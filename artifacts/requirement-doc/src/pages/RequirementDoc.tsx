@@ -755,10 +755,15 @@ function SectionDivider() {
 export default function RequirementDoc() {
   const today = new Date().toISOString().split("T")[0];
 
+  const [clientInfoOpen, setClientInfoOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docDate, setDocDate] = useState(today);
   const [preparedBy, setPreparedBy] = useState("");
   const [selectedClient, setSelectedClient] = useState("");
+  const handleSelectClient = (name: string) => {
+    setSelectedClient(name);
+    if (name) setClientInfoOpen(true);
+  };
   const [businessType, setBusinessType] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [keyProducts, setKeyProducts] = useState<string[]>([]);
@@ -891,38 +896,58 @@ export default function RequirementDoc() {
                 <SelectInput
                   options={CLIENTS.map((c) => c.name)}
                   value={selectedClient}
-                  onChange={setSelectedClient}
+                  onChange={handleSelectClient}
                   placeholder="Select or add client"
                 />
               </FormField>
             </div>
 
-            <FormField label="Phone" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.phone ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <FormField label="Email" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.email ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <FormField label="Company Name" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.company ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <FormField label="Industry" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.industry ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <FormField label="Website" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.website ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <div className="sm:col-span-2">
-              <FormField label="Address" hint="Auto-populated from client record">
-                <ReadOnlyField value={client ? client.address : ""} placeholder="Select a client to auto-populate" />
-              </FormField>
-            </div>
-            <FormField label="City" hint="Auto-populated from client record">
-              <ReadOnlyField value={client?.city ?? ""} placeholder="Select a client to auto-populate" />
-            </FormField>
-            <FormField label="County / Region" hint="Auto-populated from client record">
-              <ReadOnlyField value={client ? `${client.county}  ·  ${client.postcode}` : ""} placeholder="Select a client to auto-populate" />
-            </FormField>
+            {/* Collapsible client details */}
+            {selectedClient && (
+              <div className="sm:col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setClientInfoOpen((o) => !o)}
+                  className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wide hover:text-primary/80 transition-colors mb-3"
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform duration-200 ${clientInfoOpen ? "rotate-180" : ""}`}
+                  />
+                  {clientInfoOpen ? "Hide" : "Show"} Client Details
+                </button>
+
+                {clientInfoOpen && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
+                    <FormField label="Phone">
+                      <ReadOnlyField value={client?.phone ?? ""} placeholder="—" />
+                    </FormField>
+                    <FormField label="Email">
+                      <ReadOnlyField value={client?.email ?? ""} placeholder="—" />
+                    </FormField>
+                    <FormField label="Company Name">
+                      <ReadOnlyField value={client?.company ?? ""} placeholder="—" />
+                    </FormField>
+                    <FormField label="Industry">
+                      <ReadOnlyField value={client?.industry ?? ""} placeholder="—" />
+                    </FormField>
+                    <FormField label="Website">
+                      <ReadOnlyField value={client?.website ?? ""} placeholder="—" />
+                    </FormField>
+                    <div className="sm:col-span-2">
+                      <FormField label="Address">
+                        <ReadOnlyField value={client?.address ?? ""} placeholder="—" />
+                      </FormField>
+                    </div>
+                    <FormField label="City">
+                      <ReadOnlyField value={client?.city ?? ""} placeholder="—" />
+                    </FormField>
+                    <FormField label="County / Region">
+                      <ReadOnlyField value={client ? `${client.county}  ·  ${client.postcode}` : ""} placeholder="—" />
+                    </FormField>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
