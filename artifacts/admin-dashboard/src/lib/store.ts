@@ -801,6 +801,15 @@ export const deleteStaffRole = (id: string): void => {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export const SETTINGS_KEY = "admin-settings";
 
+export type LegalDocument = {
+  id:         string;
+  title:      string;
+  content:    string;
+  isTemplate: boolean;
+  createdAt:  string;
+  updatedAt:  string;
+};
+
 export type AppSettings = {
   companyName:          string;
   companyTagline:       string;
@@ -824,6 +833,7 @@ export type AppSettings = {
   taxOnPOS:             boolean;
   termsAndConditions:   string;
   privacyPolicy:        string;
+  legalDocuments:       LegalDocument[];
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -849,12 +859,36 @@ export const DEFAULT_SETTINGS: AppSettings = {
   taxOnPOS:             true,
   termsAndConditions:   "",
   privacyPolicy:        "",
+  legalDocuments:       [],
 };
 
 export function getSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed };
+      // Migrate old termsAndConditions / privacyPolicy into legalDocuments if needed
+      if (!Array.isArray(merged.legalDocuments)) merged.legalDocuments = [];
+      const hasTerms   = merged.legalDocuments.some(d => d.id === "__terms__");
+      const hasPrivacy = merged.legalDocuments.some(d => d.id === "__privacy__");
+      const now = new Date().toISOString();
+      if (!hasTerms && merged.termsAndConditions) {
+        merged.legalDocuments.unshift({
+          id: "__terms__", title: "Terms & Conditions",
+          content: merged.termsAndConditions, isTemplate: false,
+          createdAt: now, updatedAt: now,
+        });
+      }
+      if (!hasPrivacy && merged.privacyPolicy) {
+        merged.legalDocuments.push({
+          id: "__privacy__", title: "Privacy Policy",
+          content: merged.privacyPolicy, isTemplate: false,
+          createdAt: now, updatedAt: now,
+        });
+      }
+      return merged;
+    }
   } catch { /* ignore */ }
   return { ...DEFAULT_SETTINGS };
 }

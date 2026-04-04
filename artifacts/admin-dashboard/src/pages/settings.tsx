@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Building2, DollarSign, ShoppingBag, Database, Scale,
   Save, Upload, Download, Trash2, RefreshCw,
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
+  FilePlus2, FileText, Star, ChevronDown, MoreVertical,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  AppSettings, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
+  AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
 } from "@/lib/store";
 import { CURRENCIES } from "@/lib/currencies";
 
@@ -110,8 +111,15 @@ function ModuleResetRow({
 }
 
 // ─── Legal starter templates ──────────────────────────────────────────────────
-const TERMS_TEMPLATE = `<h1>Terms and Conditions</h1>
-<p>Last updated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+function nowDate() {
+  return new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+const LEGAL_TEMPLATES: { label: string; content: string }[] = [
+  {
+    label: "Terms & Conditions",
+    content: `<h1>Terms and Conditions</h1>
+<p>Last updated: ${nowDate()}</p>
 <h2>1. Introduction</h2>
 <p>These Terms and Conditions ("Terms") govern your use of our products and services ("Services") provided by Onesoft ("we", "us", or "our"), registered in England and Wales. By using our Services, you agree to be bound by these Terms.</p>
 <h2>2. Services</h2>
@@ -127,10 +135,12 @@ const TERMS_TEMPLATE = `<h1>Terms and Conditions</h1>
 <h2>7. Governing Law</h2>
 <p>These Terms are governed by the laws of England and Wales. Any disputes shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>
 <h2>8. Contact</h2>
-<p>For any queries regarding these Terms, please contact us at our Hull, UK office.</p>`;
-
-const PRIVACY_TEMPLATE = `<h1>Privacy Policy</h1>
-<p>Last updated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+<p>For any queries regarding these Terms, please contact us at our Hull, UK office.</p>`,
+  },
+  {
+    label: "Privacy Policy",
+    content: `<h1>Privacy Policy</h1>
+<p>Last updated: ${nowDate()}</p>
 <h2>1. Who We Are</h2>
 <p>Onesoft ("we", "us", "our") is a software and IT solutions company operating from Hull, UK and Islamabad, Pakistan. We are committed to protecting your personal data in accordance with the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.</p>
 <h2>2. Data We Collect</h2>
@@ -146,10 +156,55 @@ const PRIVACY_TEMPLATE = `<h1>Privacy Policy</h1>
 <h2>7. Transfers Outside the UK</h2>
 <p>Where we transfer data to our Islamabad office, we ensure appropriate safeguards are in place in accordance with UK GDPR Chapter V requirements.</p>
 <h2>8. Contact</h2>
-<p>For data protection queries, please contact our Data Controller at our Hull, UK office.</p>`;
+<p>For data protection queries, please contact our Data Controller at our Hull, UK office.</p>`,
+  },
+  {
+    label: "Non-Disclosure Agreement (NDA)",
+    content: `<h1>Non-Disclosure Agreement</h1>
+<p>Last updated: ${nowDate()}</p>
+<p>This Non-Disclosure Agreement ("Agreement") is entered into between Onesoft ("Disclosing Party") and the recipient ("Receiving Party").</p>
+<h2>1. Confidential Information</h2>
+<p>"Confidential Information" means any non-public information disclosed by the Disclosing Party, whether in writing, orally, or by inspection of tangible objects, that is designated as "Confidential" or that reasonably should be understood to be confidential given the nature of the information and circumstances of disclosure.</p>
+<h2>2. Obligations</h2>
+<p>The Receiving Party agrees to: (a) hold all Confidential Information in strict confidence; (b) not disclose Confidential Information to any third party without prior written consent; (c) use the Confidential Information only for the purpose of evaluating or engaging in a potential business relationship.</p>
+<h2>3. Exclusions</h2>
+<p>These obligations do not apply to information that: (a) was publicly known at the time of disclosure; (b) becomes publicly known through no breach of this Agreement; (c) was received from a third party without restriction; or (d) is required to be disclosed by law or court order.</p>
+<h2>4. Duration</h2>
+<p>This Agreement shall remain in effect for a period of two (2) years from the date of signing, unless otherwise agreed in writing by both parties.</p>
+<h2>5. Governing Law</h2>
+<p>This Agreement is governed by the laws of England and Wales.</p>`,
+  },
+  {
+    label: "Service Agreement",
+    content: `<h1>Service Agreement</h1>
+<p>Last updated: ${nowDate()}</p>
+<p>This Service Agreement ("Agreement") is made between Onesoft ("Service Provider") and the client named in the associated Statement of Work ("Client").</p>
+<h2>1. Services</h2>
+<p>The Service Provider agrees to deliver the services described in the agreed Statement of Work. Specific deliverables, timelines, and acceptance criteria shall be set out therein.</p>
+<h2>2. Fees and Payment</h2>
+<p>The Client agrees to pay the fees set out in the Statement of Work. All invoices are due within 30 days of the invoice date. Overdue invoices may attract late payment interest in accordance with the Late Payment of Commercial Debts (Interest) Act 1998.</p>
+<h2>3. Client Responsibilities</h2>
+<p>The Client agrees to provide timely access to systems, information, and personnel as reasonably required for the Service Provider to perform the services.</p>
+<h2>4. Warranties</h2>
+<p>The Service Provider warrants that services will be performed with reasonable skill and care in accordance with industry standards.</p>
+<h2>5. Limitation of Liability</h2>
+<p>The total liability of the Service Provider shall not exceed the total fees paid under this Agreement in the 3 months preceding the relevant claim.</p>
+<h2>6. Termination</h2>
+<p>Either party may terminate this Agreement with 30 days written notice. In the event of material breach, either party may terminate immediately upon written notice.</p>
+<h2>7. Governing Law</h2>
+<p>This Agreement is governed by the laws of England and Wales.</p>`,
+  },
+];
 
-// ─── LegalTab component ───────────────────────────────────────────────────────
-type LegalSubTab = "terms" | "privacy";
+// ─── LegalTab ─────────────────────────────────────────────────────────────────
+function nanoid8() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function wordCount(html: string) {
+  const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return text ? text.split(" ").length : 0;
+}
 
 function LegalTab({
   form,
@@ -158,121 +213,273 @@ function LegalTab({
   form: AppSettings;
   set: <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => void;
 }) {
-  const [sub, setSub]         = useState<LegalSubTab>("terms");
-  const [preview, setPreview] = useState(false);
+  const { toast } = useToast();
+  const docs: LegalDocument[] = form.legalDocuments ?? [];
 
-  const currentValue = sub === "terms" ? form.termsAndConditions : form.privacyPolicy;
-  const currentKey   = sub === "terms" ? "termsAndConditions"    : "privacyPolicy";
+  const [activeId,     setActiveId]     = useState<string | null>(docs[0]?.id ?? null);
+  const [preview,      setPreview]      = useState(false);
+  const [tplOpen,      setTplOpen]      = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const tplRef = useRef<HTMLDivElement>(null);
 
-  function wordCount(html: string) {
-    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    return text ? text.split(" ").length : 0;
+  // Close template dropdown on outside click
+  useEffect(() => {
+    if (!tplOpen) return;
+    function onDown(e: MouseEvent) {
+      if (tplRef.current && !tplRef.current.contains(e.target as Node)) setTplOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [tplOpen]);
+
+  const activeDoc = docs.find(d => d.id === activeId) ?? null;
+
+  // ── helpers ──────────────────────────────────────────────────────────────────
+  function updateDocs(next: LegalDocument[]) {
+    set("legalDocuments", next);
   }
 
-  function loadTemplate() {
-    const tpl = sub === "terms" ? TERMS_TEMPLATE : PRIVACY_TEMPLATE;
-    set(currentKey, tpl);
+  function patchDoc(id: string, patch: Partial<LegalDocument>) {
+    updateDocs(docs.map(d => d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d));
+  }
+
+  function addDoc() {
+    const id  = nanoid8();
+    const now = new Date().toISOString();
+    const doc: LegalDocument = {
+      id, title: "Untitled Document", content: "", isTemplate: false,
+      createdAt: now, updatedAt: now,
+    };
+    updateDocs([...docs, doc]);
+    setActiveId(id);
+    setPreview(false);
+  }
+
+  function deleteDoc(id: string) {
+    const next = docs.filter(d => d.id !== id);
+    updateDocs(next);
+    if (activeId === id) setActiveId(next[0]?.id ?? null);
+    setDeleteTarget(null);
+    toast({ title: "Document deleted" });
+  }
+
+  function applyTemplate(tpl: { label: string; content: string }) {
+    if (!activeDoc) return;
+    patchDoc(activeDoc.id, { content: tpl.content });
+    setTplOpen(false);
+    toast({ title: `Template loaded: ${tpl.label}` });
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* ── Header ── */}
       <SectionHeader
         title="Legal Documents"
-        desc="Write your Terms & Conditions and Privacy Policy using the rich text editor. These are stored in Settings and can be referenced on sales documents and receipts."
+        desc="Create and manage any number of custom documents — Terms, Privacy Policies, NDAs, Service Agreements, and more. Mark any document as a template to reuse it."
       />
 
-      {/* ── Info banner ── */}
-      <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40 rounded-xl p-4">
-        <Scale size={15} className="text-blue-500 mt-0.5 shrink-0" />
-        <div className="text-[12px] text-blue-700 dark:text-blue-300 leading-relaxed">
-          Use the editor below to draft your legal documents. You can insert headings, lists, bold/italic text, links and more.
-          Click <strong>Load Template</strong> to insert a UK-compliant starter draft which you can then customise.
-          <span className="block mt-1 text-blue-600/70 dark:text-blue-400/70">These documents are saved as part of Settings and can be printed or referenced on invoices and receipts.</span>
-        </div>
-      </div>
+      {/* ── Main layout: sidebar + editor ── */}
+      <div className="flex gap-0 border border-gray-200 dark:border-border rounded-xl overflow-hidden min-h-[600px]">
 
-      {/* ── Sub-tab switcher ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-muted rounded-lg">
-          {([
-            { id: "terms"  as LegalSubTab, label: "Terms & Conditions" },
-            { id: "privacy"as LegalSubTab, label: "Privacy Policy"     },
-          ]).map(s => (
+        {/* ── Sidebar ─────────────────────────────────────────── */}
+        <div className="w-56 shrink-0 flex flex-col border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50">
+          {/* Add button */}
+          <div className="p-3 border-b border-gray-200 dark:border-border">
             <button
-              key={s.id}
-              onClick={() => { setSub(s.id); setPreview(false); }}
-              className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
-                sub === s.id
-                  ? "bg-white dark:bg-card shadow-sm text-gray-800 dark:text-foreground"
-                  : "text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
+              onClick={addDoc}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-100 dark:border-blue-800/40 transition-colors"
             >
-              {s.label}
+              <FilePlus2 size={13} />
+              New Document
             </button>
-          ))}
+          </div>
+
+          {/* Doc list */}
+          <div className="flex-1 overflow-y-auto py-1">
+            {docs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 gap-2 text-gray-300 dark:text-zinc-600 px-4 text-center">
+                <FileText size={24} strokeWidth={1} />
+                <span className="text-[11px]">No documents yet. Click "New Document" to get started.</span>
+              </div>
+            ) : (
+              docs.map(doc => (
+                <button
+                  key={doc.id}
+                  onClick={() => { setActiveId(doc.id); setPreview(false); }}
+                  className={`w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 ${
+                    doc.id === activeId
+                      ? "border-blue-500 bg-white dark:bg-zinc-800/60 text-gray-900 dark:text-foreground"
+                      : "border-transparent hover:bg-white/70 dark:hover:bg-zinc-800/30 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  <FileText size={13} className="mt-0.5 shrink-0 text-gray-400 dark:text-gray-500" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-medium leading-snug truncate">{doc.title || "Untitled"}</div>
+                    {doc.isTemplate && (
+                      <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                        <Star size={9} fill="currentColor" /> Template
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {currentValue ? (
-            <span className="text-[11px] text-muted-foreground bg-gray-100 dark:bg-muted px-2 py-1 rounded-md">
-              ~{wordCount(currentValue)} words
-            </span>
-          ) : null}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-[12px]"
-            onClick={() => setPreview(p => !p)}
-            title={preview ? "Switch to editor" : "Preview rendered document"}
-          >
-            {preview ? <EyeOff size={12} /> : <Eye size={12} />}
-            {preview ? "Edit" : "Preview"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-[12px] border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-            onClick={loadTemplate}
-            title="Insert a starter UK-compliant template (you can then edit it)"
-          >
-            <Scale size={12} /> Load Template
-          </Button>
-        </div>
+        {/* ── Editor panel ─────────────────────────────────────── */}
+        {activeDoc ? (
+          <div className="flex-1 flex flex-col min-w-0">
+
+            {/* Doc title bar */}
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100 dark:border-border bg-white dark:bg-card">
+              <input
+                value={activeDoc.title}
+                onChange={e => patchDoc(activeDoc.id, { title: e.target.value })}
+                placeholder="Document title…"
+                className="flex-1 text-[15px] font-semibold bg-transparent border-0 outline-none text-gray-800 dark:text-foreground placeholder:text-gray-300 dark:placeholder:text-zinc-600 focus:ring-0"
+              />
+              {/* Template toggle */}
+              <label className="flex items-center gap-1.5 cursor-pointer shrink-0 select-none">
+                <input
+                  type="checkbox"
+                  checked={activeDoc.isTemplate}
+                  onChange={e => patchDoc(activeDoc.id, { isTemplate: e.target.checked })}
+                  className="sr-only"
+                />
+                <span className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                  activeDoc.isTemplate
+                    ? "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700"
+                    : "text-gray-400 dark:text-gray-500 border-gray-200 dark:border-zinc-700 hover:border-gray-300"
+                }`}>
+                  <Star size={10} fill={activeDoc.isTemplate ? "currentColor" : "none"} />
+                  {activeDoc.isTemplate ? "Template" : "Mark as template"}
+                </span>
+              </label>
+            </div>
+
+            {/* Toolbar row */}
+            <div className="flex items-center justify-between gap-2 px-5 py-2 bg-gray-50/50 dark:bg-zinc-900/30 border-b border-gray-100 dark:border-border">
+              <div className="flex items-center gap-1.5">
+                {activeDoc.content ? (
+                  <span className="text-[11px] text-muted-foreground bg-gray-100 dark:bg-muted px-2 py-0.5 rounded-md">
+                    ~{wordCount(activeDoc.content)} words
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground italic">Empty document</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-[12px]"
+                  onClick={() => setPreview(p => !p)}
+                >
+                  {preview ? <EyeOff size={12} /> : <Eye size={12} />}
+                  {preview ? "Edit" : "Preview"}
+                </Button>
+
+                {/* Load Template dropdown */}
+                <div className="relative" ref={tplRef}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-[12px] border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                    onClick={() => setTplOpen(o => !o)}
+                  >
+                    <Scale size={12} /> Load Template <ChevronDown size={10} />
+                  </Button>
+                  {tplOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-30 w-52 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl shadow-lg overflow-hidden">
+                      {LEGAL_TEMPLATES.map(tpl => (
+                        <button
+                          key={tpl.label}
+                          onClick={() => applyTemplate(tpl)}
+                          className="w-full text-left px-4 py-2.5 text-[12px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-muted transition-colors"
+                        >
+                          {tpl.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 text-[12px] text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  onClick={() => setDeleteTarget(activeDoc.id)}
+                >
+                  <Trash2 size={12} /> Delete
+                </Button>
+              </div>
+            </div>
+
+            {/* Editor / Preview */}
+            <div className="flex-1 overflow-auto">
+              {preview ? (
+                <div
+                  className="p-8 prose prose-sm dark:prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{
+                    __html: activeDoc.content || "<p class='text-gray-400 italic'>Nothing written yet. Switch to Edit mode to start writing.</p>",
+                  }}
+                />
+              ) : (
+                <RichTextEditor
+                  key={activeDoc.id}
+                  value={activeDoc.content}
+                  onChange={val => patchDoc(activeDoc.id, { content: val })}
+                  placeholder="Start writing your document… or use Load Template to insert a starter draft."
+                />
+              )}
+            </div>
+
+            {/* Footer strip */}
+            <div className="px-5 py-2 border-t border-gray-100 dark:border-border bg-gray-50/50 dark:bg-zinc-900/30 flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Last updated: {new Date(activeDoc.updatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</span>
+              <span>Remember to click <strong>Save Changes</strong> after editing</span>
+            </div>
+          </div>
+        ) : (
+          /* Empty state — no doc selected */
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-gray-300 dark:text-zinc-600">
+            <Scale size={48} strokeWidth={0.8} />
+            <div className="text-center space-y-1">
+              <p className="text-[14px] font-semibold text-gray-400 dark:text-zinc-500">No document selected</p>
+              <p className="text-[12px]">Click "New Document" in the sidebar to create one,<br />or select an existing document from the list.</p>
+            </div>
+            <button
+              onClick={addDoc}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 border border-blue-100 dark:border-blue-800/40 transition-colors"
+            >
+              <FilePlus2 size={14} /> Create your first document
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Editor or Preview ── */}
-      {preview ? (
-        <div
-          className="min-h-[520px] border border-gray-200 dark:border-border rounded-xl bg-white dark:bg-card p-8 overflow-auto prose prose-sm dark:prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: currentValue || "<p class='text-muted-foreground italic'>Nothing written yet. Switch to Edit mode to start writing.</p>" }}
-        />
-      ) : (
-        <div className="border border-gray-200 dark:border-border rounded-xl overflow-hidden">
-          <RichTextEditor
-            key={sub}
-            value={currentValue}
-            onChange={val => set(currentKey, val)}
-            placeholder={
-              sub === "terms"
-                ? "Start writing your Terms and Conditions… or click 'Load Template' above to insert a starter draft."
-                : "Start writing your Privacy Policy… or click 'Load Template' above to insert a starter draft."
-            }
-          />
-        </div>
-      )}
-
-      {/* ── Status strip ── */}
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-        <span>
-          {currentValue
-            ? `Document contains ~${wordCount(currentValue)} words`
-            : "No content yet — use the editor above or load a template"}
-        </span>
-        <span className="text-[11px] text-muted-foreground">
-          Remember to click <strong>Save Changes</strong> after editing
-        </span>
-      </div>
+      {/* ── Delete confirm dialog ── */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{docs.find(d => d.id === deleteTarget)?.title || "This document"}" will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600 text-white"
+              onClick={() => deleteTarget && deleteDoc(deleteTarget)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
