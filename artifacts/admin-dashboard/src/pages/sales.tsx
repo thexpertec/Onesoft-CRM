@@ -5,18 +5,16 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment,
   SALE_STATUSES, SALE_PAYMENTS,
-  getProducts, getCustomers,
+  getProducts, getCustomers, getProductCategories, getSales, Product,
 } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
+  ArrowLeft, Tag, Minus, Package, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -47,16 +45,14 @@ const lineTotal = (item: SaleItem): number => {
   return q * p * (1 - d / 100);
 };
 
-const saleTotal = (items: SaleItem[]): number => items.reduce((s, i) => s + lineTotal(i), 0);
-const discountTotal = (items: SaleItem[]): number => {
-  return items.reduce((s, i) => {
+const saleTotal    = (items: SaleItem[]): number => items.reduce((s, i) => s + lineTotal(i), 0);
+const discountTotal = (items: SaleItem[]): number =>
+  items.reduce((s, i) => {
     const q = parseFloat(i.qty) || 0, p = parseFloat(i.unitPrice) || 0, d = parseFloat(i.discount) || 0;
     return s + q * p * (d / 100);
   }, 0);
-};
-const subTotal = (items: SaleItem[]): number => items.reduce((s, i) => {
-  return s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0);
-}, 0);
+const subTotal = (items: SaleItem[]): number =>
+  items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
 
 const blankSaleItem = (): SaleItem => ({
   id: crypto.randomUUID(), productName: "", sku: "", qty: "1",
@@ -73,7 +69,589 @@ const blankNewRow = (): Record<string, string> => ({
   customer: "", status: "Draft", paymentMethod: "Cash", notes: "",
 });
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Category colour palette (cycles) ────────────────────────────────────────
+const CAT_COLOURS = [
+  "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
+  "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+];
+
+// ─── Tiny avatar / thumbnail ──────────────────────────────────────────────────
+const AVATAR_COLOURS = [
+  "bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500",
+  "bg-pink-500","bg-cyan-500","bg-rose-500","bg-indigo-500",
+];
+
+function ProductThumbnail({ product, size = "full" }: { product: Product; size?: "full" | "sm" }) {
+  const colIdx = product.name.charCodeAt(0) % AVATAR_COLOURS.length;
+  const bg = AVATAR_COLOURS[colIdx];
+  const letter = product.name.charAt(0).toUpperCase();
+  if (product.thumbnail) {
+    return (
+      <img
+        src={product.thumbnail}
+        alt={product.name}
+        className={`${size === "full" ? "w-full h-full" : "w-9 h-9"} object-cover rounded-lg`}
+      />
+    );
+  }
+  return (
+    <div className={`${size === "full" ? "w-full h-full" : "w-9 h-9"} ${bg} flex items-center justify-center rounded-lg`}>
+      <span className={`${size === "full" ? "text-3xl" : "text-base"} font-bold text-white/80`}>{letter}</span>
+    </div>
+  );
+}
+
+// ─── POS Full-Page Layout ─────────────────────────────────────────────────────
+interface POSViewProps {
+  sale: Sale;
+  localItems: SaleItem[];
+  localMeta: { customer: string; saleDate: string; paymentMethod: SalePayment; notes: string };
+  customerComboOpts: ComboOption[];
+  productComboOpts: ComboOption[];
+  onClose: () => void;
+  onMetaChange: (meta: Partial<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string }>) => void;
+  onSaveMeta: () => void;
+  onItemChange: (itemId: string, field: keyof SaleItem, value: string) => void;
+  onItemBlur: () => void;
+  onDeleteItem: (itemId: string) => void;
+  onAddProduct: (product: Product) => void;
+  onAddCustomItem: () => void;
+  onSetStatus: (status: SaleStatus) => void;
+  addingItem: boolean;
+  newItem: SaleItem | null;
+  onNewItemChange: (item: SaleItem) => void;
+  onCommitNewItem: () => void;
+  onCancelNewItem: () => void;
+}
+
+function POSView({
+  sale, localItems, localMeta, customerComboOpts, productComboOpts,
+  onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
+  onDeleteItem, onAddProduct, onAddCustomItem, onSetStatus,
+  addingItem, newItem, onNewItemChange, onCommitNewItem, onCancelNewItem,
+}: POSViewProps) {
+  const [prodSearch, setProdSearch] = useState("");
+  const [catFilter, setCatFilter]   = useState("All");
+
+  const allProducts  = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
+  const allCats      = useMemo(() => {
+    const cats = getProductCategories().map(c => c.name);
+    const fromProds = allProducts.map(p => p.category).filter(Boolean);
+    const set = new Set([...cats, ...fromProds]);
+    return Array.from(set).sort();
+  }, [allProducts]);
+
+  const filteredProds = useMemo(() => {
+    let list = allProducts;
+    if (catFilter !== "All") list = list.filter(p => p.category === catFilter);
+    if (prodSearch.trim()) {
+      const q = prodSearch.toLowerCase();
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [allProducts, catFilter, prodSearch]);
+
+  const grandTotal    = localItems.reduce((s, i) => s + lineTotal(i), 0);
+  const discountAmt   = discountTotal(localItems);
+  const isDraft       = sale.status === "Draft";
+  const isCompleted   = sale.status === "Completed";
+
+  const qtyChange = (itemId: string, delta: number) => {
+    const item = localItems.find(i => i.id === itemId);
+    if (!item) return;
+    const next = Math.max(0, (parseFloat(item.qty) || 0) + delta);
+    onItemChange(itemId, "qty", String(next));
+    setTimeout(onItemBlur, 0);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 dark:bg-zinc-950 overflow-hidden">
+
+      {/* ── Top bar ────────────────────────────────────────────────────────── */}
+      <div className="h-13 flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shrink-0">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
+
+        <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700" />
+
+        {/* Sale # + status */}
+        <div className="flex items-center gap-2">
+          <ShoppingCart size={15} className="text-blue-500" />
+          <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">{sale.saleNumber}</span>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_BG[sale.status]}`}>{sale.status}</span>
+        </div>
+
+        <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700" />
+
+        {/* Meta fields */}
+        <div className="flex items-center gap-4 flex-1 min-w-0 flex-wrap">
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
+            Customer
+            <Combobox
+              value={localMeta.customer}
+              onChange={v => onMetaChange({ customer: v })}
+              onSelect={opt => { onMetaChange({ customer: opt.value }); onSaveMeta(); }}
+              options={customerComboOpts}
+              placeholder="Walk-in customer…"
+              className="w-40"
+              inputClassName="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
+            Date
+            <input type="date"
+              value={localMeta.saleDate}
+              onChange={e => onMetaChange({ saleDate: e.target.value })}
+              onBlur={onSaveMeta}
+              className="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
+            Payment
+            <div className="relative">
+              <select
+                value={localMeta.paymentMethod}
+                onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); }}
+                onBlur={onSaveMeta}
+                className="appearance-none border border-gray-200 dark:border-zinc-600 rounded px-2 pr-6 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
+            Notes
+            <input
+              value={localMeta.notes}
+              onChange={e => onMetaChange({ notes: e.target.value })}
+              onBlur={onSaveMeta}
+              placeholder="Optional…"
+              className="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 w-36 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </label>
+        </div>
+
+        {/* Last saved */}
+        <span className="text-[11px] text-gray-400 hidden sm:block whitespace-nowrap">
+          {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
+
+      {/* ── Body: two panels ────────────────────────────────────────────────── */}
+      <div className="flex-1 flex overflow-hidden">
+
+        {/* ══ LEFT: Cart ══════════════════════════════════════════════════════ */}
+        <div className="w-[56%] flex flex-col border-r border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950">
+
+          {/* Cart header */}
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between shrink-0">
+            <h2 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+              <ShoppingCart size={14} className="text-blue-400" />
+              Order Items
+              <span className="text-[11px] text-gray-400 font-normal ml-1">({localItems.length})</span>
+            </h2>
+            {isDraft && (
+              <button
+                onClick={onAddCustomItem}
+                className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-1 rounded transition-colors"
+              >
+                <Plus size={11} /> Custom Item
+              </button>
+            )}
+          </div>
+
+          {/* Cart items — scrollable */}
+          <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+
+            {localItems.length === 0 && !addingItem && (
+              <div className="flex flex-col items-center justify-center h-40 text-gray-300 dark:text-zinc-600 gap-3">
+                <ShoppingCart size={36} strokeWidth={1.2} />
+                <span className="text-sm">
+                  {isDraft ? "Select products from the right to add them here" : "No items recorded"}
+                </span>
+              </div>
+            )}
+
+            {localItems.map((item, idx) => (
+              <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-3 flex gap-3 items-start group/item hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
+                {/* Index */}
+                <span className="text-[11px] text-gray-300 w-4 shrink-0 pt-0.5">{idx + 1}</span>
+
+                {/* Thumbnail small */}
+                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0">
+                  {(() => {
+                    const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
+                    return <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />;
+                  })()}
+                </div>
+
+                {/* Name + SKU */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{item.productName || "—"}</div>
+                  <div className="text-[10px] text-gray-400 font-mono">{item.sku || "no sku"}</div>
+                  {/* Notes in-line */}
+                  {isDraft && (
+                    <input
+                      value={item.notes}
+                      onChange={e => onItemChange(item.id, "notes", e.target.value)}
+                      onBlur={onItemBlur}
+                      placeholder="Notes…"
+                      className="mt-1 w-full text-[11px] text-gray-500 bg-transparent placeholder:text-gray-300 outline-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
+                    />
+                  )}
+                </div>
+
+                {/* Qty control */}
+                <div className="flex flex-col items-center gap-0.5 shrink-0">
+                  <span className="text-[9px] text-gray-400 uppercase tracking-wide">Qty</span>
+                  <div className="flex items-center gap-0.5">
+                    {isDraft && (
+                      <button
+                        onClick={() => qtyChange(item.id, -1)}
+                        className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
+                      >
+                        <Minus size={10} />
+                      </button>
+                    )}
+                    <input
+                      type="number" min="0"
+                      value={item.qty}
+                      onChange={e => onItemChange(item.id, "qty", e.target.value)}
+                      onBlur={onItemBlur}
+                      disabled={!isDraft}
+                      className="w-10 h-5 text-center text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded disabled:bg-transparent disabled:border-transparent outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    {isDraft && (
+                      <button
+                        onClick={() => qtyChange(item.id, 1)}
+                        className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
+                      >
+                        <Plus size={10} />
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[9px] text-gray-400">{item.unit}</span>
+                </div>
+
+                {/* Price + Discount */}
+                <div className="flex flex-col gap-1 shrink-0 w-20">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-gray-400 uppercase tracking-wide">Price</span>
+                    <div className="flex items-center">
+                      <span className="text-[11px] text-gray-400 mr-0.5">£</span>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={item.unitPrice}
+                        onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
+                        onBlur={onItemBlur}
+                        disabled={!isDraft}
+                        className="flex-1 text-[12px] text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-gray-400 uppercase tracking-wide">Disc %</span>
+                    <div className="flex items-center">
+                      <input
+                        type="number" min="0" max="100"
+                        value={item.discount}
+                        onChange={e => onItemChange(item.id, "discount", e.target.value)}
+                        onBlur={onItemBlur}
+                        disabled={!isDraft}
+                        className="flex-1 text-[12px] text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
+                      />
+                      <span className="text-[11px] text-gray-400 ml-0.5">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Line total */}
+                <div className="shrink-0 w-20 text-right pt-0.5">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Total</div>
+                  <div className="text-[14px] font-bold font-mono tabular-nums text-gray-800 dark:text-gray-100">
+                    £{lineTotal(item).toFixed(2)}
+                  </div>
+                  {parseFloat(item.discount) > 0 && (
+                    <div className="text-[10px] text-amber-500 font-mono">
+                      −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Delete */}
+                {isDraft && (
+                  <button
+                    onClick={() => onDeleteItem(item.id)}
+                    className="opacity-0 group-hover/item:opacity-100 shrink-0 w-5 h-5 mt-0.5 text-gray-300 hover:text-red-500 transition-all rounded"
+                    title="Remove item"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {/* New custom item form */}
+            {addingItem && newItem && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border-2 border-amber-300 dark:border-amber-700 p-3 space-y-2">
+                <div className="text-[11px] font-semibold text-amber-600 mb-2">New Custom Item</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Product / Service *</label>
+                    <Combobox
+                      autoFocus
+                      value={newItem.productName}
+                      onChange={v => onNewItemChange({ ...newItem, productName: v })}
+                      onSelect={opt => {
+                        const prod = getProducts().find(p => p.name === opt.value);
+                        onNewItemChange({ ...newItem, productName: opt.value, sku: prod?.sku ?? newItem.sku, unit: prod?.unit || newItem.unit, unitPrice: prod?.price || newItem.unitPrice });
+                      }}
+                      options={productComboOpts}
+                      placeholder="Name *"
+                      className="w-full"
+                      inputClassName="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">SKU</label>
+                    <input value={newItem.sku}
+                      onChange={e => onNewItemChange({ ...newItem, sku: e.target.value })}
+                      placeholder="SKU"
+                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Qty</label>
+                    <input type="number" min="0" value={newItem.qty}
+                      onChange={e => onNewItemChange({ ...newItem, qty: e.target.value })}
+                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit</label>
+                    <input value={newItem.unit}
+                      onChange={e => onNewItemChange({ ...newItem, unit: e.target.value })}
+                      placeholder="pcs"
+                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit Price (£)</label>
+                    <input type="number" min="0" step="0.01" value={newItem.unitPrice}
+                      onChange={e => onNewItemChange({ ...newItem, unitPrice: e.target.value })}
+                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 text-right" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Discount %</label>
+                    <input type="number" min="0" max="100" value={newItem.discount}
+                      onChange={e => onNewItemChange({ ...newItem, discount: e.target.value })}
+                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 text-right" />
+                  </div>
+                </div>
+                <div className="text-right font-mono font-semibold text-[13px] text-gray-700 dark:text-gray-300">
+                  Line Total: £{((parseFloat(newItem.qty)||0)*(parseFloat(newItem.unitPrice)||0)*(1-parseFloat(newItem.discount||"0")/100)).toFixed(2)}
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="outline" onClick={onCancelNewItem} className="h-7 text-[11px]">Cancel</Button>
+                  <Button size="sm" onClick={onCommitNewItem} className="h-7 gap-1 text-[11px]"><Plus size={11} /> Add to Sale</Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Totals + Action bar ─────────────────────────────────────────── */}
+          <div className="shrink-0 border-t border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 space-y-2.5">
+            {/* Totals */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
+                <span>Subtotal</span>
+                <span className="font-mono">£{subTotal(localItems).toFixed(2)}</span>
+              </div>
+              {discountAmt > 0 && (
+                <div className="flex justify-between text-[12px] text-amber-600">
+                  <span>Discount saved</span>
+                  <span className="font-mono">−£{discountAmt.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-gray-100 dark:border-zinc-800 pt-1.5">
+                <span className="text-[15px] font-bold text-gray-800 dark:text-gray-100">Grand Total</span>
+                <span className="text-[18px] font-bold font-mono tabular-nums text-gray-900 dark:text-white">
+                  £{grandTotal.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {isDraft && (
+                <>
+                  <Button size="sm" variant="outline" onClick={onClose} className="gap-1 flex-1 h-9 text-[12px]">
+                    <Save size={13} /> Save Draft
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => { onSetStatus("Completed"); onClose(); }}
+                    className="gap-1 flex-1 h-9 text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Check size={13} /> Complete Sale
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    onClick={() => onSetStatus("Cancelled")}
+                    className="gap-1 h-9 text-[12px] text-red-500 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
+                  >
+                    <Ban size={13} /> Cancel
+                  </Button>
+                </>
+              )}
+              {isCompleted && (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => onSetStatus("Refunded")} className="gap-1 flex-1 h-9 text-[12px] text-amber-600 border-amber-200 hover:bg-amber-50">
+                    <RotateCcw size={13} /> Refund
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={onClose} className="flex-1 h-9 text-[12px]">Close</Button>
+                </>
+              )}
+              {(sale.status === "Refunded" || sale.status === "Cancelled") && (
+                <Button size="sm" variant="outline" onClick={onClose} className="flex-1 h-9 text-[12px]">Close</Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ══ RIGHT: Product Catalogue ═════════════════════════════════════════ */}
+        <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden">
+
+          {/* Search + category filters */}
+          <div className="px-4 pt-3 pb-2 border-b border-gray-100 dark:border-zinc-800 space-y-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={prodSearch}
+                  onChange={e => setProdSearch(e.target.value)}
+                  placeholder="Search products by name, SKU or category…"
+                  className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:bg-white dark:focus:bg-zinc-700"
+                />
+                {prodSearch && (
+                  <button onClick={() => setProdSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] text-gray-400 whitespace-nowrap">{filteredProds.length} products</span>
+            </div>
+
+            {/* Category filter pills */}
+            <div className="flex gap-1 flex-wrap">
+              {["All", ...allCats].map((cat, i) => {
+                const isActive = catFilter === cat;
+                const colClass = cat === "All" ? "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300" : CAT_COLOURS[(i - 1) % CAT_COLOURS.length];
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setCatFilter(prev => prev === cat && cat !== "All" ? "All" : cat)}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${colClass} ${isActive ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "opacity-70 hover:opacity-100"}`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Product grid — scrollable */}
+          <div className="flex-1 overflow-y-auto p-3">
+            {filteredProds.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-gray-300 dark:text-zinc-600 gap-2">
+                <Package size={32} strokeWidth={1.2} />
+                <span className="text-sm">No products found</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 content-start">
+                {filteredProds.map((product, pi) => {
+                  const catColour = (() => {
+                    const idx = allCats.indexOf(product.category);
+                    return idx >= 0 ? CAT_COLOURS[idx % CAT_COLOURS.length] : CAT_COLOURS[0];
+                  })();
+                  return (
+                    <button
+                      key={product.id}
+                      disabled={!isDraft}
+                      onClick={() => onAddProduct(product)}
+                      title={isDraft ? `Add ${product.name} to cart` : "Sale is not in Draft status"}
+                      className={`group text-left bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-3 flex flex-col gap-2 transition-all ${isDraft ? "hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md cursor-pointer active:scale-[0.97]" : "opacity-50 cursor-not-allowed"}`}
+                    >
+                      {/* Thumbnail */}
+                      <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-zinc-700">
+                        <ProductThumbnail product={product} size="full" />
+                      </div>
+
+                      {/* Info */}
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          {product.name}
+                        </div>
+                        <div className="text-[10px] text-gray-400 font-mono truncate">{product.sku || "—"}</div>
+
+                        <div className="flex items-center justify-between mt-1.5 gap-1">
+                          <span className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                            £{parseFloat(product.price || "0").toFixed(2)}
+                          </span>
+                          {product.category && (
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full truncate max-w-[60px] ${catColour}`}>
+                              {product.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Add overlay on hover */}
+                      {isDraft && (
+                        <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-blue-500/0 group-hover:bg-blue-500/5 transition-colors pointer-events-none">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                            <Plus size={9} /> Add
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom strip: custom item shortcut */}
+          {isDraft && (
+            <div className="shrink-0 border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-2">
+              <Tag size={12} className="text-gray-400" />
+              <span className="text-[11px] text-gray-400 flex-1">Can't find the product?</span>
+              <button
+                onClick={onAddCustomItem}
+                className="text-[11px] text-blue-500 hover:text-blue-700 font-medium px-2 py-0.5 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded transition-colors"
+              >
+                + Add Custom Item
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main SalesPage component ─────────────────────────────────────────────────
 export default function SalesPage() {
   const [location, navigate] = useLocation();
   const isNewSale = location.includes("/new");
@@ -94,13 +672,12 @@ export default function SalesPage() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // ── POS dialog state ──
-  const [detailId,    setDetailId]    = useState<string | null>(null);
-  const [localItems,  setLocalItems]  = useState<SaleItem[]>([]);
-  const [newItem,     setNewItem]     = useState<SaleItem | null>(null);
-  const [addingItem,  setAddingItem]  = useState(false);
-  const [productSearch, setProductSearch] = useState("");
-  const [localMeta,   setLocalMeta]   = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string } | null>(null);
+  // ── POS state ──
+  const [detailId,    setDetailId]   = useState<string | null>(null);
+  const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
+  const [addingItem,  setAddingItem] = useState(false);
+  const [newItem,     setNewItem]    = useState<SaleItem | null>(null);
+  const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string } | null>(null);
 
   // ── COLS ──
   const COLS: ColDef[] = useMemo(() => [
@@ -125,26 +702,30 @@ export default function SalesPage() {
   useEffect(() => {
     if (isNewSale && isAuthenticated) {
       const draft = addSale(blankSale());
-      setDetailId(draft.id);
+      openDetailDirect(draft);
       navigate("/sales", { replace: true });
     }
   }, [isNewSale, isAuthenticated]);
 
-  // ── Open POS dialog ──
-  const openDetail = (id: string) => {
-    const sale = sales.find(s => s.id === id);
-    if (!sale) return;
+  // ── Open POS — accepts a Sale object directly (avoids stale-state lookup) ──
+  const openDetailDirect = useCallback((sale: Sale) => {
     setLocalItems([...sale.items]);
     setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes });
-    setProductSearch("");
     setAddingItem(false);
     setNewItem(null);
-    setDetailId(id);
+    setDetailId(sale.id);
+  }, []);
+
+  const openDetail = (id: string) => {
+    // Try current React state first; fall back to a fresh localStorage read
+    // for a just-created sale that hasn't propagated to state yet.
+    const sale = sales.find(s => s.id === id) ?? getSales().find(s => s.id === id);
+    if (!sale) { setDetailId(id); return; }
+    openDetailDirect(sale);
   };
 
   const detailSale = sales.find(s => s.id === detailId);
 
-  // Auto-open newly created sale when dialog is fresh
   useEffect(() => {
     if (detailId && !localMeta) {
       const sale = sales.find(s => s.id === detailId);
@@ -166,25 +747,19 @@ export default function SalesPage() {
     editSale(detailId, { ...localMeta, items });
   }, [detailId, localMeta, editSale]);
 
-  const handleAddProduct = () => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) return;
-    const match = products.find(p => p.name.toLowerCase() === q || p.sku.toLowerCase() === q);
-    if (!match) {
-      // Free text product not in catalogue
-      const item: SaleItem = { ...blankSaleItem(), productName: productSearch.trim() };
-      setNewItem(item); setAddingItem(true); setProductSearch("");
-      return;
-    }
+  // ── Add product from right panel ──
+  const handleAddProductFromCatalogue = useCallback((product: Product) => {
     const item: SaleItem = {
       ...blankSaleItem(),
-      productName: match.name, sku: match.sku,
-      unit: match.unit || "pcs", unitPrice: match.price || "0.00",
+      productName: product.name,
+      sku: product.sku,
+      unit: product.unit || "pcs",
+      unitPrice: product.price || "0.00",
     };
-    saveItems([...localItems, item]);
-    toast({ title: `${match.name} added` });
-    setProductSearch("");
-  };
+    const next = [...localItems, item];
+    saveItems(next);
+    toast({ title: `${product.name} added` });
+  }, [localItems, saveItems, toast]);
 
   const handleItemFieldChange = (itemId: string, field: keyof SaleItem, value: string) => {
     setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, [field]: value } : i));
@@ -284,7 +859,7 @@ export default function SalesPage() {
     });
     toast({ title: "Sale created", description: `${sale.saleNumber} saved` });
     setNewRow(null); setNewRowActive(null);
-    openDetail(sale.id);
+    openDetailDirect(sale);
   };
 
   useEffect(() => {
@@ -294,16 +869,41 @@ export default function SalesPage() {
   }, []);
 
   const pillColors: Record<string, { base: string; active: string }> = {
-    All:       { base: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",               active: "ring-2 ring-gray-400"     },
-    Draft:     { base: "bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400",                active: "ring-2 ring-gray-400"     },
-    Completed: { base: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300", active: "ring-2 ring-emerald-500"  },
-    Refunded:  { base: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",         active: "ring-2 ring-amber-400"    },
-    Cancelled: { base: "bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400",                 active: "ring-2 ring-red-500"      },
+    All:       { base: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",               active: "ring-2 ring-gray-400"    },
+    Draft:     { base: "bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400",                active: "ring-2 ring-gray-400"    },
+    Completed: { base: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300", active: "ring-2 ring-emerald-500" },
+    Refunded:  { base: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",         active: "ring-2 ring-amber-400"   },
+    Cancelled: { base: "bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400",                 active: "ring-2 ring-red-500"     },
   };
 
-  const grandTotal = localItems.reduce((s, i) => s + lineTotal(i), 0);
+  // ─── If POS is open, render full-page POS ───────────────────────────────────
+  if (detailId && detailSale && localMeta) {
+    return (
+      <POSView
+        sale={detailSale}
+        localItems={localItems}
+        localMeta={localMeta}
+        customerComboOpts={customerComboOpts}
+        productComboOpts={productComboOpts}
+        onClose={closePOS}
+        onMetaChange={patch => setLocalMeta(m => m ? { ...m, ...patch } : m)}
+        onSaveMeta={saveMeta}
+        onItemChange={handleItemFieldChange}
+        onItemBlur={handleItemBlur}
+        onDeleteItem={handleDeleteItem}
+        onAddProduct={handleAddProductFromCatalogue}
+        onAddCustomItem={() => { setAddingItem(true); setNewItem(blankSaleItem()); }}
+        onSetStatus={setStatus}
+        addingItem={addingItem}
+        newItem={newItem}
+        onNewItemChange={setNewItem}
+        onCommitNewItem={handleCommitNewItem}
+        onCancelNewItem={() => { setNewItem(null); setAddingItem(false); }}
+      />
+    );
+  }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── Sales list ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
 
@@ -322,7 +922,7 @@ export default function SalesPage() {
             <Button size="sm" variant="outline" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-sale-row">
               <Plus size={14} /> New Sale
             </Button>
-            <Button size="sm" onClick={() => { const s = addSale(blankSale()); openDetail(s.id); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button size="sm" onClick={() => { const s = addSale(blankSale()); openDetailDirect(s); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
               <ShoppingCart size={14} /> Open POS
             </Button>
           </div>
@@ -505,276 +1105,6 @@ export default function SalesPage() {
           )}
         </ExcelGridShell>
       </div>
-
-      {/* ══ POS Dialog ═══════════════════════════════════════════════════════════ */}
-      <Dialog open={!!detailId} onOpenChange={v => { if (!v) closePOS(); }}>
-        <DialogContent className="max-w-5xl max-h-[92vh] flex flex-col gap-0 p-0" aria-describedby="pos-desc">
-          <DialogHeader className="px-6 pt-5 pb-4 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-                <ShoppingCart size={16} className="text-blue-500" />
-                {detailSale?.saleNumber}
-              </DialogTitle>
-              <span className={`text-xs font-medium rounded px-2 py-0.5 ${STATUS_BG[detailSale?.status ?? "Draft"]}`}>
-                {detailSale?.status}
-              </span>
-              <span className="text-xs text-zinc-400 ml-1">
-                {detailSale && new Date(detailSale.updatedAt).toLocaleString("en-GB")}
-              </span>
-            </div>
-            <DialogDescription asChild id="pos-desc">
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
-                <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  Customer:
-                  <Combobox
-                    value={localMeta?.customer ?? ""}
-                    onChange={v => setLocalMeta(m => m ? { ...m, customer: v } : m)}
-                    onSelect={opt => { setLocalMeta(m => m ? { ...m, customer: opt.value } : m); saveMeta(); }}
-                    options={customerComboOpts}
-                    placeholder="Select customer…"
-                    className="w-44"
-                    inputClassName="border border-zinc-200 dark:border-zinc-600 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 w-44 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  Date:
-                  <input type="date"
-                    value={localMeta?.saleDate ?? ""}
-                    onChange={e => setLocalMeta(m => m ? { ...m, saleDate: e.target.value } : m)}
-                    onBlur={saveMeta}
-                    className="border border-zinc-200 dark:border-zinc-600 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  Payment:
-                  <select
-                    value={localMeta?.paymentMethod ?? "Cash"}
-                    onChange={e => { setLocalMeta(m => m ? { ...m, paymentMethod: e.target.value as SalePayment } : m); }}
-                    onBlur={saveMeta}
-                    className="border border-zinc-200 dark:border-zinc-600 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400">
-                    {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  Notes:
-                  <input value={localMeta?.notes ?? ""}
-                    onChange={e => setLocalMeta(m => m ? { ...m, notes: e.target.value } : m)}
-                    onBlur={saveMeta}
-                    placeholder="Optional"
-                    className="border border-zinc-200 dark:border-zinc-600 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 w-44 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                </label>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* POS body */}
-          <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
-
-            {/* Product search */}
-            {detailSale?.status === "Draft" && (
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-[9px] h-3.5 w-3.5 text-zinc-400 pointer-events-none z-10" />
-                  <Combobox
-                    value={productSearch}
-                    onChange={v => setProductSearch(v)}
-                    onSelect={opt => { setProductSearch(opt.value); setTimeout(handleAddProduct, 0); }}
-                    options={productComboOpts}
-                    placeholder="Search product by name or SKU → Enter to add…"
-                    className="w-full"
-                    inputClassName="w-full pl-8 pr-3 py-1.5 border border-zinc-200 dark:border-zinc-600 rounded text-sm bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddProduct(); } }}
-                  />
-                </div>
-                <Button size="sm" variant="outline" onClick={handleAddProduct} className="gap-1">
-                  <Plus size={13} /> Add Product
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setAddingItem(true); setNewItem(blankSaleItem()); }} className="gap-1 text-zinc-500">
-                  <Plus size={13} /> Custom Item
-                </Button>
-              </div>
-            )}
-
-            {/* Line items table */}
-            <div className="overflow-x-auto rounded border border-zinc-200 dark:border-zinc-700">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-                    {["#", "Product / Service 🔒", "SKU 🔒", "Qty", "Unit", "Unit Price (£)", "Disc %", "Line Total (£)", ""].map((h, i) => (
-                      <th key={i} className={`text-left text-[11px] font-semibold text-zinc-500 py-2 px-3 border border-zinc-200 dark:border-zinc-700 ${i === 0 ? "w-7" : i === 8 ? "w-8" : i === 3 || i === 6 ? "w-20" : i === 4 ? "w-24" : i === 5 || i === 7 ? "w-28 text-right" : ""}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {localItems.length === 0 && !addingItem && (
-                    <tr><td colSpan={9} className="py-8 text-center text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                      {detailSale?.status === "Draft" ? "No items — search a product above to add it" : "No items recorded"}
-                    </td></tr>
-                  )}
-                  {localItems.map((item, idx) => (
-                    <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/30 ${detailSale?.status !== "Draft" ? "opacity-90" : ""}`}>
-                      <td className="py-1.5 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-400">{idx + 1}</td>
-                      {/* productName — locked */}
-                      <td className="py-1.5 px-1 border border-zinc-200 dark:border-zinc-700 bg-gray-50/60 dark:bg-gray-800/20">
-                        <div className="group/lock flex items-center gap-1 px-2 py-0.5">
-                          <span className="flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400 font-medium">{item.productName || "—"}</span>
-                          <span className="opacity-0 group-hover/lock:opacity-40 text-[10px] text-zinc-400 whitespace-nowrap">🔒 Products</span>
-                        </div>
-                      </td>
-                      {/* sku — locked */}
-                      <td className="py-1.5 px-1 border border-zinc-200 dark:border-zinc-700 bg-gray-50/60 dark:bg-gray-800/20">
-                        <div className="group/lock flex items-center px-2 py-0.5">
-                          <span className="flex-1 text-xs text-zinc-400 font-mono">{item.sku || "—"}</span>
-                        </div>
-                      </td>
-                      {/* editable fields */}
-                      {(["qty", "unit", "unitPrice", "discount", "notes"] as (keyof SaleItem)[]).map(field => (
-                        <td key={field} className="py-1 px-1 border border-zinc-200 dark:border-zinc-700">
-                          {detailSale?.status === "Draft" ? (
-                            <input
-                              type={field === "qty" || field === "unitPrice" || field === "discount" ? "number" : "text"}
-                              min={0} step={field === "unitPrice" ? "0.01" : field === "discount" ? "1" : "1"}
-                              placeholder={field === "qty" ? "1" : field === "unit" ? "pcs" : field === "unitPrice" ? "0.00" : field === "discount" ? "0" : ""}
-                              className={`w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs ${field === "unitPrice" || field === "discount" ? "text-right" : ""}`}
-                              value={String(item[field])}
-                              onChange={e => handleItemFieldChange(item.id, field, e.target.value)}
-                              onBlur={handleItemBlur}
-                            />
-                          ) : (
-                            <span className={`px-2 text-xs text-zinc-600 dark:text-zinc-400 ${field === "unitPrice" || field === "discount" ? "block text-right" : ""}`}>
-                              {field === "unitPrice" ? `£${parseFloat(String(item[field]) || "0").toFixed(2)}` : String(item[field]) || "—"}
-                            </span>
-                          )}
-                        </td>
-                      ))}
-                      <td className="py-1.5 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums font-semibold text-zinc-700 dark:text-zinc-300">
-                        £{lineTotal(item).toFixed(2)}
-                      </td>
-                      <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700 text-center">
-                        {detailSale?.status === "Draft" && (
-                          <button onClick={() => handleDeleteItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors" title="Remove"><X size={13} /></button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* New custom item form */}
-                  {addingItem && newItem && (
-                    <tr className="bg-amber-50 dark:bg-amber-900/20">
-                      <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-zinc-400">{localItems.length + 1}</td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <Combobox autoFocus value={newItem.productName}
-                          onChange={v => setNewItem(prev => prev ? { ...prev, productName: v } : prev)}
-                          onSelect={opt => {
-                            const prod = products.find(p => p.name === opt.value);
-                            setNewItem(prev => prev ? { ...prev, productName: opt.value, sku: prod?.sku ?? prev.sku, unit: prod?.unit || prev.unit, unitPrice: prod?.price || prev.unitPrice } : prev);
-                          }}
-                          options={productComboOpts}
-                          placeholder="Product / service name *"
-                          className="w-full"
-                          inputClassName="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
-                        />
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input placeholder="SKU" className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
-                          value={newItem.sku} onChange={e => setNewItem(p => p ? { ...p, sku: e.target.value } : p)} />
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input type="number" min="0" placeholder="1" className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
-                          value={newItem.qty} onChange={e => setNewItem(p => p ? { ...p, qty: e.target.value } : p)} />
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input placeholder="pcs" className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
-                          value={newItem.unit} onChange={e => setNewItem(p => p ? { ...p, unit: e.target.value } : p)} />
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input type="number" min="0" step="0.01" placeholder="0.00" className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs text-right"
-                          value={newItem.unitPrice} onChange={e => setNewItem(p => p ? { ...p, unitPrice: e.target.value } : p)} />
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input type="number" min="0" max="100" placeholder="0" className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs text-right"
-                          value={newItem.discount} onChange={e => setNewItem(p => p ? { ...p, discount: e.target.value } : p)} />
-                      </td>
-                      <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-right font-mono tabular-nums text-zinc-400">
-                        £{(parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0") * (1 - parseFloat(newItem.discount || "0") / 100)).toFixed(2)}
-                      </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700 text-center">
-                        <button onClick={() => { setNewItem(null); setAddingItem(false); }} className="text-zinc-400 hover:text-zinc-600"><X size={13} /></button>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-
-                {/* Totals footer */}
-                {(localItems.length > 0 || addingItem) && (
-                  <tfoot>
-                    <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-                      <td colSpan={6} className="py-1.5 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-[11px] text-zinc-500">Subtotal</td>
-                      <td colSpan={2} className="py-1.5 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono text-xs text-zinc-600 dark:text-zinc-400">£{subTotal(localItems).toFixed(2)}</td>
-                      <td className="border border-zinc-200 dark:border-zinc-700" />
-                    </tr>
-                    {discountTotal(localItems) > 0 && (
-                      <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-                        <td colSpan={6} className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-[11px] text-amber-600">Discount</td>
-                        <td colSpan={2} className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono text-xs text-amber-600">−£{discountTotal(localItems).toFixed(2)}</td>
-                        <td className="border border-zinc-200 dark:border-zinc-700" />
-                      </tr>
-                    )}
-                    <tr className="bg-zinc-100 dark:bg-zinc-800 font-bold">
-                      <td colSpan={6} className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-sm text-zinc-700 dark:text-zinc-200">Grand Total</td>
-                      <td colSpan={2} className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono text-base text-zinc-800 dark:text-zinc-100">
-                        £{(grandTotal + (addingItem && newItem ? parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0") * (1 - parseFloat(newItem.discount || "0") / 100) : 0)).toFixed(2)}
-                      </td>
-                      <td className="border border-zinc-200 dark:border-zinc-700" />
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </div>
-
-          {/* POS footer */}
-          <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-700 flex items-center justify-between gap-3 shrink-0 flex-wrap">
-            <p className="text-xs text-zinc-400">
-              {localItems.length} item{localItems.length !== 1 ? "s" : ""} · <span className="font-semibold text-zinc-600 dark:text-zinc-300">£{grandTotal.toFixed(2)}</span>
-            </p>
-            <div className="flex gap-2 flex-wrap">
-              {addingItem ? (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => { setNewItem(null); setAddingItem(false); }}>Cancel</Button>
-                  <Button size="sm" onClick={handleCommitNewItem} className="gap-1"><Plus size={13} /> Add to Sale</Button>
-                </>
-              ) : (
-                <>
-                  {detailSale?.status === "Draft" && (
-                    <>
-                      <Button size="sm" variant="outline" onClick={closePOS} className="gap-1"><Save size={13} /> Save Draft</Button>
-                      <Button size="sm" onClick={() => { setStatus("Completed"); closePOS(); }} className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white">
-                        <Check size={13} /> Complete Sale
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setStatus("Cancelled")} className="gap-1 text-red-500 border-red-200 hover:bg-red-50">
-                        <Ban size={13} /> Cancel Sale
-                      </Button>
-                    </>
-                  )}
-                  {detailSale?.status === "Completed" && (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => setStatus("Refunded")} className="gap-1 text-amber-600 border-amber-200 hover:bg-amber-50">
-                        <RotateCcw size={13} /> Refund
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={closePOS}>Close</Button>
-                    </>
-                  )}
-                  {(detailSale?.status === "Refunded" || detailSale?.status === "Cancelled") && (
-                    <Button size="sm" variant="outline" onClick={closePOS}>Close</Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>

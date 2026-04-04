@@ -3,7 +3,8 @@ import { usePurchaseOrders } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, getSuppliers, getProducts } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingCart, Plus, Search, X, Save, Trash2, Eye, Package, ReceiptText } from "lucide-react";
+import { ShoppingCart, Plus, Search, X, Save, Trash2, Eye, Package, ReceiptText, Truck, AlertCircle } from "lucide-react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -45,10 +46,12 @@ export default function PurchasesPage() {
   const { purchaseOrders, addPurchaseOrder, editPurchaseOrder, removePurchaseOrder } = usePurchaseOrders();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   // ── supplier / product options ──
-  const supplierComboOpts = useMemo<ComboOption[]>(() => getSuppliers().map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
+  const supplierComboOpts = useMemo<ComboOption[]>(() => getSuppliers().filter(s => s.status !== "Blacklisted").map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const noSuppliers = supplierComboOpts.length === 0;
 
   // ── COLS (inside component to pick up dynamic supplier options) ──
   const COLS: ColDef[] = useMemo(() => [
@@ -169,7 +172,19 @@ export default function PurchasesPage() {
 
   const commitNewRow = () => {
     if (!newRow) return;
-    if (!newRow.supplier.trim()) { toast({ title: "Supplier is required", variant: "destructive" }); setNewRowActive(1); return; }
+    if (!newRow.supplier.trim()) {
+      toast({ title: "Supplier is required", variant: "destructive" });
+      setNewRowActive(1);
+      return;
+    }
+    if (supplierComboOpts.length > 0) {
+      const match = supplierComboOpts.find(s => s.value.toLowerCase() === newRow.supplier.trim().toLowerCase());
+      if (!match) {
+        toast({ title: "Unknown supplier", description: "Select a supplier from the list, or add one in the Suppliers section first.", variant: "destructive" });
+        setNewRowActive(1);
+        return;
+      }
+    }
     const created = addPurchaseOrder({ ...newRow, items: [], status: newRow.status as PurchaseOrderStatus });
     toast({ title: "Purchase order created", description: `${created.poNumber} — ${created.supplier}` });
     setNewRow(null); setNewRowActive(null);
@@ -228,11 +243,38 @@ export default function PurchasesPage() {
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Click <Eye size={11} className="inline" /> to manage line items</p>
         </div>
         {isAuthenticated && (
-          <Button size="sm" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-po">
-            <Plus size={14} /> New PO
+          <Button
+            size="sm"
+            onClick={() => { if (noSuppliers) { navigate("/suppliers"); return; } setNewRow(blankNewRow()); setNewRowActive(0); }}
+            className="gap-1.5"
+            disabled={!!newRow}
+            title={noSuppliers ? "Add suppliers first before creating a purchase order" : undefined}
+            data-testid="btn-new-po"
+          >
+            {noSuppliers ? <Truck size={14} /> : <Plus size={14} />}
+            {noSuppliers ? "Add Suppliers First" : "New PO"}
           </Button>
         )}
       </div>
+
+      {/* No-suppliers notice */}
+      {noSuppliers && (
+        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+          <AlertCircle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300">No suppliers found</p>
+            <p className="text-[12px] text-amber-700 dark:text-amber-400 mt-0.5">
+              Suppliers can only be created from the Suppliers page. Add your suppliers there first, then select them here when creating purchase orders.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/suppliers")}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 dark:hover:bg-amber-800/60 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Truck size={13} /> Go to Suppliers
+          </button>
+        </div>
+      )}
 
       {/* KPI pills */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -308,14 +350,24 @@ export default function PurchasesPage() {
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" />
                     ) : isA && c.field === "supplier" ? (
                       <div className="absolute inset-0 flex items-center">
-                        <Combobox autoFocus value={val}
-                          onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
-                          options={supplierComboOpts}
-                          placeholder="Select supplier…"
-                          className="w-full h-full"
-                          inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
-                          onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editableIdx, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
-                        />
+                        {noSuppliers ? (
+                          <div className="absolute inset-0 flex items-center px-3 gap-2">
+                            <AlertCircle size={12} className="text-amber-400 shrink-0" />
+                            <button onClick={() => navigate("/suppliers")} className="text-[12px] text-amber-600 hover:underline truncate">
+                              Add suppliers in Suppliers page first
+                            </button>
+                          </div>
+                        ) : (
+                          <Combobox autoFocus value={val}
+                            onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
+                            onSelect={opt => setNewRow(r => r ? { ...r, supplier: opt.value } : r)}
+                            options={supplierComboOpts}
+                            placeholder="Select supplier from list…"
+                            className="w-full h-full"
+                            inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                            onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editableIdx, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
+                          />
+                        )}
                       </div>
                     ) : isA ? (
                       <input autoFocus type="text" value={val} placeholder={c.label}
