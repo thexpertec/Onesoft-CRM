@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   Search, Plus, Trash2, UserCheck, ChevronDown, X, Save,
-  MoreHorizontal, Eye, ArrowDownToLine,
+  MoreHorizontal, Eye, ArrowDownToLine, Upload, Download,
+  FileSpreadsheet, AlertTriangle, CheckCircle2, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes">;
@@ -48,6 +52,103 @@ const BLANK_ROW = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "",
   industry: "", city: "", status: "New", source: "", notes: "",
 });
+
+// ─── CSV Template ─────────────────────────────────────────────────────────────
+const CSV_HEADERS = ["name", "company", "email", "phone", "industry", "city", "status", "source", "notes"] as const;
+
+const CSV_TEMPLATE_ROWS = [
+  ["Jane Smith",   "Acme Ltd",     "jane@acme.com",    "+44 7700 111222", "Technology",   "Hull",       "New",       "Website",  "Interested in ERP solution"],
+  ["John Doe",     "Beta Corp",    "john@betacorp.com","",               "Manufacturing", "Leeds",      "Contacted", "Referral", "Follow up next week"],
+  ["Sara Ahmed",   "Delta Systems","sara@delta.pk",    "+92 300 1234567", "IT Services",  "Islamabad",  "Qualified", "Cold Call","Requested proposal"],
+];
+
+function downloadTemplate() {
+  const rows = [
+    CSV_HEADERS.join(","),
+    ...CSV_TEMPLATE_ROWS.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")),
+  ];
+  const blob = new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "leads-import-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── CSV Parser ───────────────────────────────────────────────────────────────
+type ParsedRow = Record<string, string>;
+
+function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // Parse a single CSV line handling quoted fields
+  function parseLine(line: string): string[] {
+    const result: string[] = [];
+    let cur = "";
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuote = !inQuote; }
+      } else if (ch === "," && !inQuote) {
+        result.push(cur.trim()); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  }
+
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().trim());
+  const rows: ParsedRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cells = parseLine(line);
+    const row: ParsedRow = {};
+    headers.forEach((h, idx) => { row[h] = cells[idx] ?? ""; });
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+// Map a parsed CSV row → lead fields (flexible header matching)
+const FIELD_ALIASES: Record<EditableField, string[]> = {
+  name:     ["name", "full name", "fullname", "lead name", "contact name", "first name"],
+  company:  ["company", "company name", "organisation", "organization", "business"],
+  email:    ["email", "email address", "e-mail"],
+  phone:    ["phone", "phone number", "mobile", "tel", "telephone"],
+  industry: ["industry", "sector", "vertical"],
+  city:     ["city", "location", "town"],
+  status:   ["status", "lead status", "stage"],
+  source:   ["source", "lead source", "channel", "origin"],
+  notes:    ["notes", "note", "comments", "comment", "description"],
+};
+
+function mapRow(row: ParsedRow): Record<EditableField, string> {
+  const result = BLANK_ROW();
+  (Object.keys(FIELD_ALIASES) as EditableField[]).forEach(field => {
+    for (const alias of FIELD_ALIASES[field]) {
+      if (row[alias] !== undefined) { result[field] = row[alias]; break; }
+    }
+  });
+  // Validate & normalise status
+  const validStatuses: string[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"];
+  const rawStatus = result.status.trim();
+  const matchedStatus = validStatuses.find(s => s.toLowerCase() === rawStatus.toLowerCase());
+  result.status = matchedStatus ?? "New";
+  return result;
+}
+
+type ImportRow = {
+  mapped:  Record<EditableField, string>;
+  error?:  string;   // null = valid
+  isDupe?: boolean;  // email matches existing
+};
 
 // ─── EditableCell ──────────────────────────────────────────────────────────────
 function EditableCell({
@@ -156,6 +257,78 @@ export default function Leads() {
     () => new Set(getCustomers().map(c => c.leadId).filter(Boolean)),
     [leads]
   );
+
+  // ── Import state ─────────────────────────────────────────────────────────
+  const [importOpen,    setImportOpen]    = useState(false);
+  const [importRows,    setImportRows]    = useState<ImportRow[]>([]);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [skipDupes,     setSkipDupes]     = useState(true);
+  const [importing,     setImporting]     = useState(false);
+  const [dragOver,      setDragOver]      = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const existingEmails = useMemo(() => new Set(leads.map(l => l.email?.toLowerCase()).filter(Boolean)), [leads]);
+
+  function processFile(file: File) {
+    if (!file.name.match(/\.(csv|txt)$/i)) {
+      toast({ title: "Invalid file type", description: "Please upload a .csv file.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target?.result as string;
+      const { headers, rows } = parseCSV(text);
+      if (headers.length === 0 || rows.length === 0) {
+        toast({ title: "Empty file", description: "The CSV file has no data rows.", variant: "destructive" });
+        return;
+      }
+      const parsed: ImportRow[] = rows.map(raw => {
+        const mapped = mapRow(raw);
+        let error: string | undefined;
+        if (!mapped.name.trim()) error = "Name is required";
+        const isDupe = !!(mapped.email && existingEmails.has(mapped.email.toLowerCase()));
+        return { mapped, error, isDupe };
+      });
+      setImportHeaders(headers);
+      setImportRows(parsed);
+      setImportOpen(true);
+    };
+    reader.readAsText(file);
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }
+
+  function confirmImport() {
+    setImporting(true);
+    const toImport = importRows.filter(r => !r.error && !(skipDupes && r.isDupe));
+    let count = 0;
+    toImport.forEach(r => {
+      addLead({
+        name: r.mapped.name, company: r.mapped.company, email: r.mapped.email,
+        phone: r.mapped.phone, industry: r.mapped.industry, city: r.mapped.city,
+        status: (r.mapped.status as LeadStatus) || "New",
+        source: r.mapped.source, notes: r.mapped.notes,
+      });
+      count++;
+    });
+    setTimeout(() => {
+      setImporting(false);
+      setImportOpen(false);
+      setImportRows([]);
+      toast({ title: `${count} leads imported`, description: count > 0 ? `Successfully added ${count} lead${count !== 1 ? "s" : ""}.` : "No leads were imported." });
+    }, 200);
+  }
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const [search,       setSearch]       = useState("");
