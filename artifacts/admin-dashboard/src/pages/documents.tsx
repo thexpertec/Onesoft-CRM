@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Search, MoreHorizontal, Trash2, Eye, ExternalLink, FileText, Save, Edit, Lock, X } from "lucide-react";
+import { Search, MoreHorizontal, Trash2, Eye, FileText, Save, Edit, Lock, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
@@ -99,9 +99,9 @@ export default function Documents() {
         </div>
         {isAuthenticated && (
           <Button asChild data-testid="btn-create-doc">
-            <a href="/" target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="mr-2 h-4 w-4" /> Create New Document
-            </a>
+            <Link href="/documents/new">
+              <FileText className="mr-2 h-4 w-4" /> New Document
+            </Link>
           </Button>
         )}
       </div>
@@ -109,11 +109,11 @@ export default function Documents() {
       <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 flex items-start gap-3 text-sm text-foreground">
         <FileText className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
         <span>
-          Documents are created using the{" "}
-          <a href="/" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">
-            Customer Requirement Form
-          </a>
-          . Fill in the form, then click <strong>Submit to Admin Dashboard</strong> to add the document here.
+          {isAuthenticated ? (
+            <>Click <strong>New Document</strong> to open the full requirement collection form and save it directly to this list.</>
+          ) : (
+            <>Login as admin to create and manage requirement documents.</>
+          )}
         </span>
       </div>
 

@@ -12,6 +12,7 @@ import Dashboard from "@/pages/dashboard";
 import Leads from "@/pages/leads";
 import Documents from "@/pages/documents";
 import DocumentDetail from "@/pages/document-detail";
+import NewDocument from "@/pages/new-document";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/leads" component={Leads} />
             <Route path="/documents" component={Documents} />
+            <Route path="/documents/new" component={NewDocument} />
             <Route path="/documents/:id" component={DocumentDetail} />
             <Route component={NotFound} />
           </Switch>

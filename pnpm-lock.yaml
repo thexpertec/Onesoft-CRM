@@ -165,6 +165,37 @@ importers:
         version: 5.9.3
 
   artifacts/admin-dashboard:
+    dependencies:
+      '@tiptap/extension-color':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/extension-text-style@3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1)))
+      '@tiptap/extension-highlight':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))
+      '@tiptap/extension-link':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))(@tiptap/pm@3.22.1)
+      '@tiptap/extension-placeholder':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/extensions@3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))(@tiptap/pm@3.22.1))
+      '@tiptap/extension-text-align':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))
+      '@tiptap/extension-text-style':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))
+      '@tiptap/extension-underline':
+        specifier: ^3.22.1
+        version: 3.22.1(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))
+      '@tiptap/pm':
+        specifier: ^3.22.1
+        version: 3.22.1
+      '@tiptap/react':
+        specifier: ^3.22.1
+        version: 3.22.1(@floating-ui/dom@1.7.6)(@tiptap/core@3.22.1(@tiptap/pm@3.22.1))(@tiptap/pm@3.22.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@tiptap/starter-kit':
+        specifier: ^3.22.1
+        version: 3.22.1
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
