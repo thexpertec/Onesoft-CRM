@@ -883,20 +883,37 @@ export default function SalesPage() {
 
   // ── COLS ──
   const COLS: ColDef[] = useMemo(() => [
-    { field: "saleNumber",    label: "Sale #",     minW: 145, type: "readonly" },
-    { field: "saleDate",      label: "Date",       minW: 130, type: "date"     },
-    { field: "customer",      label: "Customer",   minW: 200, type: "text"     },
-    { field: "status",        label: "Status",     minW: 130, type: "select",  options: [...SALE_STATUSES] },
-    { field: "itemCount",     label: "Items",      minW: 60,  type: "readonly" },
-    { field: "total",         label: "Total (£)",  minW: 110, type: "readonly" },
-    { field: "paymentMethod", label: "Payment",    minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
-    { field: "notes",         label: "Notes",      minW: 230, type: "text"     },
+    { field: "saleNumber",    label: "Sale #",          minW: 145, type: "readonly" },
+    { field: "saleDate",      label: "Date",            minW: 130, type: "date"     },
+    { field: "customer",      label: "Customer",        minW: 200, type: "text"     },
+    { field: "status",        label: "Status",          minW: 130, type: "select",  options: [...SALE_STATUSES] },
+    { field: "itemCount",     label: "Items",           minW: 60,  type: "readonly" },
+    { field: "total",         label: "Total (£)",       minW: 110, type: "readonly" },
+    { field: "amountPaid",    label: "Paid (£)",        minW: 110, type: "readonly" },
+    { field: "balance",       label: "Balance (£)",     minW: 110, type: "readonly" },
+    { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
+    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
+    { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
   ], []);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const cellValue = (sale: Sale, field: string): string => {
     if (field === "itemCount") return String(sale.items.length);
     if (field === "total")     return saleTotal(sale.items).toFixed(2);
+    if (field === "balance") {
+      const total = saleTotal(sale.items);
+      const paid  = parseFloat(sale.amountPaid || "0");
+      return Math.max(0, total - paid).toFixed(2);
+    }
+    if (field === "payStatus") {
+      if (sale.status === "Cancelled" || sale.status === "Refunded" || sale.status === "Draft") return "N/A";
+      if (sale.status === "On Credit") return "On Credit";
+      const total = saleTotal(sale.items);
+      const paid  = parseFloat(sale.amountPaid || "0");
+      if (paid >= total && total > 0) return "Paid";
+      if (paid > 0)                   return "Partial";
+      return "Unpaid";
+    }
     return String((sale as unknown as Record<string, string>)[field] ?? "");
   };
 
@@ -1262,9 +1279,30 @@ export default function SalesPage() {
                         {PAYMENT_ICON[rawVal as SalePayment]}
                         <span className="text-[12px] text-gray-600 dark:text-gray-400">{rawVal}</span>
                       </div>
-                    ) : c.field === "total" ? (
+                    ) : (c.field === "total" || c.field === "amountPaid" || c.field === "balance") ? (
                       <div className="w-full h-full flex items-center px-3">
-                        <span className="text-[13px] font-mono font-semibold tabular-nums text-gray-700 dark:text-foreground">£{parseFloat(rawVal || "0").toLocaleString("en-GB", { minimumFractionDigits: 2 })}</span>
+                        <span className={`text-[13px] font-mono font-semibold tabular-nums ${
+                          c.field === "balance" && parseFloat(rawVal) > 0
+                            ? "text-red-500 dark:text-red-400"
+                            : c.field === "amountPaid" && parseFloat(rawVal) > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-gray-700 dark:text-foreground"
+                        }`}>
+                          £{parseFloat(rawVal || "0").toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ) : c.field === "payStatus" ? (
+                      <div className="w-full h-full flex items-center px-3">
+                        {rawVal === "N/A" ? (
+                          <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
+                        ) : (
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                            rawVal === "Paid"      ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300" :
+                            rawVal === "Partial"   ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300" :
+                            rawVal === "On Credit" ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300" :
+                                                    "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+                          }`}>{rawVal}</span>
+                        )}
                       </div>
                     ) : (
                       <EditableCell
