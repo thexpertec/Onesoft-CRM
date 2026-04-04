@@ -5,6 +5,7 @@ import {
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
+  ShoppingCart,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -90,6 +91,12 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
+    key: "purchases", label: "Purchases", icon: ShoppingCart,
+    items: [
+      { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
+    ],
+  },
+  {
     key: "documents", href: "/documents", label: "Documents", icon: FileText,
     items: [
       { label: "All Documents", href: "/documents",     icon: FileText },
@@ -103,14 +110,16 @@ const USERS_NAV: NavItem = {
   items: [{ label: "All Users", href: "/users", icon: Shield }],
 };
 
-const CRM_ROUTES      = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES = ["/products", "/brands", "/categories", "/attributes", "/units"];
+const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
+const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units"];
+const PURCHASES_ROUTES = ["/purchases"];
 
 const QUICK_ADD: SubItem[] = [
-  { label: "New Lead",     href: "/leads",         icon: UserPlus },
-  { label: "New Customer", href: "/customers",     icon: UserCheck },
-  { label: "New Supplier", href: "/suppliers",     icon: Truck },
-  { label: "New Document", href: "/documents/new", icon: FilePlus },
+  { label: "New Lead",           href: "/leads",         icon: UserPlus    },
+  { label: "New Customer",       href: "/customers",     icon: UserCheck   },
+  { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
+  { label: "New Purchase Order", href: "/purchases",     icon: ShoppingCart},
+  { label: "New Document",       href: "/documents/new", icon: FilePlus    },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -159,8 +168,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
     .split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const isCrmActive      = CRM_ROUTES.some(r      => location === r || location.startsWith(r));
-  const isProductsActive = PRODUCTS_ROUTES.some(r => location === r || location.startsWith(r));
+  const isCrmActive       = CRM_ROUTES.some(r       => location === r || location.startsWith(r));
+  const isProductsActive  = PRODUCTS_ROUTES.some(r  => location === r || location.startsWith(r));
+  const isPurchasesActive = PURCHASES_ROUTES.some(r => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -312,8 +322,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
             {navItems.map(item => {
               const isActive =
-                item.key === "crm"      ? isCrmActive :
-                item.key === "products" ? isProductsActive :
+                item.key === "crm"       ? isCrmActive :
+                item.key === "products"  ? isProductsActive :
+                item.key === "purchases" ? isPurchasesActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
@@ -477,6 +488,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </Link>
                 ))}
               </div>
+
+              {/* Purchases */}
+              <Link href="/purchases"
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  location.startsWith("/purchases") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                <ShoppingCart size={16} /> Purchases
+              </Link>
 
               {/* Documents, Users */}
               {[

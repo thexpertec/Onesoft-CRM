@@ -544,6 +544,73 @@ export const deleteUnit = (id: string): void => {
   setStored(UNITS_KEY, getUnits().filter(u => u.id !== id));
 };
 
+// ─── Purchase Orders API ──────────────────────────────────────────────────────
+export type PurchaseOrderStatus = "Draft" | "Sent" | "Confirmed" | "Received" | "Cancelled";
+
+export type PurchaseOrderItem = {
+  id: string;
+  productName: string;
+  qty: string;
+  unit: string;
+  unitPrice: string;
+  notes: string;
+};
+
+export type PurchaseOrder = {
+  id: string;
+  poNumber: string;
+  supplier: string;
+  orderDate: string;
+  deliveryDate: string;
+  status: PurchaseOrderStatus;
+  notes: string;
+  items: PurchaseOrderItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const PURCHASE_ORDERS_KEY = "admin-purchase-orders";
+
+export const getPurchaseOrders = (): PurchaseOrder[] => getStored<PurchaseOrder>(PURCHASE_ORDERS_KEY);
+
+function generatePoNumber(): string {
+  const now = new Date();
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const all = getPurchaseOrders();
+  const seq = String(all.filter(p => p.poNumber.startsWith(`PO-${ym}-`)).length + 1).padStart(3, "0");
+  return `PO-${ym}-${seq}`;
+}
+
+export const createPurchaseOrder = (
+  data: Omit<PurchaseOrder, "id" | "poNumber" | "createdAt" | "updatedAt">,
+): PurchaseOrder => {
+  const item: PurchaseOrder = {
+    ...data,
+    id: crypto.randomUUID(),
+    poNumber: generatePoNumber(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(PURCHASE_ORDERS_KEY, [...getPurchaseOrders(), item]);
+  return item;
+};
+
+export const updatePurchaseOrder = (
+  id: string,
+  updates: Partial<Omit<PurchaseOrder, "id" | "createdAt">>,
+): PurchaseOrder => {
+  const items = getPurchaseOrders();
+  const i = items.findIndex(p => p.id === id);
+  if (i === -1) throw new Error("Purchase order not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PURCHASE_ORDERS_KEY, items);
+  return items[i];
+};
+
+export const deletePurchaseOrder = (id: string): void => {
+  setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
+};
+
 export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;

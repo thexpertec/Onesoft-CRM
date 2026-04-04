@@ -8,8 +8,9 @@ import {
   getBrands, createBrand, updateBrand, deleteBrand,
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
   getUnits, createUnit, updateUnit, deleteUnit,
+  getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
-  Product, Brand, Attribute, Unit,
+  Product, Brand, Attribute, Unit, PurchaseOrder,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -247,4 +248,37 @@ export function useSuppliers() {
   };
 
   return { suppliers, addSupplier, editSupplier, removeSupplier, refresh: fetchSuppliers };
+}
+
+export function usePurchaseOrders() {
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+
+  const fetchOrders = useCallback(() => {
+    setPurchaseOrders(getPurchaseOrders());
+  }, []);
+
+  useEffect(() => {
+    fetchOrders();
+    window.addEventListener("storage", fetchOrders);
+    return () => window.removeEventListener("storage", fetchOrders);
+  }, [fetchOrders]);
+
+  const addPurchaseOrder = (data: Parameters<typeof createPurchaseOrder>[0]) => {
+    const po = createPurchaseOrder(data);
+    fetchOrders();
+    return po;
+  };
+
+  const editPurchaseOrder = (id: string, updates: Parameters<typeof updatePurchaseOrder>[1]) => {
+    const po = updatePurchaseOrder(id, updates);
+    fetchOrders();
+    return po;
+  };
+
+  const removePurchaseOrder = (id: string) => {
+    deletePurchaseOrder(id);
+    fetchOrders();
+  };
+
+  return { purchaseOrders, addPurchaseOrder, editPurchaseOrder, removePurchaseOrder, refresh: fetchOrders };
 }
