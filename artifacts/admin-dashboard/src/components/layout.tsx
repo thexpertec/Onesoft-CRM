@@ -6,7 +6,7 @@ import {
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
-  Package2, Image as ImageIcon,
+  Package2, Image as ImageIcon, Settings,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -119,6 +119,7 @@ const OTHER_NAV: NavItem[] = [
       { label: "New Document",  href: "/documents/new", icon: FilePlus },
     ],
   },
+  { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
 ];
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];

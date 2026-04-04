@@ -798,6 +798,89 @@ export const deleteStaffRole = (id: string): void => {
   setStored(HRM_ROLES_KEY, getStaffRoles().filter(r => r.id !== id));
 };
 
+// ─── Settings ─────────────────────────────────────────────────────────────────
+export const SETTINGS_KEY = "admin-settings";
+
+export type AppSettings = {
+  companyName:          string;
+  companyTagline:       string;
+  logoBase64:           string;
+  emailHull:            string;
+  emailIslamabad:       string;
+  phoneHull:            string;
+  phoneIslamabad:       string;
+  addressHull:          string;
+  addressIslamabad:     string;
+  website:              string;
+  currency:             string;
+  vatRate:              string;
+  vatNumber:            string;
+  fiscalYearStart:      string;
+  salePrefix:           string;
+  purchasePrefix:       string;
+  defaultPaymentMethod: string;
+  receiptHeader:        string;
+  receiptFooter:        string;
+  taxOnPOS:             boolean;
+};
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  companyName:          "Onesoft",
+  companyTagline:       "Software & IT Solutions",
+  logoBase64:           "",
+  emailHull:            "",
+  emailIslamabad:       "",
+  phoneHull:            "",
+  phoneIslamabad:       "",
+  addressHull:          "Hull, UK",
+  addressIslamabad:     "Islamabad, Pakistan",
+  website:              "",
+  currency:             "GBP",
+  vatRate:              "20",
+  vatNumber:            "",
+  fiscalYearStart:      "January",
+  salePrefix:           "SAL-",
+  purchasePrefix:       "PO-",
+  defaultPaymentMethod: "Cash",
+  receiptHeader:        "",
+  receiptFooter:        "Thank you for your business!",
+  taxOnPOS:             true,
+};
+
+export function getSettings(): AppSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { ...DEFAULT_SETTINGS };
+}
+
+export function saveSettings(s: AppSettings): void {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+// All localStorage keys for export/import/reset
+export const ALL_STORE_KEYS = [
+  "admin-leads", "admin-req-docs", "admin-customers", "admin-suppliers",
+  "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
+  "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales",
+  "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
+  "admin-settings",
+] as const;
+
+export type StoreKey = typeof ALL_STORE_KEYS[number];
+
+export const MODULE_KEYS: Record<string, StoreKey[]> = {
+  CRM:        ["admin-leads", "admin-customers", "admin-suppliers"],
+  Products:   ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
+  Stock:      ["admin-stock"],
+  Purchases:  ["admin-purchase-orders"],
+  Sales:      ["admin-sales"],
+  Documents:  ["admin-req-docs"],
+  HRM:        ["admin-hrm-staff", "admin-hrm-roles"],
+  Users:      ["admin-users"],
+};
+
 export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;
