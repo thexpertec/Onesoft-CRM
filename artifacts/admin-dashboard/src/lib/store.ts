@@ -611,6 +611,49 @@ export const deletePurchaseOrder = (id: string): void => {
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
 };
 
+// ─── Stock Tracking ───────────────────────────────────────────────────────────
+export const STOCK_TYPES = ["For Sale", "Not For Sale", "Business Asset"] as const;
+export type StockType = typeof STOCK_TYPES[number];
+
+export type StockItem = {
+  id: string;
+  productName: string;
+  sku: string;
+  store: string;
+  stockType: StockType;
+  quantity: string;   // stored as string for grid compat
+  minLevel: string;   // alert threshold; "0" = no alert
+  unit: string;
+  holdCustomer: string; // name of customer holding this stock (Not For Sale only)
+  holdReason: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const STOCK_KEY = "admin-stock";
+
+export const getStock = (): StockItem[] => getStored<StockItem>(STOCK_KEY);
+
+export const createStockItem = (data: Omit<StockItem, "id" | "createdAt" | "updatedAt">): StockItem => {
+  const item: StockItem = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(STOCK_KEY, [...getStock(), item]);
+  return item;
+};
+
+export const updateStockItem = (id: string, updates: Partial<Omit<StockItem, "id" | "createdAt">>): StockItem => {
+  const items = getStock();
+  const i = items.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Stock item not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(STOCK_KEY, items);
+  return items[i];
+};
+
+export const deleteStockItem = (id: string): void => {
+  setStored(STOCK_KEY, getStock().filter(s => s.id !== id));
+};
+
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────
 export type StaffStatus = "Active" | "On Leave" | "Terminated";
 

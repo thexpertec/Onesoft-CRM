@@ -5,7 +5,7 @@ import {
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
-  ShoppingCart, Users2, KeyRound, Building2,
+  ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -91,6 +91,13 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
+    key: "stock", label: "Stock", icon: Boxes,
+    items: [
+      { label: "All Stock",   href: "/stock",       icon: Boxes, desc: "Product quantities & levels" },
+      { label: "Stock Holds", href: "/stock/holds", icon: Lock,  desc: "Reserved (Not For Sale) items" },
+    ],
+  },
+  {
     key: "purchases", label: "Purchases", icon: ShoppingCart,
     items: [
       { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
@@ -107,6 +114,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units"];
+const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
 const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
@@ -173,6 +181,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isCrmActive       = CRM_ROUTES.some(r       => location === r || location.startsWith(r));
   const isProductsActive  = PRODUCTS_ROUTES.some(r  => location === r || location.startsWith(r));
+  const isStockActive     = STOCK_ROUTES.some(r     => location === r || location.startsWith(r));
   const isPurchasesActive = PURCHASES_ROUTES.some(r => location === r || location.startsWith(r));
   const isHrmActive       = HRM_ROUTES.some(r       => location === r || location.startsWith(r));
 
@@ -328,6 +337,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               const isActive =
                 item.key === "crm"       ? isCrmActive :
                 item.key === "products"  ? isProductsActive :
+                item.key === "stock"     ? isStockActive :
                 item.key === "purchases" ? isPurchasesActive :
                 item.key === "hrm"       ? isHrmActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
