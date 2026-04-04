@@ -1482,6 +1482,13 @@ export default function RequirementDoc() {
                 <Phone className="w-4 h-4" />
                 +44 7984 273482
               </a>
+              <a
+                href="tel:+923334199233"
+                className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
+              >
+                <Phone className="w-4 h-4" />
+                +92 333 4199233
+              </a>
             </div>
           </div>
         </div>
