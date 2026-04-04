@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin } from "lucide-react";
+import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine } from "lucide-react";
 import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
+import RichTextEditor from "@/components/RichTextEditor";
 
 const TEAM_MEMBERS = [
   "Alice Johnson",
@@ -272,6 +273,7 @@ export default function RequirementDoc() {
   const [postLaunch, setPostLaunch] = useState("");
   const [maintenance, setMaintenance] = useState("");
   const [versionHistory, setVersionHistory] = useState("");
+  const [detailedNotes, setDetailedNotes] = useState("");
 
   const client = CLIENTS.find((c) => c.name === selectedClient);
 
@@ -435,6 +437,22 @@ export default function RequirementDoc() {
               </div>
             )}
           </div>
+        </section>
+
+        <SectionDivider />
+
+        {/* Section 3.5: Detailed Requirements Notes */}
+        <section>
+          <SectionHeader
+            icon={PenLine}
+            title="Detailed Requirements Notes"
+            subtitle="Use this space to document any additional client requirements, discussions, or specifications in detail"
+          />
+          <RichTextEditor
+            value={detailedNotes}
+            onChange={setDetailedNotes}
+            placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
+          />
         </section>
 
         <SectionDivider />
