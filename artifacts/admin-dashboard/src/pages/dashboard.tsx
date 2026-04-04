@@ -1,16 +1,38 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useLeads, useDocs } from "@/hooks/use-data";
+import { useLeads, useDocs, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { getAdminUsers } from "@/lib/store";
+import { CURRENCIES } from "@/lib/currencies";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useToast } from "@/hooks/use-toast";
 import { format, isToday, isYesterday, formatDistanceToNow } from "date-fns";
 import {
   Users, FileText, TrendingUp, PoundSterling, Plus, ArrowRight,
-  Target, CheckCircle2, Clock, Building2, MapPin, Layers, UserPlus,
+  Target, CheckCircle2, Clock, Building2, MapPin, Layers, UserPlus, UserCheck,
 } from "lucide-react";
+
+const quickCustomerSchema = z.object({
+  name:    z.string().min(2, "Name is required"),
+  company: z.string().min(1, "Company is required"),
+  email:   z.union([z.string().email("Invalid email"), z.literal("")]),
+  phone:   z.string().optional(),
+  status:  z.enum(["Active", "Inactive", "Churned"]),
+  currency: z.string(),
+  totalValue: z.string().optional(),
+  notes:   z.string().optional(),
+});
+type QuickCustomerValues = z.infer<typeof quickCustomerSchema>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatGBP(n: number) {
@@ -120,7 +142,40 @@ function LeadBadge({ status }: { status: string }) {
 export default function Dashboard() {
   const { leads } = useLeads();
   const { docs }  = useDocs();
+  const { addCustomer } = useCustomers();
   const { currentUser, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+
+  const quickCustomerForm = useForm<QuickCustomerValues>({
+    resolver: zodResolver(quickCustomerSchema),
+    defaultValues: {
+      name: "", company: "", email: "", phone: "",
+      status: "Active", currency: "GBP", totalValue: "", notes: "",
+    },
+  });
+
+  const handleQuickAddCustomer = (data: QuickCustomerValues) => {
+    addCustomer({
+      name:          data.name,
+      company:       data.company,
+      email:         data.email ?? "",
+      phone:         data.phone ?? "",
+      industry:      "",
+      city:          "",
+      status:        data.status,
+      source:        "direct",
+      customerSince: new Date().toISOString().split("T")[0],
+      totalValue:    data.totalValue ?? "",
+      currency:      data.currency,
+      notes:         data.notes ?? "",
+      tags:          [],
+    });
+    toast({ title: "Customer added", description: `${data.name} has been added as a customer.` });
+    quickCustomerForm.reset();
+    setAddCustomerOpen(false);
+  };
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const totalLeads    = leads.length;
@@ -213,10 +268,19 @@ export default function Dashboard() {
           </p>
         </div>
         {isAuthenticated && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Link href="/leads">
               <Button size="sm" variant="outline" className="gap-1.5"><UserPlus size={14} /> Add Lead</Button>
             </Link>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setAddCustomerOpen(true)}
+              data-testid="btn-quick-add-customer"
+            >
+              <UserCheck size={14} /> Add Customer
+            </Button>
             <Link href="/documents/new">
               <Button size="sm" className="gap-1.5"><Plus size={14} /> New Document</Button>
             </Link>
@@ -544,6 +608,104 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Add Customer dialog ────────────────────────────────────────────── */}
+      <Dialog open={addCustomerOpen} onOpenChange={v => { setAddCustomerOpen(v); if (!v) quickCustomerForm.reset(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck size={18} /> Add New Customer
+            </DialogTitle>
+            <DialogDescription>Quickly add a customer. More details can be filled in on the Customers page.</DialogDescription>
+          </DialogHeader>
+          <Form {...quickCustomerForm}>
+            <form onSubmit={quickCustomerForm.handleSubmit(handleQuickAddCustomer)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={quickCustomerForm.control} name="name" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name *</FormLabel>
+                    <FormControl><Input placeholder="Jane Smith" data-testid="input-customer-name" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={quickCustomerForm.control} name="company" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Company *</FormLabel>
+                    <FormControl><Input placeholder="Acme Ltd" data-testid="input-customer-company" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={quickCustomerForm.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl><Input type="email" placeholder="jane@acme.com" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={quickCustomerForm.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl><Input placeholder="+44 7700 000000" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={quickCustomerForm.control} name="status" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                        <SelectItem value="Churned">Churned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={quickCustomerForm.control} name="currency" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} {c.symbol}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={quickCustomerForm.control} name="totalValue" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Total Value</FormLabel>
+                  <FormControl><Input placeholder="e.g. 50000" data-testid="input-customer-value" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={quickCustomerForm.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl><Textarea rows={2} className="resize-none" placeholder="Any initial notes..." {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setAddCustomerOpen(false)}>Cancel</Button>
+                <Button type="submit" data-testid="btn-save-quick-customer">Add Customer</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
