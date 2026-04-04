@@ -1,42 +1,151 @@
-import { useState, useMemo } from "react";
+import {
+  useState, useMemo, useRef, useEffect, useCallback,
+} from "react";
 import { useLeads, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Lead, LeadStatus, convertLeadToCustomer, getCustomers } from "@/lib/store";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, Link as LinkIcon, UserCheck } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
-import { Link } from "wouter";
+import {
+  Search, Plus, Trash2, UserCheck, ChevronDown, X, Save,
+  MoreHorizontal, Eye, ArrowDownToLine,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-const leadSchema = z.object({
-  name: z.string().min(2, "Name is required"),
-  company: z.string().min(2, "Company is required"),
-  email: z.union([z.string().email("Invalid email"), z.literal("")]),
-  phone: z.string().min(5, "Phone is required"),
-  industry: z.string().min(2, "Industry is required"),
-  city: z.string().min(2, "City is required"),
-  status: z.enum(["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"]),
-  source: z.string().min(2, "Source is required"),
-  notes: z.string().optional(),
-});
-
-type LeadFormValues = z.infer<typeof leadSchema>;
+// ─── Column definitions ────────────────────────────────────────────────────────
+type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes">;
 
 const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"];
 
+const STATUS_STYLES: Record<LeadStatus, string> = {
+  New:           "bg-blue-100  dark:bg-blue-900  text-blue-700  dark:text-blue-300",
+  Contacted:     "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300",
+  Qualified:     "bg-cyan-100  dark:bg-cyan-900  text-cyan-700  dark:text-cyan-300",
+  "Proposal Sent":"bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300",
+  Won:           "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300",
+  Lost:          "bg-red-100   dark:bg-red-900   text-red-600   dark:text-red-400",
+};
+
+const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" }[] = [
+  { field: "name",     label: "Name",     minW: 150, type: "text"   },
+  { field: "company",  label: "Company",  minW: 140, type: "text"   },
+  { field: "email",    label: "Email",    minW: 190, type: "email"  },
+  { field: "phone",    label: "Phone",    minW: 130, type: "tel"    },
+  { field: "industry", label: "Industry", minW: 120, type: "text"   },
+  { field: "city",     label: "City",     minW: 110, type: "text"   },
+  { field: "status",   label: "Status",   minW: 140, type: "select" },
+  { field: "source",   label: "Source",   minW: 110, type: "text"   },
+  { field: "notes",    label: "Notes",    minW: 200, type: "text"   },
+];
+
+// ─── Blank new-lead template ───────────────────────────────────────────────────
+const BLANK_ROW = (): Record<EditableField, string> => ({
+  name: "", company: "", email: "", phone: "",
+  industry: "", city: "", status: "New", source: "", notes: "",
+});
+
+// ─── EditableCell ──────────────────────────────────────────────────────────────
+function EditableCell({
+  value,
+  col,
+  active,
+  canEdit,
+  onActivate,
+  onCommit,
+  onCancel,
+  onTab,
+  onEnter,
+}: {
+  value: string;
+  col: (typeof COLS)[number];
+  active: boolean;
+  canEdit: boolean;
+  onActivate: () => void;
+  onCommit: (v: string) => void;
+  onCancel: () => void;
+  onTab: (shift: boolean) => void;
+  onEnter: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selectRef = useRef<HTMLSelectElement>(null);
+
+  useEffect(() => {
+    if (active) {
+      setDraft(value);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        selectRef.current?.focus();
+      }, 0);
+    }
+  }, [active]);
+
+  const commit = () => onCommit(draft);
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    else if (e.key === "Enter") { e.preventDefault(); commit(); onEnter(); }
+    else if (e.key === "Tab") { e.preventDefault(); commit(); onTab(e.shiftKey); }
+  };
+
+  // ── Active edit mode ──────────────────────────────────────────────────────
+  if (active && canEdit) {
+    if (col.type === "select") {
+      return (
+        <div className="relative w-full h-full">
+          <select
+            ref={selectRef}
+            value={draft}
+            onChange={e => { setDraft(e.target.value); onCommit(e.target.value); }}
+            onBlur={commit}
+            onKeyDown={handleKey}
+            className="absolute inset-0 w-full h-full px-2 text-[13px] font-medium bg-white dark:bg-card border-0 outline-none cursor-pointer"
+          >
+            {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      );
+    }
+    return (
+      <input
+        ref={inputRef}
+        type={col.type}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={handleKey}
+        className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground"
+        style={{ boxSizing: "border-box" }}
+      />
+    );
+  }
+
+  // ── Display mode ──────────────────────────────────────────────────────────
+  return (
+    <div
+      className={`w-full h-full flex items-center px-3 text-[13px] overflow-hidden ${canEdit ? "cursor-text" : "cursor-default"}`}
+      onClick={canEdit ? onActivate : undefined}
+    >
+      {col.field === "status" ? (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${STATUS_STYLES[value as LeadStatus] || ""}`}>
+          {value}
+        </span>
+      ) : (
+        <span className={`truncate text-gray-700 dark:text-foreground ${!value ? "text-gray-300 dark:text-muted-foreground/30" : ""}`}>
+          {value || (canEdit ? "—" : "")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
   const { refresh: refreshCustomers } = useCustomers();
@@ -48,420 +157,523 @@ export default function Leads() {
     [leads]
   );
 
-  const handleConvertToCustomer = (lead: Lead) => {
+  // ── Filters ──────────────────────────────────────────────────────────────
+  const [search,       setSearch]       = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const filtered = useMemo(() =>
+    leads.filter(l => {
+      const q = search.toLowerCase();
+      const mQ = !q || [l.name, l.company, l.email, l.industry, l.city, l.source]
+        .some(v => v?.toLowerCase().includes(q));
+      const mS = statusFilter === "All" || l.status === statusFilter;
+      return mQ && mS;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [leads, search, statusFilter]
+  );
+
+  // ── Inline editing state ──────────────────────────────────────────────────
+  const [activeCell, setActiveCell] = useState<{ id: string; col: number } | null>(null);
+  const [deleteId,   setDeleteId]   = useState<string | null>(null);
+  const [viewLead,   setViewLead]   = useState<Lead | null>(null);
+
+  // ── New row state ─────────────────────────────────────────────────────────
+  const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
+  const [newRowActive, setNewRowActive] = useState<number | null>(null); // active col in new row
+
+  const NEW_ROW_ID = "__new__";
+
+  const activateCell = useCallback((id: string, col: number) => {
+    setActiveCell({ id, col });
+    setNewRowActive(null);
+  }, []);
+
+  const activateNewRowCell = (col: number) => {
+    setActiveCell(null);
+    setNewRowActive(col);
+  };
+
+  // Commit a cell edit for an existing lead
+  const commitCell = useCallback((id: string, field: EditableField, value: string) => {
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
+    if ((lead as Record<string, string>)[field] === value) { setActiveCell(null); return; }
+    editLead(id, { [field]: value } as Partial<Lead>);
+    setActiveCell(null);
+    toast({ title: "Saved", description: `${field.charAt(0).toUpperCase() + field.slice(1)} updated.` });
+  }, [leads, editLead, toast]);
+
+  // Move to next/prev cell (Tab navigation)
+  const navigateCell = useCallback((id: string, colIdx: number, shift: boolean) => {
+    const rows = [NEW_ROW_ID, ...filtered.map(l => l.id)];
+    const rowIdx = rows.indexOf(id);
+    const totalCols = COLS.length;
+
+    let nextRow = rowIdx;
+    let nextCol = colIdx + (shift ? -1 : 1);
+
+    if (nextCol >= totalCols) { nextCol = 0; nextRow++; }
+    if (nextCol < 0)          { nextCol = totalCols - 1; nextRow--; }
+
+    if (nextRow < 0 || nextRow >= rows.length) { setActiveCell(null); setNewRowActive(null); return; }
+
+    const nextId = rows[nextRow];
+    if (nextId === NEW_ROW_ID) {
+      setActiveCell(null); setNewRowActive(nextCol);
+    } else {
+      setActiveCell({ id: nextId, col: nextCol }); setNewRowActive(null);
+    }
+  }, [filtered]);
+
+  // Move to cell below (Enter key)
+  const moveCellDown = useCallback((id: string, colIdx: number) => {
+    const rows = [NEW_ROW_ID, ...filtered.map(l => l.id)];
+    const rowIdx = rows.indexOf(id);
+    const nextRow = rowIdx + 1;
+    if (nextRow >= rows.length) { setActiveCell(null); return; }
+    const nextId = rows[nextRow];
+    if (nextId === NEW_ROW_ID) {
+      setActiveCell(null); setNewRowActive(colIdx);
+    } else {
+      setActiveCell({ id: nextId, col: colIdx }); setNewRowActive(null);
+    }
+  }, [filtered]);
+
+  // New-row navigation
+  const navigateNewRow = (colIdx: number, shift: boolean) => {
+    let nextCol = colIdx + (shift ? -1 : 1);
+    if (nextCol >= COLS.length) { commitNewRow(); return; }
+    if (nextCol < 0) { setNewRowActive(null); return; }
+    setNewRowActive(nextCol);
+  };
+
+  // Commit new row on Enter of last col or explicit save
+  const commitNewRow = () => {
+    if (!newRow || !newRow.name.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      setNewRowActive(0);
+      return;
+    }
+    addLead({
+      name: newRow.name, company: newRow.company, email: newRow.email,
+      phone: newRow.phone, industry: newRow.industry, city: newRow.city,
+      status: (newRow.status as LeadStatus) || "New",
+      source: newRow.source, notes: newRow.notes,
+    });
+    toast({ title: "Lead added", description: `${newRow.name} has been added.` });
+    setNewRow(null);
+    setNewRowActive(null);
+  };
+
+  const cancelNewRow = () => { setNewRow(null); setNewRowActive(null); };
+
+  // Start a new row
+  const startNewRow = () => {
+    setNewRow(BLANK_ROW());
+    setNewRowActive(0);
+    setActiveCell(null);
+  };
+
+  // Delete lead
+  const handleDelete = () => {
+    if (!deleteId) return;
+    const l = leads.find(x => x.id === deleteId);
+    removeLead(deleteId);
+    toast({ title: "Lead deleted", description: `${l?.name} has been removed.` });
+    setDeleteId(null);
+  };
+
+  // Convert to customer
+  const handleConvert = (lead: Lead) => {
     convertLeadToCustomer(lead);
     refreshCustomers();
-    toast({ title: "Lead converted", description: `${lead.name} has been added as a customer.` });
+    toast({ title: "Lead converted", description: `${lead.name} added as a customer.` });
   };
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  // Close active cell on outside click
+  const tableRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+        setActiveCell(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
+  // ── KPI summary ───────────────────────────────────────────────────────────
+  const kpis = useMemo(() => ({
+    total: leads.length,
+    won:   leads.filter(l => l.status === "Won").length,
+    new:   leads.filter(l => l.status === "New").length,
+    qualified: leads.filter(l => l.status === "Qualified").length,
+  }), [leads]);
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter((lead) => {
-      const matchesSearch = (lead.name + lead.company + lead.industry).toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "All" || lead.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [leads, search, statusFilter]);
-
-  const form = useForm<LeadFormValues>({
-    resolver: zodResolver(leadSchema),
-    defaultValues: {
-      name: "",
-      company: "",
-      email: "",
-      phone: "",
-      industry: "",
-      city: "",
-      status: "New",
-      source: "Website",
-      notes: "",
-    },
-  });
-
-  const onSubmitAdd = (data: LeadFormValues) => {
-    addLead({ ...data, notes: data.notes || "" });
-    setIsAddOpen(false);
-    form.reset();
-    toast({ title: "Lead created", description: "The lead has been added successfully." });
-  };
-
-  const editForm = useForm<LeadFormValues>({
-    resolver: zodResolver(leadSchema),
-    defaultValues: {
-      name: "",
-      company: "",
-      email: "",
-      phone: "",
-      industry: "",
-      city: "",
-      status: "New",
-      source: "",
-      notes: "",
-    },
-  });
-
-  const openEdit = (lead: Lead) => {
-    editForm.reset({
-      name: lead.name,
-      company: lead.company,
-      email: lead.email,
-      phone: lead.phone,
-      industry: lead.industry,
-      city: lead.city,
-      status: lead.status,
-      source: lead.source,
-      notes: lead.notes,
-    });
-    setSelectedLead(lead);
-    setIsEditMode(true);
-  };
-
-  const onSubmitEdit = (data: LeadFormValues) => {
-    if (!selectedLead) return;
-    editLead(selectedLead.id, { ...data, notes: data.notes || "" });
-    setIsEditMode(false);
-    setSelectedLead(null);
-    toast({ title: "Lead updated", description: "The lead has been updated successfully." });
-  };
-
-  const handleDelete = () => {
-    if (!leadToDelete) return;
-    removeLead(leadToDelete);
-    setLeadToDelete(null);
-    if (selectedLead?.id === leadToDelete) {
-      setSelectedLead(null);
-      setIsEditMode(false);
-    }
-    toast({ title: "Lead deleted", description: "The lead has been removed." });
-  };
-
-  const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    New: "default",
-    Contacted: "secondary",
-    Qualified: "default",
-    "Proposal Sent": "secondary",
-    Won: "default",
-    Lost: "destructive",
-  };
+  const CELL_H = 36; // px
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 animate-in fade-in duration-500">
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
-          <p className="text-muted-foreground mt-1">Manage and track your customer leads.</p>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            Leads
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Click any cell to edit · Tab to move · Enter to save · Esc to cancel
+          </p>
         </div>
         {isAuthenticated && (
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="btn-add-lead">
-                <Plus className="mr-2 h-4 w-4" /> Add Lead
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Add New Lead</DialogTitle>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitAdd)} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} data-testid="input-lead-name" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="company" render={({ field }) => (
-                      <FormItem><FormLabel>Company</FormLabel><FormControl><Input {...field} data-testid="input-lead-company" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="phone" render={({ field }) => (
-                      <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="industry" render={({ field }) => (
-                      <FormItem><FormLabel>Industry</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="city" render={({ field }) => (
-                      <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="status" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="source" render={({ field }) => (
-                      <FormItem><FormLabel>Source</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <FormField control={form.control} name="notes" render={({ field }) => (
-                    <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} className="resize-none" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <div className="flex justify-end pt-4">
-                    <Button type="submit" data-testid="btn-submit-lead">Save Lead</Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" onClick={startNewRow} className="gap-1.5 flex-shrink-0" data-testid="btn-add-lead">
+            <Plus size={14} /> Add Lead
+          </Button>
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-center">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      {/* ── KPI pills ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: "Total",    value: kpis.total,     color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground" },
+          { label: "New",      value: kpis.new,       color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400" },
+          { label: "Qualified",value: kpis.qualified,  color: "bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400" },
+          { label: "Won",      value: kpis.won,       color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400" },
+        ].map(k => (
+          <div key={k.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold ${k.color}`}>
+            {k.label}: <span>{k.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
+      <div className="flex gap-2 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search leads..."
-            className="pl-9"
+            className="pl-8 h-8 text-[13px]"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             data-testid="input-search-leads"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-filter-status">
-            <SelectValue placeholder="Filter by status" />
+          <SelectTrigger className="w-36 h-8 text-[13px]" data-testid="select-filter-status">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="All">All Statuses</SelectItem>
             {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
+        {isAuthenticated && newRow && (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
+            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={cancelNewRow}>
+              <X size={12} /> Cancel
+            </Button>
+            <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}>
+              <Save size={12} /> Save Row
+            </Button>
+          </div>
+        )}
+        <div className="text-[12px] text-muted-foreground self-center ml-auto">
+          {filtered.length} of {leads.length} leads
+        </div>
       </div>
 
-      <div className="rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Industry</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Date Added</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredLeads.length > 0 ? (
-              filteredLeads.map((lead) => (
-                <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedLead(lead); setIsEditMode(false); }} data-testid={`row-lead-${lead.id}`}>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell>{lead.company}</TableCell>
-                  <TableCell>{lead.industry}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {isAuthenticated ? (
-                      <Select value={lead.status} onValueChange={(val: LeadStatus) => {
-                        editLead(lead.id, { status: val });
-                        toast({ title: "Status updated", description: `Lead status changed to ${val}.` });
-                      }}>
-                        <SelectTrigger className="h-8 w-[130px] bg-transparent border-0 shadow-none focus:ring-0 p-0">
-                          <Badge variant={statusColors[lead.status] || "default"} className={`whitespace-nowrap ${lead.status === "Won" ? "bg-green-600 hover:bg-green-700" : ""}`}>
-                            {lead.status}
-                          </Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge variant={statusColors[lead.status] || "default"} className={`whitespace-nowrap ${lead.status === "Won" ? "bg-green-600" : ""}`}>
-                        {lead.status}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{format(new Date(lead.createdAt), "MMM d, yyyy")}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setSelectedLead(lead); setIsEditMode(false); }}>
-                          <Eye className="mr-2 h-4 w-4" /> View Details
-                        </DropdownMenuItem>
-                        {isAuthenticated && (
-                          <>
-                            <DropdownMenuItem onClick={() => openEdit(lead)}>
-                              <Edit className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            {lead.status === "Won" && !convertedLeadIds.has(lead.id) && (
-                              <DropdownMenuItem onClick={() => handleConvertToCustomer(lead)} className="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 dark:text-emerald-400 dark:focus:bg-emerald-950">
-                                <UserCheck className="mr-2 h-4 w-4" /> Convert to Customer
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => setLeadToDelete(lead.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No leads found. {search || statusFilter !== "All" ? "Try adjusting your filters." : "Add your first one!"}
-                </TableCell>
-              </TableRow>
+      {/* ── Excel-like Grid ──────────────────────────────────────────────────── */}
+      <div
+        ref={tableRef}
+        className="rounded-xl border border-gray-200 dark:border-border overflow-auto bg-white dark:bg-card shadow-sm"
+        style={{ maxHeight: "calc(100vh - 280px)" }}
+      >
+        <table className="border-collapse text-[13px] w-full" style={{ tableLayout: "fixed", minWidth: `${COLS.reduce((a, c) => a + c.minW, 0) + 80 + 100}px` }}>
+
+          {/* Colgroup */}
+          <colgroup>
+            <col style={{ width: "48px" }} />
+            {COLS.map(c => <col key={c.field} style={{ width: `${c.minW}px` }} />)}
+            <col style={{ width: "80px" }} />
+          </colgroup>
+
+          {/* ── Sticky header ────────────────────────────────────────────── */}
+          <thead className="sticky top-0 z-10">
+            <tr>
+              {/* Row # */}
+              <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">
+                #
+              </th>
+              {COLS.map(c => (
+                <th
+                  key={c.field}
+                  className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none"
+                >
+                  {c.label}
+                </th>
+              ))}
+              {/* Actions header */}
+              <th className="border-b border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none sticky right-0">
+                Actions
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {/* ── New row (if adding) ────────────────────────────────────── */}
+            {isAuthenticated && newRow && (
+              <tr className="bg-amber-50/60 dark:bg-amber-950/20 border-b border-gray-100 dark:border-border">
+                <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold select-none" style={{ height: `${CELL_H}px` }}>
+                  ★
+                </td>
+                {COLS.map((c, ci) => {
+                  const isActive = newRowActive === ci;
+                  return (
+                    <td
+                      key={c.field}
+                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`}
+                      style={{ height: `${CELL_H}px` }}
+                    >
+                      {isActive && c.type === "select" ? (
+                        <select
+                          autoFocus
+                          value={newRow[c.field]}
+                          onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
+                          onKeyDown={e => {
+                            if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); }
+                            if (e.key === "Enter") { e.preventDefault(); navigateNewRow(ci, false); }
+                            if (e.key === "Escape") cancelNewRow();
+                          }}
+                          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none"
+                        >
+                          {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : isActive ? (
+                        <input
+                          autoFocus
+                          type={c.type}
+                          value={newRow[c.field]}
+                          placeholder={c.label}
+                          onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
+                          onKeyDown={e => {
+                            if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); }
+                            if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); }
+                            if (e.key === "Escape") cancelNewRow();
+                          }}
+                          className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center px-3 cursor-text"
+                          onClick={() => activateNewRowCell(ci)}
+                        >
+                          {c.field === "status" ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[newRow.status as LeadStatus]}`}>
+                              {newRow.status}
+                            </span>
+                          ) : (
+                            <span className={`truncate ${!newRow[c.field] ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>
+                              {newRow[c.field] || c.label}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }}>
+                  <div className="flex items-center justify-center gap-1">
+                    <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={13} /></button>
+                    <button onClick={cancelNewRow} className="p-1 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={13} /></button>
+                  </div>
+                </td>
+              </tr>
             )}
-          </TableBody>
-        </Table>
+
+            {/* ── Existing rows ─────────────────────────────────────────── */}
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
+                  {search || statusFilter !== "All"
+                    ? "No leads match your filters."
+                    : isAuthenticated
+                      ? <span>No leads yet. Click <strong>Add Lead</strong> or press <kbd className="border rounded px-1 text-xs">+</kbd> to start.</span>
+                      : "No leads yet."
+                  }
+                </td>
+              </tr>
+            ) : filtered.map((lead, rowIdx) => {
+              const isRowActive = activeCell?.id === lead.id;
+              return (
+                <tr
+                  key={lead.id}
+                  data-testid={`row-lead-${lead.id}`}
+                  className={`border-b border-gray-100 dark:border-border transition-colors group ${
+                    isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : rowIdx % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"
+                  } hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}
+                >
+                  {/* Row number */}
+                  <td
+                    className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 select-none font-mono"
+                    style={{ height: `${CELL_H}px` }}
+                  >
+                    {rowIdx + 1}
+                  </td>
+
+                  {/* Editable columns */}
+                  {COLS.map((c, ci) => {
+                    const isActive = activeCell?.id === lead.id && activeCell.col === ci;
+                    return (
+                      <td
+                        key={c.field}
+                        className={`border-r border-gray-100 dark:border-border relative p-0 ${
+                          isActive
+                            ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10"
+                            : "hover:bg-blue-50/40 dark:hover:bg-blue-950/20"
+                        }`}
+                        style={{ height: `${CELL_H}px` }}
+                        onClick={() => !isActive && isAuthenticated && activateCell(lead.id, ci)}
+                      >
+                        <EditableCell
+                          value={String((lead as Record<string, string>)[c.field] ?? "")}
+                          col={c}
+                          active={isActive}
+                          canEdit={isAuthenticated}
+                          onActivate={() => activateCell(lead.id, ci)}
+                          onCommit={v => commitCell(lead.id, c.field, v)}
+                          onCancel={() => setActiveCell(null)}
+                          onTab={shift => navigateCell(lead.id, ci, shift)}
+                          onEnter={() => moveCellDown(lead.id, ci)}
+                        />
+                      </td>
+                    );
+                  })}
+
+                  {/* Actions column */}
+                  <td
+                    className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center"
+                    style={{ height: `${CELL_H}px` }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                        title="View details"
+                        onClick={() => setViewLead(lead)}
+                      >
+                        <Eye size={13} />
+                      </button>
+                      {isAuthenticated && lead.status === "Won" && !convertedLeadIds.has(lead.id) && (
+                        <button
+                          className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+                          title="Convert to customer"
+                          onClick={() => handleConvert(lead)}
+                        >
+                          <UserCheck size={13} />
+                        </button>
+                      )}
+                      {isAuthenticated && (
+                        <button
+                          className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                          title="Delete"
+                          onClick={() => setDeleteId(lead.id)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* ── Add row trigger ───────────────────────────────────────── */}
+            {isAuthenticated && !newRow && (
+              <tr>
+                <td colSpan={COLS.length + 2}>
+                  <button
+                    onClick={startNewRow}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
+                    data-testid="btn-add-row"
+                  >
+                    <Plus size={13} />
+                    Add row
+                  </button>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {/* Lead Detail / Edit Sheet */}
-      <Sheet open={!!selectedLead} onOpenChange={(open) => { if (!open) { setSelectedLead(null); setIsEditMode(false); } }}>
+      {/* ── Lead detail sheet ─────────────────────────────────────────────────── */}
+      <Sheet open={!!viewLead} onOpenChange={o => { if (!o) setViewLead(null); }}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader className="mb-6">
-            <SheetTitle>{isEditMode ? "Edit Lead" : "Lead Details"}</SheetTitle>
+            <SheetTitle>Lead Details</SheetTitle>
           </SheetHeader>
-
-          {selectedLead && !isEditMode && (
-            <div className="space-y-6">
+          {viewLead && (
+            <div className="space-y-5">
               <div>
-                <h3 className="text-xl font-semibold">{selectedLead.name}</h3>
-                <p className="text-muted-foreground">{selectedLead.company}</p>
-                <Badge className="mt-2" variant={statusColors[selectedLead.status] || "default"}>{selectedLead.status}</Badge>
+                <h3 className="text-xl font-bold">{viewLead.name}</h3>
+                <p className="text-muted-foreground">{viewLead.company}</p>
+                <span className={`inline-flex items-center mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold ${STATUS_STYLES[viewLead.status]}`}>
+                  {viewLead.status}
+                </span>
               </div>
-
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground block">Email</span>
-                  {selectedLead.email
-                    ? <a href={`mailto:${selectedLead.email}`} className="text-primary hover:underline">{selectedLead.email}</a>
-                    : <span className="text-muted-foreground">—</span>
-                  }
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">Phone</span>
-                  <a href={`tel:${selectedLead.phone}`} className="text-primary hover:underline">{selectedLead.phone}</a>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">Industry</span>
-                  <span>{selectedLead.industry}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">City</span>
-                  <span>{selectedLead.city}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">Source</span>
-                  <span>{selectedLead.source}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block">Added On</span>
-                  <span>{format(new Date(selectedLead.createdAt), "MMM d, yyyy")}</span>
-                </div>
+                {[
+                  { label: "Email",    value: viewLead.email,    link: `mailto:${viewLead.email}` },
+                  { label: "Phone",    value: viewLead.phone,    link: `tel:${viewLead.phone}` },
+                  { label: "Industry", value: viewLead.industry },
+                  { label: "City",     value: viewLead.city },
+                  { label: "Source",   value: viewLead.source },
+                  { label: "Added",    value: format(new Date(viewLead.createdAt), "d MMM yyyy") },
+                ].map(item => (
+                  <div key={item.label}>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{item.label}</p>
+                    {item.link && item.value
+                      ? <a href={item.link} className="text-primary hover:underline">{item.value}</a>
+                      : <span>{item.value || "—"}</span>}
+                  </div>
+                ))}
               </div>
-
-              {selectedLead.notes && (
+              {viewLead.notes && (
                 <div>
-                  <span className="text-muted-foreground block mb-1 text-sm">Notes</span>
-                  <p className="text-sm bg-muted/50 p-3 rounded-md whitespace-pre-wrap">{selectedLead.notes}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Notes</p>
+                  <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">{viewLead.notes}</p>
                 </div>
               )}
-
-              {isAuthenticated && (
-                <div className="pt-6 border-t flex gap-2">
-                  <Button onClick={() => openEdit(selectedLead)} className="flex-1" data-testid="btn-edit-lead">Edit</Button>
-                  <Button variant="destructive" onClick={() => setLeadToDelete(selectedLead.id)} className="flex-1">Delete</Button>
+              {isAuthenticated && viewLead.status === "Won" && !convertedLeadIds.has(viewLead.id) && (
+                <div className="pt-4 border-t">
+                  <Button
+                    className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => { handleConvert(viewLead); setViewLead(null); }}
+                  >
+                    <UserCheck size={14} /> Convert to Customer
+                  </Button>
                 </div>
               )}
             </div>
           )}
-
-          {selectedLead && isEditMode && (
-            <Form {...editForm}>
-              <form onSubmit={editForm.handleSubmit(onSubmitEdit)} className="space-y-4">
-                <FormField control={editForm.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={editForm.control} name="company" render={({ field }) => (
-                  <FormItem><FormLabel>Company</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={editForm.control} name="email" render={({ field }) => (
-                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="phone" render={({ field }) => (
-                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={editForm.control} name="industry" render={({ field }) => (
-                    <FormItem><FormLabel>Industry</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="city" render={({ field }) => (
-                    <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={editForm.control} name="status" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="source" render={({ field }) => (
-                    <FormItem><FormLabel>Source</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <FormField control={editForm.control} name="notes" render={({ field }) => (
-                  <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} className="min-h-[100px] resize-none" /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsEditMode(false)}>Cancel</Button>
-                  <Button type="submit" data-testid="btn-save-lead-edit">Save Changes</Button>
-                </div>
-              </form>
-            </Form>
-          )}
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
+      {/* ── Delete confirm ──────────────────────────────────────────────────── */}
+      <AlertDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the lead from the system.
-            </AlertDialogDescription>
+            <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="btn-confirm-delete">
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="btn-confirm-delete"
+            >
               Delete Lead
             </AlertDialogAction>
           </AlertDialogFooter>
