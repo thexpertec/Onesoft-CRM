@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLeads } from "@/hooks/use-data";
+import { useAuth } from "@/contexts/auth-context";
 import { Lead, LeadStatus } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,10 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Search, Plus, MoreHorizontal, Trash2, Edit } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, Link as LinkIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
+import { Link } from "wouter";
 
 const leadSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -37,11 +39,12 @@ const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal 
 
 export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
+  const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-  
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
-  
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -143,81 +146,83 @@ export default function Leads() {
           <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
           <p className="text-muted-foreground mt-1">Manage and track your customer leads.</p>
         </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="btn-add-lead">
-              <Plus className="mr-2 h-4 w-4" /> Add Lead
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Add New Lead</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmitAdd)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} data-testid="input-lead-name" /></FormControl><FormMessage /></FormItem>
+        {isAuthenticated && (
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="btn-add-lead">
+                <Plus className="mr-2 h-4 w-4" /> Add Lead
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Add New Lead</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmitAdd)} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                      <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} data-testid="input-lead-name" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="company" render={({ field }) => (
+                      <FormItem><FormLabel>Company</FormLabel><FormControl><Input {...field} data-testid="input-lead-company" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="phone" render={({ field }) => (
+                      <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="industry" render={({ field }) => (
+                      <FormItem><FormLabel>Industry</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="city" render={({ field }) => (
+                      <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="status" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="source" render={({ field }) => (
+                      <FormItem><FormLabel>Source</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <FormField control={form.control} name="notes" render={({ field }) => (
+                    <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} className="resize-none" /></FormControl><FormMessage /></FormItem>
                   )} />
-                  <FormField control={form.control} name="company" render={({ field }) => (
-                    <FormItem><FormLabel>Company</FormLabel><FormControl><Input {...field} data-testid="input-lead-company" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="email" render={({ field }) => (
-                    <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={form.control} name="phone" render={({ field }) => (
-                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="industry" render={({ field }) => (
-                    <FormItem><FormLabel>Industry</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={form.control} name="city" render={({ field }) => (
-                    <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="status" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="source" render={({ field }) => (
-                    <FormItem><FormLabel>Source</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                </div>
-                <FormField control={form.control} name="notes" render={({ field }) => (
-                  <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} className="resize-none" /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="flex justify-end pt-4">
-                  <Button type="submit" data-testid="btn-submit-lead">Save Lead</Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                  <div className="flex justify-end pt-4">
+                    <Button type="submit" data-testid="btn-submit-lead">Save Lead</Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search leads..." 
-            className="pl-9" 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
+          <Input
+            placeholder="Search leads..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-leads"
           />
         </div>
@@ -252,19 +257,25 @@ export default function Leads() {
                   <TableCell>{lead.company}</TableCell>
                   <TableCell>{lead.industry}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Select value={lead.status} onValueChange={(val: LeadStatus) => {
-                      editLead(lead.id, { status: val });
-                      toast({ title: "Status updated", description: `Lead status changed to ${val}.` });
-                    }}>
-                      <SelectTrigger className="h-8 w-[130px] bg-transparent border-0 shadow-none focus:ring-0 p-0">
-                        <Badge variant={statusColors[lead.status] || "default"} className={`whitespace-nowrap ${lead.status === "Won" ? "bg-green-600 hover:bg-green-700" : ""}`}>
-                          {lead.status}
-                        </Badge>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    {isAuthenticated ? (
+                      <Select value={lead.status} onValueChange={(val: LeadStatus) => {
+                        editLead(lead.id, { status: val });
+                        toast({ title: "Status updated", description: `Lead status changed to ${val}.` });
+                      }}>
+                        <SelectTrigger className="h-8 w-[130px] bg-transparent border-0 shadow-none focus:ring-0 p-0">
+                          <Badge variant={statusColors[lead.status] || "default"} className={`whitespace-nowrap ${lead.status === "Won" ? "bg-green-600 hover:bg-green-700" : ""}`}>
+                            {lead.status}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant={statusColors[lead.status] || "default"} className={`whitespace-nowrap ${lead.status === "Won" ? "bg-green-600" : ""}`}>
+                        {lead.status}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{format(new Date(lead.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -276,12 +287,19 @@ export default function Leads() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(lead)}>
-                          <Edit className="mr-2 h-4 w-4" /> Edit
+                        <DropdownMenuItem onClick={() => { setSelectedLead(lead); setIsEditMode(false); }}>
+                          <Eye className="mr-2 h-4 w-4" /> View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLeadToDelete(lead.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
-                        </DropdownMenuItem>
+                        {isAuthenticated && (
+                          <>
+                            <DropdownMenuItem onClick={() => openEdit(lead)}>
+                              <Edit className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setLeadToDelete(lead.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -298,12 +316,13 @@ export default function Leads() {
         </Table>
       </div>
 
+      {/* Lead Detail / Edit Sheet */}
       <Sheet open={!!selectedLead} onOpenChange={(open) => { if (!open) { setSelectedLead(null); setIsEditMode(false); } }}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader className="mb-6">
             <SheetTitle>{isEditMode ? "Edit Lead" : "Lead Details"}</SheetTitle>
           </SheetHeader>
-          
+
           {selectedLead && !isEditMode && (
             <div className="space-y-6">
               <div>
@@ -311,7 +330,7 @@ export default function Leads() {
                 <p className="text-muted-foreground">{selectedLead.company}</p>
                 <Badge className="mt-2" variant={statusColors[selectedLead.status] || "default"}>{selectedLead.status}</Badge>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground block">Email</span>
@@ -338,18 +357,20 @@ export default function Leads() {
                   <span>{format(new Date(selectedLead.createdAt), "MMM d, yyyy")}</span>
                 </div>
               </div>
-              
+
               {selectedLead.notes && (
                 <div>
                   <span className="text-muted-foreground block mb-1 text-sm">Notes</span>
                   <p className="text-sm bg-muted/50 p-3 rounded-md whitespace-pre-wrap">{selectedLead.notes}</p>
                 </div>
               )}
-              
-              <div className="pt-6 border-t flex gap-2">
-                <Button onClick={() => openEdit(selectedLead)} className="flex-1" data-testid="btn-edit-lead">Edit</Button>
-                <Button variant="destructive" onClick={() => setLeadToDelete(selectedLead.id)} className="flex-1">Delete</Button>
-              </div>
+
+              {isAuthenticated && (
+                <div className="pt-6 border-t flex gap-2">
+                  <Button onClick={() => openEdit(selectedLead)} className="flex-1" data-testid="btn-edit-lead">Edit</Button>
+                  <Button variant="destructive" onClick={() => setLeadToDelete(selectedLead.id)} className="flex-1">Delete</Button>
+                </div>
+              )}
             </div>
           )}
 

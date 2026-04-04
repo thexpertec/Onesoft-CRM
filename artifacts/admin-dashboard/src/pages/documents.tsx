@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useDocs } from "@/hooks/use-data";
+import { useAuth } from "@/contexts/auth-context";
 import { RequirementDoc, DocStatus } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, MoreHorizontal, Trash2, Edit, ExternalLink, FileText } from "lucide-react";
+import { Search, MoreHorizontal, Trash2, Eye, ExternalLink, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
@@ -17,6 +18,7 @@ const DOC_STATUSES: DocStatus[] = ["Draft", "Under Review", "Approved", "Archive
 
 export default function Documents() {
   const { docs, removeDoc, editDoc } = useDocs();
+  const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -54,16 +56,17 @@ export default function Documents() {
           <h1 className="text-3xl font-bold tracking-tight">Requirement Documents</h1>
           <p className="text-muted-foreground mt-1">Manage client project requirements and scoping.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button asChild data-testid="btn-create-doc">
-            <a href="/" target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="mr-2 h-4 w-4" /> Create New Document
-            </a>
-          </Button>
-        </div>
+        {isAuthenticated && (
+          <div className="flex items-center gap-2">
+            <Button asChild data-testid="btn-create-doc">
+              <a href="/" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="mr-2 h-4 w-4" /> Create New Document
+              </a>
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Info banner */}
       <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 flex items-start gap-3 text-sm text-foreground">
         <FileText className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
         <span>
@@ -79,11 +82,11 @@ export default function Documents() {
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search documents..." 
-            className="pl-9" 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
+          <Input
+            placeholder="Search documents..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-docs"
           />
         </div>
@@ -123,19 +126,25 @@ export default function Documents() {
                   <TableCell>{doc.clientName} <span className="text-muted-foreground text-xs block">{doc.company}</span></TableCell>
                   <TableCell>{doc.softwareType}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Select value={doc.status} onValueChange={(val: DocStatus) => {
-                      editDoc(doc.id, { status: val });
-                      toast({ title: "Status updated", description: `Document status changed to ${val}.` });
-                    }}>
-                      <SelectTrigger className="h-8 w-[140px] bg-transparent border-0 shadow-none focus:ring-0 p-0">
-                        <Badge variant={statusColors[doc.status] || "default"} className={`whitespace-nowrap ${doc.status === "Approved" ? "bg-green-600 hover:bg-green-700" : ""}`}>
-                          {doc.status}
-                        </Badge>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DOC_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    {isAuthenticated ? (
+                      <Select value={doc.status} onValueChange={(val: DocStatus) => {
+                        editDoc(doc.id, { status: val });
+                        toast({ title: "Status updated", description: `Document status changed to ${val}.` });
+                      }}>
+                        <SelectTrigger className="h-8 w-[140px] bg-transparent border-0 shadow-none focus:ring-0 p-0">
+                          <Badge variant={statusColors[doc.status] || "default"} className={`whitespace-nowrap ${doc.status === "Approved" ? "bg-green-600 hover:bg-green-700" : ""}`}>
+                            {doc.status}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DOC_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant={statusColors[doc.status] || "default"} className={`whitespace-nowrap ${doc.status === "Approved" ? "bg-green-600" : ""}`}>
+                        {doc.status}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{format(new Date(doc.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -149,12 +158,14 @@ export default function Documents() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link href={`/documents/${doc.id}`}>
-                            <Edit className="mr-2 h-4 w-4" /> Edit Details
+                            <Eye className="mr-2 h-4 w-4" /> View Details
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDocToDelete(doc.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
-                        </DropdownMenuItem>
+                        {isAuthenticated && (
+                          <DropdownMenuItem onClick={() => setDocToDelete(doc.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
