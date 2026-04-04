@@ -13,36 +13,36 @@ const TEAM_MEMBERS = [
 ];
 
 const CLIENTS = [
-  { name: "TechNova Solutions", contact: "+44 113 555 0182", email: "contact@technovasolutions.co.uk", company: "TechNova Solutions Ltd.", industry: "Software & Technology", website: "www.technovasolutions.co.uk" },
-  { name: "CloudMind Systems", contact: "+44 161 555 0293", email: "hello@cloudmindsystems.co.uk", company: "CloudMind Systems Ltd.", industry: "Cloud & IT Services", website: "www.cloudmindsystems.co.uk" },
-  { name: "DataSphere Analytics", contact: "+44 207 555 0374", email: "info@dataspherehq.co.uk", company: "DataSphere Analytics Ltd.", industry: "Data & AI", website: "www.dataspherehq.co.uk" },
-  { name: "DevBridge UK", contact: "+44 113 555 0491", email: "projects@devbridgeuk.com", company: "DevBridge UK Ltd.", industry: "Software Development", website: "www.devbridgeuk.com" },
-  { name: "GreenPath Retail", contact: "+44 20 555 0347", email: "hello@greenpathretail.co.uk", company: "GreenPath Retail Ltd.", industry: "E-commerce & Retail", website: "www.greenpathretail.co.uk" },
-  { name: "QuickCart Online", contact: "+44 161 555 0512", email: "ops@quickcartonline.co.uk", company: "QuickCart Online Ltd.", industry: "E-commerce", website: "www.quickcartonline.co.uk" },
-  { name: "HomeStyle Shop", contact: "+44 113 555 0638", email: "sales@homestyleshop.co.uk", company: "HomeStyle Retail Ltd.", industry: "Home & Lifestyle Retail", website: "www.homestyleshop.co.uk" },
-  { name: "FreshBite Catering", contact: "+44 113 555 0719", email: "enquiries@freshbitecatering.co.uk", company: "FreshBite Catering Services Ltd.", industry: "Food & Hospitality", website: "www.freshbitecatering.co.uk" },
-  { name: "HotelPro Management", contact: "+44 207 555 0834", email: "info@hotelpromgmt.co.uk", company: "HotelPro Management Group", industry: "Hospitality & Tourism", website: "www.hotelpromgmt.co.uk" },
-  { name: "HealthFirst Clinics", contact: "+44 114 555 0293", email: "info@healthfirstclinics.co.uk", company: "HealthFirst Medical Group Ltd.", industry: "Healthcare & Wellness", website: "www.healthfirstclinics.co.uk" },
-  { name: "MediTrack Systems", contact: "+44 207 555 0917", email: "support@meditracksys.co.uk", company: "MediTrack Systems Ltd.", industry: "Healthcare Technology", website: "www.meditracksys.co.uk" },
-  { name: "CarePoint Services", contact: "+44 113 555 0128", email: "admin@carepointservices.co.uk", company: "CarePoint Community Services", industry: "Social Care & NHS", website: "www.carepointservices.co.uk" },
-  { name: "FinEdge Capital", contact: "+44 207 555 0418", email: "team@finedgecapital.co.uk", company: "FinEdge Capital Partners Ltd.", industry: "Financial Services", website: "www.finedgecapital.co.uk" },
-  { name: "PaySmart UK", contact: "+44 207 555 0563", email: "hello@paysmartuk.com", company: "PaySmart Financial Tech Ltd.", industry: "Fintech & Payments", website: "www.paysmartuk.com" },
-  { name: "SmartInvest Advisors", contact: "+44 161 555 0684", email: "contact@smartinvestadvisors.co.uk", company: "SmartInvest Financial Advisors", industry: "Wealth Management", website: "www.smartinvestadvisors.co.uk" },
-  { name: "LearnHub Academy", contact: "+44 113 555 0745", email: "info@learnhubacademy.co.uk", company: "LearnHub Education Ltd.", industry: "Education & E-learning", website: "www.learnhubacademy.co.uk" },
-  { name: "EduTrack School", contact: "+44 114 555 0821", email: "admin@edutrackschool.co.uk", company: "EduTrack School Solutions Ltd.", industry: "Education Technology", website: "www.edutrackschool.co.uk" },
-  { name: "SkillUp Training", contact: "+44 161 555 0936", email: "courses@skilluptraining.co.uk", company: "SkillUp Training & Development Ltd.", industry: "Corporate Training", website: "www.skilluptraining.co.uk" },
-  { name: "LegalEase Solicitors", contact: "+44 207 555 0247", email: "enquiries@legaleasesolicitors.co.uk", company: "LegalEase Solicitors LLP", industry: "Legal Services", website: "www.legaleasesolicitors.co.uk" },
-  { name: "CompliancePro UK", contact: "+44 161 555 0358", email: "info@complianceprouk.com", company: "CompliancePro Advisory Ltd.", industry: "Compliance & Risk", website: "www.complianceprouk.com" },
-  { name: "PropTrack Estates", contact: "+44 113 555 0469", email: "sales@proptrackes.co.uk", company: "PropTrack Property Solutions", industry: "Property & Real Estate", website: "www.proptrackestates.co.uk" },
-  { name: "HomeFinder UK", contact: "+44 207 555 0572", email: "hello@homefinderuk.com", company: "HomeFinder UK Ltd.", industry: "Property Technology", website: "www.homefinderuk.com" },
-  { name: "SwiftMove Logistics", contact: "+44 113 555 0681", email: "ops@swiftmovelogistics.co.uk", company: "SwiftMove Logistics Ltd.", industry: "Logistics & Delivery", website: "www.swiftmovelogistics.co.uk" },
-  { name: "RouteOptima", contact: "+44 161 555 0793", email: "contact@routeoptima.co.uk", company: "RouteOptima Fleet Solutions Ltd.", industry: "Fleet & Transport", website: "www.routeoptima.co.uk" },
-  { name: "PrecisionParts Ltd", contact: "+44 114 555 0804", email: "enquiries@precisionpartsltd.co.uk", company: "PrecisionParts Manufacturing Ltd.", industry: "Manufacturing & Engineering", website: "www.precisionpartsltd.co.uk" },
-  { name: "BuildRight Construction", contact: "+44 113 555 0915", email: "projects@buildrightconstruction.co.uk", company: "BuildRight Construction Group", industry: "Construction & Civil Engineering", website: "www.buildrightconstruction.co.uk" },
-  { name: "GreenEnergy Partners", contact: "+44 207 555 0136", email: "info@greenenergypartners.co.uk", company: "GreenEnergy Solutions Ltd.", industry: "Energy & Utilities", website: "www.greenenergypartners.co.uk" },
-  { name: "SafeGuard Security", contact: "+44 161 555 0247", email: "ops@safeguardsecurity.co.uk", company: "SafeGuard Security Services Ltd.", industry: "Security & Surveillance", website: "www.safeguardsecurity.co.uk" },
-  { name: "BrightMind Charity", contact: "+44 113 555 0358", email: "hello@brightmindcharity.org.uk", company: "BrightMind Community Foundation", industry: "Non-profit & Charity", website: "www.brightmindcharity.org.uk" },
-  { name: "MediaWave Studio", contact: "+44 207 555 0469", email: "creative@mediawaveuk.co.uk", company: "MediaWave Creative Studio Ltd.", industry: "Media & Creative Agency", website: "www.mediawaveuk.co.uk" },
+  { name: "TechNova Solutions",   phone: "+44 113 555 0182", email: "contact@technovasolutions.co.uk",      company: "TechNova Solutions Ltd.",              industry: "Software & Technology",        website: "www.technovasolutions.co.uk",      address: "14 Kirkgate",             city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 6BY" },
+  { name: "CloudMind Systems",    phone: "+44 161 555 0293", email: "hello@cloudmindsystems.co.uk",          company: "CloudMind Systems Ltd.",               industry: "Cloud & IT Services",          website: "www.cloudmindsystems.co.uk",      address: "22 Piccadilly",           city: "Manchester",  county: "Greater Manchester", postcode: "M1 2AN" },
+  { name: "DataSphere Analytics", phone: "+44 207 555 0374", email: "info@dataspherehq.co.uk",              company: "DataSphere Analytics Ltd.",            industry: "Data & AI",                    website: "www.dataspherehq.co.uk",          address: "88 Bishopsgate",          city: "London",      county: "Greater London",    postcode: "EC2N 4AG" },
+  { name: "DevBridge UK",         phone: "+44 113 555 0491", email: "projects@devbridgeuk.com",             company: "DevBridge UK Ltd.",                    industry: "Software Development",         website: "www.devbridgeuk.com",             address: "5 Park Row",              city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 5HD" },
+  { name: "GreenPath Retail",     phone: "+44 20 555 0347",  email: "hello@greenpathretail.co.uk",          company: "GreenPath Retail Ltd.",                industry: "E-commerce & Retail",          website: "www.greenpathretail.co.uk",       address: "12 Oxford Street",        city: "London",      county: "Greater London",    postcode: "W1D 1BS" },
+  { name: "QuickCart Online",     phone: "+44 161 555 0512", email: "ops@quickcartonline.co.uk",            company: "QuickCart Online Ltd.",                industry: "E-commerce",                   website: "www.quickcartonline.co.uk",       address: "30 Deansgate",            city: "Manchester",  county: "Greater Manchester", postcode: "M3 2EQ" },
+  { name: "HomeStyle Shop",       phone: "+44 113 555 0638", email: "sales@homestyleshop.co.uk",            company: "HomeStyle Retail Ltd.",                industry: "Home & Lifestyle Retail",      website: "www.homestyleshop.co.uk",         address: "7 Boar Lane",             city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 6HW" },
+  { name: "FreshBite Catering",   phone: "+44 113 555 0719", email: "enquiries@freshbitecatering.co.uk",    company: "FreshBite Catering Services Ltd.",     industry: "Food & Hospitality",           website: "www.freshbitecatering.co.uk",     address: "19 Albion Street",        city: "Leeds",       county: "West Yorkshire",    postcode: "LS2 8PN" },
+  { name: "HotelPro Management",  phone: "+44 207 555 0834", email: "info@hotelpromgmt.co.uk",              company: "HotelPro Management Group",            industry: "Hospitality & Tourism",        website: "www.hotelpromgmt.co.uk",          address: "45 Park Lane",            city: "London",      county: "Greater London",    postcode: "W1K 7QZ" },
+  { name: "HealthFirst Clinics",  phone: "+44 114 555 0293", email: "info@healthfirstclinics.co.uk",        company: "HealthFirst Medical Group Ltd.",       industry: "Healthcare & Wellness",        website: "www.healthfirstclinics.co.uk",    address: "3 Pinstone Street",       city: "Sheffield",   county: "South Yorkshire",   postcode: "S1 2HN" },
+  { name: "MediTrack Systems",    phone: "+44 207 555 0917", email: "support@meditracksys.co.uk",           company: "MediTrack Systems Ltd.",               industry: "Healthcare Technology",        website: "www.meditracksys.co.uk",          address: "200 Aldersgate Street",   city: "London",      county: "Greater London",    postcode: "EC1A 4HD" },
+  { name: "CarePoint Services",   phone: "+44 113 555 0128", email: "admin@carepointservices.co.uk",        company: "CarePoint Community Services",         industry: "Social Care & NHS",            website: "www.carepointservices.co.uk",     address: "62 Wellington Street",    city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 2EE" },
+  { name: "FinEdge Capital",      phone: "+44 207 555 0418", email: "team@finedgecapital.co.uk",            company: "FinEdge Capital Partners Ltd.",        industry: "Financial Services",           website: "www.finedgecapital.co.uk",        address: "1 Canada Square",         city: "London",      county: "Greater London",    postcode: "E14 5AB" },
+  { name: "PaySmart UK",          phone: "+44 207 555 0563", email: "hello@paysmartuk.com",                 company: "PaySmart Financial Tech Ltd.",         industry: "Fintech & Payments",           website: "www.paysmartuk.com",              address: "25 Bank Street",          city: "London",      county: "Greater London",    postcode: "E14 5JP" },
+  { name: "SmartInvest Advisors", phone: "+44 161 555 0684", email: "contact@smartinvestadvisors.co.uk",    company: "SmartInvest Financial Advisors",       industry: "Wealth Management",            website: "www.smartinvestadvisors.co.uk",   address: "8 St Mary's Parsonage",   city: "Manchester",  county: "Greater Manchester", postcode: "M3 2ER" },
+  { name: "LearnHub Academy",     phone: "+44 113 555 0745", email: "info@learnhubacademy.co.uk",           company: "LearnHub Education Ltd.",              industry: "Education & E-learning",       website: "www.learnhubacademy.co.uk",       address: "4 Merrion Way",           city: "Leeds",       county: "West Yorkshire",    postcode: "LS2 8BT" },
+  { name: "EduTrack School",      phone: "+44 114 555 0821", email: "admin@edutrackschool.co.uk",           company: "EduTrack School Solutions Ltd.",       industry: "Education Technology",         website: "www.edutrackschool.co.uk",        address: "15 Leopold Street",       city: "Sheffield",   county: "South Yorkshire",   postcode: "S1 2GY" },
+  { name: "SkillUp Training",     phone: "+44 161 555 0936", email: "courses@skilluptraining.co.uk",        company: "SkillUp Training & Development Ltd.",  industry: "Corporate Training",           website: "www.skilluptraining.co.uk",       address: "11 Portland Street",      city: "Manchester",  county: "Greater Manchester", postcode: "M1 3HU" },
+  { name: "LegalEase Solicitors", phone: "+44 207 555 0247", email: "enquiries@legaleasesolicitors.co.uk",  company: "LegalEase Solicitors LLP",             industry: "Legal Services",               website: "www.legaleasesolicitors.co.uk",   address: "60 Gray's Inn Road",      city: "London",      county: "Greater London",    postcode: "WC1X 8LU" },
+  { name: "CompliancePro UK",     phone: "+44 161 555 0358", email: "info@complianceprouk.com",             company: "CompliancePro Advisory Ltd.",          industry: "Compliance & Risk",            website: "www.complianceprouk.com",         address: "3 Hardman Square",        city: "Manchester",  county: "Greater Manchester", postcode: "M3 3EB" },
+  { name: "PropTrack Estates",    phone: "+44 113 555 0469", email: "sales@proptrackes.co.uk",              company: "PropTrack Property Solutions",         industry: "Property & Real Estate",       website: "www.proptrackestates.co.uk",      address: "9 Bond Court",            city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 2JZ" },
+  { name: "HomeFinder UK",        phone: "+44 207 555 0572", email: "hello@homefinderuk.com",               company: "HomeFinder UK Ltd.",                   industry: "Property Technology",          website: "www.homefinderuk.com",            address: "16 Upper Woburn Place",   city: "London",      county: "Greater London",    postcode: "WC1H 0AF" },
+  { name: "SwiftMove Logistics",  phone: "+44 113 555 0681", email: "ops@swiftmovelogistics.co.uk",         company: "SwiftMove Logistics Ltd.",             industry: "Logistics & Delivery",         website: "www.swiftmovelogistics.co.uk",    address: "Unit 5 Gelderd Road",     city: "Leeds",       county: "West Yorkshire",    postcode: "LS12 6DT" },
+  { name: "RouteOptima",          phone: "+44 161 555 0793", email: "contact@routeoptima.co.uk",            company: "RouteOptima Fleet Solutions Ltd.",     industry: "Fleet & Transport",            website: "www.routeoptima.co.uk",           address: "18 Trafford Park Road",   city: "Manchester",  county: "Greater Manchester", postcode: "M17 1EE" },
+  { name: "PrecisionParts Ltd",   phone: "+44 114 555 0804", email: "enquiries@precisionpartsltd.co.uk",    company: "PrecisionParts Manufacturing Ltd.",    industry: "Manufacturing & Engineering",  website: "www.precisionpartsltd.co.uk",     address: "27 Attercliffe Road",     city: "Sheffield",   county: "South Yorkshire",   postcode: "S4 7WW" },
+  { name: "BuildRight Construction", phone: "+44 113 555 0915", email: "projects@buildrightconstruction.co.uk", company: "BuildRight Construction Group",   industry: "Construction & Civil Engineering", website: "www.buildrightconstruction.co.uk", address: "40 Armley Road",        city: "Leeds",       county: "West Yorkshire",    postcode: "LS12 2EJ" },
+  { name: "GreenEnergy Partners", phone: "+44 207 555 0136", email: "info@greenenergypartners.co.uk",       company: "GreenEnergy Solutions Ltd.",           industry: "Energy & Utilities",           website: "www.greenenergypartners.co.uk",   address: "10 Victoria Street",      city: "London",      county: "Greater London",    postcode: "SW1H 0NN" },
+  { name: "SafeGuard Security",   phone: "+44 161 555 0247", email: "ops@safeguardsecurity.co.uk",          company: "SafeGuard Security Services Ltd.",     industry: "Security & Surveillance",      website: "www.safeguardsecurity.co.uk",     address: "55 Mosley Street",        city: "Manchester",  county: "Greater Manchester", postcode: "M2 3AZ" },
+  { name: "BrightMind Charity",   phone: "+44 113 555 0358", email: "hello@brightmindcharity.org.uk",       company: "BrightMind Community Foundation",      industry: "Non-profit & Charity",         website: "www.brightmindcharity.org.uk",    address: "6 St Paul's Street",      city: "Leeds",       county: "West Yorkshire",    postcode: "LS1 2LE" },
+  { name: "MediaWave Studio",     phone: "+44 207 555 0469", email: "creative@mediawaveuk.co.uk",           company: "MediaWave Creative Studio Ltd.",       industry: "Media & Creative Agency",      website: "www.mediawaveuk.co.uk",           address: "32 Clerkenwell Close",    city: "London",      county: "Greater London",    postcode: "EC1R 0AT" },
 ];
 
 const BUSINESS_TYPES = [
@@ -897,11 +897,11 @@ export default function RequirementDoc() {
               </FormField>
             </div>
 
-            <FormField label="Contact Info" hint="Auto-populated from client record">
-              <ReadOnlyField
-                value={client ? `${client.contact} · ${client.email}` : ""}
-                placeholder="Select a client to auto-populate"
-              />
+            <FormField label="Phone" hint="Auto-populated from client record">
+              <ReadOnlyField value={client?.phone ?? ""} placeholder="Select a client to auto-populate" />
+            </FormField>
+            <FormField label="Email" hint="Auto-populated from client record">
+              <ReadOnlyField value={client?.email ?? ""} placeholder="Select a client to auto-populate" />
             </FormField>
             <FormField label="Company Name" hint="Auto-populated from client record">
               <ReadOnlyField value={client?.company ?? ""} placeholder="Select a client to auto-populate" />
@@ -911,6 +911,17 @@ export default function RequirementDoc() {
             </FormField>
             <FormField label="Website" hint="Auto-populated from client record">
               <ReadOnlyField value={client?.website ?? ""} placeholder="Select a client to auto-populate" />
+            </FormField>
+            <div className="sm:col-span-2">
+              <FormField label="Address" hint="Auto-populated from client record">
+                <ReadOnlyField value={client ? client.address : ""} placeholder="Select a client to auto-populate" />
+              </FormField>
+            </div>
+            <FormField label="City" hint="Auto-populated from client record">
+              <ReadOnlyField value={client?.city ?? ""} placeholder="Select a client to auto-populate" />
+            </FormField>
+            <FormField label="County / Region" hint="Auto-populated from client record">
+              <ReadOnlyField value={client ? `${client.county}  ·  ${client.postcode}` : ""} placeholder="Select a client to auto-populate" />
             </FormField>
           </div>
         </section>
