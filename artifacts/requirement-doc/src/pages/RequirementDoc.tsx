@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine } from "lucide-react";
+import React, { useState } from "react";
+import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine, Monitor, Heart, GraduationCap, ShoppingCart, Truck, Scale, Home, Cloud, UtensilsCrossed, Hammer, Palette, CreditCard, BookOpen, Zap, Shield, Factory, Brain, Car, Handshake } from "lucide-react";
 import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
 import RichTextEditor from "@/components/RichTextEditor";
 
@@ -544,7 +544,7 @@ const TECH_STACK_OPTIONS = [
   // Databases — Relational
   "PostgreSQL", "MySQL", "MariaDB", "SQLite", "Microsoft SQL Server", "Oracle Database",
   // Databases — NoSQL
-  "MongoDB", "Firebase Firestore", "DynamoDB", "Redis", "Cassandra", "Elasticsearch",
+  "MongoDB", "Firebase Firestore", "DynamoDB", "Redis", "Cassandra",
   // Cloud Providers
   "AWS (Amazon Web Services)", "Google Cloud Platform (GCP)", "Microsoft Azure", "DigitalOcean", "Heroku", "Vercel", "Netlify", "Fly.io", "Railway",
   // DevOps & CI/CD
@@ -1309,44 +1309,41 @@ export default function RequirementDoc() {
             </p>
           </div>
 
-          {/* Business cards grid */}
+          {/* Industry grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {[
-              { name: "TechNova Solutions",       industry: "Software & Technology" },
-              { name: "HealthFirst Clinics",       industry: "Healthcare & Wellness" },
-              { name: "FinEdge Capital",           industry: "Financial Services" },
-              { name: "LearnHub Academy",          industry: "Education & E-learning" },
-              { name: "GreenPath Retail",          industry: "E-commerce & Retail" },
-              { name: "SwiftMove Logistics",       industry: "Logistics & Delivery" },
-              { name: "LegalEase Solicitors",      industry: "Legal Services" },
-              { name: "PropTrack Estates",         industry: "Property & Real Estate" },
-              { name: "CloudMind Systems",         industry: "Cloud & IT Services" },
-              { name: "FreshBite Catering",        industry: "Food & Hospitality" },
-              { name: "BrightMind Charity",        industry: "Non-profit & Charity" },
-              { name: "BuildRight Construction",   industry: "Construction & Engineering" },
-              { name: "MediaWave Studio",          industry: "Media & Creative" },
-              { name: "PaySmart UK",               industry: "Fintech & Payments" },
-              { name: "SkillUp Training",          industry: "Corporate Training" },
-              { name: "GreenEnergy Partners",      industry: "Energy & Utilities" },
-              { name: "SafeGuard Security",        industry: "Security & Surveillance" },
-              { name: "MediTrack Systems",         industry: "Healthcare Technology" },
-              { name: "DataSphere Analytics",      industry: "Data & AI" },
-              { name: "RouteOptima",               industry: "Fleet & Transport" },
-            ].map((biz) => (
+            {([
+              { icon: Monitor,        label: "Software & Technology",    desc: "Custom apps & digital platforms" },
+              { icon: Heart,          label: "Healthcare & Wellness",    desc: "Clinics, NHS & health tech" },
+              { icon: DollarSign,     label: "Financial Services",       desc: "Banking, insurance & wealth" },
+              { icon: CreditCard,     label: "Fintech & Payments",       desc: "Payment systems & open banking" },
+              { icon: GraduationCap,  label: "Education & E-learning",   desc: "Schools, colleges & LMS" },
+              { icon: ShoppingCart,   label: "E-commerce & Retail",      desc: "Online shops & POS systems" },
+              { icon: Truck,          label: "Logistics & Transport",    desc: "Fleet, delivery & routing" },
+              { icon: Scale,          label: "Legal & Compliance",       desc: "Solicitors & regulatory tech" },
+              { icon: Home,           label: "Property & Real Estate",   desc: "Agencies, lettings & PropTech" },
+              { icon: Cloud,          label: "Cloud & IT Services",      desc: "Infrastructure & DevOps" },
+              { icon: UtensilsCrossed,label: "Food & Hospitality",       desc: "Restaurants, hotels & catering" },
+              { icon: Hammer,         label: "Construction & Engineering",desc: "Builders, contractors & civil" },
+              { icon: Palette,        label: "Media & Creative",         desc: "Agencies, studios & content" },
+              { icon: BookOpen,       label: "Corporate Training",       desc: "L&D, CPD & workforce upskilling" },
+              { icon: Zap,            label: "Energy & Utilities",       desc: "Renewables & smart energy" },
+              { icon: Shield,         label: "Security & Surveillance",  desc: "Physical & cyber security" },
+              { icon: Factory,        label: "Manufacturing",            desc: "Production, ERP & IoT" },
+              { icon: Brain,          label: "Data & AI",                desc: "Analytics, ML & business intel" },
+              { icon: Handshake,      label: "Non-profit & Charity",     desc: "Charities, NGOs & social impact" },
+              { icon: Car,            label: "Automotive & Fleet",       desc: "Dealerships & fleet management" },
+            ] as { icon: React.ElementType; label: string; desc: string }[]).map(({ icon: Icon, label, desc }) => (
               <div
-                key={biz.name}
-                className="group flex flex-col gap-1.5 rounded-xl border border-border bg-white px-4 py-3.5 hover:border-primary/40 hover:shadow-sm transition-all duration-200"
+                key={label}
+                className="group flex flex-col gap-2 rounded-xl border border-border bg-white px-4 py-4 hover:border-primary/40 hover:shadow-sm transition-all duration-200"
               >
-                {/* Initials avatar */}
-                <div className="flex items-center gap-2.5">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary leading-none">
-                      {biz.name.split(" ").slice(0, 2).map((w) => w[0]).join("")}
-                    </span>
-                  </div>
-                  <span className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{biz.name}</span>
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
+                  <Icon className="w-4.5 h-4.5 text-primary" size={18} />
                 </div>
-                <span className="text-[11px] text-muted-foreground leading-tight pl-0.5">{biz.industry}</span>
+                <div>
+                  <p className="text-sm font-semibold text-foreground leading-snug">{label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</p>
+                </div>
               </div>
             ))}
           </div>
