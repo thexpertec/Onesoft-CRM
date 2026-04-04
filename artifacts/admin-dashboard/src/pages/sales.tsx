@@ -152,10 +152,17 @@ function POSView({
     return list;
   }, [allProducts, catFilter, prodSearch]);
 
-  const grandTotal    = localItems.reduce((s, i) => s + lineTotal(i), 0);
-  const discountAmt   = discountTotal(localItems);
-  const isDraft       = sale.status === "Draft";
-  const isCompleted   = sale.status === "Completed";
+  const grandTotal   = localItems.reduce((s, i) => s + lineTotal(i), 0);
+  const discountAmt  = discountTotal(localItems);
+  const isDraft      = sale.status === "Draft";
+  const isCompleted  = sale.status === "Completed";
+
+  // Blue badge on product card showing how many are already in cart
+  const cartQtyMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    localItems.forEach(i => { if (i.sku) m[i.sku] = (m[i.sku] || 0) + (parseFloat(i.qty) || 0); });
+    return m;
+  }, [localItems]);
 
   const qtyChange = (itemId: string, delta: number) => {
     const item = localItems.find(i => i.id === itemId);
@@ -168,79 +175,83 @@ function POSView({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 dark:bg-zinc-950 overflow-hidden">
 
-      {/* ── Top bar ────────────────────────────────────────────────────────── */}
-      <div className="h-13 flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shrink-0">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800"
-        >
-          <ArrowLeft size={14} /> Back
-        </button>
+      {/* ── Top bar ──────────────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-stretch bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800">
 
-        <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700" />
-
-        {/* Sale # + status */}
-        <div className="flex items-center gap-2">
-          <ShoppingCart size={15} className="text-blue-500" />
-          <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">{sale.saleNumber}</span>
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_BG[sale.status]}`}>{sale.status}</span>
+        {/* Left: back + sale id */}
+        <div className="flex items-center gap-2.5 px-3 py-2 border-r border-gray-200 dark:border-zinc-800 shrink-0">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-800 dark:hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <ArrowLeft size={14} /> Back
+          </button>
+          <div className="w-px h-6 bg-gray-200 dark:bg-zinc-700" />
+          <div className="flex flex-col leading-none gap-1">
+            <span className="text-[12px] font-bold text-gray-800 dark:text-gray-100 font-mono tracking-wide">{sale.saleNumber}</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full self-start ${STATUS_BG[sale.status]}`}>{sale.status}</span>
+          </div>
         </div>
 
-        <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700" />
-
-        {/* Meta fields */}
-        <div className="flex items-center gap-4 flex-1 min-w-0 flex-wrap">
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
-            Customer
+        {/* Centre: meta fields */}
+        <div className="flex items-center gap-5 px-5 py-2 flex-1 min-w-0 flex-wrap">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Customer</span>
             <Combobox
               value={localMeta.customer}
               onChange={v => onMetaChange({ customer: v })}
               onSelect={opt => { onMetaChange({ customer: opt.value }); onSaveMeta(); }}
               options={customerComboOpts}
-              placeholder="Walk-in customer…"
-              className="w-40"
-              inputClassName="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="Walk-in…"
+              className="w-36"
+              inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-36 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
             />
-          </label>
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
-            Date
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Date</span>
             <input type="date"
               value={localMeta.saleDate}
               onChange={e => onMetaChange({ saleDate: e.target.value })}
               onBlur={onSaveMeta}
-              className="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
             />
-          </label>
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
-            Payment
-            <div className="relative">
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Payment</span>
+            <div className="relative flex items-center gap-1.5">
+              <span className="text-gray-400 shrink-0">{PAYMENT_ICON[localMeta.paymentMethod]}</span>
               <select
                 value={localMeta.paymentMethod}
-                onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); }}
-                onBlur={onSaveMeta}
-                className="appearance-none border border-gray-200 dark:border-zinc-600 rounded px-2 pr-6 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); onSaveMeta(); }}
+                className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pl-0 pr-5 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
               >
                 {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-              <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
             </div>
-          </label>
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-400 whitespace-nowrap">
-            Notes
+          </div>
+
+          <div className="flex flex-col gap-0.5 flex-1 min-w-[110px] max-w-[200px]">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Notes</span>
             <input
               value={localMeta.notes}
               onChange={e => onMetaChange({ notes: e.target.value })}
               onBlur={onSaveMeta}
               placeholder="Optional…"
-              className="border border-gray-200 dark:border-zinc-600 rounded px-2 py-1 text-[12px] text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 w-36 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300 dark:placeholder:text-zinc-600"
             />
-          </label>
+          </div>
         </div>
 
-        {/* Last saved */}
-        <span className="text-[11px] text-gray-400 hidden sm:block whitespace-nowrap">
-          {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-        </span>
+        {/* Right: saved time */}
+        <div className="px-4 py-2 flex flex-col justify-center text-right border-l border-gray-100 dark:border-zinc-800 shrink-0">
+          <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Saved</div>
+          <div className="text-[12px] font-semibold text-gray-500 mt-0.5">
+            {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
       </div>
 
       {/* ── Body: two panels ────────────────────────────────────────────────── */}
@@ -249,303 +260,356 @@ function POSView({
         {/* ══ LEFT: Cart ══════════════════════════════════════════════════════ */}
         <div className="w-[56%] flex flex-col border-r border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950">
 
-          {/* Cart header */}
-          <div className="px-4 pt-3 pb-2 flex items-center justify-between shrink-0">
-            <h2 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
-              <ShoppingCart size={14} className="text-blue-400" />
-              Order Items
-              <span className="text-[11px] text-gray-400 font-normal ml-1">({localItems.length})</span>
-            </h2>
-            <span className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+          {/* Cart sub-header */}
+          <div className="px-5 py-2.5 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <ShoppingCart size={14} className="text-blue-500" />
+              <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Order Items</span>
+              {localItems.length > 0 && (
+                <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-bold px-2 py-0 rounded-full">{localItems.length}</span>
+              )}
+            </div>
+            <span className="flex items-center gap-1 text-[10px] text-gray-400">
               <Lock size={9} /> Catalogue only
             </span>
           </div>
 
-          {/* Cart items — scrollable */}
-          <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+          {/* Cart rows — scrollable */}
+          <div className="flex-1 overflow-y-auto bg-white dark:bg-zinc-950">
+            {localItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-zinc-700 gap-4 py-20">
+                <ShoppingCart size={52} strokeWidth={0.9} />
+                <div className="text-center space-y-1">
+                  <p className="text-[14px] font-semibold text-gray-400 dark:text-zinc-500">
+                    {isDraft ? "Cart is empty" : "No items recorded"}
+                  </p>
+                  {isDraft && (
+                    <p className="text-[12px] text-gray-300 dark:text-zinc-600">
+                      Tap a product on the right to add it here
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-zinc-800/70">
+                {localItems.map((item, idx) => {
+                  const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-zinc-900/60 transition-colors">
 
-            {localItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-40 text-gray-300 dark:text-zinc-600 gap-3">
-                <ShoppingCart size={36} strokeWidth={1.2} />
-                <span className="text-sm">
-                  {isDraft ? "Select products from the right panel to add them here" : "No items recorded"}
-                </span>
+                      {/* Row number */}
+                      <span className="text-[11px] text-gray-300 dark:text-zinc-700 w-4 text-center shrink-0 tabular-nums">{idx + 1}</span>
+
+                      {/* Thumbnail */}
+                      <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-gray-100 dark:ring-zinc-800">
+                        <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />
+                      </div>
+
+                      {/* Product info + notes */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">{item.productName || "—"}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-gray-400 font-mono">{item.sku || "—"}</span>
+                          <span className="text-gray-200 dark:text-zinc-700 select-none">·</span>
+                          <span className="text-[10px] text-gray-400">{item.unit}</span>
+                        </div>
+                        {isDraft && (
+                          <input
+                            value={item.notes}
+                            onChange={e => onItemChange(item.id, "notes", e.target.value)}
+                            onBlur={onItemBlur}
+                            placeholder="Add a note…"
+                            className="mt-1 w-full text-[11px] text-gray-500 bg-transparent placeholder:text-gray-300 dark:placeholder:text-zinc-700 outline-none border-b border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-300 transition-colors"
+                          />
+                        )}
+                      </div>
+
+                      {/* Qty stepper */}
+                      <div className="shrink-0 flex items-center gap-1">
+                        {isDraft ? (
+                          <>
+                            <button
+                              onClick={() => qtyChange(item.id, -1)}
+                              className="w-7 h-7 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-100 dark:hover:bg-red-900/30 flex items-center justify-center text-gray-500 hover:text-red-600 transition-colors"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <input
+                              type="number" min="0"
+                              value={item.qty}
+                              onChange={e => onItemChange(item.id, "qty", e.target.value)}
+                              onBlur={onItemBlur}
+                              className="w-12 h-8 text-center text-[14px] font-black text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-zinc-800 border-2 border-gray-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                            />
+                            <button
+                              onClick={() => qtyChange(item.id, 1)}
+                              className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-800/60 flex items-center justify-center text-blue-600 dark:text-blue-400 transition-colors"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[14px] font-black text-gray-700 dark:text-gray-200 w-14 text-center">×{item.qty}</span>
+                        )}
+                      </div>
+
+                      {/* Unit price */}
+                      <div className="shrink-0 w-20">
+                        <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Unit £</div>
+                        <div className="flex items-center gap-0.5">
+                          <input
+                            type="number" min="0" step="0.01"
+                            value={item.unitPrice}
+                            onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
+                            onBlur={onItemBlur}
+                            disabled={!isDraft}
+                            className="flex-1 text-[13px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Discount */}
+                      <div className="shrink-0 w-14">
+                        <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Disc %</div>
+                        <div className="flex items-center gap-0.5">
+                          <input
+                            type="number" min="0" max="100"
+                            value={item.discount}
+                            onChange={e => onItemChange(item.id, "discount", e.target.value)}
+                            onBlur={onItemBlur}
+                            disabled={!isDraft}
+                            className="flex-1 text-[13px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 transition-colors"
+                          />
+                          <span className="text-[10px] text-gray-400">%</span>
+                        </div>
+                      </div>
+
+                      {/* Line total */}
+                      <div className="shrink-0 w-20 text-right">
+                        <div className="text-[16px] font-black font-mono tabular-nums text-gray-800 dark:text-gray-100">
+                          £{lineTotal(item).toFixed(2)}
+                        </div>
+                        {parseFloat(item.discount) > 0 && (
+                          <div className="text-[10px] text-emerald-500 font-mono leading-tight">
+                            −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => isDraft && onDeleteItem(item.id)}
+                        disabled={!isDraft}
+                        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDraft ? "text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" : "opacity-0 pointer-events-none"}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
-
-            {localItems.map((item, idx) => (
-              <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-3 flex gap-3 items-start group/item hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
-                {/* Index */}
-                <span className="text-[11px] text-gray-300 w-4 shrink-0 pt-0.5">{idx + 1}</span>
-
-                {/* Thumbnail small */}
-                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0">
-                  {(() => {
-                    const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
-                    return <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />;
-                  })()}
-                </div>
-
-                {/* Name + SKU */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{item.productName || "—"}</div>
-                  <div className="text-[10px] text-gray-400 font-mono">{item.sku || "no sku"}</div>
-                  {/* Notes in-line */}
-                  {isDraft && (
-                    <input
-                      value={item.notes}
-                      onChange={e => onItemChange(item.id, "notes", e.target.value)}
-                      onBlur={onItemBlur}
-                      placeholder="Notes…"
-                      className="mt-1 w-full text-[11px] text-gray-500 bg-transparent placeholder:text-gray-300 outline-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
-                    />
-                  )}
-                </div>
-
-                {/* Qty control */}
-                <div className="flex flex-col items-center gap-0.5 shrink-0">
-                  <span className="text-[9px] text-gray-400 uppercase tracking-wide">Qty</span>
-                  <div className="flex items-center gap-0.5">
-                    {isDraft && (
-                      <button
-                        onClick={() => qtyChange(item.id, -1)}
-                        className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
-                      >
-                        <Minus size={10} />
-                      </button>
-                    )}
-                    <input
-                      type="number" min="0"
-                      value={item.qty}
-                      onChange={e => onItemChange(item.id, "qty", e.target.value)}
-                      onBlur={onItemBlur}
-                      disabled={!isDraft}
-                      className="w-10 h-5 text-center text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded disabled:bg-transparent disabled:border-transparent outline-none focus:ring-1 focus:ring-blue-400"
-                    />
-                    {isDraft && (
-                      <button
-                        onClick={() => qtyChange(item.id, 1)}
-                        className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
-                      >
-                        <Plus size={10} />
-                      </button>
-                    )}
-                  </div>
-                  <span className="text-[9px] text-gray-400">{item.unit}</span>
-                </div>
-
-                {/* Price + Discount */}
-                <div className="flex flex-col gap-1 shrink-0 w-20">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-gray-400 uppercase tracking-wide">Price</span>
-                    <div className="flex items-center">
-                      <span className="text-[11px] text-gray-400 mr-0.5">£</span>
-                      <input
-                        type="number" min="0" step="0.01"
-                        value={item.unitPrice}
-                        onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
-                        onBlur={onItemBlur}
-                        disabled={!isDraft}
-                        className="flex-1 text-[12px] text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-gray-400 uppercase tracking-wide">Disc %</span>
-                    <div className="flex items-center">
-                      <input
-                        type="number" min="0" max="100"
-                        value={item.discount}
-                        onChange={e => onItemChange(item.id, "discount", e.target.value)}
-                        onBlur={onItemBlur}
-                        disabled={!isDraft}
-                        className="flex-1 text-[12px] text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-transparent hover:border-gray-200 focus:border-blue-300 transition-colors"
-                      />
-                      <span className="text-[11px] text-gray-400 ml-0.5">%</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Line total */}
-                <div className="shrink-0 w-20 text-right pt-0.5">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Total</div>
-                  <div className="text-[14px] font-bold font-mono tabular-nums text-gray-800 dark:text-gray-100">
-                    £{lineTotal(item).toFixed(2)}
-                  </div>
-                  {parseFloat(item.discount) > 0 && (
-                    <div className="text-[10px] text-amber-500 font-mono">
-                      −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Delete */}
-                {isDraft && (
-                  <button
-                    onClick={() => onDeleteItem(item.id)}
-                    className="opacity-0 group-hover/item:opacity-100 shrink-0 w-5 h-5 mt-0.5 text-gray-300 hover:text-red-500 transition-all rounded"
-                    title="Remove item"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
-
           </div>
 
-          {/* ── Totals + Action bar ─────────────────────────────────────────── */}
-          <div className="shrink-0 border-t border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 space-y-2.5">
-            {/* Totals */}
-            <div className="space-y-1">
+          {/* ── Totals + Actions ─────────────────────────────────────────────── */}
+          <div className="shrink-0 border-t border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className="px-5 pt-3.5 pb-2 space-y-1.5">
               <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
-                <span>Subtotal</span>
-                <span className="font-mono">£{subTotal(localItems).toFixed(2)}</span>
+                <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
+                <span className="font-mono font-semibold">£{subTotal(localItems).toFixed(2)}</span>
               </div>
               {discountAmt > 0 && (
-                <div className="flex justify-between text-[12px] text-amber-600">
-                  <span>Discount saved</span>
-                  <span className="font-mono">−£{discountAmt.toFixed(2)}</span>
+                <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
+                  <span>Discount savings</span>
+                  <span className="font-mono font-semibold">−£{discountAmt.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-gray-100 dark:border-zinc-800 pt-1.5">
-                <span className="text-[15px] font-bold text-gray-800 dark:text-gray-100">Grand Total</span>
-                <span className="text-[18px] font-bold font-mono tabular-nums text-gray-900 dark:text-white">
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-zinc-800">
+                <span className="text-[14px] font-bold text-gray-600 dark:text-gray-300">Total to Pay</span>
+                <span className="text-[26px] font-black font-mono tabular-nums text-blue-600 dark:text-blue-400 leading-none">
                   £{grandTotal.toFixed(2)}
                 </span>
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex gap-2 flex-wrap">
+            <div className="px-5 pb-4 space-y-2">
               {isDraft && (
                 <>
-                  <Button size="sm" variant="outline" onClick={onClose} className="gap-1 flex-1 h-9 text-[12px]">
-                    <Save size={13} /> Save Draft
-                  </Button>
-                  <Button
-                    size="sm"
+                  <button
                     onClick={() => { onSetStatus("Completed"); onClose(); }}
-                    className="gap-1 flex-1 h-9 text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
                   >
-                    <Check size={13} /> Complete Sale
-                  </Button>
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => onSetStatus("Cancelled")}
-                    className="gap-1 h-9 text-[12px] text-red-500 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
-                  >
-                    <Ban size={13} /> Cancel
-                  </Button>
+                    <Check size={17} /> Complete &amp; Pay
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onClose}
+                      className="flex-1 h-9 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Save size={13} /> Save Draft
+                    </button>
+                    <button
+                      onClick={() => onSetStatus("Cancelled")}
+                      className="h-9 px-3 rounded-xl border-2 border-red-100 dark:border-red-900/50 text-[12px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-1.5 transition-colors"
+                    >
+                      <Ban size={13} /> Void
+                    </button>
+                  </div>
                 </>
               )}
               {isCompleted && (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => onSetStatus("Refunded")} className="gap-1 flex-1 h-9 text-[12px] text-amber-600 border-amber-200 hover:bg-amber-50">
-                    <RotateCcw size={13} /> Refund
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={onClose} className="flex-1 h-9 text-[12px]">Close</Button>
-                </>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onSetStatus("Refunded")}
+                    className="flex-1 h-10 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[13px] font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <RotateCcw size={14} /> Refund
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="flex-1 h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               )}
               {(sale.status === "Refunded" || sale.status === "Cancelled") && (
-                <Button size="sm" variant="outline" onClick={onClose} className="flex-1 h-9 text-[12px]">Close</Button>
+                <button
+                  onClick={onClose}
+                  className="w-full h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Close
+                </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* ══ RIGHT: Product Catalogue ═════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden">
+        {/* ══ RIGHT: Product Catalogue ══════════════════════════════════════════ */}
+        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-950 overflow-hidden">
 
-          {/* Search + category filters */}
-          <div className="px-4 pt-3 pb-2 border-b border-gray-100 dark:border-zinc-800 space-y-2 shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={prodSearch}
-                  onChange={e => setProdSearch(e.target.value)}
-                  placeholder="Search products by name, SKU or category…"
-                  className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:bg-white dark:focus:bg-zinc-700"
-                />
-                {prodSearch && (
-                  <button onClick={() => setProdSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    <X size={11} />
-                  </button>
-                )}
-              </div>
-              <span className="text-[11px] text-gray-400 whitespace-nowrap">{filteredProds.length} products</span>
+          {/* Search + filters */}
+          <div className="px-4 pt-3 pb-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 space-y-2.5 shrink-0">
+            {/* Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                autoFocus
+                type="text"
+                value={prodSearch}
+                onChange={e => setProdSearch(e.target.value)}
+                placeholder="Search by name or SKU…"
+                className="w-full pl-9 pr-8 py-2.5 text-[13px] border-2 border-gray-200 dark:border-zinc-700 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-700 transition-all placeholder:text-gray-400 dark:placeholder:text-zinc-500"
+              />
+              {prodSearch && (
+                <button
+                  onClick={() => setProdSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-zinc-600 hover:bg-gray-400 dark:hover:bg-zinc-500 flex items-center justify-center transition-colors"
+                >
+                  <X size={10} className="text-white" />
+                </button>
+              )}
             </div>
 
-            {/* Category filter pills */}
-            <div className="flex gap-1 flex-wrap">
-              {["All", ...allCats].map((cat, i) => {
-                const isActive = catFilter === cat;
-                const colClass = cat === "All" ? "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300" : CAT_COLOURS[(i - 1) % CAT_COLOURS.length];
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setCatFilter(prev => prev === cat && cat !== "All" ? "All" : cat)}
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${colClass} ${isActive ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "opacity-70 hover:opacity-100"}`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
+            {/* Category pills */}
+            {allCats.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap">
+                {["All", ...allCats].map((cat, i) => {
+                  const isActive = catFilter === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setCatFilter(prev => prev === cat && cat !== "All" ? "All" : cat)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                        cat === "All"
+                          ? isActive
+                            ? "bg-gray-800 dark:bg-white text-white dark:text-gray-900 shadow-sm"
+                            : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                          : `${CAT_COLOURS[(i-1) % CAT_COLOURS.length]} ${isActive ? "ring-2 ring-offset-1 ring-blue-400 opacity-100" : "opacity-55 hover:opacity-90"}`
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="text-[11px] text-gray-400 font-medium">
+              {filteredProds.length} product{filteredProds.length !== 1 ? "s" : ""}
+              {!isDraft && <span className="ml-2 text-amber-500">(view only — sale is {sale.status})</span>}
             </div>
           </div>
 
           {/* Product grid — scrollable */}
           <div className="flex-1 overflow-y-auto p-3">
             {filteredProds.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-gray-300 dark:text-zinc-600 gap-2">
-                <Package size={32} strokeWidth={1.2} />
-                <span className="text-sm">No products found</span>
+              <div className="flex flex-col items-center justify-center h-48 text-gray-300 dark:text-zinc-600 gap-3">
+                <Package size={40} strokeWidth={1} />
+                <div className="text-center space-y-1">
+                  <p className="text-[13px] font-semibold text-gray-400 dark:text-zinc-500">No products found</p>
+                  {prodSearch && (
+                    <p className="text-[11px] text-gray-300 dark:text-zinc-600">
+                      Try a different name or SKU, or{" "}
+                      <button onClick={() => setProdSearch("")} className="text-blue-500 hover:underline">clear search</button>
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3 content-start">
-                {filteredProds.map((product, pi) => {
-                  const catColour = (() => {
-                    const idx = allCats.indexOf(product.category);
-                    return idx >= 0 ? CAT_COLOURS[idx % CAT_COLOURS.length] : CAT_COLOURS[0];
-                  })();
+              <div className="grid grid-cols-2 gap-2.5 content-start">
+                {filteredProds.map((product) => {
+                  const catIdx   = allCats.indexOf(product.category);
+                  const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
+                  const inCart   = cartQtyMap[product.sku] || 0;
                   return (
                     <button
                       key={product.id}
                       disabled={!isDraft}
                       onClick={() => onAddProduct(product)}
-                      title={isDraft ? `Add ${product.name} to cart` : "Sale is not in Draft status"}
-                      className={`group text-left bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl p-3 flex flex-col gap-2 transition-all ${isDraft ? "hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md cursor-pointer active:scale-[0.97]" : "opacity-50 cursor-not-allowed"}`}
+                      title={isDraft ? `Add ${product.name}` : `Sale is ${sale.status}`}
+                      className={`group relative text-left bg-white dark:bg-zinc-900 border-2 rounded-2xl overflow-hidden flex flex-col transition-all ${
+                        isDraft
+                          ? inCart > 0
+                            ? "border-blue-300 dark:border-blue-700 hover:border-blue-500 hover:shadow-lg cursor-pointer active:scale-[0.97]"
+                            : "border-gray-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg cursor-pointer active:scale-[0.97]"
+                          : "border-gray-100 dark:border-zinc-800 opacity-50 cursor-not-allowed"
+                      }`}
                     >
-                      {/* Thumbnail */}
-                      <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-zinc-700">
+                      {/* In-cart badge */}
+                      {inCart > 0 && (
+                        <div className="absolute top-2 right-2 z-10 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                          {inCart}
+                        </div>
+                      )}
+
+                      {/* Thumbnail — 4:3 aspect */}
+                      <div className="aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-zinc-800">
                         <ProductThumbnail product={product} size="full" />
                       </div>
 
                       {/* Info */}
-                      <div className="min-w-0">
-                        <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      <div className="p-3 flex flex-col gap-1">
+                        <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100 leading-snug line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                           {product.name}
                         </div>
-                        <div className="text-[10px] text-gray-400 font-mono truncate">{product.sku || "—"}</div>
-
-                        <div className="flex items-center justify-between mt-1.5 gap-1">
-                          <span className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        <div className="text-[10px] text-gray-400 font-mono">{product.sku || "—"}</div>
+                        <div className="flex items-center justify-between mt-0.5 gap-1">
+                          <span className="text-[16px] font-black text-emerald-600 dark:text-emerald-400 font-mono">
                             £{parseFloat(product.price || "0").toFixed(2)}
                           </span>
                           {product.category && (
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full truncate max-w-[60px] ${catColour}`}>
+                            <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full truncate max-w-[70px] ${catColor}`}>
                               {product.category}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Add overlay on hover */}
+                      {/* "Tap to add" cue on hover */}
                       {isDraft && (
-                        <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-blue-500/0 group-hover:bg-blue-500/5 transition-colors pointer-events-none">
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                        <div className="absolute inset-0 pointer-events-none rounded-2xl">
+                          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
                             <Plus size={9} /> Add
                           </div>
                         </div>
@@ -555,12 +619,6 @@ function POSView({
                 })}
               </div>
             )}
-          </div>
-
-          {/* Catalogue-only notice */}
-          <div className="shrink-0 border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-2">
-            <Lock size={11} className="text-gray-300" />
-            <span className="text-[11px] text-gray-400">Only catalogue products can be added to a sale. Manage products in the Products module.</span>
           </div>
         </div>
       </div>
