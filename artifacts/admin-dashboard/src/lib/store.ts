@@ -39,94 +39,48 @@ export type RequirementDoc = {
 const LEADS_KEY = "admin-leads";
 const DOCS_KEY = "admin-req-docs";
 
-const INITIAL_LEADS: Lead[] = [
-  {
-    id: "l-1",
-    name: "Sarah Jenkins",
-    company: "Hull Logistics Ltd",
-    email: "s.jenkins@hulllogistics.co.uk",
-    phone: "01482 123456",
-    industry: "Logistics",
-    city: "Hull",
-    status: "New",
-    source: "Website",
-    notes: "Looking for a custom transport management system.",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "l-2",
-    name: "David Smith",
-    company: "Smith & Co Accounting",
-    email: "david@smithco.co.uk",
-    phone: "07700 900123",
-    industry: "Finance",
-    city: "London",
-    status: "Contacted",
-    source: "Referral",
-    notes: "Needs a secure client portal.",
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "l-3",
-    name: "Aisha Khan",
-    company: "Crescent Retail",
-    email: "akhan@crescentretail.pk",
-    phone: "+92 300 1234567",
-    industry: "Retail",
-    city: "Islamabad",
-    status: "Qualified",
-    source: "LinkedIn",
-    notes: "E-commerce platform rebuild required.",
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-  }
-];
+// ─── One-time migration: remove seeded demo items ────────────────────────────
+const DEMO_LEAD_IDS = ["l-1", "l-2", "l-3"];
+const DEMO_DOC_IDS  = ["d-1"];
 
-const INITIAL_DOCS: RequirementDoc[] = [
-  {
-    id: "d-1",
-    title: "Transport Management System Requirements",
-    clientName: "Sarah Jenkins",
-    company: "Hull Logistics Ltd",
-    email: "s.jenkins@hulllogistics.co.uk",
-    phone: "01482 123456",
-    industry: "Logistics",
-    city: "Hull",
-    status: "Draft",
-    softwareType: "Web App",
-    budget: "£25,000 - £50,000",
-    startDate: "2024-03-01",
-    deliveryDate: "2024-09-01",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    sections: {}
-  }
-];
+function clearDemoData() {
+  try {
+    const leadsRaw = localStorage.getItem(LEADS_KEY);
+    if (leadsRaw) {
+      const leads: Lead[] = JSON.parse(leadsRaw);
+      const filtered = leads.filter((l) => !DEMO_LEAD_IDS.includes(l.id));
+      if (filtered.length !== leads.length) localStorage.setItem(LEADS_KEY, JSON.stringify(filtered));
+    }
+    const docsRaw = localStorage.getItem(DOCS_KEY);
+    if (docsRaw) {
+      const docs: RequirementDoc[] = JSON.parse(docsRaw);
+      const filtered = docs.filter((d) => !DEMO_DOC_IDS.includes(d.id));
+      if (filtered.length !== docs.length) localStorage.setItem(DOCS_KEY, JSON.stringify(filtered));
+    }
+  } catch { /* ignore */ }
+}
+clearDemoData();
 
-function getStored<T>(key: string, initial: T[]): T[] {
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+function getStored<T>(key: string): T[] {
   try {
     const item = localStorage.getItem(key);
     if (item) {
       const parsed = JSON.parse(item);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error(`Error reading ${key} from localStorage`, e);
   }
-  localStorage.setItem(key, JSON.stringify(initial));
-  return initial;
+  return [];
 }
 
 function setStored<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-// Leads API
-export const getLeads = (): Lead[] => getStored(LEADS_KEY, INITIAL_LEADS);
+// ─── Leads API ────────────────────────────────────────────────────────────────
+export const getLeads = (): Lead[] => getStored<Lead>(LEADS_KEY);
 export const getLead = (id: string): Lead | undefined => getLeads().find(l => l.id === id);
 export const createLead = (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">): Lead => {
   const newLead: Lead = {
@@ -142,12 +96,7 @@ export const updateLead = (id: string, updates: Partial<Omit<Lead, "id" | "creat
   const leads = getLeads();
   const index = leads.findIndex(l => l.id === id);
   if (index === -1) throw new Error("Lead not found");
-  
-  const updatedLead = {
-    ...leads[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+  const updatedLead = { ...leads[index], ...updates, updatedAt: new Date().toISOString() };
   leads[index] = updatedLead;
   setStored(LEADS_KEY, leads);
   return updatedLead;
@@ -156,8 +105,8 @@ export const deleteLead = (id: string): void => {
   setStored(LEADS_KEY, getLeads().filter(l => l.id !== id));
 };
 
-// Docs API
-export const getDocs = (): RequirementDoc[] => getStored(DOCS_KEY, INITIAL_DOCS);
+// ─── Docs API ─────────────────────────────────────────────────────────────────
+export const getDocs = (): RequirementDoc[] => getStored<RequirementDoc>(DOCS_KEY);
 export const getDoc = (id: string): RequirementDoc | undefined => getDocs().find(d => d.id === id);
 export const createDoc = (doc: Omit<RequirementDoc, "id" | "createdAt" | "updatedAt">): RequirementDoc => {
   const newDoc: RequirementDoc = {
@@ -173,16 +122,41 @@ export const updateDoc = (id: string, updates: Partial<Omit<RequirementDoc, "id"
   const docs = getDocs();
   const index = docs.findIndex(d => d.id === id);
   if (index === -1) throw new Error("Document not found");
-  
-  const updatedDoc = {
-    ...docs[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+  const updatedDoc = { ...docs[index], ...updates, updatedAt: new Date().toISOString() };
   docs[index] = updatedDoc;
   setStored(DOCS_KEY, docs);
   return updatedDoc;
 };
 export const deleteDoc = (id: string): void => {
   setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
+};
+
+// ─── Team Members API (for New Document "Prepared By") ───────────────────────
+const TEAM_KEY = "admin-team-members";
+const DEFAULT_TEAM = ["Ali Raza", "Umar Farooq", "Hassan Sheikh", "Bilal Ahmed", "Zainab Mirza", "Sara Qureshi"];
+
+export const getTeamMembers = (): string[] => {
+  try {
+    const raw = localStorage.getItem(TEAM_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  localStorage.setItem(TEAM_KEY, JSON.stringify(DEFAULT_TEAM));
+  return DEFAULT_TEAM;
+};
+
+export const addTeamMember = (name: string): string[] => {
+  const current = getTeamMembers();
+  if (current.includes(name)) return current;
+  const updated = [...current, name];
+  localStorage.setItem(TEAM_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+export const removeTeamMember = (name: string): string[] => {
+  const updated = getTeamMembers().filter(m => m !== name);
+  localStorage.setItem(TEAM_KEY, JSON.stringify(updated));
+  return updated;
 };

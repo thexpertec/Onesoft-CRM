@@ -1,29 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   FileText, Briefcase, Layers, Wrench, DollarSign, Clock, Target,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
-  ArrowLeft, Lock,
+  ArrowLeft, Lock, Plus, X,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
-import { useDocs } from "@/hooks/use-data";
+import { useDocs, useLeads } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
+import { getTeamMembers, addTeamMember } from "@/lib/store";
 
-// ─── Clients ────────────────────────────────────────────────────────────────
-const CLIENTS = [
-  { name: "John Smith",       company: "Smith & Co Ltd",         email: "j.smith@smithco.co.uk",        phone: "+44 7901 234567", industry: "Software & Technology",  website: "www.smithco.co.uk",    address: "12 Victoria Street",       city: "Hull",          county: "East Yorkshire", postcode: "HU1 1AA" },
-  { name: "Sarah Johnson",    company: "Johnson Logistics",       email: "sarah@johnsonlogistics.co.uk", phone: "+44 7912 345678", industry: "Logistics & Transport",   website: "www.johnsonlogistics.co.uk", address: "45 Humber Dock Street", city: "Hull",       county: "East Yorkshire", postcode: "HU1 1TB" },
-  { name: "Mohammed Al-Farsi",company: "Al-Farsi Healthcare",    email: "m.alfarsi@alf-health.com",     phone: "+44 7923 456789", industry: "Healthcare & Wellness",   website: "www.alf-health.com",   address: "88 Anlaby Road",           city: "Hull",          county: "East Yorkshire", postcode: "HU3 2RG" },
-  { name: "Emily Brown",      company: "Brown Retail Group",      email: "emily@brownretail.co.uk",      phone: "+44 7934 567890", industry: "E-commerce & Retail",     website: "www.brownretail.co.uk",address: "22 Whitefriargate",        city: "Hull",          county: "East Yorkshire", postcode: "HU1 2HN" },
-  { name: "David Chen",       company: "Chen Tech Solutions",     email: "d.chen@chentech.co.uk",        phone: "+44 7945 678901", industry: "Software & Technology",   website: "www.chentech.co.uk",   address: "7 Paragon Street",         city: "Hull",          county: "East Yorkshire", postcode: "HU1 3PX" },
-  { name: "Ayesha Malik",     company: "Malik Finance Ltd",       email: "ayesha@malikfinance.com",      phone: "+44 7956 789012", industry: "Financial Services",      website: "www.malikfinance.com", address: "33 Brook Street",          city: "Hull",          county: "East Yorkshire", postcode: "HU2 8LA" },
-  { name: "James Wilson",     company: "Wilson Construction",     email: "james@wilsonconstruction.co.uk",phone: "+44 7967 890123", industry: "Construction & Engineering",website:"www.wilsonconstruction.co.uk",address:"56 Clough Road",        city: "Hull",          county: "East Yorkshire", postcode: "HU6 7PA" },
-  { name: "Priya Sharma",     company: "Sharma E-Learning",       email: "priya@sharmaelearning.com",    phone: "+44 7978 901234", industry: "Education & E-learning",  website: "www.sharmaelearning.com",address:"14 Beverley Road",        city: "Hull",          county: "East Yorkshire", postcode: "HU3 1XH" },
-  { name: "Robert Taylor",    company: "Taylor Legal Services",   email: "r.taylor@taylorlegal.co.uk",   phone: "+44 7989 012345", industry: "Legal & Compliance",      website: "www.taylorlegal.co.uk",address: "9 Alfred Gelder Street",  city: "Hull",          county: "East Yorkshire", postcode: "HU1 2AQ" },
-  { name: "Fatima Noor",      company: "Noor Media Agency",       email: "fatima@noormedia.co.uk",       phone: "+44 7990 123456", industry: "Media & Creative",        website: "www.noormedia.co.uk",  address: "29 Scale Lane",            city: "Hull",          county: "East Yorkshire", postcode: "HU1 1LF" },
-];
-
-const TEAM_MEMBERS = ["Ali Raza", "Umar Farooq", "Hassan Sheikh", "Bilal Ahmed", "Zainab Mirza", "Sara Qureshi"];
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
 
 const PRODUCTS_BY_TYPE: Record<string, string[]> = {
@@ -260,6 +246,79 @@ function SectionDivider() {
   return <div className="border-t border-border/60 my-8" />;
 }
 
+function PreparedByField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [members, setMembers] = useState<string[]>(() => getTeamMembers());
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleAdd = () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const updated = addTeamMember(trimmed);
+    setMembers(updated);
+    onChange(trimmed);
+    setNewName("");
+    setAdding(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); handleAdd(); }
+    if (e.key === "Escape") { setAdding(false); setNewName(""); }
+  };
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus();
+  }, [adding]);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative flex gap-2">
+        <div className="relative flex-1">
+          <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full appearance-none px-3 py-2.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-9"
+          >
+            <option value="" disabled>Select team member</option>
+            {members.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        </div>
+        <button
+          type="button"
+          onClick={() => setAdding((a) => !a)}
+          title="Add new team member"
+          className="flex-shrink-0 h-[42px] w-[42px] flex items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-primary hover:border-primary/50 transition-all"
+        >
+          {adding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+        </button>
+      </div>
+      {adding && (
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Enter full name..."
+            className="flex-1 px-3 py-2 rounded-lg border border-primary/40 bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newName.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-40 transition-all"
+          >
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Draft key ───────────────────────────────────────────────────────────────
 const DRAFT_KEY = "admin-new-doc-draft";
 
@@ -267,6 +326,7 @@ const DRAFT_KEY = "admin-new-doc-draft";
 export default function NewDocument() {
   const [, navigate] = useLocation();
   const { addDoc } = useDocs();
+  const { leads } = useLeads();
   const { isAuthenticated } = useAuth();
 
   const today = new Date().toISOString().split("T")[0];
@@ -311,7 +371,7 @@ export default function NewDocument() {
   const [versionHistory, setVersionHistory] = useState("");
   const [detailedNotes, setDetailedNotes] = useState("");
 
-  const client = CLIENTS.find((c) => c.name === selectedClient);
+  const client = leads.find((l) => l.name === selectedClient);
 
   // Per-section save (draft)
   const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
@@ -520,20 +580,26 @@ export default function NewDocument() {
             <DateInput value={docDate} onChange={setDocDate} />
           </FormField>
           <FormField label="Prepared By" required hint="Select the team member preparing this document">
-            <SelectInput options={TEAM_MEMBERS} value={preparedBy} onChange={setPreparedBy} placeholder="Select team member" />
+            <PreparedByField value={preparedBy} onChange={setPreparedBy} />
           </FormField>
           <div className="sm:col-span-2">
-            <FormField label="Client Name" required hint="Select from existing leads/customers or add new">
-              <SelectInput
-                options={CLIENTS.map((c) => c.name)}
-                value={selectedClient}
-                onChange={handleSelectClient}
-                placeholder="Select or add client"
-              />
+            <FormField label="Client Name" required hint={leads.length === 0 ? "Add leads first to select a client" : "Select from your existing leads"}>
+              {leads.length === 0 ? (
+                <div className="w-full px-3 py-2.5 rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground italic">
+                  No leads yet — add leads first to link a client
+                </div>
+              ) : (
+                <SelectInput
+                  options={leads.map((l) => l.name)}
+                  value={selectedClient}
+                  onChange={handleSelectClient}
+                  placeholder="Select client from leads"
+                />
+              )}
             </FormField>
           </div>
 
-          {selectedClient && (
+          {selectedClient && client && (
             <div className="sm:col-span-2">
               <button
                 type="button"
@@ -545,18 +611,17 @@ export default function NewDocument() {
               </button>
               {clientInfoOpen && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
-                  <FormField label="Phone"><ReadOnlyField value={client?.phone ?? ""} placeholder="—" /></FormField>
-                  <FormField label="Email"><ReadOnlyField value={client?.email ?? ""} placeholder="—" /></FormField>
-                  <FormField label="Company Name"><ReadOnlyField value={client?.company ?? ""} placeholder="—" /></FormField>
-                  <FormField label="Industry"><ReadOnlyField value={client?.industry ?? ""} placeholder="—" /></FormField>
-                  <FormField label="Website"><ReadOnlyField value={client?.website ?? ""} placeholder="—" /></FormField>
-                  <div className="sm:col-span-2">
-                    <FormField label="Address"><ReadOnlyField value={client?.address ?? ""} placeholder="—" /></FormField>
-                  </div>
-                  <FormField label="City"><ReadOnlyField value={client?.city ?? ""} placeholder="—" /></FormField>
-                  <FormField label="County / Region">
-                    <ReadOnlyField value={client ? `${client.county}  ·  ${client.postcode}` : ""} placeholder="—" />
-                  </FormField>
+                  <FormField label="Phone"><ReadOnlyField value={client.phone} placeholder="—" /></FormField>
+                  <FormField label="Email"><ReadOnlyField value={client.email} placeholder="—" /></FormField>
+                  <FormField label="Company Name"><ReadOnlyField value={client.company} placeholder="—" /></FormField>
+                  <FormField label="Industry"><ReadOnlyField value={client.industry} placeholder="—" /></FormField>
+                  <FormField label="City"><ReadOnlyField value={client.city} placeholder="—" /></FormField>
+                  <FormField label="Status"><ReadOnlyField value={client.status} placeholder="—" /></FormField>
+                  {client.notes && (
+                    <div className="sm:col-span-2">
+                      <FormField label="Lead Notes"><ReadOnlyField value={client.notes} placeholder="—" /></FormField>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
