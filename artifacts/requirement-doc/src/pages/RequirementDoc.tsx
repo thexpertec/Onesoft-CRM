@@ -859,9 +859,13 @@ export default function RequirementDoc() {
             </div>
             <span className="text-xs font-semibold uppercase tracking-widest text-primary">Customer Requirement Collection</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
-            {docTitle || <span className="text-muted-foreground/50 italic font-normal">Untitled Document</span>}
-          </h1>
+          <input
+            type="text"
+            value={docTitle}
+            onChange={(e) => setDocTitle(e.target.value)}
+            placeholder="Untitled Document"
+            className="w-full text-2xl sm:text-3xl font-bold text-foreground mb-2 bg-transparent border-0 border-b-2 border-transparent focus:border-primary/30 focus:outline-none placeholder:text-muted-foreground/40 placeholder:font-normal placeholder:italic transition-colors pb-0.5"
+          />
           <p className="text-sm text-muted-foreground">
             Fill in all required fields to generate a complete software requirements document for your client.
           </p>
