@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine, Monitor, Heart, GraduationCap, ShoppingCart, Truck, Scale, Home, Cloud, UtensilsCrossed, Hammer, Palette, CreditCard, BookOpen, Zap, Shield, Factory, Brain, Car, Handshake, Check, Save } from "lucide-react";
+import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine, Monitor, Heart, GraduationCap, ShoppingCart, Truck, Scale, Home, Cloud, UtensilsCrossed, Hammer, Palette, CreditCard, BookOpen, Zap, Shield, Factory, Brain, Car, Handshake, Check, Save, Send } from "lucide-react";
 import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
 import RichTextEditor from "@/components/RichTextEditor";
 
@@ -863,6 +863,37 @@ export default function RequirementDoc() {
   const saveS6 = () => { persist("s6", { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7 = () => { persist("s7", { postLaunch, maintenance }); markSaved("s7"); };
 
+  // ── Submit to Admin Dashboard ─────────────────────────────────────────────
+  const [adminSubmitDone, setAdminSubmitDone] = useState(false);
+
+  const submitToAdmin = () => {
+    const raw = JSON.parse(localStorage.getItem("req-doc") || "{}");
+    const now = new Date().toISOString();
+    const newDoc = {
+      id: crypto.randomUUID(),
+      title: docTitle || (selectedClient ? `${selectedClient} - Requirements` : "Untitled Document"),
+      clientName: selectedClient || "",
+      company: client?.company || selectedClient || "",
+      email: client?.email || "",
+      phone: client?.phone || "",
+      industry: client?.industry || "",
+      city: client?.city || "",
+      status: "Draft",
+      softwareType: keyProducts[0] || purpose || "",
+      budget: paymentStructure || "",
+      startDate: startDate || "",
+      deliveryDate: deliveryDate || "",
+      createdAt: now,
+      updatedAt: now,
+      sections: raw,
+    };
+    const existing: object[] = JSON.parse(localStorage.getItem("admin-req-docs") || "[]");
+    localStorage.setItem("admin-req-docs", JSON.stringify([...existing, newDoc]));
+    window.dispatchEvent(new StorageEvent("storage", { key: "admin-req-docs" }));
+    setAdminSubmitDone(true);
+    setTimeout(() => setAdminSubmitDone(false), 4000);
+  };
+
   // Load from localStorage on mount
   useEffect(() => {
     try {
@@ -965,6 +996,30 @@ export default function RequirementDoc() {
           <p className="text-sm text-muted-foreground">
             Fill in all required fields to generate a complete software requirements document for your client.
           </p>
+
+          {/* Submit to Admin Dashboard */}
+          <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={submitToAdmin}
+              data-testid="btn-submit-to-admin"
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                adminSubmitDone
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-primary text-white hover:bg-primary/90 shadow-sm"
+              }`}
+            >
+              {adminSubmitDone ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+              {adminSubmitDone ? "Submitted to Admin Dashboard!" : "Submit to Admin Dashboard"}
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Saves the current form data as a new requirement document in the{" "}
+              <a href="/admin-dashboard/" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
+                Admin Dashboard
+              </a>
+              .
+            </p>
+          </div>
         </div>
 
         {/* Section 1: Document Information */}

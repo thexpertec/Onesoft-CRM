@@ -5,47 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, ExternalLink, FileText } from "lucide-react";
+import { Search, MoreHorizontal, Trash2, Edit, ExternalLink, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
 
-const docSchema = z.object({
-  title: z.string().min(2, "Title is required"),
-  clientName: z.string().min(2, "Client name is required"),
-  company: z.string().min(2, "Company is required"),
-  email: z.string().email("Invalid email"),
-  phone: z.string().min(5, "Phone is required"),
-  industry: z.string().min(2, "Industry is required"),
-  city: z.string().min(2, "City is required"),
-  status: z.enum(["Draft", "Under Review", "Approved", "Archived"]),
-  softwareType: z.string().min(2, "Software type is required"),
-  budget: z.string().min(2, "Budget is required"),
-  startDate: z.string().min(2, "Start date is required"),
-  deliveryDate: z.string().min(2, "Delivery date is required"),
-});
-
-type DocFormValues = z.infer<typeof docSchema>;
-
 const DOC_STATUSES: DocStatus[] = ["Draft", "Under Review", "Approved", "Archived"];
 
 export default function Documents() {
-  const { docs, addDoc, removeDoc, editDoc } = useDocs();
+  const { docs, removeDoc, editDoc } = useDocs();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
-  
-  const [isAddOpen, setIsAddOpen] = useState(false);
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
 
   const filteredDocs = useMemo(() => {
@@ -56,32 +32,6 @@ export default function Documents() {
       return matchesSearch && matchesStatus;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [docs, search, statusFilter]);
-
-  const form = useForm<DocFormValues>({
-    resolver: zodResolver(docSchema),
-    defaultValues: {
-      title: "",
-      clientName: "",
-      company: "",
-      email: "",
-      phone: "",
-      industry: "",
-      city: "",
-      status: "Draft",
-      softwareType: "Web App",
-      budget: "",
-      startDate: "",
-      deliveryDate: "",
-    },
-  });
-
-  const onSubmitAdd = (data: DocFormValues) => {
-    const newDoc = addDoc(data);
-    setIsAddOpen(false);
-    form.reset();
-    toast({ title: "Document created", description: "Requirement document added successfully." });
-    setLocation(`/documents/${newDoc.id}`);
-  };
 
   const handleDelete = () => {
     if (!docToDelete) return;
@@ -105,74 +55,25 @@ export default function Documents() {
           <p className="text-muted-foreground mt-1">Manage client project requirements and scoping.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <a href="/" target="_blank" rel="noopener noreferrer" data-testid="btn-open-form">
-              <ExternalLink className="mr-2 h-4 w-4" /> Open Client Form
+          <Button asChild data-testid="btn-create-doc">
+            <a href="/" target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="mr-2 h-4 w-4" /> Create New Document
             </a>
           </Button>
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="btn-add-doc">
-                <Plus className="mr-2 h-4 w-4" /> Create Document
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create Requirement Document</DialogTitle>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitAdd)} className="space-y-4">
-                  <FormField control={form.control} name="title" render={({ field }) => (
-                    <FormItem><FormLabel>Document Title</FormLabel><FormControl><Input placeholder="e.g. Acme Corp Web Platform" {...field} data-testid="input-doc-title" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="clientName" render={({ field }) => (
-                      <FormItem><FormLabel>Client Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="company" render={({ field }) => (
-                      <FormItem><FormLabel>Company</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="phone" render={({ field }) => (
-                      <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="industry" render={({ field }) => (
-                      <FormItem><FormLabel>Industry</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="city" render={({ field }) => (
-                      <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="softwareType" render={({ field }) => (
-                      <FormItem><FormLabel>Software Type</FormLabel><FormControl><Input placeholder="Web App, Mobile, etc." {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="budget" render={({ field }) => (
-                      <FormItem><FormLabel>Estimated Budget</FormLabel><FormControl><Input placeholder="£10,000 - £25,000" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="startDate" render={({ field }) => (
-                      <FormItem><FormLabel>Target Start Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="deliveryDate" render={({ field }) => (
-                      <FormItem><FormLabel>Target Delivery</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="flex justify-end pt-4">
-                    <Button type="submit" data-testid="btn-submit-doc">Create & Edit Details</Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
         </div>
+      </div>
+
+      {/* Info banner */}
+      <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 flex items-start gap-3 text-sm text-foreground">
+        <FileText className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+        <span>
+          Documents are created using the{" "}
+          <a href="/" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">
+            Customer Requirement Form
+          </a>
+          . Fill in the form, then click{" "}
+          <strong className="font-semibold">Submit to Admin Dashboard</strong> to add the document here.
+        </span>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-center">
