@@ -9,8 +9,10 @@ import {
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
   getUnits, createUnit, updateUnit, deleteUnit,
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+  getStaff, createStaff, updateStaff, deleteStaff,
+  getStaffRoles, createStaffRole, updateStaffRole, deleteStaffRole,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
-  Product, Brand, Attribute, Unit, PurchaseOrder,
+  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -281,4 +283,24 @@ export function usePurchaseOrders() {
   };
 
   return { purchaseOrders, addPurchaseOrder, editPurchaseOrder, removePurchaseOrder, refresh: fetchOrders };
+}
+
+export function useStaff() {
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const fetch = useCallback(() => setStaff(getStaff()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addStaff    = (d: Parameters<typeof createStaff>[0])                 => { const s = createStaff(d);    fetch(); return s; };
+  const editStaff   = (id: string, u: Parameters<typeof updateStaff>[1])     => { const s = updateStaff(id, u); fetch(); return s; };
+  const removeStaff = (id: string)                                            => { deleteStaff(id);              fetch(); };
+  return { staff, addStaff, editStaff, removeStaff, refresh: fetch };
+}
+
+export function useStaffRoles() {
+  const [roles, setRoles] = useState<StaffRole[]>([]);
+  const fetch = useCallback(() => setRoles(getStaffRoles()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addRole    = (d: Parameters<typeof createStaffRole>[0])                   => { const r = createStaffRole(d);    fetch(); return r; };
+  const editRole   = (id: string, u: Parameters<typeof updateStaffRole>[1])       => { const r = updateStaffRole(id, u); fetch(); return r; };
+  const removeRole = (id: string)                                                  => { deleteStaffRole(id);              fetch(); };
+  return { roles, addRole, editRole, removeRole, refresh: fetch };
 }

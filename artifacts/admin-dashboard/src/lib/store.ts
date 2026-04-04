@@ -611,6 +611,81 @@ export const deletePurchaseOrder = (id: string): void => {
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
 };
 
+// ─── HRM — Staff ─────────────────────────────────────────────────────────────
+export type StaffStatus = "Active" | "On Leave" | "Terminated";
+
+export type Staff = {
+  id: string;
+  name: string;
+  department: string;
+  designation: string;
+  role: string;
+  status: StaffStatus;
+  email: string;
+  phone: string;
+  joinDate: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const STAFF_KEY = "admin-hrm-staff";
+
+export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
+
+export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
+  const item: Staff = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(STAFF_KEY, [...getStaff(), item]);
+  return item;
+};
+
+export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "createdAt">>): Staff => {
+  const items = getStaff();
+  const i = items.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Staff not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(STAFF_KEY, items);
+  return items[i];
+};
+
+export const deleteStaff = (id: string): void => {
+  setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
+};
+
+// ─── HRM — Roles ─────────────────────────────────────────────────────────────
+export type StaffRole = {
+  id: string;
+  color: string;
+  name: string;
+  description: string;
+  permissions: string; // comma-separated permission keys
+  createdAt: string;
+  updatedAt: string;
+};
+
+const HRM_ROLES_KEY = "admin-hrm-roles";
+
+export const getStaffRoles = (): StaffRole[] => getStored<StaffRole>(HRM_ROLES_KEY);
+
+export const createStaffRole = (data: Omit<StaffRole, "id" | "createdAt" | "updatedAt">): StaffRole => {
+  const item: StaffRole = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(HRM_ROLES_KEY, [...getStaffRoles(), item]);
+  return item;
+};
+
+export const updateStaffRole = (id: string, updates: Partial<Omit<StaffRole, "id" | "createdAt">>): StaffRole => {
+  const items = getStaffRoles();
+  const i = items.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Role not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(HRM_ROLES_KEY, items);
+  return items[i];
+};
+
+export const deleteStaffRole = (id: string): void => {
+  setStored(HRM_ROLES_KEY, getStaffRoles().filter(r => r.id !== id));
+};
+
 export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;

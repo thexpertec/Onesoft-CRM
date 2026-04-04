@@ -5,7 +5,7 @@ import {
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
-  ShoppingCart,
+  ShoppingCart, Users2, KeyRound, Building2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -105,14 +105,10 @@ const OTHER_NAV: NavItem[] = [
   },
 ];
 
-const USERS_NAV: NavItem = {
-  key: "users", href: "/users", label: "Users", icon: Shield,
-  items: [{ label: "All Users", href: "/users", icon: Shield }],
-};
-
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units"];
 const PURCHASES_ROUTES = ["/purchases"];
+const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
@@ -162,7 +158,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const navItems = isSuperAdmin ? [...OTHER_NAV, USERS_NAV] : OTHER_NAV;
+  const hrmItems: SubItem[] = [
+    { label: "Staff",           href: "/staff",  icon: Users2,    desc: "Employees by dept & designation" },
+    { label: "Roles",           href: "/roles",  icon: KeyRound,  desc: "Permission roles"                },
+    ...(isSuperAdmin ? [{ label: "Admin Accounts", href: "/users", icon: Shield, desc: "System users" }] : []),
+  ];
+  const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, items: hrmItems };
+  const navItems = [...OTHER_NAV, HRM_NAV];
+
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
@@ -171,6 +174,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isCrmActive       = CRM_ROUTES.some(r       => location === r || location.startsWith(r));
   const isProductsActive  = PRODUCTS_ROUTES.some(r  => location === r || location.startsWith(r));
   const isPurchasesActive = PURCHASES_ROUTES.some(r => location === r || location.startsWith(r));
+  const isHrmActive       = HRM_ROUTES.some(r       => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -325,6 +329,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "crm"       ? isCrmActive :
                 item.key === "products"  ? isProductsActive :
                 item.key === "purchases" ? isPurchasesActive :
+                item.key === "hrm"       ? isHrmActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
@@ -496,17 +501,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <ShoppingCart size={16} /> Purchases
               </Link>
 
-              {/* Documents, Users */}
-              {[
-                { href: "/documents", label: "Documents", icon: FileText },
-                ...(isSuperAdmin ? [{ href: "/users", label: "Users", icon: Shield }] : []),
-              ].map(item => (
-                <Link key={item.href} href={item.href}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                  <item.icon size={16} /> {item.label}
-                </Link>
-              ))}
+              {/* Documents */}
+              <Link href="/documents"
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  location.startsWith("/documents") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                <FileText size={16} /> Documents
+              </Link>
+
+              {/* HRM group */}
+              <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">HRM</p>
+                {[
+                  { href: "/staff",  label: "Staff",  icon: Users2   },
+                  { href: "/roles",  label: "Roles",  icon: KeyRound },
+                  ...(isSuperAdmin ? [{ href: "/users", label: "Admin Accounts", icon: Shield }] : []),
+                ].map(item => (
+                  <Link key={item.href} href={item.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                    <item.icon size={16} /> {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
 
             <div className="pt-2 mt-2 border-t border-gray-100">
