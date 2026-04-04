@@ -1297,6 +1297,70 @@ export default function RequirementDoc() {
         <div className="h-10" />
       </div>
 
+      {/* Businesses We've Worked With */}
+      <section className="bg-muted/30 border-t border-border py-12 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Heading */}
+          <div className="text-center mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Trusted By</p>
+            <h2 className="text-xl font-bold text-foreground">Businesses We've Worked With</h2>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
+              Proud to have partnered with organisations across a wide range of industries throughout the UK and beyond.
+            </p>
+          </div>
+
+          {/* Business cards grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {[
+              { name: "TechNova Solutions",       industry: "Software & Technology" },
+              { name: "HealthFirst Clinics",       industry: "Healthcare & Wellness" },
+              { name: "FinEdge Capital",           industry: "Financial Services" },
+              { name: "LearnHub Academy",          industry: "Education & E-learning" },
+              { name: "GreenPath Retail",          industry: "E-commerce & Retail" },
+              { name: "SwiftMove Logistics",       industry: "Logistics & Delivery" },
+              { name: "LegalEase Solicitors",      industry: "Legal Services" },
+              { name: "PropTrack Estates",         industry: "Property & Real Estate" },
+              { name: "CloudMind Systems",         industry: "Cloud & IT Services" },
+              { name: "FreshBite Catering",        industry: "Food & Hospitality" },
+              { name: "BrightMind Charity",        industry: "Non-profit & Charity" },
+              { name: "BuildRight Construction",   industry: "Construction & Engineering" },
+              { name: "MediaWave Studio",          industry: "Media & Creative" },
+              { name: "PaySmart UK",               industry: "Fintech & Payments" },
+              { name: "SkillUp Training",          industry: "Corporate Training" },
+              { name: "GreenEnergy Partners",      industry: "Energy & Utilities" },
+              { name: "SafeGuard Security",        industry: "Security & Surveillance" },
+              { name: "MediTrack Systems",         industry: "Healthcare Technology" },
+              { name: "DataSphere Analytics",      industry: "Data & AI" },
+              { name: "RouteOptima",               industry: "Fleet & Transport" },
+            ].map((biz) => (
+              <div
+                key={biz.name}
+                className="group flex flex-col gap-1.5 rounded-xl border border-border bg-white px-4 py-3.5 hover:border-primary/40 hover:shadow-sm transition-all duration-200"
+              >
+                {/* Initials avatar */}
+                <div className="flex items-center gap-2.5">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <span className="text-xs font-bold text-primary leading-none">
+                      {biz.name.split(" ").slice(0, 2).map((w) => w[0]).join("")}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{biz.name}</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground leading-tight pl-0.5">{biz.industry}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA note */}
+          <p className="text-center text-xs text-muted-foreground mt-8">
+            Ready to join them?{" "}
+            <a href="https://www.onesoft.org.uk" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
+              Get in touch with Onesoft →
+            </a>
+          </p>
+        </div>
+      </section>
+
       {/* Site Footer */}
       <footer className="border-t border-border bg-white mt-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
