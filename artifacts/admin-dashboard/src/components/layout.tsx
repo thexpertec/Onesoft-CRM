@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock, ShieldCheck, Shield, UserCheck, Package } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock, ShieldCheck, Shield, UserCheck, Package, Truck } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ const BASE_NAV = [
   { href: "/leads",     label: "Leads",     icon: Users },
   { href: "/customers", label: "Customers", icon: UserCheck },
   { href: "/products",  label: "Products",  icon: Package },
+  { href: "/suppliers", label: "Suppliers",  icon: Truck },
   { href: "/documents", label: "Documents", icon: FileText },
 ];
 

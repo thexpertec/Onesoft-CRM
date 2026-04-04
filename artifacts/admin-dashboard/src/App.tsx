@@ -17,6 +17,7 @@ import ShareDocument from "@/pages/share-document";
 import UsersPage from "@/pages/users";
 import CustomersPage from "@/pages/customers";
 import ProductsPage from "@/pages/products";
+import SuppliersPage from "@/pages/suppliers";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ function Router() {
             <Route path="/documents/:id" component={DocumentDetail} />
             <Route path="/customers" component={CustomersPage} />
             <Route path="/products" component={ProductsPage} />
+            <Route path="/suppliers" component={SuppliersPage} />
             <Route path="/users" component={UsersPage} />
             <Route component={NotFound} />
           </Switch>

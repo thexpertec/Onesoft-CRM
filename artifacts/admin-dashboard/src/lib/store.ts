@@ -202,6 +202,55 @@ export const convertLeadToCustomer = (lead: Lead): Customer => {
   });
 };
 
+// ─── Suppliers API ────────────────────────────────────────────────────────────
+export type SupplierStatus = "Active" | "Inactive" | "Blacklisted";
+
+export type Supplier = {
+  id: string;
+  company: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  category: string;
+  city: string;
+  country: string;
+  status: SupplierStatus;
+  rating: number;
+  currency: string;
+  notes: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const SUPPLIERS_KEY = "admin-suppliers";
+
+export const getSuppliers = (): Supplier[] => getStored<Supplier>(SUPPLIERS_KEY);
+
+export const createSupplier = (data: Omit<Supplier, "id" | "createdAt" | "updatedAt">): Supplier => {
+  const item: Supplier = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(SUPPLIERS_KEY, [...getSuppliers(), item]);
+  return item;
+};
+
+export const updateSupplier = (id: string, updates: Partial<Omit<Supplier, "id" | "createdAt">>): Supplier => {
+  const items = getSuppliers();
+  const i = items.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Supplier not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SUPPLIERS_KEY, items);
+  return items[i];
+};
+
+export const deleteSupplier = (id: string): void => {
+  setStored(SUPPLIERS_KEY, getSuppliers().filter(s => s.id !== id));
+};
+
 // ─── Product Categories API ───────────────────────────────────────────────────
 export type ProductCategory = {
   id: string;

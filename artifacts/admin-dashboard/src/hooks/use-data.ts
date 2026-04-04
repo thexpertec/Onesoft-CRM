@@ -3,7 +3,8 @@ import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
-  Lead, RequirementDoc, Customer, ProductCategory,
+  getSuppliers, createSupplier, updateSupplier, deleteSupplier,
+  Lead, RequirementDoc, Customer, ProductCategory, Supplier,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -136,4 +137,37 @@ export function useProductCategories() {
   };
 
   return { categories, addCategory, editCategory, removeCategory, refresh: fetchCategories };
+}
+
+export function useSuppliers() {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  const fetchSuppliers = useCallback(() => {
+    setSuppliers(getSuppliers());
+  }, []);
+
+  useEffect(() => {
+    fetchSuppliers();
+    window.addEventListener("storage", fetchSuppliers);
+    return () => window.removeEventListener("storage", fetchSuppliers);
+  }, [fetchSuppliers]);
+
+  const addSupplier = (data: Parameters<typeof createSupplier>[0]) => {
+    const s = createSupplier(data);
+    fetchSuppliers();
+    return s;
+  };
+
+  const editSupplier = (id: string, updates: Parameters<typeof updateSupplier>[1]) => {
+    const s = updateSupplier(id, updates);
+    fetchSuppliers();
+    return s;
+  };
+
+  const removeSupplier = (id: string) => {
+    deleteSupplier(id);
+    fetchSuppliers();
+  };
+
+  return { suppliers, addSupplier, editSupplier, removeSupplier, refresh: fetchSuppliers };
 }
