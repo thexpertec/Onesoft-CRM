@@ -9,6 +9,7 @@ import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { getTeamMembers, addTeamMember, getDoc } from "@/lib/store";
+import { CURRENCIES, formatAmount } from "@/lib/currencies";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
 
@@ -367,6 +368,7 @@ export default function NewDocument() {
 
   const [paymentStructure, setPaymentStructure] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState("");
+  const [currency, setCurrency] = useState("GBP");
   const [postLaunch, setPostLaunch] = useState("");
   const [maintenance, setMaintenance] = useState("");
   const [versionHistory, setVersionHistory] = useState("");
@@ -391,7 +393,7 @@ export default function NewDocument() {
   const saveS3  = () => { persist("s3",  { purpose, keyFeatures }); markSaved("s3"); };
   const saveS35 = () => { persist("s35", { detailedNotes }); markSaved("s35"); };
   const saveS4  = () => { persist("s4",  { integrations, techStack, hosting, security }); markSaved("s4"); };
-  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts }); markSaved("s5"); };
+  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
 
@@ -425,6 +427,7 @@ export default function NewDocument() {
       if (s4.security)       setSecurity(s4.security as string);
       if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
       if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
+      if (s5.currency)         setCurrency(s5.currency as string);
       if (s6.startDate)      setStartDate(s6.startDate as string);
       if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
       if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
@@ -453,9 +456,8 @@ export default function NewDocument() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0), 0);
-  const formatCurrency = (n: number) =>
-    n === 0 ? "—" : `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment.replace(/[^0-9.]/g, "")) || 0), 0);
+  const formatCurrency = (n: number) => formatAmount(n, currency);
 
   // Save Document → addDoc → navigate to /documents
   const [saving, setSaving] = useState(false);
@@ -476,7 +478,7 @@ export default function NewDocument() {
       s3:  { purpose, keyFeatures },
       s35: { detailedNotes },
       s4:  { integrations, techStack, hosting, security },
-      s5:  { paymentStructure, additionalCosts },
+      s5:  { paymentStructure, additionalCosts, currency },
       s6:  { startDate, deliveryDate, milestones },
       s7:  { postLaunch, maintenance },
     };
@@ -789,15 +791,26 @@ export default function NewDocument() {
       {/* Section 5: Budget & Costing */}
       <section>
         <SectionHeader icon={DollarSign} title="5. Budget & Costing" subtitle="Estimated costs and payment arrangements — linked to milestone payments" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <FormField label="Currency" required>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+          </FormField>
           <FormField label="Payment Structure" required>
             <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
           </FormField>
-          <FormField label="Actual Cost" hint="Total cost of the project (e.g. 150,000 PKR, £8,000, etc.)">
-            <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 150,000 PKR, £8,000, $12,000..." />
+          <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically">
+            <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 90000" />
           </FormField>
 
-          <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
+          <div className="sm:col-span-3 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
             <div className="flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-primary" />
               <span className="text-xs font-semibold uppercase tracking-wide text-primary">Budget Breakdown</span>

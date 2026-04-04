@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import { getDoc, RequirementDoc } from "@/lib/store";
+import { formatAmount, formatCurrencyString } from "@/lib/currencies";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import {
   FileText, MapPin, Phone, Globe, Mail, Printer,
@@ -26,7 +27,7 @@ type Sections = {
   s3?: { purpose?: string; keyFeatures?: string[] };
   s35?: { detailedNotes?: string };
   s4?: { integrations?: string[]; techStack?: string[]; hosting?: string; security?: string };
-  s5?: { paymentStructure?: string; additionalCosts?: string };
+  s5?: { paymentStructure?: string; additionalCosts?: string; currency?: string };
   s6?: { startDate?: string; deliveryDate?: string; milestones?: Milestone[] };
   s7?: { postLaunch?: string; maintenance?: string };
 };
@@ -39,11 +40,8 @@ function formatDate(str?: string) {
   catch { return str; }
 }
 
-function formatCurrency(str?: string) {
-  if (!str || str.trim() === "") return null;
-  const n = parseFloat(str.replace(/[£$€,\s]/g, ""));
-  if (isNaN(n)) return str;
-  return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(str?: string, currencyCode = "GBP") {
+  return formatCurrencyString(str, currencyCode);
 }
 
 function escHtml(s?: string) {
@@ -62,7 +60,8 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
   const s6 = s.s6 ?? {};
   const s7 = s.s7 ?? {};
   const milestones: Milestone[] = s6.milestones ?? [];
-  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[£$€,\s]/g, "") ?? "") || 0), 0);
+  const htmlCurrencyCode = (s5.currency as string) || "GBP";
+  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[^0-9.]/g, "") ?? "") || 0), 0);
 
   const tags = (items?: string[]) =>
     items && items.length > 0
@@ -101,7 +100,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
       <td style="padding:9px 10px;"><span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700;align-items:center;justify-content:center;">${i+1}</span></td>
       <td style="padding:9px 10px;font-weight:600;color:#0f172a;">${escHtml(m.title || `Milestone ${i+1}`)}</td>
       <td style="padding:9px 10px;color:#64748b;">${m.date ? formatDate(m.date) : "—"}</td>
-      <td style="padding:9px 10px;text-align:right;font-weight:700;color:#0f172a;">${m.payment ? (formatCurrency(m.payment) ?? m.payment) : "—"}</td>
+      <td style="padding:9px 10px;text-align:right;font-weight:700;color:#0f172a;">${m.payment ? (formatCurrency(m.payment, htmlCurrencyCode) ?? m.payment) : "—"}</td>
       <td style="padding:9px 10px;text-align:center;">${m.paymentStatus ? `<span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;${pColor}">${escHtml(m.paymentStatus)}</span>` : "—"}</td>
       <td style="padding:9px 10px;text-align:center;font-size:12px;color:#64748b;">${escHtml(m.taskStatus || "—")}</td>
     </tr>`;
@@ -120,7 +119,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
       <tbody>${milestoneRows}</tbody>
       ${milestonesTotal > 0 ? `<tfoot><tr style="border-top:2px solid #bfdbfe;">
         <td colspan="3" style="padding:10px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Total</td>
-        <td style="padding:10px 10px;text-align:right;font-size:15px;font-weight:800;color:#1d4ed8;">£${milestonesTotal.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="padding:10px 10px;text-align:right;font-size:15px;font-weight:800;color:#1d4ed8;">${escHtml(formatAmount(milestonesTotal, htmlCurrencyCode))}</td>
         <td colspan="2"></td>
       </tr></tfoot>` : ""}
     </table>`) : "";
@@ -132,7 +131,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
           <div style="display:flex;flex-direction:column;gap:12px;">
             ${field("Payment Structure", s5.paymentStructure)}
             ${s5.additionalCosts ? field("Actual Cost", s5.additionalCosts) : ""}
-            ${milestonesTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Total Budget</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">£${milestonesTotal.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>` : ""}
+            ${milestonesTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Total Budget</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">${escHtml(formatAmount(milestonesTotal, htmlCurrencyCode))}</span></div>` : ""}
           </div>
         </div>` : "";
 
@@ -472,7 +471,8 @@ export default function ShareDocument() {
   const s7 = s.s7 ?? {};
 
   const milestones: Milestone[] = s6.milestones ?? [];
-  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[£$€,\s]/g, "") ?? "") || 0), 0);
+  const currencyCode = (s5.currency as string) || "GBP";
+  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[^0-9.]/g, "") ?? "") || 0), 0);
 
   const statusClass = STATUS_COLORS[doc.status] ?? STATUS_COLORS.Draft;
 
@@ -674,12 +674,14 @@ export default function ShareDocument() {
             <SectionBlock icon={DollarSign} title="Budget & Costing">
               <div className="space-y-3">
                 <Field label="Payment Structure" value={s5.paymentStructure} />
-                {s5.additionalCosts && <Field label="Actual Cost" value={s5.additionalCosts} />}
+                {s5.additionalCosts && (
+                  <Field label="Actual Cost" value={formatCurrencyString(s5.additionalCosts, currencyCode) ?? s5.additionalCosts} />
+                )}
                 {milestonesTotal > 0 && (
                   <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                     <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Budget</span>
                     <span className="text-base font-bold text-primary">
-                      £{milestonesTotal.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatAmount(milestonesTotal, currencyCode)}
                     </span>
                   </div>
                 )}
@@ -733,7 +735,7 @@ export default function ShareDocument() {
                         {m.date ? formatDate(m.date) : "—"}
                       </td>
                       <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
-                        {formatCurrency(m.payment) ?? "—"}
+                        {formatCurrency(m.payment, currencyCode) ?? "—"}
                       </td>
                       <td className="py-2.5 px-2 text-center hidden sm:table-cell">
                         {m.paymentStatus ? (
@@ -756,7 +758,7 @@ export default function ShareDocument() {
                       <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</td>
                       <td className="hidden sm:table-cell" />
                       <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums">
-                        £{milestonesTotal.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatAmount(milestonesTotal, currencyCode)}
                       </td>
                       <td className="hidden sm:table-cell" />
                       <td className="hidden md:table-cell" />

@@ -133,10 +133,12 @@ export default function Dashboard() {
   const pendingDocs   = docs.filter(d => d.status === "Under Review").length;
 
   const pipelineValue = useMemo(() => docs.reduce((acc, doc) => {
-    const match = doc.budget?.match(/£([\d,]+)/g);
-    if (match?.length) {
-      const val = parseInt(match[match.length - 1].replace(/[£,]/g, ""), 10);
-      return acc + (isNaN(val) ? 0 : val);
+    const sections = (doc.sections ?? {}) as Record<string, Record<string, unknown>>;
+    const s5 = (sections.s5 ?? {}) as Record<string, unknown>;
+    const additionalCosts = s5.additionalCosts as string | undefined;
+    if (additionalCosts) {
+      const val = parseFloat(additionalCosts.replace(/[^0-9.]/g, ""));
+      if (!isNaN(val)) return acc + val;
     }
     return acc;
   }, 0), [docs]);
