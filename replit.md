@@ -13,6 +13,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 | Route | Page | localStorage key |
 |---|---|---|
+| `/stock` | All Stock (All / For Sale / Not For Sale / Business Asset / Low Stock) | `admin-stock` |
+| `/stock/holds` | Stock Holds — reserved (Not For Sale) items by customer | `admin-stock` |
 | `/products` | Products catalogue | `admin-products` |
 | `/brands` | Brand management | `admin-brands` |
 | `/categories` | Product categories | `admin-product-categories` |

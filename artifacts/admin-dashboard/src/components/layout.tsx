@@ -122,6 +122,7 @@ const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
   { label: "New Customer",       href: "/customers",     icon: UserCheck   },
   { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
+  { label: "Add Stock Item",     href: "/stock",         icon: Boxes       },
   { label: "New Purchase Order", href: "/purchases",     icon: ShoppingCart},
   { label: "New Document",       href: "/documents/new", icon: FilePlus    },
 ];
@@ -510,6 +511,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   location.startsWith("/purchases") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                 <ShoppingCart size={16} /> Purchases
               </Link>
+
+              {/* Stock */}
+              <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Stock</p>
+                {[
+                  { href: "/stock",       label: "All Stock",   icon: Boxes },
+                  { href: "/stock/holds", label: "Stock Holds", icon: Lock  },
+                ].map(item => (
+                  <Link key={item.href} href={item.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      location === item.href ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                    <item.icon size={16} /> {item.label}
+                  </Link>
+                ))}
+              </div>
 
               {/* Documents */}
               <Link href="/documents"
