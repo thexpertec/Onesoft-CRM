@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Search, MoreHorizontal, Trash2, Eye, FileText, Save, Edit, Lock, X, Share2, Check } from "lucide-react";
+import { Search, MoreHorizontal, Trash2, Eye, FileText, Save, Edit, Lock, X, Share2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
@@ -84,16 +84,10 @@ export default function Documents() {
     toast({ title: "Document deleted", description: "The document has been removed." });
   };
 
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const copyShareLink = (docId: string) => {
+  const openShareLink = (docId: string) => {
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const url = `${window.location.origin}${base}/share/${docId}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(docId);
-      toast({ title: "Link copied!", description: "The public share link has been copied to your clipboard." });
-      setTimeout(() => setCopiedId(null), 2500);
-    });
+    window.open(url, "_blank");
   };
 
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -221,13 +215,9 @@ export default function Documents() {
                         <DropdownMenuItem onClick={() => openDoc(doc)}>
                           <Eye className="mr-2 h-4 w-4" /> View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => copyShareLink(doc.id)}>
-                          {copiedId === doc.id ? (
-                            <Check className="mr-2 h-4 w-4 text-green-600" />
-                          ) : (
-                            <Share2 className="mr-2 h-4 w-4" />
-                          )}
-                          {copiedId === doc.id ? "Link Copied!" : "Copy Share Link"}
+                        <DropdownMenuItem onClick={() => openShareLink(doc.id)}>
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Open Share Link
                         </DropdownMenuItem>
                         {isAuthenticated && (
                           <DropdownMenuItem
@@ -272,14 +262,10 @@ export default function Documents() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyShareLink(selectedDoc.id)}
+                    onClick={() => openShareLink(selectedDoc.id)}
                     data-testid="btn-share-doc"
                   >
-                    {copiedId === selectedDoc.id ? (
-                      <><Check className="mr-1.5 h-3.5 w-3.5 text-green-600" /> Copied!</>
-                    ) : (
-                      <><Share2 className="mr-1.5 h-3.5 w-3.5" /> Share</>
-                    )}
+                    <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
                   </Button>
 
                   {isAuthenticated ? (
