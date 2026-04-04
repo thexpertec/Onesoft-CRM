@@ -176,20 +176,30 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* KPI pills */}
+      {/* KPI filter pills */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: "Total",    value: customers.length,                                 color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground" },
-          { label: "Active",   value: customers.filter(c => c.status === "Active").length, color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400" },
-          { label: "Inactive", value: customers.filter(c => c.status === "Inactive").length, color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400" },
-          { label: "Churned",  value: customers.filter(c => c.status === "Churned").length,  color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400" },
-        ].map(k => (
-          <div key={k.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold ${k.color}`}>
-            {k.label}: <span>{k.value}</span>
-          </div>
-        ))}
+          { label: "Total",    value: customers.length,                                      filter: "All",      color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",               activeRing: "ring-gray-400 dark:ring-gray-500"   },
+          { label: "Active",   value: customers.filter(c => c.status === "Active").length,   filter: "Active",   color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",           activeRing: "ring-emerald-500 dark:ring-emerald-400" },
+          { label: "Inactive", value: customers.filter(c => c.status === "Inactive").length, filter: "Inactive", color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400",                 activeRing: "ring-amber-400 dark:ring-amber-500"   },
+          { label: "Churned",  value: customers.filter(c => c.status === "Churned").length,  filter: "Churned",  color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400",                         activeRing: "ring-red-400 dark:ring-red-500"     },
+        ].map(k => {
+          const isActive = statusFilter === k.filter;
+          return (
+            <button
+              key={k.label}
+              aria-pressed={isActive}
+              onClick={() => setStatusFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
+              title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}
+            >
+              {k.label}: <span>{k.value}</span>
+              {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+            </button>
+          );
+        })}
         {totalRevenue > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 select-none">
             Revenue: {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(totalRevenue)}
           </div>
         )}

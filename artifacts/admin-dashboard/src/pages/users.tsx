@@ -69,6 +69,7 @@ export default function UsersPage() {
   const { toast } = useToast();
 
   const [users,      setUsers]      = useState<AdminUser[]>([]);
+  const [roleFilter, setRoleFilter] = useState<"All" | "superadmin" | "admin">("All");
   const [addOpen,    setAddOpen]    = useState(false);
   const [resetUser,  setResetUser]  = useState<AdminUser | null>(null);
   const [deleteId,   setDeleteId]   = useState<string | null>(null);
@@ -76,6 +77,8 @@ export default function UsersPage() {
 
   const reload = () => setUsers(getAdminUsers());
   useEffect(() => { reload(); }, []);
+
+  const filteredUsers = roleFilter === "All" ? users : users.filter(u => u.role === roleFilter);
 
   if (!isSuperAdmin) {
     return (
@@ -108,7 +111,7 @@ export default function UsersPage() {
   }, [users, currentUser, refreshCurrentUser, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
-    const rows = users.map(u => u.id);
+    const rows = filteredUsers.map(u => u.id);
     const ri = rows.indexOf(id);
     const editableCols = COLS.length;
     let nc = col + (shift ? -1 : 1), nr = ri;
@@ -116,15 +119,15 @@ export default function UsersPage() {
     if (nc < 0) { nc = editableCols - 1; nr--; }
     if (nr < 0 || nr >= rows.length) { setActiveCell(null); return; }
     setActiveCell({ id: rows[nr], col: nc });
-  }, [users]);
+  }, [filteredUsers]);
 
   const moveCellDown = useCallback((id: string, col: number) => {
-    const rows = users.map(u => u.id);
+    const rows = filteredUsers.map(u => u.id);
     const ri = rows.indexOf(id);
     const nr = ri + 1;
     if (nr >= rows.length) { setActiveCell(null); return; }
     setActiveCell({ id: rows[nr], col });
-  }, [users]);
+  }, [filteredUsers]);
 
   const tableRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -185,25 +188,42 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      {/* KPI pills */}
+      {/* KPI filter pills */}
       <div className="flex flex-wrap gap-2">
-        {[
-          { label: "Total",      value: users.length,                                    color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground" },
-          { label: "Super Admin",value: users.filter(u => u.role === "superadmin").length, color: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400" },
-          { label: "Admin",      value: users.filter(u => u.role === "admin").length,     color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400" },
-        ].map(k => (
-          <div key={k.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold ${k.color}`}>
-            {k.label}: <span>{k.value}</span>
-          </div>
-        ))}
+        {([
+          { label: "Total",       value: users.length,                                      filter: "All"        as const, color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",           activeRing: "ring-gray-400 dark:ring-gray-500"       },
+          { label: "Super Admin", value: users.filter(u => u.role === "superadmin").length, filter: "superadmin" as const, color: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400",         activeRing: "ring-purple-500 dark:ring-purple-400"   },
+          { label: "Admin",       value: users.filter(u => u.role === "admin").length,      filter: "admin"      as const, color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                 activeRing: "ring-blue-500 dark:ring-blue-400"       },
+        ] as const).map(k => {
+          const isActive = roleFilter === k.filter;
+          return (
+            <button
+              key={k.label}
+              aria-pressed={isActive}
+              onClick={() => setRoleFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
+              title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}
+            >
+              {k.label}: <span>{k.value}</span>
+              {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+            </button>
+          );
+        })}
+        {roleFilter !== "All" && (
+          <span className="self-center text-[11px] text-muted-foreground">
+            Showing {filteredUsers.length} of {users.length}
+          </span>
+        )}
       </div>
 
       {/* Excel grid */}
       <div ref={tableRef}>
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
-          {users.length === 0 ? (
-            <tr><td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">No users found.</td></tr>
-          ) : users.map((u, ri) => {
+          {filteredUsers.length === 0 ? (
+            <tr><td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
+              {roleFilter !== "All" ? `No ${roleFilter === "superadmin" ? "Super Admin" : "Admin"} users found.` : "No users found."}
+            </td></tr>
+          ) : filteredUsers.map((u, ri) => {
             const isMe = u.id === currentUser?.id;
             const isRowActive = activeCell?.id === u.id;
             return (

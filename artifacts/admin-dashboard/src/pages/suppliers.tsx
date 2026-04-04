@@ -179,19 +179,36 @@ export default function SuppliersPage() {
         )}
       </div>
 
-      {/* KPI pills */}
+      {/* KPI filter pills */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: "Total",       value: suppliers.length,  color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground" },
-          { label: "Active",      value: activeCount,        color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400" },
-          { label: "Inactive",    value: suppliers.filter(s => s.status === "Inactive").length, color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400" },
-          { label: "Blacklisted", value: blacklisted,        color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400" },
-          { label: "Avg Rating",  value: avgRating,          color: "bg-yellow-50 dark:bg-yellow-950 text-yellow-600 dark:text-yellow-500" },
-        ].map(k => (
-          <div key={k.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold ${k.color}`}>
-            {k.label}: <span>{k.value}</span>
-          </div>
-        ))}
+          { label: "Total",       value: suppliers.length,                                         filter: "All",         color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",                 activeRing: "ring-gray-400 dark:ring-gray-500",    clickable: true  },
+          { label: "Active",      value: activeCount,                                               filter: "Active",      color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",           activeRing: "ring-emerald-500 dark:ring-emerald-400", clickable: true  },
+          { label: "Inactive",    value: suppliers.filter(s => s.status === "Inactive").length,     filter: "Inactive",    color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400",                 activeRing: "ring-amber-400 dark:ring-amber-500",  clickable: true  },
+          { label: "Blacklisted", value: blacklisted,                                               filter: "Blacklisted", color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400",                         activeRing: "ring-red-400 dark:ring-red-500",      clickable: true  },
+          { label: "Avg Rating",  value: avgRating,                                                 filter: null,          color: "bg-yellow-50 dark:bg-yellow-950 text-yellow-600 dark:text-yellow-500",              activeRing: "",                                    clickable: false },
+        ].map(k => {
+          const isActive = k.clickable && statusFilter === k.filter;
+          if (!k.clickable) {
+            return (
+              <div key={k.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold select-none ${k.color}`}>
+                {k.label}: <span>{k.value}</span>
+              </div>
+            );
+          }
+          return (
+            <button
+              key={k.label}
+              aria-pressed={isActive}
+              onClick={() => setStatusFilter(prev => prev === k.filter! && k.filter !== "All" ? "All" : k.filter!)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
+              title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}
+            >
+              {k.label}: <span>{k.value}</span>
+              {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Toolbar */}
