@@ -47,7 +47,88 @@ const CLIENTS = [
   },
 ];
 
-const BUSINESS_TYPES = ["B2B", "B2C", "B2B2C", "SaaS", "Marketplace", "Non-profit", "Government", "Other"];
+const BUSINESS_TYPES = [
+  "Services",
+  "Products",
+  "Both (Services & Products)",
+  "B2B",
+  "B2C",
+  "B2B2C",
+  "SaaS",
+  "Marketplace",
+  "E-commerce",
+  "Non-profit",
+  "Government",
+  "Other",
+];
+
+const PRODUCTS_BY_TYPE: Record<string, string[]> = {
+  Services: [
+    "IT Consulting",
+    "Software Development",
+    "Web Development",
+    "Mobile App Development",
+    "Cloud & DevOps Services",
+    "Cybersecurity Services",
+    "UI/UX Design",
+    "Digital Marketing",
+    "SEO & Content Strategy",
+    "Data Analytics & BI",
+    "AI & Machine Learning Services",
+    "Business Process Outsourcing",
+    "Customer Support Services",
+    "Legal Services",
+    "Accounting & Finance",
+    "HR & Recruitment",
+    "Training & Education",
+    "Project Management",
+    "QA & Testing Services",
+    "Managed IT Services",
+  ],
+  Products: [
+    "SaaS Platform",
+    "Mobile Application",
+    "Web Application",
+    "Desktop Software",
+    "API / SDK",
+    "CRM Software",
+    "ERP Software",
+    "E-commerce Platform",
+    "POS System",
+    "Inventory Management System",
+    "HR Management System",
+    "Accounting Software",
+    "Project Management Tool",
+    "Communication & Collaboration Tool",
+    "Analytics & Reporting Platform",
+    "IoT Product",
+    "Hardware Device",
+    "Physical Retail Product",
+    "Digital Downloads",
+    "Subscription Box",
+  ],
+};
+
+const COMBINED_OPTIONS = [
+  ...PRODUCTS_BY_TYPE.Services,
+  ...PRODUCTS_BY_TYPE.Products.filter((p) => !PRODUCTS_BY_TYPE.Services.includes(p)),
+];
+
+function getProductOptions(businessType: string): string[] {
+  if (businessType === "Services") return PRODUCTS_BY_TYPE.Services;
+  if (businessType === "Products") return PRODUCTS_BY_TYPE.Products;
+  if (
+    businessType === "Both (Services & Products)" ||
+    businessType === "B2B" ||
+    businessType === "B2C" ||
+    businessType === "B2B2C" ||
+    businessType === "SaaS" ||
+    businessType === "Marketplace" ||
+    businessType === "E-commerce"
+  )
+    return COMBINED_OPTIONS;
+  return COMBINED_OPTIONS;
+}
 
 const KEY_FEATURES_OPTIONS = [
   "Lead Management",
@@ -162,11 +243,21 @@ function ReadOnlyField({ value, placeholder }: { value: string; placeholder?: st
   );
 }
 
-function MultiSelectFeatures({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
+function MultiSelectFeatures({
+  selected,
+  onChange,
+  options = KEY_FEATURES_OPTIONS,
+  placeholder = "Search and select...",
+}: {
+  selected: string[];
+  onChange: (v: string[]) => void;
+  options?: string[];
+  placeholder?: string;
+}) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
 
-  const filtered = KEY_FEATURES_OPTIONS.filter(
+  const filtered = options.filter(
     (f) => f.toLowerCase().includes(search.toLowerCase()) && !selected.includes(f)
   );
 
@@ -199,7 +290,7 @@ function MultiSelectFeatures({ selected, onChange }: { selected: string[]; onCha
           </span>
         ))}
         {selected.length === 0 && !open && (
-          <span className="text-muted-foreground/60 text-sm italic">Search and select features...</span>
+          <span className="text-muted-foreground/60 text-sm italic">{placeholder}</span>
         )}
         {open && (
           <input
@@ -231,7 +322,7 @@ function MultiSelectFeatures({ selected, onChange }: { selected: string[]; onCha
   );
 }
 
-function FormField({ children, label, required, hint }: { children: React.ReactNode; label: string; required?: boolean; hint?: string }) {
+function FormField({ children, label, required, hint }: { children: React.ReactNode; label: string; required?: boolean; hint?: React.ReactNode }) {
   return (
     <div>
       <FieldLabel label={label} required={required} />
@@ -254,7 +345,15 @@ export default function RequirementDoc() {
   const [selectedClient, setSelectedClient] = useState("");
   const [businessType, setBusinessType] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
-  const [keyProducts, setKeyProducts] = useState("");
+  const [keyProducts, setKeyProducts] = useState<string[]>([]);
+
+  const handleBusinessTypeChange = (type: string) => {
+    setBusinessType(type);
+    // Clear selections that are no longer in the new option list
+    const newOptions = getProductOptions(type);
+    setKeyProducts((prev) => prev.filter((p) => newOptions.includes(p)));
+  };
+
   const [businessGoals, setBusinessGoals] = useState("");
   const [keyChallenges, setKeyChallenges] = useState("");
   const [currentSystems, setCurrentSystems] = useState("");
@@ -381,15 +480,32 @@ export default function RequirementDoc() {
         <section>
           <SectionHeader icon={Briefcase} title="2. Business Information" subtitle="Understanding the client's business context and goals" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <FormField label="Business Type" required>
-              <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={setBusinessType} placeholder="Select business type" />
+            <FormField label="Business Type" required hint="Selecting a type refines the Key Products / Services list below">
+              <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={handleBusinessTypeChange} placeholder="Select business type" />
             </FormField>
             <FormField label="Target Audience" required hint="Age group, profession, and geographical location">
               <TextInput value={targetAudience} onChange={setTargetAudience} placeholder="e.g. Professionals aged 25-45 in North America..." />
             </FormField>
             <div className="sm:col-span-2">
-              <FormField label="Key Products / Services" required hint="Main products or services offered by the client">
-                <TextInput value={keyProducts} onChange={setKeyProducts} placeholder="e.g. SaaS platform, consulting services, retail products..." />
+              <FormField
+                label="Key Products / Services"
+                required
+                hint={
+                  businessType
+                    ? `Showing options relevant to "${businessType}" — search or select multiple`
+                    : "Select a Business Type above to see relevant options, or search freely"
+                }
+              >
+                <MultiSelectFeatures
+                  selected={keyProducts}
+                  onChange={setKeyProducts}
+                  options={businessType ? getProductOptions(businessType) : COMBINED_OPTIONS}
+                  placeholder={
+                    businessType
+                      ? `Search ${businessType} products / services...`
+                      : "Select a business type first, or search all options..."
+                  }
+                />
               </FormField>
             </div>
             <div className="sm:col-span-2">
