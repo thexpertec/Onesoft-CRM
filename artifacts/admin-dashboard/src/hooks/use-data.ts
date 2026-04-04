@@ -4,7 +4,12 @@ import {
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
+  getProducts, createProduct, updateProduct, deleteProduct,
+  getBrands, createBrand, updateBrand, deleteBrand,
+  getAttributes, createAttribute, updateAttribute, deleteAttribute,
+  getUnits, createUnit, updateUnit, deleteUnit,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
+  Product, Brand, Attribute, Unit,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -137,6 +142,78 @@ export function useProductCategories() {
   };
 
   return { categories, addCategory, editCategory, removeCategory, refresh: fetchCategories };
+}
+
+export function useProducts() {
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const fetchProducts = useCallback(() => { setProducts(getProducts()); }, []);
+
+  useEffect(() => {
+    fetchProducts();
+    window.addEventListener("storage", fetchProducts);
+    return () => window.removeEventListener("storage", fetchProducts);
+  }, [fetchProducts]);
+
+  const addProduct = (data: Parameters<typeof createProduct>[0]) => { const p = createProduct(data); fetchProducts(); return p; };
+  const editProduct = (id: string, updates: Parameters<typeof updateProduct>[1]) => { const p = updateProduct(id, updates); fetchProducts(); return p; };
+  const removeProduct = (id: string) => { deleteProduct(id); fetchProducts(); };
+
+  return { products, addProduct, editProduct, removeProduct, refresh: fetchProducts };
+}
+
+export function useBrands() {
+  const [brands, setBrands] = useState<Brand[]>([]);
+
+  const fetchBrands = useCallback(() => { setBrands(getBrands()); }, []);
+
+  useEffect(() => {
+    fetchBrands();
+    window.addEventListener("storage", fetchBrands);
+    return () => window.removeEventListener("storage", fetchBrands);
+  }, [fetchBrands]);
+
+  const addBrand = (data: Parameters<typeof createBrand>[0]) => { const b = createBrand(data); fetchBrands(); return b; };
+  const editBrand = (id: string, updates: Parameters<typeof updateBrand>[1]) => { const b = updateBrand(id, updates); fetchBrands(); return b; };
+  const removeBrand = (id: string) => { deleteBrand(id); fetchBrands(); };
+
+  return { brands, addBrand, editBrand, removeBrand, refresh: fetchBrands };
+}
+
+export function useAttributes() {
+  const [attributes, setAttributes] = useState<Attribute[]>([]);
+
+  const fetchAttributes = useCallback(() => { setAttributes(getAttributes()); }, []);
+
+  useEffect(() => {
+    fetchAttributes();
+    window.addEventListener("storage", fetchAttributes);
+    return () => window.removeEventListener("storage", fetchAttributes);
+  }, [fetchAttributes]);
+
+  const addAttribute = (data: Parameters<typeof createAttribute>[0]) => { const a = createAttribute(data); fetchAttributes(); return a; };
+  const editAttribute = (id: string, updates: Parameters<typeof updateAttribute>[1]) => { const a = updateAttribute(id, updates); fetchAttributes(); return a; };
+  const removeAttribute = (id: string) => { deleteAttribute(id); fetchAttributes(); };
+
+  return { attributes, addAttribute, editAttribute, removeAttribute, refresh: fetchAttributes };
+}
+
+export function useUnits() {
+  const [units, setUnits] = useState<Unit[]>([]);
+
+  const fetchUnits = useCallback(() => { setUnits(getUnits()); }, []);
+
+  useEffect(() => {
+    fetchUnits();
+    window.addEventListener("storage", fetchUnits);
+    return () => window.removeEventListener("storage", fetchUnits);
+  }, [fetchUnits]);
+
+  const addUnit = (data: Parameters<typeof createUnit>[0]) => { const u = createUnit(data); fetchUnits(); return u; };
+  const editUnit = (id: string, updates: Parameters<typeof updateUnit>[1]) => { const u = updateUnit(id, updates); fetchUnits(); return u; };
+  const removeUnit = (id: string) => { deleteUnit(id); fetchUnits(); };
+
+  return { units, addUnit, editUnit, removeUnit, refresh: fetchUnits };
 }
 
 export function useSuppliers() {

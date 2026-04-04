@@ -378,6 +378,172 @@ export const getTeamMembers = (): string[] => {
   return DEFAULT_TEAM;
 };
 
+// ─── Products (catalogue) API ─────────────────────────────────────────────────
+export type ProductStatus = "Active" | "Inactive" | "Draft";
+
+export type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  brand: string;
+  category: string;
+  unit: string;
+  price: string;
+  description: string;
+  status: ProductStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const PRODUCTS_KEY = "admin-products";
+
+export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);
+
+export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
+  const item: Product = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(PRODUCTS_KEY, [...getProducts(), item]);
+  return item;
+};
+
+export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | "createdAt">>): Product => {
+  const items = getProducts();
+  const i = items.findIndex(p => p.id === id);
+  if (i === -1) throw new Error("Product not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PRODUCTS_KEY, items);
+  return items[i];
+};
+
+export const deleteProduct = (id: string): void => {
+  setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
+};
+
+// ─── Brands API ───────────────────────────────────────────────────────────────
+export type BrandStatus = "Active" | "Inactive";
+
+export type Brand = {
+  id: string;
+  color: string;
+  name: string;
+  website: string;
+  description: string;
+  status: BrandStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const BRANDS_KEY = "admin-brands";
+
+export const getBrands = (): Brand[] => getStored<Brand>(BRANDS_KEY);
+
+export const createBrand = (data: Omit<Brand, "id" | "createdAt" | "updatedAt">): Brand => {
+  const item: Brand = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(BRANDS_KEY, [...getBrands(), item]);
+  return item;
+};
+
+export const updateBrand = (id: string, updates: Partial<Omit<Brand, "id" | "createdAt">>): Brand => {
+  const items = getBrands();
+  const i = items.findIndex(b => b.id === id);
+  if (i === -1) throw new Error("Brand not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(BRANDS_KEY, items);
+  return items[i];
+};
+
+export const deleteBrand = (id: string): void => {
+  setStored(BRANDS_KEY, getBrands().filter(b => b.id !== id));
+};
+
+// ─── Attributes API ───────────────────────────────────────────────────────────
+export type AttributeType = "text" | "number" | "boolean" | "select";
+
+export type Attribute = {
+  id: string;
+  name: string;
+  type: AttributeType;
+  values: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const ATTRIBUTES_KEY = "admin-attributes";
+
+export const getAttributes = (): Attribute[] => getStored<Attribute>(ATTRIBUTES_KEY);
+
+export const createAttribute = (data: Omit<Attribute, "id" | "createdAt" | "updatedAt">): Attribute => {
+  const item: Attribute = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(ATTRIBUTES_KEY, [...getAttributes(), item]);
+  return item;
+};
+
+export const updateAttribute = (id: string, updates: Partial<Omit<Attribute, "id" | "createdAt">>): Attribute => {
+  const items = getAttributes();
+  const i = items.findIndex(a => a.id === id);
+  if (i === -1) throw new Error("Attribute not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(ATTRIBUTES_KEY, items);
+  return items[i];
+};
+
+export const deleteAttribute = (id: string): void => {
+  setStored(ATTRIBUTES_KEY, getAttributes().filter(a => a.id !== id));
+};
+
+// ─── Units API ────────────────────────────────────────────────────────────────
+export type Unit = {
+  id: string;
+  name: string;
+  symbol: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const UNITS_KEY = "admin-units";
+
+export const getUnits = (): Unit[] => getStored<Unit>(UNITS_KEY);
+
+export const createUnit = (data: Omit<Unit, "id" | "createdAt" | "updatedAt">): Unit => {
+  const item: Unit = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(UNITS_KEY, [...getUnits(), item]);
+  return item;
+};
+
+export const updateUnit = (id: string, updates: Partial<Omit<Unit, "id" | "createdAt">>): Unit => {
+  const items = getUnits();
+  const i = items.findIndex(u => u.id === id);
+  if (i === -1) throw new Error("Unit not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(UNITS_KEY, items);
+  return items[i];
+};
+
+export const deleteUnit = (id: string): void => {
+  setStored(UNITS_KEY, getUnits().filter(u => u.id !== id));
+};
+
 export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;

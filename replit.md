@@ -7,6 +7,26 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## Artifacts
 
 - **requirement-doc** (`artifacts/requirement-doc/`): Customer Requirement Collection Document — a beautiful, view-only single-page React + Vite frontend. No backend. Served at `/`.
+- **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. All data stored in localStorage. Auth via sessionStorage. Served at `/admin-dashboard/`.
+
+### Admin Dashboard — Routes & Data
+
+| Route | Page | localStorage key |
+|---|---|---|
+| `/products` | Products catalogue | `admin-products` |
+| `/brands` | Brand management | `admin-brands` |
+| `/categories` | Product categories | `admin-product-categories` |
+| `/attributes` | Product attributes | `admin-attributes` |
+| `/units` | Units of measurement | `admin-units` |
+| `/leads` | Leads pipeline | `admin-leads` |
+| `/customers` | Customer management | `admin-customers` |
+| `/suppliers` | Supplier management | `admin-suppliers` |
+| `/documents` | Requirement documents | `admin-req-docs` |
+| `/users` | User management (superadmin) | `admin-users` |
+
+Key files: `src/lib/store.ts`, `src/hooks/use-data.ts`, `src/components/editable-cell.tsx`, `src/components/layout.tsx`
+
+Default credentials: superadmin `admin` / `Onesoft@2024` (sessionStorage key `onesoft-admin-auth`)
 
 ## Stack
 

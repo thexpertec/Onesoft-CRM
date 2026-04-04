@@ -18,6 +18,10 @@ import ShareDocument from "@/pages/share-document";
 import UsersPage from "@/pages/users";
 import CustomersPage from "@/pages/customers";
 import ProductsPage from "@/pages/products";
+import CategoriesPage from "@/pages/categories";
+import BrandsPage from "@/pages/brands";
+import AttributesPage from "@/pages/attributes";
+import UnitsPage from "@/pages/units";
 import SuppliersPage from "@/pages/suppliers";
 
 const queryClient = new QueryClient();
@@ -53,6 +57,10 @@ function Router() {
               <Route path="/documents/:id" component={DocumentDetail} />
               <Route path="/customers" component={CustomersPage} />
               <Route path="/products" component={ProductsPage} />
+              <Route path="/brands" component={BrandsPage} />
+              <Route path="/categories" component={CategoriesPage} />
+              <Route path="/attributes" component={AttributesPage} />
+              <Route path="/units" component={UnitsPage} />
               <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/users" component={UsersPage} />
               <Route component={NotFound} />

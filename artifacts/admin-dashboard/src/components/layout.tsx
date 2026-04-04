@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, FileText, Moon, Sun, Menu, X,
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
-  ArrowRight,
+  ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -80,10 +80,13 @@ const OTHER_NAV: NavItem[] = [
     items: null,
   },
   {
-    key: "products", href: "/products", label: "Products", icon: Package,
+    key: "products", label: "Products", icon: Package,
     items: [
-      { label: "All Products",      href: "/products", icon: Package },
-      { label: "Manage Categories", href: "/products", icon: Tag },
+      { label: "Products",   href: "/products",   icon: Package,            desc: "Product catalogue"    },
+      { label: "Brands",     href: "/brands",     icon: Bookmark,           desc: "Brand management"     },
+      { label: "Categories", href: "/categories", icon: FolderOpen,         desc: "Product grouping"     },
+      { label: "Attributes", href: "/attributes", icon: SlidersHorizontal,  desc: "Product properties"   },
+      { label: "Units",      href: "/units",      icon: Ruler,              desc: "Measurement units"    },
     ],
   },
   {
@@ -100,7 +103,8 @@ const USERS_NAV: NavItem = {
   items: [{ label: "All Users", href: "/users", icon: Shield }],
 };
 
-const CRM_ROUTES = ["/leads", "/customers", "/suppliers"];
+const CRM_ROUTES      = ["/leads", "/customers", "/suppliers"];
+const PRODUCTS_ROUTES = ["/products", "/brands", "/categories", "/attributes", "/units"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",     href: "/leads",         icon: UserPlus },
@@ -155,7 +159,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
     .split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const isCrmActive = CRM_ROUTES.some(r => location === r || location.startsWith(r));
+  const isCrmActive      = CRM_ROUTES.some(r      => location === r || location.startsWith(r));
+  const isProductsActive = PRODUCTS_ROUTES.some(r => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -307,10 +312,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
             {navItems.map(item => {
               const isActive =
-                item.key === "crm"
-                  ? isCrmActive
-                  : location === item.href ||
-                    (item.href && item.href !== "/" && location.startsWith(item.href));
+                item.key === "crm"      ? isCrmActive :
+                item.key === "products" ? isProductsActive :
+                location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
                 isActive
@@ -456,9 +460,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </div>
 
-              {/* Products, Documents, Users */}
+              {/* Products group */}
+              <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products</p>
+                {[
+                  { href: "/products",   label: "Products",   icon: Package           },
+                  { href: "/brands",     label: "Brands",     icon: Bookmark          },
+                  { href: "/categories", label: "Categories", icon: FolderOpen        },
+                  { href: "/attributes", label: "Attributes", icon: SlidersHorizontal },
+                  { href: "/units",      label: "Units",      icon: Ruler             },
+                ].map(item => (
+                  <Link key={item.href} href={item.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                    <item.icon size={16} /> {item.label}
+                  </Link>
+                ))}
+              </div>
+
+              {/* Documents, Users */}
               {[
-                { href: "/products",  label: "Products",  icon: Package },
                 { href: "/documents", label: "Documents", icon: FileText },
                 ...(isSuperAdmin ? [{ href: "/users", label: "Users", icon: Shield }] : []),
               ].map(item => (
