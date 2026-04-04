@@ -85,9 +85,6 @@ export default function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
-        // Exclude extensions we're adding separately with custom config
-        underline: false,
-        link: false,
       }),
       Underline,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -343,13 +340,10 @@ export default function RichTextEditor({
       <EditorContent editor={editor} />
 
       {/* Status bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-t border-border/60 bg-muted/20">
-        <span className="text-xs text-muted-foreground/60">
-          {editor.storage.characterCount?.words?.() ?? ""} &nbsp;
-        </span>
+      <div className="flex items-center justify-end px-4 py-1.5 border-t border-border/60 bg-muted/20">
         <span className="text-xs text-muted-foreground/50">
           {editor.getText().trim().length > 0
-            ? `${editor.getText().trim().length.toLocaleString()} characters`
+            ? `${editor.getText().trim().split(/\s+/).filter(Boolean).length} words · ${editor.getText().trim().length.toLocaleString()} characters`
             : "Start typing..."}
         </span>
       </div>
