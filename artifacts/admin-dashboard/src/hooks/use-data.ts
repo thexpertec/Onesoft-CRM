@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc, Lead, RequirementDoc } from "@/lib/store";
+import {
+  getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
+  getCustomers, createCustomer, updateCustomer, deleteCustomer,
+  Lead, RequirementDoc, Customer,
+} from "@/lib/store";
 
 export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -65,4 +69,37 @@ export function useDocs() {
   };
 
   return { docs, addDoc, editDoc, removeDoc, refresh: fetchDocs };
+}
+
+export function useCustomers() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  const fetchCustomers = useCallback(() => {
+    setCustomers(getCustomers());
+  }, []);
+
+  useEffect(() => {
+    fetchCustomers();
+    window.addEventListener("storage", fetchCustomers);
+    return () => window.removeEventListener("storage", fetchCustomers);
+  }, [fetchCustomers]);
+
+  const addCustomer = (data: Parameters<typeof createCustomer>[0]) => {
+    const c = createCustomer(data);
+    fetchCustomers();
+    return c;
+  };
+
+  const editCustomer = (id: string, updates: Parameters<typeof updateCustomer>[1]) => {
+    const c = updateCustomer(id, updates);
+    fetchCustomers();
+    return c;
+  };
+
+  const removeCustomer = (id: string) => {
+    deleteCustomer(id);
+    fetchCustomers();
+  };
+
+  return { customers, addCustomer, editCustomer, removeCustomer, refresh: fetchCustomers };
 }

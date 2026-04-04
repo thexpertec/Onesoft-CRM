@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock, ShieldCheck, Shield } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock, ShieldCheck, Shield, UserCheck } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 const BASE_NAV = [
   { href: "/",          label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads",     label: "Leads",     icon: Users },
+  { href: "/customers", label: "Customers", icon: UserCheck },
   { href: "/documents", label: "Documents", icon: FileText },
 ];
 

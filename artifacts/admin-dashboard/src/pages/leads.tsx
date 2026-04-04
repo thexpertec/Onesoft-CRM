@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
-import { useLeads } from "@/hooks/use-data";
+import { useLeads, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Lead, LeadStatus } from "@/lib/store";
+import { Lead, LeadStatus, convertLeadToCustomer, getCustomers } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, Link as LinkIcon } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, Link as LinkIcon, UserCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
@@ -39,8 +39,20 @@ const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal 
 
 export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
+  const { refresh: refreshCustomers } = useCustomers();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+
+  const convertedLeadIds = useMemo(
+    () => new Set(getCustomers().map(c => c.leadId).filter(Boolean)),
+    [leads]
+  );
+
+  const handleConvertToCustomer = (lead: Lead) => {
+    convertLeadToCustomer(lead);
+    refreshCustomers();
+    toast({ title: "Lead converted", description: `${lead.name} has been added as a customer.` });
+  };
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -295,6 +307,11 @@ export default function Leads() {
                             <DropdownMenuItem onClick={() => openEdit(lead)}>
                               <Edit className="mr-2 h-4 w-4" /> Edit
                             </DropdownMenuItem>
+                            {lead.status === "Won" && !convertedLeadIds.has(lead.id) && (
+                              <DropdownMenuItem onClick={() => handleConvertToCustomer(lead)} className="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 dark:text-emerald-400 dark:focus:bg-emerald-950">
+                                <UserCheck className="mr-2 h-4 w-4" /> Convert to Customer
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => setLeadToDelete(lead.id)} className="text-destructive focus:bg-destructive focus:text-destructive-foreground">
                               <Trash2 className="mr-2 h-4 w-4" /> Delete
                             </DropdownMenuItem>

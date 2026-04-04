@@ -131,6 +131,77 @@ export const deleteDoc = (id: string): void => {
   setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
 };
 
+// ─── Customers API ────────────────────────────────────────────────────────────
+export type CustomerStatus = "Active" | "Inactive" | "Churned";
+
+export type Customer = {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  industry: string;
+  city: string;
+  status: CustomerStatus;
+  source: "from_lead" | "direct";
+  leadId?: string;
+  customerSince: string;
+  totalValue: string;
+  currency: string;
+  notes: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const CUSTOMERS_KEY = "admin-customers";
+
+export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY);
+export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
+
+export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "updatedAt">): Customer => {
+  const newCustomer: Customer = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(CUSTOMERS_KEY, [...getCustomers(), newCustomer]);
+  return newCustomer;
+};
+
+export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" | "createdAt">>): Customer => {
+  const customers = getCustomers();
+  const index = customers.findIndex(c => c.id === id);
+  if (index === -1) throw new Error("Customer not found");
+  customers[index] = { ...customers[index], ...updates, updatedAt: new Date().toISOString() };
+  setStored(CUSTOMERS_KEY, customers);
+  return customers[index];
+};
+
+export const deleteCustomer = (id: string): void => {
+  setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
+};
+
+export const convertLeadToCustomer = (lead: Lead): Customer => {
+  return createCustomer({
+    name: lead.name,
+    company: lead.company,
+    email: lead.email,
+    phone: lead.phone,
+    industry: lead.industry,
+    city: lead.city,
+    status: "Active",
+    source: "from_lead",
+    leadId: lead.id,
+    customerSince: new Date().toISOString().split("T")[0],
+    totalValue: "",
+    currency: "GBP",
+    notes: lead.notes || "",
+    tags: [],
+  });
+};
+
 // ─── Admin Users API ──────────────────────────────────────────────────────────
 export type UserRole = "superadmin" | "admin";
 
