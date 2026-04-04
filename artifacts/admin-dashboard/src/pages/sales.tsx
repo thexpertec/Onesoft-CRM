@@ -705,16 +705,25 @@ export default function SalesPage() {
 
   // ── Add product from right panel ──
   const handleAddProductFromCatalogue = useCallback((product: Product) => {
-    const item: SaleItem = {
-      ...blankSaleItem(),
-      productName: product.name,
-      sku: product.sku,
-      unit: product.unit || "pcs",
-      unitPrice: product.price || "0.00",
-    };
-    const next = [...localItems, item];
-    saveItems(next);
-    toast({ title: `${product.name} added` });
+    const existing = localItems.find(i => i.sku === product.sku);
+    if (existing) {
+      const next = localItems.map(i =>
+        i.sku === product.sku
+          ? { ...i, qty: String((parseFloat(i.qty) || 0) + 1) }
+          : i
+      );
+      saveItems(next);
+    } else {
+      const item: SaleItem = {
+        ...blankSaleItem(),
+        productName: product.name,
+        sku: product.sku,
+        unit: product.unit || "pcs",
+        unitPrice: product.price || "0.00",
+      };
+      saveItems([...localItems, item]);
+      toast({ title: `${product.name} added` });
+    }
   }, [localItems, saveItems, toast]);
 
   const handleItemFieldChange = (itemId: string, field: keyof SaleItem, value: string) => {
