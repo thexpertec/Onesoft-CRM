@@ -285,6 +285,7 @@ interface POSViewProps {
   onSaveMeta: () => void;
   onItemChange: (itemId: string, field: keyof SaleItem, value: string) => void;
   onItemBlur: () => void;
+  onSaveItems: (items: SaleItem[]) => void;
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
   onSetStatus: (status: SaleStatus) => void;
@@ -294,7 +295,7 @@ interface POSViewProps {
 function POSView({
   sale, localItems, localMeta, customerComboOpts, productComboOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
-  onDeleteItem, onAddProduct, onSetStatus, onComplete,
+  onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete,
 }: POSViewProps) {
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
@@ -347,8 +348,8 @@ function POSView({
     const item = localItems.find(i => i.id === itemId);
     if (!item) return;
     const next = Math.max(0, (parseFloat(item.qty) || 0) + delta);
-    onItemChange(itemId, "qty", String(next));
-    setTimeout(onItemBlur, 0);
+    const newItems = localItems.map(i => i.id === itemId ? { ...i, qty: String(next) } : i);
+    onSaveItems(newItems);
   };
 
   return (
@@ -881,6 +882,12 @@ export default function SalesPage() {
   const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
   const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string } | null>(null);
 
+  // Refs so callbacks always see latest values without stale-closure issues
+  const localItemsRef = useRef<SaleItem[]>(localItems);
+  const localMetaRef  = useRef(localMeta);
+  useEffect(() => { localItemsRef.current = localItems; }, [localItems]);
+  useEffect(() => { localMetaRef.current  = localMeta;  }, [localMeta]);
+
   // ── COLS ──
   const COLS: ColDef[] = useMemo(() => [
     { field: "saleNumber",    label: "Sale #",          minW: 145, type: "readonly" },
@@ -898,7 +905,10 @@ export default function SalesPage() {
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const cellValue = (sale: Sale, field: string): string => {
-    if (field === "itemCount") return String(sale.items.length);
+    if (field === "itemCount") {
+      const totalQty = sale.items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
+      return Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
+    }
     if (field === "total")     return saleTotal(sale.items).toFixed(2);
     if (field === "balance") {
       const total = saleTotal(sale.items);
@@ -959,16 +969,19 @@ export default function SalesPage() {
   }, [detailId, localMeta, localItems, editSale]);
 
   const saveItems = useCallback((items: SaleItem[]) => {
-    if (!detailId || !localMeta) return;
+    const meta = localMetaRef.current;
+    if (!detailId || !meta) return;
     setLocalItems(items);
-    editSale(detailId, { ...localMeta, items });
-  }, [detailId, localMeta, editSale]);
+    localItemsRef.current = items;
+    editSale(detailId, { ...meta, items });
+  }, [detailId, editSale]);
 
   // ── Add product from right panel ──
   const handleAddProductFromCatalogue = useCallback((product: Product) => {
-    const existing = localItems.find(i => i.sku === product.sku);
+    const current = localItemsRef.current;
+    const existing = current.find(i => i.sku === product.sku);
     if (existing) {
-      const next = localItems.map(i =>
+      const next = current.map(i =>
         i.sku === product.sku
           ? { ...i, qty: String((parseFloat(i.qty) || 0) + 1) }
           : i
@@ -982,20 +995,21 @@ export default function SalesPage() {
         unit: product.unit || "pcs",
         unitPrice: product.price || "0.00",
       };
-      saveItems([...localItems, item]);
+      saveItems([...current, item]);
       toast({ title: `${product.name} added` });
     }
-  }, [localItems, saveItems, toast]);
+  }, [saveItems, toast]);
 
   const handleItemFieldChange = (itemId: string, field: keyof SaleItem, value: string) => {
     setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, [field]: value } : i));
   };
 
   const handleItemBlur = () => {
-    if (detailId && localMeta) editSale(detailId, { ...localMeta, items: localItems });
+    const meta = localMetaRef.current;
+    if (detailId && meta) editSale(detailId, { ...meta, items: localItemsRef.current });
   };
 
-  const handleDeleteItem = (itemId: string) => saveItems(localItems.filter(i => i.id !== itemId));
+  const handleDeleteItem = (itemId: string) => saveItems(localItemsRef.current.filter(i => i.id !== itemId));
 
   const setStatus = (status: SaleStatus) => {
     if (!detailId || !localMeta) return;
@@ -1115,6 +1129,7 @@ export default function SalesPage() {
         onSaveMeta={saveMeta}
         onItemChange={handleItemFieldChange}
         onItemBlur={handleItemBlur}
+        onSaveItems={saveItems}
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
         onSetStatus={setStatus}
