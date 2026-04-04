@@ -499,6 +499,76 @@ const HOSTING_OPTIONS = ["Cloud (AWS / Azure / GCP)", "On-premise", "Hybrid", "M
 const MAINTENANCE_OPTIONS = ["3 months", "6 months", "1 year", "2 years", "Ongoing"];
 const PAYMENT_STRUCTURES = ["Fixed Price", "Hourly Rate", "Payment Milestones", "Retainer", "Time & Material"];
 
+const INTEGRATIONS_OPTIONS = [
+  // Payments & Finance
+  "Stripe", "PayPal", "GoCardless", "Worldpay", "Sage Pay", "Square", "Braintree", "Klarna", "Xero", "QuickBooks", "Sage Accounting", "FreeAgent",
+  // CRM & Sales
+  "Salesforce", "HubSpot", "Pipedrive", "Zoho CRM", "Microsoft Dynamics 365", "Freshsales", "Monday CRM",
+  // Marketing & Email
+  "Mailchimp", "Klaviyo", "SendGrid", "Campaign Monitor", "ActiveCampaign", "Brevo (Sendinblue)", "Constant Contact", "Dotdigital",
+  // Communication & Messaging
+  "Twilio (SMS)", "Twilio (Voice)", "WhatsApp Business API", "Intercom", "Zendesk", "Freshdesk", "LiveChat", "Tawk.to",
+  // Cloud & Storage
+  "AWS S3", "Google Cloud Storage", "Azure Blob Storage", "Cloudinary", "Dropbox", "Google Drive", "OneDrive", "Box",
+  // Authentication & Identity
+  "Google OAuth", "Facebook Login", "Apple Sign-In", "Auth0", "Firebase Auth", "Okta", "Microsoft Azure AD",
+  // Analytics & Tracking
+  "Google Analytics 4", "Google Tag Manager", "Hotjar", "Mixpanel", "Amplitude", "Segment", "Heap", "Microsoft Clarity",
+  // E-commerce & Retail
+  "Shopify", "WooCommerce", "Magento", "BigCommerce", "Etsy API", "Amazon Seller API", "eBay API",
+  // Logistics & Shipping
+  "Royal Mail API", "DPD API", "Evri API", "DHL API", "FedEx API", "UPS API", "ShipStation", "EasyPost",
+  // Maps & Location
+  "Google Maps", "Mapbox", "What3Words", "Postcode Anywhere (PCA Predict)",
+  // Social Media
+  "Facebook / Meta API", "Instagram API", "Twitter / X API", "LinkedIn API", "TikTok API", "YouTube API",
+  // ERP & Business Systems
+  "SAP", "Oracle ERP", "Microsoft Dynamics NAV", "NetSuite",
+  // HR & Payroll
+  "BambooHR", "Workday", "ADP Payroll", "Sage HR", "Breathe HR",
+  // Collaboration & Productivity
+  "Slack", "Microsoft Teams", "Zoom", "Google Workspace", "Microsoft 365",
+  // Healthcare
+  "NHS Login", "EMIS Health", "SystmOne", "NHS Spine",
+  // Other
+  "Zapier", "Make (Integromat)", "n8n", "Webhooks / REST API", "GraphQL API",
+];
+
+const TECH_STACK_OPTIONS = [
+  // Frontend Frameworks
+  "React", "Next.js", "Vue.js", "Nuxt.js", "Angular", "Svelte", "SvelteKit", "Remix",
+  // Mobile
+  "React Native", "Expo", "Flutter", "Swift (iOS)", "Kotlin (Android)", "Ionic",
+  // Backend / Server
+  "Node.js", "Express.js", "NestJS", "Django", "FastAPI", "Flask", "Ruby on Rails", "Laravel (PHP)", "Spring Boot (Java)", "ASP.NET Core (C#)", "Go (Golang)", "Rust",
+  // Databases — Relational
+  "PostgreSQL", "MySQL", "MariaDB", "SQLite", "Microsoft SQL Server", "Oracle Database",
+  // Databases — NoSQL
+  "MongoDB", "Firebase Firestore", "DynamoDB", "Redis", "Cassandra", "Elasticsearch",
+  // Cloud Providers
+  "AWS (Amazon Web Services)", "Google Cloud Platform (GCP)", "Microsoft Azure", "DigitalOcean", "Heroku", "Vercel", "Netlify", "Fly.io", "Railway",
+  // DevOps & CI/CD
+  "Docker", "Kubernetes", "GitHub Actions", "GitLab CI/CD", "Bitbucket Pipelines", "CircleCI", "Jenkins", "Terraform",
+  // CMS & Headless CMS
+  "WordPress", "Strapi", "Contentful", "Sanity", "Prismic", "Directus", "Payload CMS",
+  // APIs & Protocols
+  "REST API", "GraphQL", "gRPC", "WebSockets", "MQTT (IoT)",
+  // AI & ML
+  "OpenAI API (ChatGPT)", "Anthropic Claude API", "Google Gemini API", "Hugging Face", "LangChain", "TensorFlow", "PyTorch",
+  // Search
+  "Elasticsearch", "Algolia", "MeiliSearch", "Typesense",
+  // Testing
+  "Jest", "Cypress", "Playwright", "Vitest", "Selenium",
+  // CSS & UI
+  "Tailwind CSS", "Bootstrap", "Material UI (MUI)", "Chakra UI", "shadcn/ui", "Ant Design", "SASS / SCSS",
+  // State Management
+  "Redux", "Zustand", "Jotai", "React Query (TanStack Query)", "SWR",
+  // Authentication
+  "JWT (JSON Web Tokens)", "OAuth 2.0 / OpenID Connect", "Clerk", "NextAuth.js", "Passport.js",
+  // Version Control
+  "Git / GitHub", "GitLab", "Bitbucket",
+];
+
 function SectionHeader({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle?: string }) {
   return (
     <div className="flex items-start gap-3 mb-6">
@@ -705,8 +775,8 @@ export default function RequirementDoc() {
   const [currentSystems, setCurrentSystems] = useState("");
   const [purpose, setPurpose] = useState("");
   const [keyFeatures, setKeyFeatures] = useState<string[]>([]);
-  const [integrations, setIntegrations] = useState("");
-  const [techStack, setTechStack] = useState("");
+  const [integrations, setIntegrations] = useState<string[]>([]);
+  const [techStack, setTechStack] = useState<string[]>([]);
   const [hosting, setHosting] = useState("");
   const [security, setSecurity] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -949,13 +1019,23 @@ export default function RequirementDoc() {
           <SectionHeader icon={Wrench} title="4. Technical Requirements" subtitle="Technology stack, integrations, and infrastructure" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="sm:col-span-2">
-              <FormField label="Third-Party Integrations" hint="Payment gateways, CRMs, email marketing tools, etc.">
-                <TextInput value={integrations} onChange={setIntegrations} placeholder="e.g. Stripe, Mailchimp, Salesforce, Twilio..." />
+              <FormField label="Third-Party Integrations" hint="Search and select payment gateways, CRMs, marketing tools, shipping APIs, and more">
+                <MultiSelectFeatures
+                  selected={integrations}
+                  onChange={setIntegrations}
+                  options={INTEGRATIONS_OPTIONS}
+                  placeholder="Search integrations — e.g. Stripe, Mailchimp, Salesforce..."
+                />
               </FormField>
             </div>
             <div className="sm:col-span-2">
-              <FormField label="Technology Stack" hint="Preferred frontend, backend, database, and API technologies">
-                <TextInput value={techStack} onChange={setTechStack} placeholder="e.g. Frontend: React, Backend: Node.js, Database: PostgreSQL..." />
+              <FormField label="Technology Stack" hint="Search and select frontend frameworks, backend, databases, cloud providers, and tools">
+                <MultiSelectFeatures
+                  selected={techStack}
+                  onChange={setTechStack}
+                  options={TECH_STACK_OPTIONS}
+                  placeholder="Search tech — e.g. React, Node.js, PostgreSQL, AWS..."
+                />
               </FormField>
             </div>
             <FormField label="Hosting Requirements" required>
