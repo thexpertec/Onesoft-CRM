@@ -295,22 +295,21 @@ function POSView({
                 {localItems.map((item, idx) => {
                   const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
                   return (
-                    <div key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-zinc-900/60 transition-colors">
+                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
 
                       {/* Row number */}
-                      <span className="text-[11px] text-gray-300 dark:text-zinc-700 w-4 text-center shrink-0 tabular-nums">{idx + 1}</span>
+                      <span className="text-[11px] text-gray-300 dark:text-zinc-700 w-4 text-center shrink-0">{idx + 1}</span>
 
-                      {/* Thumbnail */}
-                      <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-gray-100 dark:ring-zinc-800">
+                      {/* Small thumbnail */}
+                      <div className="w-8 h-8 rounded-md overflow-hidden shrink-0">
                         <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />
                       </div>
 
                       {/* Product info + notes */}
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">{item.productName || "—"}</div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] text-gray-400 font-mono">{item.sku || "—"}</span>
-                          <span className="text-gray-200 dark:text-zinc-700 select-none">·</span>
+                        <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate leading-tight">{item.productName || "—"}</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] text-gray-400">—</span>
                           <span className="text-[10px] text-gray-400">{item.unit}</span>
                         </div>
                         {isDraft && (
@@ -319,78 +318,73 @@ function POSView({
                             onChange={e => onItemChange(item.id, "notes", e.target.value)}
                             onBlur={onItemBlur}
                             placeholder="Add a note…"
-                            className="mt-1 w-full text-[11px] text-gray-500 bg-transparent placeholder:text-gray-300 dark:placeholder:text-zinc-700 outline-none border-b border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-300 transition-colors"
+                            className="mt-0.5 w-full text-[11px] text-gray-400 bg-transparent placeholder:text-gray-300 dark:placeholder:text-zinc-700 outline-none border-b border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-300 transition-colors"
                           />
                         )}
                       </div>
 
-                      {/* Qty stepper */}
-                      <div className="shrink-0 flex items-center gap-1">
+                      {/* Qty stepper — flat, minimal */}
+                      <div className="shrink-0 flex items-center">
                         {isDraft ? (
-                          <>
+                          <div className="flex items-center border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
                             <button
                               onClick={() => qtyChange(item.id, -1)}
-                              className="w-7 h-7 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-100 dark:hover:bg-red-900/30 flex items-center justify-center text-gray-500 hover:text-red-600 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
                             >
-                              <Minus size={12} />
+                              <Minus size={11} />
                             </button>
                             <input
                               type="number" min="0"
                               value={item.qty}
                               onChange={e => onItemChange(item.id, "qty", e.target.value)}
                               onBlur={onItemBlur}
-                              className="w-12 h-8 text-center text-[14px] font-black text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-zinc-800 border-2 border-gray-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                              className="w-10 h-7 text-center text-[13px] font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none border-x border-gray-200 dark:border-zinc-700 focus:bg-blue-50 dark:focus:bg-blue-950/20"
                             />
                             <button
                               onClick={() => qtyChange(item.id, 1)}
-                              className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-800/60 flex items-center justify-center text-blue-600 dark:text-blue-400 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 transition-colors"
                             >
-                              <Plus size={12} />
+                              <Plus size={11} />
                             </button>
-                          </>
+                          </div>
                         ) : (
-                          <span className="text-[14px] font-black text-gray-700 dark:text-gray-200 w-14 text-center">×{item.qty}</span>
+                          <span className="text-[13px] font-bold text-gray-600 dark:text-gray-300 w-12 text-center">×{item.qty}</span>
                         )}
                       </div>
 
                       {/* Unit price */}
-                      <div className="shrink-0 w-20">
-                        <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Unit £</div>
-                        <div className="flex items-center gap-0.5">
-                          <input
-                            type="number" min="0" step="0.01"
-                            value={item.unitPrice}
-                            onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
-                            onBlur={onItemBlur}
-                            disabled={!isDraft}
-                            className="flex-1 text-[13px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 transition-colors"
-                          />
-                        </div>
+                      <div className="shrink-0 w-[76px]">
+                        <div className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Unit £</div>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={item.unitPrice}
+                          onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
+                          onBlur={onItemBlur}
+                          disabled={!isDraft}
+                          className="w-full text-[12px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-gray-200 dark:border-zinc-700 focus:border-blue-400 transition-colors"
+                        />
                       </div>
 
                       {/* Discount */}
-                      <div className="shrink-0 w-14">
-                        <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Disc %</div>
-                        <div className="flex items-center gap-0.5">
-                          <input
-                            type="number" min="0" max="100"
-                            value={item.discount}
-                            onChange={e => onItemChange(item.id, "discount", e.target.value)}
-                            onBlur={onItemBlur}
-                            disabled={!isDraft}
-                            className="flex-1 text-[13px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 transition-colors"
-                          />
-                          <span className="text-[10px] text-gray-400">%</span>
-                        </div>
+                      <div className="shrink-0 w-12">
+                        <div className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Disc %</div>
+                        <input
+                          type="number" min="0" max="100"
+                          value={item.discount}
+                          onChange={e => onItemChange(item.id, "discount", e.target.value)}
+                          onBlur={onItemBlur}
+                          disabled={!isDraft}
+                          className="w-full text-[12px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-gray-200 dark:border-zinc-700 focus:border-blue-400 transition-colors"
+                        />
                       </div>
 
                       {/* Line total */}
-                      <div className="shrink-0 w-20 text-right">
-                        <div className="text-[16px] font-black font-mono tabular-nums text-gray-800 dark:text-gray-100">
+                      <div className="shrink-0 w-[72px] text-right">
+                        <div className="text-[14px] font-bold font-mono tabular-nums text-gray-800 dark:text-gray-100">
                           £{lineTotal(item).toFixed(2)}
                         </div>
                         {parseFloat(item.discount) > 0 && (
-                          <div className="text-[10px] text-emerald-500 font-mono leading-tight">
+                          <div className="text-[9px] text-emerald-500 font-mono">
                             −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
                           </div>
                         )}
@@ -400,9 +394,9 @@ function POSView({
                       <button
                         onClick={() => isDraft && onDeleteItem(item.id)}
                         disabled={!isDraft}
-                        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDraft ? "text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" : "opacity-0 pointer-events-none"}`}
+                        className={`shrink-0 w-6 h-6 rounded flex items-center justify-center transition-colors ${isDraft ? "text-gray-300 hover:text-red-400" : "opacity-0 pointer-events-none"}`}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   );
@@ -557,7 +551,7 @@ function POSView({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5 content-start">
+              <div className="grid grid-cols-3 gap-2 content-start">
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
                   const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
@@ -568,52 +562,43 @@ function POSView({
                       disabled={!isDraft}
                       onClick={() => onAddProduct(product)}
                       title={isDraft ? `Add ${product.name}` : `Sale is ${sale.status}`}
-                      className={`group relative text-left bg-white dark:bg-zinc-900 border-2 rounded-2xl overflow-hidden flex flex-col transition-all ${
+                      className={`group relative text-left bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden flex flex-col transition-all ${
                         isDraft
                           ? inCart > 0
-                            ? "border-blue-300 dark:border-blue-700 hover:border-blue-500 hover:shadow-lg cursor-pointer active:scale-[0.97]"
-                            : "border-gray-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg cursor-pointer active:scale-[0.97]"
-                          : "border-gray-100 dark:border-zinc-800 opacity-50 cursor-not-allowed"
+                            ? "border-blue-300 dark:border-blue-700 hover:border-blue-400 hover:shadow-sm cursor-pointer active:scale-[0.98]"
+                            : "border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm cursor-pointer active:scale-[0.98]"
+                          : "border-gray-100 dark:border-zinc-800 opacity-40 cursor-not-allowed"
                       }`}
                     >
                       {/* In-cart badge */}
                       {inCart > 0 && (
-                        <div className="absolute top-2 right-2 z-10 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                        <div className="absolute top-1.5 right-1.5 z-10 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
                           {inCart}
                         </div>
                       )}
 
-                      {/* Thumbnail — 4:3 aspect */}
-                      <div className="aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-zinc-800">
+                      {/* Thumbnail — square, compact */}
+                      <div className="aspect-square w-full overflow-hidden bg-gray-100 dark:bg-zinc-800">
                         <ProductThumbnail product={product} size="full" />
                       </div>
 
                       {/* Info */}
-                      <div className="p-3 flex flex-col gap-1">
-                        <div className="text-[13px] font-bold text-gray-800 dark:text-gray-100 leading-snug line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      <div className="p-2 flex flex-col gap-0.5">
+                        <div className="text-[11px] font-semibold text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-tight">
                           {product.name}
                         </div>
-                        <div className="text-[10px] text-gray-400 font-mono">{product.sku || "—"}</div>
-                        <div className="flex items-center justify-between mt-0.5 gap-1">
-                          <span className="text-[16px] font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        <div className="text-[9px] text-gray-400 font-mono truncate">{product.sku || "—"}</div>
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                             £{parseFloat(product.price || "0").toFixed(2)}
                           </span>
                           {product.category && (
-                            <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full truncate max-w-[70px] ${catColor}`}>
+                            <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[50px] ${catColor}`}>
                               {product.category}
                             </span>
                           )}
                         </div>
                       </div>
-
-                      {/* "Tap to add" cue on hover */}
-                      {isDraft && (
-                        <div className="absolute inset-0 pointer-events-none rounded-2xl">
-                          <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-md">
-                            <Plus size={9} /> Add
-                          </div>
-                        </div>
-                      )}
                     </button>
                   );
                 })}
