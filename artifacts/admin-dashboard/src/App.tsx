@@ -29,6 +29,7 @@ function Router() {
             <Route path="/leads" component={Leads} />
             <Route path="/documents" component={Documents} />
             <Route path="/documents/new" component={NewDocument} />
+            <Route path="/documents/edit/:id" component={NewDocument} />
             <Route path="/documents/:id" component={DocumentDetail} />
             <Route component={NotFound} />
           </Switch>

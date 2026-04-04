@@ -14,7 +14,7 @@ import { Search, MoreHorizontal, Trash2, Eye, FileText, Save, Edit, Lock, X, Sha
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 const DOC_STATUSES: DocStatus[] = ["Draft", "Under Review", "Approved", "Archived"];
 
@@ -33,6 +33,7 @@ export default function Documents() {
   const { docs, removeDoc, editDoc } = useDocs();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -293,7 +294,12 @@ export default function Documents() {
                       </>
                     ) : (
                       <>
-                        <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} data-testid="btn-edit-doc">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { closeSheet(); navigate(`/documents/edit/${selectedDoc.id}`); }}
+                          data-testid="btn-edit-doc"
+                        >
                           <Edit className="mr-1.5 h-3.5 w-3.5" /> Edit Document
                         </Button>
                         <Button
@@ -472,29 +478,55 @@ export default function Documents() {
                       <CardDescription className="text-xs">Captured from the client requirement form.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
-                      {Object.entries(selectedDoc.sections).map(([key, value]) => (
-                        <div key={key}>
-                          <h4 className="text-sm font-semibold capitalize border-b pb-1.5 mb-2">
-                            {key.replace(/([A-Z])/g, " $1").trim()}
-                          </h4>
-                          {typeof value === "object" && value !== null ? (
-                            <div className="grid grid-cols-2 gap-3">
-                              {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
-                                <div key={k} className="bg-muted/50 p-2.5 rounded-md">
-                                  <span className="block text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
-                                    {k.replace(/([A-Z])/g, " $1").trim()}
-                                  </span>
-                                  <span className="text-xs">
-                                    {Array.isArray(v) ? (v as unknown[]).join(", ") : String(v || "N/A")}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm">{String(value)}</p>
-                          )}
-                        </div>
-                      ))}
+                      {Object.entries(selectedDoc.sections).map(([key, value]) => {
+                        const sectionLabel: Record<string, string> = {
+                          s1: "Document Information",
+                          s2: "Business Overview",
+                          s3: "Software Requirements",
+                          s35: "Detailed Notes",
+                          s4: "Technical Requirements",
+                          s5: "Budget & Costs",
+                          s6: "Timeline & Milestones",
+                          s7: "Post-Launch & Support",
+                        };
+                        const label = sectionLabel[key] ?? key.replace(/([A-Z])/g, " $1").trim();
+                        return (
+                          <div key={key}>
+                            <h4 className="text-sm font-semibold border-b pb-1.5 mb-2">{label}</h4>
+                            {typeof value === "object" && value !== null ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                {Object.entries(value as Record<string, unknown>).map(([k, v]) => {
+                                  const fieldLabel = k.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()).trim();
+                                  const isHtml = typeof v === "string" && /^<[a-z][\s\S]*>/i.test(v.trim());
+                                  const isEmpty = !v || (Array.isArray(v) && v.length === 0) || v === "" || v === "N/A";
+                                  if (isEmpty) return null;
+                                  // Wide column for rich text
+                                  const colSpan = isHtml ? "col-span-2" : "";
+                                  return (
+                                    <div key={k} className={`bg-muted/50 p-2.5 rounded-md ${colSpan}`}>
+                                      <span className="block text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
+                                        {fieldLabel}
+                                      </span>
+                                      {isHtml ? (
+                                        <div
+                                          className="text-xs [&_h1]:text-sm [&_h1]:font-bold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-xs [&_h3]:font-semibold [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-0.5 [&_strong]:font-semibold [&_em]:italic"
+                                          dangerouslySetInnerHTML={{ __html: v as string }}
+                                        />
+                                      ) : Array.isArray(v) ? (
+                                        <span className="text-xs">{(v as unknown[]).join(", ")}</span>
+                                      ) : (
+                                        <span className="text-xs">{String(v)}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-sm">{String(value)}</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 )}

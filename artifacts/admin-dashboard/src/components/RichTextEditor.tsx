@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -110,6 +111,18 @@ export default function RichTextEditor({
       },
     },
   });
+
+  // Sync externally-loaded value into the editor (e.g. when editing an existing document)
+  const lastSyncedValue = useRef(value || "");
+  useEffect(() => {
+    if (!editor) return;
+    const incoming = value || "";
+    const editorHtml = editor.getHTML();
+    if (incoming !== lastSyncedValue.current && incoming !== editorHtml) {
+      lastSyncedValue.current = incoming;
+      editor.commands.setContent(incoming, false);
+    }
+  }, [editor, value]);
 
   if (!editor) return null;
 

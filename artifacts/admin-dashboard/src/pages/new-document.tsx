@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import {
   FileText, Briefcase, Layers, Wrench, DollarSign, Clock, Target,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
@@ -8,7 +8,7 @@ import {
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getTeamMembers, addTeamMember } from "@/lib/store";
+import { getTeamMembers, addTeamMember, getDoc } from "@/lib/store";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
 
@@ -319,13 +319,14 @@ function PreparedByField({ value, onChange }: { value: string; onChange: (v: str
   );
 }
 
-// ─── Draft key ───────────────────────────────────────────────────────────────
-const DRAFT_KEY = "admin-new-doc-draft";
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function NewDocument() {
   const [, navigate] = useLocation();
-  const { addDoc } = useDocs();
+  const params = useParams<{ id?: string }>();
+  const isEditMode = !!params.id;
+  const DRAFT_KEY = isEditMode ? `admin-edit-doc-draft-${params.id}` : "admin-new-doc-draft";
+
+  const { addDoc, editDoc } = useDocs();
   const { leads } = useLeads();
   const { isAuthenticated } = useAuth();
 
@@ -394,51 +395,59 @@ export default function NewDocument() {
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
 
-  // Load draft on mount
+  // Load data on mount — edit mode loads from the saved document, new mode from draft
   useEffect(() => {
+    const loadSections = (d: Record<string, unknown>) => {
+      const s1 = (d.s1 ?? {}) as Record<string, unknown>;
+      const s2 = (d.s2 ?? {}) as Record<string, unknown>;
+      const s3 = (d.s3 ?? {}) as Record<string, unknown>;
+      const s35 = (d.s35 ?? {}) as Record<string, unknown>;
+      const s4 = (d.s4 ?? {}) as Record<string, unknown>;
+      const s5 = (d.s5 ?? {}) as Record<string, unknown>;
+      const s6 = (d.s6 ?? {}) as Record<string, unknown>;
+      const s7 = (d.s7 ?? {}) as Record<string, unknown>;
+      if (s1.docTitle)       setDocTitle(s1.docTitle as string);
+      if (s1.docDate)        setDocDate(s1.docDate as string);
+      if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
+      if (s1.selectedClient) setSelectedClient(s1.selectedClient as string);
+      if (s2.businessType)   setBusinessType(s2.businessType as string);
+      if (s2.targetAudience) setTargetAudience(s2.targetAudience as string);
+      if (s2.keyProducts)    setKeyProducts(s2.keyProducts as string[]);
+      if (s2.businessGoals)  setBusinessGoals(s2.businessGoals as string);
+      if (s2.keyChallenges)  setKeyChallenges(s2.keyChallenges as string);
+      if (s2.currentSystems) setCurrentSystems(s2.currentSystems as string);
+      if (s3.purpose)        setPurpose(s3.purpose as string);
+      if (s3.keyFeatures)    setKeyFeatures(s3.keyFeatures as string[]);
+      if (s35.detailedNotes) setDetailedNotes(s35.detailedNotes as string);
+      if (s4.integrations)   setIntegrations(s4.integrations as string[]);
+      if (s4.techStack)      setTechStack(s4.techStack as string[]);
+      if (s4.hosting)        setHosting(s4.hosting as string);
+      if (s4.security)       setSecurity(s4.security as string);
+      if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
+      if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
+      if (s6.startDate)      setStartDate(s6.startDate as string);
+      if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
+      if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
+      if (s7.postLaunch)     setPostLaunch(s7.postLaunch as string);
+      if (s7.maintenance)    setMaintenance(s7.maintenance as string);
+    };
+
     try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const d = JSON.parse(raw);
-      if (d.s1) {
-        if (d.s1.docTitle)       setDocTitle(d.s1.docTitle);
-        if (d.s1.docDate)        setDocDate(d.s1.docDate);
-        if (d.s1.preparedBy)     setPreparedBy(d.s1.preparedBy);
-        if (d.s1.selectedClient) setSelectedClient(d.s1.selectedClient);
-      }
-      if (d.s2) {
-        if (d.s2.businessType)   setBusinessType(d.s2.businessType);
-        if (d.s2.targetAudience) setTargetAudience(d.s2.targetAudience);
-        if (d.s2.keyProducts)    setKeyProducts(d.s2.keyProducts);
-        if (d.s2.businessGoals)  setBusinessGoals(d.s2.businessGoals);
-        if (d.s2.keyChallenges)  setKeyChallenges(d.s2.keyChallenges);
-        if (d.s2.currentSystems) setCurrentSystems(d.s2.currentSystems);
-      }
-      if (d.s3) {
-        if (d.s3.purpose)     setPurpose(d.s3.purpose);
-        if (d.s3.keyFeatures) setKeyFeatures(d.s3.keyFeatures);
-      }
-      if (d.s35) {
-        if (d.s35.detailedNotes) setDetailedNotes(d.s35.detailedNotes);
-      }
-      if (d.s4) {
-        if (d.s4.integrations) setIntegrations(d.s4.integrations);
-        if (d.s4.techStack)    setTechStack(d.s4.techStack);
-        if (d.s4.hosting)      setHosting(d.s4.hosting);
-        if (d.s4.security)     setSecurity(d.s4.security);
-      }
-      if (d.s5) {
-        if (d.s5.paymentStructure) setPaymentStructure(d.s5.paymentStructure);
-        if (d.s5.additionalCosts)  setAdditionalCosts(d.s5.additionalCosts);
-      }
-      if (d.s6) {
-        if (d.s6.startDate)    setStartDate(d.s6.startDate);
-        if (d.s6.deliveryDate) setDeliveryDate(d.s6.deliveryDate);
-        if (d.s6.milestones)   setMilestones(d.s6.milestones);
-      }
-      if (d.s7) {
-        if (d.s7.postLaunch)  setPostLaunch(d.s7.postLaunch);
-        if (d.s7.maintenance) setMaintenance(d.s7.maintenance);
+      if (isEditMode && params.id) {
+        // Edit mode: load from the saved document
+        const existingDoc = getDoc(params.id);
+        if (!existingDoc) { navigate("/documents"); return; }
+        setDocTitle(existingDoc.title || "");
+        const sections = (existingDoc.sections ?? {}) as Record<string, unknown>;
+        loadSections(sections);
+        // Also check for unsaved draft edits on top
+        const draftRaw = localStorage.getItem(DRAFT_KEY);
+        if (draftRaw) loadSections(JSON.parse(draftRaw));
+      } else {
+        // New mode: load from draft
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return;
+        loadSections(JSON.parse(raw));
       }
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,8 +469,19 @@ export default function NewDocument() {
     setSaveError("");
     setSaving(true);
 
-    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
-    addDoc({
+    // Always build sections from current in-memory state (reflects user's latest input)
+    const sections = {
+      s1:  { docTitle, docDate, preparedBy, selectedClient },
+      s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
+      s3:  { purpose, keyFeatures },
+      s35: { detailedNotes },
+      s4:  { integrations, techStack, hosting, security },
+      s5:  { paymentStructure, additionalCosts },
+      s6:  { startDate, deliveryDate, milestones },
+      s7:  { postLaunch, maintenance },
+    };
+
+    const docPayload = {
       title: docTitle.trim() || (selectedClient ? `${selectedClient} - Requirements` : "Untitled Document"),
       clientName: selectedClient || "",
       company: client?.company || selectedClient || "",
@@ -469,17 +489,20 @@ export default function NewDocument() {
       phone: client?.phone || "",
       industry: client?.industry || "",
       city: client?.city || "",
-      status: "Draft",
       softwareType: keyProducts[0] || purpose || "",
       budget: paymentStructure || "",
       startDate: startDate || "",
       deliveryDate: deliveryDate || "",
-      sections: raw,
-    });
+      sections,
+    };
 
-    // Clear draft after saving
+    if (isEditMode && params.id) {
+      editDoc(params.id, docPayload);
+    } else {
+      addDoc({ ...docPayload, status: "Draft" });
+    }
+
     localStorage.removeItem(DRAFT_KEY);
-
     navigate("/documents");
   };
 
@@ -531,7 +554,9 @@ export default function NewDocument() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <FileText className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">New Requirement Document</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+            {isEditMode ? "Edit Requirement Document" : "New Requirement Document"}
+          </span>
         </div>
 
         <input
@@ -554,7 +579,7 @@ export default function NewDocument() {
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:opacity-60"
           >
             <Save className="w-4 h-4" />
-            {saving ? "Saving…" : "Save Document"}
+            {saving ? "Saving…" : isEditMode ? "Update Document" : "Save Document"}
           </button>
           <button
             type="button"
@@ -964,7 +989,7 @@ export default function NewDocument() {
           className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:opacity-60"
         >
           <Save className="w-4 h-4" />
-          {saving ? "Saving…" : "Save Document"}
+          {saving ? "Saving…" : isEditMode ? "Update Document" : "Save Document"}
         </button>
         <button
           type="button"
