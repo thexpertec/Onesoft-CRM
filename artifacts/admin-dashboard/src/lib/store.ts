@@ -640,6 +640,8 @@ export type Sale = {
   paymentMethod: SalePayment;
   notes: string;
   items: SaleItem[];
+  taxRate: string;    // VAT / tax percentage, e.g. "20"
+  amountPaid: string; // amount actually received at payment
   createdAt: string;
   updatedAt: string;
 };

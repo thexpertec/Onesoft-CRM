@@ -63,6 +63,7 @@ const blankSaleItem = (): SaleItem => ({
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
   customer: "", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
+  taxRate: "0", amountPaid: "0",
 });
 
 const blankNewRow = (): Record<string, string> => ({
@@ -106,6 +107,172 @@ function ProductThumbnail({ product, size = "full" }: { product: Product; size?:
   );
 }
 
+// ─── Payment Modal ────────────────────────────────────────────────────────────
+interface PaymentModalProps {
+  saleNumber: string;
+  billedAmount: number;   // raw subtotal (qty × price, no discounts)
+  discountAmt: number;
+  afterDiscount: number;  // billedAmount – discountAmt
+  onConfirm: (amountPaid: string, taxRate: string) => void;
+  onCancel: () => void;
+}
+
+function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, onConfirm, onCancel }: PaymentModalProps) {
+  const [taxRate,    setTaxRate]    = useState("0");
+  const [payAmount,  setPayAmount]  = useState("0");
+
+  const taxPct   = Math.max(0, parseFloat(taxRate) || 0);
+  const taxAmt   = afterDiscount * taxPct / 100;
+  const total    = afterDiscount + taxAmt;
+  const paid     = parseFloat(payAmount) || 0;
+  const remaining = total - paid;
+  const overPaid  = paid > total;
+
+  const fmt = (n: number) => `£${n.toFixed(2)}`;
+
+  const presets = [
+    { label: "Exact", value: total.toFixed(2) },
+    ...([5, 10, 20, 50, 100, 200].filter(v => v >= Math.ceil(paid)).slice(0, 4).map(v => ({ label: `£${v}`, value: String(Math.min(v, total)) }))),
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+
+      {/* Card */}
+      <div className="relative w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-zinc-800">
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Payment</div>
+          <div className="text-[15px] font-bold text-gray-800 dark:text-gray-100 font-mono">{saleNumber}</div>
+        </div>
+
+        {/* Breakdown */}
+        <div className="px-6 py-5 space-y-3">
+          {/* Billed */}
+          <div className="flex justify-between items-baseline">
+            <span className="text-[13px] text-gray-500">Billed Amount</span>
+            <span className="text-[20px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
+              {fmt(billedAmount)}
+            </span>
+          </div>
+
+          {/* Discount */}
+          {discountAmt > 0 && (
+            <div className="flex justify-between items-baseline">
+              <span className="text-[13px] text-gray-500">Discount</span>
+              <span className="text-[20px] font-bold text-emerald-600 font-mono tabular-nums">
+                -{fmt(discountAmt)}
+              </span>
+            </div>
+          )}
+
+          {/* Tax */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] text-gray-500">Tax</span>
+              <div className="flex items-center border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                <input
+                  type="number" min="0" max="100" step="0.5"
+                  value={taxRate}
+                  onChange={e => setTaxRate(e.target.value)}
+                  className="w-12 text-center text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none py-1 px-1"
+                />
+                <span className="px-1.5 text-[11px] text-gray-400 bg-gray-50 dark:bg-zinc-700 border-l border-gray-200 dark:border-zinc-700 py-1 select-none">%</span>
+              </div>
+            </div>
+            <span className="text-[20px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
+              {fmt(taxAmt)}
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t-2 border-dashed border-gray-200 dark:border-zinc-700" />
+
+          {/* Total */}
+          <div className="flex justify-between items-baseline">
+            <span className="text-[14px] font-bold text-gray-700 dark:text-gray-300">Total to Pay</span>
+            <span className="text-[40px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums leading-none">
+              {fmt(total)}
+            </span>
+          </div>
+        </div>
+
+        {/* Pay Amount */}
+        <div className="px-6 pb-3">
+          <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-4 space-y-3">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Amount Received</div>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[28px] font-black text-gray-400">£</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={payAmount}
+                onChange={e => {
+                  const v = e.target.value;
+                  // allow free typing; clamp on blur
+                  setPayAmount(v);
+                }}
+                onBlur={e => {
+                  const v = parseFloat(e.target.value) || 0;
+                  setPayAmount(Math.min(v, total).toFixed(2));
+                }}
+                onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
+                className="w-full pl-12 pr-4 py-3 text-[36px] font-black text-gray-800 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-xl outline-none focus:border-blue-400 font-mono tabular-nums"
+              />
+            </div>
+
+            {/* Quick presets */}
+            <div className="flex gap-2 flex-wrap">
+              {presets.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => setPayAmount(p.value)}
+                  className="flex-1 min-w-[60px] py-1.5 text-[12px] font-bold rounded-lg bg-gray-200 dark:bg-zinc-600 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-700 text-gray-700 dark:text-gray-200 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Remaining / overpaid indicator */}
+            {remaining > 0.005 && (
+              <div className="flex justify-between items-baseline px-1">
+                <span className="text-[12px] text-orange-600 font-semibold">Remaining balance</span>
+                <span className="text-[22px] font-black text-orange-600 font-mono tabular-nums">{fmt(remaining)}</span>
+              </div>
+            )}
+            {remaining <= 0.005 && paid > 0 && (
+              <div className="flex justify-between items-baseline px-1">
+                <span className="text-[12px] text-emerald-600 font-semibold">Fully paid</span>
+                <span className="text-[22px] font-black text-emerald-600 font-mono tabular-nums">{fmt(paid)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="px-6 pb-6 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 h-12 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[14px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(payAmount, taxRate)}
+            disabled={overPaid}
+            className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
+          >
+            <Check size={16} /> Confirm Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── POS Full-Page Layout ─────────────────────────────────────────────────────
 interface POSViewProps {
   sale: Sale;
@@ -121,15 +288,17 @@ interface POSViewProps {
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
   onSetStatus: (status: SaleStatus) => void;
+  onComplete: (amountPaid: string, taxRate: string) => void;
 }
 
 function POSView({
   sale, localItems, localMeta, customerComboOpts, productComboOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
-  onDeleteItem, onAddProduct, onSetStatus,
+  onDeleteItem, onAddProduct, onSetStatus, onComplete,
 }: POSViewProps) {
-  const [prodSearch, setProdSearch] = useState("");
-  const [catFilter, setCatFilter]   = useState("All");
+  const [prodSearch,    setProdSearch]    = useState("");
+  const [catFilter,     setCatFilter]     = useState("All");
+  const [payModalOpen,  setPayModalOpen]  = useState(false);
 
   const allProducts  = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
   const allCats      = useMemo(() => {
@@ -183,6 +352,7 @@ function POSView({
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 dark:bg-zinc-950 overflow-hidden">
 
       {/* ── Top bar ──────────────────────────────────────────────────────────── */}
@@ -449,7 +619,7 @@ function POSView({
                     </div>
                   )}
                   <button
-                    onClick={() => { onSetStatus(isCredit ? "On Credit" : "Completed"); onClose(); }}
+                    onClick={() => isCredit ? (onSetStatus("On Credit"), onClose()) : setPayModalOpen(true)}
                     className={`w-full h-12 rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.99] ${
                       isCredit
                         ? "bg-orange-500 hover:bg-orange-600 shadow-orange-200 dark:shadow-none"
@@ -483,7 +653,7 @@ function POSView({
                     </span>
                   </div>
                   <button
-                    onClick={() => { onSetStatus("Completed"); onClose(); }}
+                    onClick={() => setPayModalOpen(true)}
                     className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
                   >
                     <Check size={16} /> Mark as Paid
@@ -666,6 +836,22 @@ function POSView({
         </div>
       </div>
     </div>
+
+    {/* Payment Modal */}
+    {payModalOpen && (
+      <PaymentModal
+        saleNumber={sale.saleNumber}
+        billedAmount={subTotal(localItems)}
+        discountAmt={discountAmt}
+        afterDiscount={grandTotal}
+        onConfirm={(amountPaid, taxRate) => {
+          setPayModalOpen(false);
+          onComplete(amountPaid, taxRate);
+        }}
+        onCancel={() => setPayModalOpen(false)}
+      />
+    )}
+    </>
   );
 }
 
@@ -807,6 +993,13 @@ export default function SalesPage() {
     setLocalItems([]);
   };
 
+  const handleComplete = (amountPaid: string, taxRate: string) => {
+    if (!detailId || !localMeta) return;
+    editSale(detailId, { ...localMeta, status: "Completed", items: localItems, amountPaid, taxRate });
+    toast({ title: "Sale completed!", description: `£${parseFloat(amountPaid || "0").toFixed(2)} received` });
+    closePOS();
+  };
+
   // ── List filtering ──
   const filtered = useMemo(() => {
     let rows = [...sales];
@@ -870,7 +1063,7 @@ export default function SalesPage() {
       saleDate: newRow.saleDate || new Date().toISOString().slice(0, 10),
       customer: newRow.customer, status: (newRow.status as SaleStatus) || "Draft",
       paymentMethod: (newRow.paymentMethod as SalePayment) || "Cash",
-      notes: newRow.notes, items: [],
+      notes: newRow.notes, items: [], taxRate: "0", amountPaid: "0",
     });
     toast({ title: "Sale created", description: `${sale.saleNumber} saved` });
     setNewRow(null); setNewRowActive(null);
@@ -908,6 +1101,7 @@ export default function SalesPage() {
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
         onSetStatus={setStatus}
+        onComplete={handleComplete}
       />
     );
   }
