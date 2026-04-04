@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useLeads, useDocs, useCustomers } from "@/hooks/use-data";
+import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getAdminUsers } from "@/lib/store";
-import { CURRENCIES } from "@/lib/currencies";
+import { getAdminUsers, getSettings } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -16,189 +14,280 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { format, isToday, isYesterday, formatDistanceToNow } from "date-fns";
+import { format, isToday, isYesterday, formatDistanceToNow, startOfWeek, startOfMonth, subDays, isSameDay } from "date-fns";
 import {
   Users, FileText, TrendingUp, PoundSterling, Plus, ArrowRight,
-  Target, CheckCircle2, Clock, Building2, MapPin, Layers, UserPlus, UserCheck,
+  Target, CheckCircle2, Building2, MapPin, Layers, UserPlus, UserCheck,
+  ShoppingCart, Package, Boxes, Receipt, AlertTriangle, Users2,
+  ArrowUpRight, ArrowDownRight, Truck, BarChart3, CreditCard,
+  Banknote, Wifi, WifiOff, Tag, Shield, Settings,
 } from "lucide-react";
+import { CURRENCIES } from "@/lib/currencies";
 
-const quickCustomerSchema = z.object({
-  name:    z.string().min(2, "Name is required"),
-  company: z.string().min(1, "Company is required"),
-  email:   z.union([z.string().email("Invalid email"), z.literal("")]),
-  phone:   z.string().optional(),
-  status:  z.enum(["Active", "Inactive", "Churned"]),
-  currency: z.string(),
-  totalValue: z.string().optional(),
-  notes:   z.string().optional(),
-});
-type QuickCustomerValues = z.infer<typeof quickCustomerSchema>;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function formatGBP(n: number) {
+// ─── Types & helpers ──────────────────────────────────────────────────────────
+function fmtCurrency(n: number, sym = "£") {
+  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${sym}${(n / 1_000).toFixed(1)}k`;
+  return `${sym}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function fmtGBP(n: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
 }
-
 function relativeDate(iso: string) {
   const d = new Date(iso);
-  if (isToday(d)) return formatDistanceToNow(d, { addSuffix: true });
+  if (isToday(d))     return formatDistanceToNow(d, { addSuffix: true });
   if (isYesterday(d)) return "Yesterday";
   return format(d, "d MMM yyyy");
 }
-
-// Lead status colours
-const LEAD_STATUS_META: Record<string, { bg: string; text: string; label: string }> = {
-  New:             { bg: "bg-blue-500",   text: "text-blue-600 dark:text-blue-400",   label: "New" },
-  Contacted:       { bg: "bg-amber-400",  text: "text-amber-600 dark:text-amber-400", label: "Contacted" },
-  Qualified:       { bg: "bg-cyan-500",   text: "text-cyan-600 dark:text-cyan-400",   label: "Qualified" },
-  "Proposal Sent": { bg: "bg-violet-500", text: "text-violet-600 dark:text-violet-400", label: "Proposal Sent" },
-  Won:             { bg: "bg-emerald-500",text: "text-emerald-600 dark:text-emerald-400", label: "Won" },
-  Lost:            { bg: "bg-red-400",    text: "text-red-600 dark:text-red-400",     label: "Lost" },
-};
-
-const DOC_STATUS_META: Record<string, { color: string; label: string; badge: string }> = {
-  Draft:          { color: "#94a3b8", label: "Draft",        badge: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
-  "Under Review": { color: "#f59e0b", label: "Under Review", badge: "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300" },
-  Approved:       { color: "#10b981", label: "Approved",     badge: "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" },
-  Archived:       { color: "#cbd5e1", label: "Archived",     badge: "bg-slate-100 dark:bg-slate-800 text-slate-400" },
-};
-
-const LEAD_STATUS_ORDER = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"] as const;
-
-// ─── Mini SVG Donut ──────────────────────────────────────────────────────────
-function DonutChart({ segments }: { segments: { color: string; value: number }[] }) {
-  const total = segments.reduce((s, x) => s + x.value, 0);
-  if (total === 0) {
-    return (
-      <svg viewBox="0 0 36 36" className="w-full h-full">
-        <circle cx="18" cy="18" r="13" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/30" />
-      </svg>
-    );
-  }
-  const r = 13;
-  const circ = 2 * Math.PI * r;
-  let offset = 0;
-  return (
-    <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-      {segments.map((s, i) => {
-        const pct = s.value / total;
-        const dash = pct * circ;
-        const gap  = circ - dash;
-        const el = (
-          <circle
-            key={i}
-            cx="18" cy="18" r={r}
-            fill="none"
-            stroke={s.color}
-            strokeWidth="5"
-            strokeDasharray={`${dash} ${gap}`}
-            strokeDashoffset={-offset}
-          />
-        );
-        offset += dash;
-        return el;
-      })}
-    </svg>
-  );
+function saleItemTotal(items: { qty: string; unitPrice: string; discount: string }[]) {
+  return items.reduce((s, it) => {
+    const qty = parseFloat(it.qty) || 0;
+    const price = parseFloat(it.unitPrice) || 0;
+    const disc  = parseFloat(it.discount) || 0;
+    return s + qty * price * (1 - disc / 100);
+  }, 0);
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// ─── Lead status meta ─────────────────────────────────────────────────────────
+const LEAD_STATUS_META: Record<string, { bg: string; dot: string }> = {
+  New:             { bg: "bg-blue-500",    dot: "bg-blue-500"    },
+  Contacted:       { bg: "bg-amber-400",   dot: "bg-amber-400"   },
+  Qualified:       { bg: "bg-cyan-500",    dot: "bg-cyan-500"    },
+  "Proposal Sent": { bg: "bg-violet-500",  dot: "bg-violet-500"  },
+  Won:             { bg: "bg-emerald-500", dot: "bg-emerald-500" },
+  Lost:            { bg: "bg-red-400",     dot: "bg-red-400"     },
+};
+const LEAD_STATUS_ORDER = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"] as const;
+
+const LEAD_BADGE: Record<string, string> = {
+  New:             "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300",
+  Contacted:       "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
+  Qualified:       "bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300",
+  "Proposal Sent": "bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300",
+  Won:             "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
+  Lost:            "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300",
+};
+
+// ─── Quick-add customer schema ────────────────────────────────────────────────
+const quickCustomerSchema = z.object({
+  name:       z.string().min(2, "Name is required"),
+  company:    z.string().min(1, "Company is required"),
+  email:      z.union([z.string().email("Invalid email"), z.literal("")]),
+  phone:      z.string().optional(),
+  status:     z.enum(["Active", "Inactive", "Churned"]),
+  currency:   z.string(),
+  totalValue: z.string().optional(),
+  notes:      z.string().optional(),
+});
+type QuickCustomerValues = z.infer<typeof quickCustomerSchema>;
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+// Gradient KPI card
 function KpiCard({
-  icon: Icon, label, value, sub, accent, testId,
-}: { icon: React.ElementType; label: string; value: string | number; sub?: React.ReactNode; accent: string; testId?: string }) {
+  icon: Icon, label, value, sub, sub2, gradient, iconBg, delta, testId,
+}: {
+  icon: React.ElementType; label: string; value: string | number;
+  sub?: React.ReactNode; sub2?: string;
+  gradient: string; iconBg: string; delta?: { val: number; label: string };
+  testId?: string;
+}) {
   return (
-    <Card className={`relative overflow-hidden border-l-4 ${accent}`}>
+    <Card className={`relative overflow-hidden border-0 shadow-sm ${gradient}`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-            <p className="text-3xl font-bold mt-1.5 text-foreground" data-testid={testId}>{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">{label}</p>
+            <p className="text-[28px] font-bold mt-1 text-white leading-none" data-testid={testId}>{value}</p>
+            {sub  && <p className="text-[11px] text-white/70 mt-1.5">{sub}</p>}
+            {sub2 && <p className="text-[11px] text-white/60 mt-0.5">{sub2}</p>}
           </div>
-          <div className="rounded-xl p-2.5 bg-muted/50 flex-shrink-0">
-            <Icon className="h-5 w-5 text-muted-foreground" />
+          <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}>
+            <Icon className="h-5 w-5 text-white" />
           </div>
         </div>
+        {delta !== undefined && (
+          <div className="mt-3 flex items-center gap-1">
+            {delta.val >= 0
+              ? <ArrowUpRight size={13} className="text-white/80" />
+              : <ArrowDownRight size={13} className="text-white/80" />}
+            <span className="text-[11px] text-white/80">{Math.abs(delta.val)}% {delta.label}</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-// ─── Lead status badge ────────────────────────────────────────────────────────
-function LeadBadge({ status }: { status: string }) {
-  const m = LEAD_STATUS_META[status];
-  const cls = {
-    New:             "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300",
-    Contacted:       "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
-    Qualified:       "bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300",
-    "Proposal Sent": "bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300",
-    Won:             "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
-    Lost:            "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300",
-  }[status] || "bg-muted text-muted-foreground";
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{m?.label ?? status}</span>;
+// Mini sparkline bar chart — last 7 days
+function MiniBarChart({ data }: { data: number[] }) {
+  const max = Math.max(...data, 1);
+  return (
+    <div className="flex items-end gap-[3px] h-14">
+      {data.map((v, i) => (
+        <div key={i} className="flex-1 flex flex-col justify-end">
+          <div
+            className={`rounded-t ${i === data.length - 1 ? "bg-blue-500" : "bg-blue-200 dark:bg-blue-800"}`}
+            style={{ height: `${Math.max(4, (v / max) * 100)}%` }}
+            title={`£${v.toFixed(0)}`}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// Horizontal bar stat
+function HBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="font-medium truncate">{label}</span>
+        <span className="text-muted-foreground ml-2 tabular-nums">{count} · {pct}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Quick-access module tile
+function QuickTile({
+  href, icon: Icon, label, count, sub, color, testId,
+}: {
+  href: string; icon: React.ElementType; label: string;
+  count: number | string; sub?: string; color: string; testId?: string;
+}) {
+  return (
+    <Link href={href}>
+      <div
+        data-testid={testId}
+        className="group flex flex-col gap-2 p-4 rounded-xl border border-gray-100 dark:border-border bg-white dark:bg-card hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-md transition-all cursor-pointer"
+      >
+        <div className={`w-9 h-9 rounded-lg ${color} flex items-center justify-center`}>
+          <Icon size={17} className="text-white" />
+        </div>
+        <div>
+          <p className="text-[22px] font-bold text-gray-800 dark:text-foreground leading-none tabular-nums">{count}</p>
+          <p className="text-[12px] font-medium text-gray-600 dark:text-gray-400 mt-0.5">{label}</p>
+          {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+        </div>
+        <ArrowRight size={13} className="text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors self-end mt-auto" />
+      </div>
+    </Link>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { leads } = useLeads();
-  const { docs }  = useDocs();
-  const { addCustomer } = useCustomers();
+  const { leads }             = useLeads();
+  const { docs }              = useDocs();
+  const { customers }         = useCustomers();
+  const { sales }             = useSales();
+  const { stock }             = useStock();
+  const { staff }             = useStaff();
+  const { products }          = useProducts();
+  const { purchaseOrders }    = usePurchaseOrders();
+  const { addCustomer }       = useCustomers();
   const { currentUser, isAuthenticated } = useAuth();
-  const { toast } = useToast();
+  const { toast }             = useToast();
 
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
 
+  const settings = useMemo(() => getSettings(), []);
+
   const quickCustomerForm = useForm<QuickCustomerValues>({
     resolver: zodResolver(quickCustomerSchema),
-    defaultValues: {
-      name: "", company: "", email: "", phone: "",
-      status: "Active", currency: "GBP", totalValue: "", notes: "",
-    },
+    defaultValues: { name: "", company: "", email: "", phone: "", status: "Active", currency: "GBP", totalValue: "", notes: "" },
   });
 
   const handleQuickAddCustomer = (data: QuickCustomerValues) => {
     addCustomer({
-      name:          data.name,
-      company:       data.company,
-      email:         data.email ?? "",
-      phone:         data.phone ?? "",
-      industry:      "",
-      city:          "",
-      status:        data.status,
-      source:        "direct",
+      name: data.name, company: data.company, email: data.email ?? "", phone: data.phone ?? "",
+      industry: "", city: "", status: data.status, source: "direct",
       customerSince: new Date().toISOString().split("T")[0],
-      totalValue:    data.totalValue ?? "",
-      currency:      data.currency,
-      notes:         data.notes ?? "",
-      tags:          [],
+      totalValue: data.totalValue ?? "", currency: data.currency,
+      notes: data.notes ?? "", tags: [],
     });
-    toast({ title: "Customer added", description: `${data.name} has been added as a customer.` });
+    toast({ title: "Customer added", description: `${data.name} has been added.` });
     quickCustomerForm.reset();
     setAddCustomerOpen(false);
   };
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  const totalLeads    = leads.length;
-  const wonLeads      = leads.filter(l => l.status === "Won").length;
-  const lostLeads     = leads.filter(l => l.status === "Lost").length;
-  const activeLeads   = leads.filter(l => !["Won","Lost"].includes(l.status)).length;
-  const winRate       = totalLeads ? Math.round((wonLeads / totalLeads) * 100) : 0;
-  const totalDocs     = docs.length;
-  const approvedDocs  = docs.filter(d => d.status === "Approved").length;
-  const pendingDocs   = docs.filter(d => d.status === "Under Review").length;
+  // ── Date boundaries ────────────────────────────────────────────────────────
+  const now        = new Date();
+  const todayStr   = format(now, "yyyy-MM-dd");
+  const weekStart  = startOfWeek(now, { weekStartsOn: 1 });
+  const monthStart = startOfMonth(now);
 
-  const pipelineValue = useMemo(() => docs.reduce((acc, doc) => {
-    const sections = (doc.sections ?? {}) as Record<string, Record<string, unknown>>;
-    const s5 = (sections.s5 ?? {}) as Record<string, unknown>;
-    const additionalCosts = s5.additionalCosts as string | undefined;
-    if (additionalCosts) {
-      const val = parseFloat(additionalCosts.replace(/[^0-9.]/g, ""));
-      if (!isNaN(val)) return acc + val;
-    }
-    return acc;
-  }, 0), [docs]);
+  // ── Sales analytics ────────────────────────────────────────────────────────
+  const completedSales = useMemo(() =>
+    sales.filter(s => s.status === "Completed" || s.status === "On Credit"),
+  [sales]);
 
-  // ── Lead pipeline breakdown ────────────────────────────────────────────────
+  const totalRevenue = useMemo(() =>
+    completedSales.reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0),
+  [completedSales]);
+
+  const todayRevenue = useMemo(() =>
+    completedSales
+      .filter(s => s.saleDate === todayStr)
+      .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0),
+  [completedSales, todayStr]);
+
+  const weekRevenue = useMemo(() =>
+    completedSales
+      .filter(s => new Date(s.saleDate) >= weekStart)
+      .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0),
+  [completedSales, weekStart]);
+
+  const monthRevenue = useMemo(() =>
+    completedSales
+      .filter(s => new Date(s.saleDate) >= monthStart)
+      .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0),
+  [completedSales, monthStart]);
+
+  // Last 7 days sparkline
+  const last7 = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = subDays(now, 6 - i);
+      const ds = format(d, "yyyy-MM-dd");
+      return completedSales
+        .filter(s => s.saleDate === ds)
+        .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0);
+    });
+  }, [completedSales]);
+
+  const last7Labels = useMemo(() =>
+    Array.from({ length: 7 }, (_, i) => format(subDays(now, 6 - i), "EEE")),
+  []);
+
+  // Sales by payment method
+  const paymentMethodBreakdown = useMemo(() => {
+    const map: Record<string, number> = {};
+    completedSales.forEach(s => {
+      const m = s.paymentMethod || "Other";
+      map[m] = (map[m] || 0) + 1;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [completedSales]);
+
+  // Sales status breakdown (all)
+  const salesStatusMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    sales.forEach(s => { m[s.status] = (m[s.status] || 0) + 1; });
+    return m;
+  }, [sales]);
+
+  // ── Lead analytics ─────────────────────────────────────────────────────────
+  const totalLeads  = leads.length;
+  const wonLeads    = leads.filter(l => l.status === "Won").length;
+  const lostLeads   = leads.filter(l => l.status === "Lost").length;
+  const activeLeads = leads.filter(l => !["Won", "Lost"].includes(l.status)).length;
+  const winRate     = totalLeads ? Math.round((wonLeads / totalLeads) * 100) : 0;
+
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
     LEAD_STATUS_ORDER.forEach(s => { map[s] = 0; });
@@ -206,137 +295,303 @@ export default function Dashboard() {
     return map;
   }, [leads]);
 
-  // ── Lead source breakdown ──────────────────────────────────────────────────
   const sourceCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    leads.forEach(l => {
-      const s = l.source || "Unknown";
-      map[s] = (map[s] || 0) + 1;
-    });
+    leads.forEach(l => { const s = l.source || "Unknown"; map[s] = (map[s] || 0) + 1; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [leads]);
 
-  // ── Industry breakdown ─────────────────────────────────────────────────────
-  const industryCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    leads.forEach(l => {
-      const s = l.industry || "Other";
-      map[s] = (map[s] || 0) + 1;
-    });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [leads]);
+  // ── Stock analytics ────────────────────────────────────────────────────────
+  const forSaleStock    = stock.filter(s => s.stockType === "For Sale");
+  const lowStockItems   = forSaleStock.filter(s => {
+    const qty = parseFloat(s.quantity) || 0;
+    const min = parseFloat(s.minLevel) || 0;
+    return min > 0 && qty <= min;
+  });
+  const outOfStock      = forSaleStock.filter(s => (parseFloat(s.quantity) || 0) === 0);
 
-  // ── Doc status for donut ───────────────────────────────────────────────────
-  const docStatusCounts = useMemo(() => {
-    const map: Record<string, number> = { Draft: 0, "Under Review": 0, Approved: 0, Archived: 0 };
-    docs.forEach(d => { if (map[d.status] !== undefined) map[d.status]++; });
-    return map;
-  }, [docs]);
+  // ── Purchases analytics ────────────────────────────────────────────────────
+  const pendingPOs   = purchaseOrders.filter(p => ["Draft", "Sent", "Confirmed"].includes(p.status));
+  const receivedPOs  = purchaseOrders.filter(p => p.status === "Received");
 
-  const donutSegments = Object.entries(docStatusCounts).map(([k, v]) => ({
-    color: DOC_STATUS_META[k]?.color ?? "#ccc",
-    value: v,
-  }));
+  // ── Customers analytics ────────────────────────────────────────────────────
+  const activeCustomers = customers.filter(c => c.status === "Active").length;
 
-  // ── Recent ─────────────────────────────────────────────────────────────────
+  // ── Docs analytics ─────────────────────────────────────────────────────────
+  const totalDocs    = docs.length;
+  const approvedDocs = docs.filter(d => d.status === "Approved").length;
+  const pendingDocs  = docs.filter(d => d.status === "Under Review").length;
+
+  // ── Admin users ────────────────────────────────────────────────────────────
+  const adminUsers = useMemo(() => getAdminUsers(), []);
+
+  // ── Recents ────────────────────────────────────────────────────────────────
+  const recentSales = useMemo(() =>
+    [...sales].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6),
+  [sales]);
+
   const recentLeads = useMemo(() =>
-    [...leads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
-  , [leads]);
+    [...leads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
+  [leads]);
 
-  const recentDocs = useMemo(() =>
-    [...docs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
-  , [docs]);
+  const recentCustomers = useMemo(() =>
+    [...customers].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4),
+  [customers]);
 
-  // ── Greeting ──────────────────────────────────────────────────────────────
+  const recentPOs = useMemo(() =>
+    [...purchaseOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4),
+  [purchaseOrders]);
+
+  // ── Greeting ───────────────────────────────────────────────────────────────
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const displayName = currentUser?.fullName?.split(" ")[0] || currentUser?.username || "there";
 
-  const adminUsers = useMemo(() => getAdminUsers(), []);
+  const SALE_STATUS_COLOR: Record<string, string> = {
+    Completed:  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+    "On Credit":"bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
+    Draft:      "bg-gray-100 dark:bg-gray-800 text-gray-500",
+    Refunded:   "bg-red-100 dark:bg-red-900/40 text-red-600",
+    Cancelled:  "bg-red-50 dark:bg-red-900/20 text-red-400",
+  };
+
+  const PO_STATUS_COLOR: Record<string, string> = {
+    Draft:      "bg-gray-100 dark:bg-gray-800 text-gray-500",
+    Sent:       "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+    Confirmed:  "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+    Received:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+    Cancelled:  "bg-red-100 dark:bg-red-900/40 text-red-600",
+  };
 
   return (
-    <div className="space-y-7 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-      {/* ── Welcome header ──────────────────────────────────────────────────── */}
+      {/* ══ Greeting + Quick Actions ══════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {isAuthenticated ? `${greeting}, ${displayName} 👋` : "Onesoft Dashboard"}
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {format(new Date(), "EEEE, d MMMM yyyy")} &middot; Here's your business overview.
+            {format(now, "EEEE, d MMMM yyyy")} &middot; Here's your business overview
           </p>
         </div>
         {isAuthenticated && (
           <div className="flex gap-2 flex-wrap">
+            <Link href="/sales/new">
+              <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"><Receipt size={14} /> New Sale</Button>
+            </Link>
             <Link href="/leads">
               <Button size="sm" variant="outline" className="gap-1.5"><UserPlus size={14} /> Add Lead</Button>
             </Link>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => setAddCustomerOpen(true)}
-              data-testid="btn-quick-add-customer"
-            >
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddCustomerOpen(true)} data-testid="btn-quick-add-customer">
               <UserCheck size={14} /> Add Customer
             </Button>
-            <Link href="/documents/new">
-              <Button size="sm" className="gap-1.5"><Plus size={14} /> New Document</Button>
+            <Link href="/purchases">
+              <Button size="sm" variant="outline" className="gap-1.5"><ShoppingCart size={14} /> Purchase Order</Button>
             </Link>
           </div>
         )}
       </div>
 
-      {/* ── KPI cards ───────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ══ KPI Cards ═════════════════════════════════════════════════════════ */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          icon={PoundSterling}
+          label="Total Revenue"
+          value={fmtCurrency(totalRevenue)}
+          sub={`This month: ${fmtCurrency(monthRevenue)}`}
+          sub2={`Today: ${fmtCurrency(todayRevenue)}`}
+          gradient="bg-gradient-to-br from-blue-600 to-blue-500"
+          iconBg="bg-blue-400/40"
+          testId="stat-revenue"
+        />
+        <KpiCard
+          icon={Receipt}
+          label="Sales This Week"
+          value={fmtCurrency(weekRevenue)}
+          sub={`${completedSales.length} completed sale${completedSales.length !== 1 ? "s" : ""}`}
+          sub2={`${salesStatusMap["On Credit"] || 0} on credit`}
+          gradient="bg-gradient-to-br from-emerald-600 to-emerald-500"
+          iconBg="bg-emerald-400/40"
+          testId="stat-week-revenue"
+        />
         <KpiCard
           icon={Users}
-          label="Total Leads"
+          label="Leads"
           value={totalLeads}
-          sub={totalLeads > 0 ? <>{activeLeads} active · {lostLeads} lost</> : "No leads yet"}
-          accent="border-l-blue-500"
+          sub={`${activeLeads} active · ${wonLeads} won`}
+          sub2={`Win rate: ${winRate}%`}
+          gradient="bg-gradient-to-br from-violet-600 to-violet-500"
+          iconBg="bg-violet-400/40"
           testId="stat-total-leads"
         />
         <KpiCard
-          icon={CheckCircle2}
-          label="Deals Won"
-          value={wonLeads}
-          sub={<>Win rate: <strong>{winRate}%</strong></>}
-          accent="border-l-emerald-500"
-          testId="stat-conversion-rate"
+          icon={UserCheck}
+          label="Customers"
+          value={customers.length}
+          sub={`${activeCustomers} active`}
+          gradient="bg-gradient-to-br from-cyan-600 to-cyan-500"
+          iconBg="bg-cyan-400/40"
+          testId="stat-customers"
         />
         <KpiCard
-          icon={FileText}
-          label="Req. Documents"
-          value={totalDocs}
-          sub={totalDocs > 0 ? <>{approvedDocs} approved · {pendingDocs} under review</> : "No documents yet"}
-          accent="border-l-violet-500"
-          testId="stat-total-docs"
+          icon={AlertTriangle}
+          label="Low Stock"
+          value={lowStockItems.length}
+          sub={`${outOfStock.length} out of stock`}
+          sub2={`${forSaleStock.length} total SKUs`}
+          gradient={lowStockItems.length > 0 ? "bg-gradient-to-br from-amber-500 to-orange-500" : "bg-gradient-to-br from-gray-500 to-gray-400"}
+          iconBg="bg-white/20"
+          testId="stat-low-stock"
         />
         <KpiCard
-          icon={PoundSterling}
-          label="Est. Pipeline"
-          value={formatGBP(pipelineValue)}
-          sub="Based on document budgets"
-          accent="border-l-amber-500"
-          testId="stat-pipeline-value"
+          icon={ShoppingCart}
+          label="Pending Orders"
+          value={pendingPOs.length}
+          sub={`${receivedPOs.length} received`}
+          sub2={`${purchaseOrders.length} total POs`}
+          gradient="bg-gradient-to-br from-rose-600 to-rose-500"
+          iconBg="bg-rose-400/40"
+          testId="stat-pending-pos"
+        />
+        <KpiCard
+          icon={Package}
+          label="Products"
+          value={products.length}
+          sub={`${stock.length} stock items`}
+          gradient="bg-gradient-to-br from-indigo-600 to-indigo-500"
+          iconBg="bg-indigo-400/40"
+          testId="stat-products"
+        />
+        <KpiCard
+          icon={Users2}
+          label="Staff"
+          value={staff.length}
+          sub={`${staff.filter(s => s.status === "Active").length} active`}
+          sub2={`${adminUsers.length} admin accounts`}
+          gradient="bg-gradient-to-br from-teal-600 to-teal-500"
+          iconBg="bg-teal-400/40"
+          testId="stat-staff"
         />
       </div>
 
-      {/* ── Pipeline + Doc status + Team ────────────────────────────────────── */}
+      {/* ══ Revenue Chart + Sales Breakdown ══════════════════════════════════ */}
       <div className="grid gap-4 lg:grid-cols-3">
 
-        {/* Lead Pipeline */}
+        {/* Sparkline chart */}
         <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <BarChart3 size={16} className="text-muted-foreground" /> Revenue — Last 7 Days
+              </CardTitle>
+              <Link href="/sales">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  All sales <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {completedSales.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-24 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No sales data yet. <Link href="/sales/new"><span className="text-primary underline ml-1 cursor-pointer">Create a sale</span></Link>
+              </div>
+            ) : (
+              <>
+                <MiniBarChart data={last7} />
+                <div className="flex justify-between mt-1">
+                  {last7Labels.map((l, i) => (
+                    <span key={i} className="text-[10px] text-muted-foreground flex-1 text-center">{l}</span>
+                  ))}
+                </div>
+                {/* Revenue summary row */}
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Today",      value: todayRevenue  },
+                    { label: "This Week",  value: weekRevenue   },
+                    { label: "This Month", value: monthRevenue  },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 dark:bg-muted/30 rounded-lg p-3 text-center">
+                      <p className="text-[11px] text-muted-foreground">{label}</p>
+                      <p className="text-[15px] font-bold text-gray-800 dark:text-foreground tabular-nums">
+                        {fmtCurrency(value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sales breakdown */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+              <CreditCard size={16} className="text-muted-foreground" /> Sales Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* By status */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">By Status</p>
+              <div className="space-y-2">
+                {["Completed", "On Credit", "Draft", "Refunded", "Cancelled"].map(st => (
+                  (salesStatusMap[st] ?? 0) > 0 && (
+                    <div key={st} className="flex items-center justify-between">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${SALE_STATUS_COLOR[st] || "bg-muted text-muted-foreground"}`}>{st}</span>
+                      <span className="text-[12px] font-semibold tabular-nums">{salesStatusMap[st] || 0}</span>
+                    </div>
+                  )
+                ))}
+                {sales.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No sales yet</p>}
+              </div>
+            </div>
+            {/* By payment method */}
+            {paymentMethodBreakdown.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">By Payment</p>
+                <div className="space-y-2">
+                  {paymentMethodBreakdown.map(([m, cnt]) => (
+                    <HBar key={m} label={m} count={cnt} total={completedSales.length} color="bg-blue-500" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ══ Quick Access Tiles ════════════════════════════════════════════════ */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">Quick Access</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <QuickTile href="/leads"     icon={Users}        label="Leads"     count={leads.length}          sub={`${activeLeads} active`}  color="bg-blue-500"    testId="tile-leads" />
+          <QuickTile href="/customers" icon={UserCheck}    label="Customers" count={customers.length}      sub={`${activeCustomers} active`} color="bg-cyan-500" testId="tile-customers" />
+          <QuickTile href="/products"  icon={Package}      label="Products"  count={products.length}       color="bg-indigo-500" />
+          <QuickTile href="/stock"     icon={Boxes}        label="Stock"     count={stock.length}          sub={lowStockItems.length > 0 ? `${lowStockItems.length} low` : undefined} color={lowStockItems.length > 0 ? "bg-amber-500" : "bg-slate-500"} />
+          <QuickTile href="/purchases" icon={ShoppingCart} label="Purchases" count={purchaseOrders.length} sub={`${pendingPOs.length} pending`} color="bg-rose-500" />
+          <QuickTile href="/sales"     icon={Receipt}      label="Sales"     count={sales.length}          sub={`${completedSales.length} completed`} color="bg-emerald-500" testId="tile-sales" />
+          <QuickTile href="/staff"     icon={Users2}       label="Staff"     count={staff.length}          color="bg-teal-500" />
+          <QuickTile href="/documents" icon={FileText}     label="Docs"      count={docs.length}           sub={`${pendingDocs} pending`} color="bg-violet-500" />
+        </div>
+      </div>
+
+      {/* ══ Pipeline + Purchases ══════════════════════════════════════════════ */}
+      <div className="grid gap-4 lg:grid-cols-2">
+
+        {/* Lead pipeline */}
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
                 <Layers size={16} className="text-muted-foreground" /> Lead Pipeline
               </CardTitle>
               <Link href="/leads">
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  View all <ArrowRight size={12} />
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  All leads <ArrowRight size={12} />
                 </Button>
               </Link>
             </div>
@@ -348,179 +603,156 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                {/* Stacked bar */}
-                <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+                <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
                   {LEAD_STATUS_ORDER.map(s => {
-                    const count = statusCounts[s] || 0;
-                    const pct = totalLeads ? (count / totalLeads) * 100 : 0;
+                    const pct = totalLeads ? (statusCounts[s] / totalLeads) * 100 : 0;
                     if (pct === 0) return null;
-                    return (
-                      <div
-                        key={s}
-                        className={`${LEAD_STATUS_META[s].bg} transition-all`}
-                        style={{ width: `${pct}%` }}
-                        title={`${s}: ${count}`}
-                      />
-                    );
+                    return <div key={s} className={`${LEAD_STATUS_META[s].bg} transition-all`} style={{ width: `${pct}%` }} title={`${s}: ${statusCounts[s]}`} />;
                   })}
                 </div>
-                {/* Legend */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {LEAD_STATUS_ORDER.map(s => {
                     const count = statusCounts[s] || 0;
-                    const pct = totalLeads ? Math.round((count / totalLeads) * 100) : 0;
+                    const pct   = totalLeads ? Math.round((count / totalLeads) * 100) : 0;
                     return (
-                      <div key={s} className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${LEAD_STATUS_META[s].bg}`} />
+                      <div key={s} className="flex items-center gap-2 bg-gray-50 dark:bg-muted/20 rounded-lg px-2.5 py-2">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${LEAD_STATUS_META[s].dot}`} />
                         <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">{s}</p>
-                          <p className="text-[11px] text-muted-foreground">{count} · {pct}%</p>
+                          <p className="text-[11px] font-medium truncate leading-tight">{s}</p>
+                          <p className="text-[11px] text-muted-foreground tabular-nums">{count} · {pct}%</p>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                {/* Lead source */}
+                {sourceCounts.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">By Source</p>
+                    <div className="space-y-2">
+                      {sourceCounts.map(([src, cnt]) => (
+                        <HBar key={src} label={src} count={cnt} total={totalLeads} color="bg-blue-500" />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </CardContent>
         </Card>
 
-        {/* Document Status */}
+        {/* Recent Purchase Orders */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Target size={16} className="text-muted-foreground" /> Documents
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <Truck size={16} className="text-muted-foreground" /> Purchase Orders
               </CardTitle>
-              <Link href="/documents">
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  View all <ArrowRight size={12} />
+              <Link href="/purchases">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  All POs <ArrowRight size={12} />
                 </Button>
               </Link>
             </div>
           </CardHeader>
-          <CardContent>
-            {totalDocs === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm border border-dashed rounded-lg">
-                No documents yet.
+          <CardContent className="p-0">
+            {purchaseOrders.length === 0 ? (
+              <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
+                No purchase orders yet. <Link href="/purchases"><span className="text-primary underline cursor-pointer">Create one</span></Link>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
-                <div className="w-20 h-20 flex-shrink-0">
-                  <DonutChart segments={donutSegments} />
-                </div>
-                <div className="space-y-2 flex-1 min-w-0">
-                  {Object.entries(docStatusCounts).filter(([, v]) => v > 0).map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: DOC_STATUS_META[k]?.color }} />
-                        <span className="text-xs truncate">{DOC_STATUS_META[k]?.label ?? k}</span>
+              <>
+                <ul className="divide-y divide-border">
+                  {recentPOs.map(po => (
+                    <li key={po.id} className="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center flex-shrink-0">
+                        <ShoppingCart size={13} className="text-rose-600 dark:text-rose-400" />
                       </div>
-                      <span className="text-xs font-semibold tabular-nums">{v}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold truncate font-mono">{po.poNumber}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{po.supplier || "No supplier"}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${PO_STATUS_COLOR[po.status] || "bg-muted text-muted-foreground"}`}>{po.status}</span>
+                        <span className="text-[10px] text-muted-foreground">{relativeDate(po.createdAt)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {/* PO status summary */}
+                <div className="px-6 py-3 border-t border-border bg-gray-50/50 dark:bg-muted/10 grid grid-cols-4 gap-2">
+                  {["Draft","Sent","Confirmed","Received"].map(st => (
+                    <div key={st} className="text-center">
+                      <p className="text-[15px] font-bold text-gray-800 dark:text-foreground tabular-nums">
+                        {purchaseOrders.filter(p => p.status === st).length}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{st}</p>
                     </div>
                   ))}
                 </div>
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Insights row ────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* ══ Activity Feeds ════════════════════════════════════════════════════ */}
+      <div className="grid gap-4 lg:grid-cols-3">
 
-        {/* Lead Source breakdown */}
+        {/* Recent Sales */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <TrendingUp size={16} className="text-muted-foreground" /> Leads by Source
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <Receipt size={15} className="text-muted-foreground" /> Recent Sales
+              </CardTitle>
+              <Link href="/sales">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  View all <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {sourceCounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
-            ) : sourceCounts.map(([src, cnt]) => {
-              const pct = totalLeads ? Math.round((cnt / totalLeads) * 100) : 0;
-              return (
-                <div key={src} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-medium truncate">{src}</span>
-                    <span className="text-muted-foreground ml-2">{cnt} ({pct}%)</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Industry breakdown */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Building2 size={16} className="text-muted-foreground" /> Leads by Industry
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {industryCounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
-            ) : industryCounts.map(([ind, cnt]) => {
-              const pct = totalLeads ? Math.round((cnt / totalLeads) * 100) : 0;
-              return (
-                <div key={ind} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-medium truncate">{ind}</span>
-                    <span className="text-muted-foreground ml-2">{cnt} ({pct}%)</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Team / Sys info */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Clock size={16} className="text-muted-foreground" /> System Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { label: "Admin Users", value: adminUsers.length, icon: Users },
-              { label: "Total Leads", value: totalLeads, icon: TrendingUp },
-              { label: "Documents", value: totalDocs, icon: FileText },
-              { label: "Win Rate", value: `${winRate}%`, icon: Target },
-              { label: "Pipeline", value: formatGBP(pipelineValue), icon: PoundSterling },
-            ].map(({ label, value, icon: Icon }) => (
-              <div key={label} className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Icon size={13} />
-                  <span>{label}</span>
-                </div>
-                <span className="text-sm font-semibold">{value}</span>
+          <CardContent className="p-0">
+            {recentSales.length === 0 ? (
+              <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
+                No sales yet. <Link href="/sales/new"><span className="text-primary underline cursor-pointer">Open POS</span></Link>
               </div>
-            ))}
+            ) : (
+              <ul className="divide-y divide-border">
+                {recentSales.map(sale => {
+                  const total = saleItemTotal(sale.items as { qty: string; unitPrice: string; discount: string }[]);
+                  return (
+                    <li key={sale.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                      <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                        <Receipt size={12} className="text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold truncate font-mono">{sale.saleNumber}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{sale.customer || "Walk-in"}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[13px] font-bold text-gray-700 dark:text-foreground tabular-nums">£{total.toFixed(2)}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SALE_STATUS_COLOR[sale.status] || "bg-muted text-muted-foreground"}`}>{sale.status}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* ── Recent activity ──────────────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
 
         {/* Recent Leads */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Recent Leads</CardTitle>
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <TrendingUp size={15} className="text-muted-foreground" /> Recent Leads
+              </CardTitle>
               <Link href="/leads">
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  All leads <ArrowRight size={12} />
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  View all <ArrowRight size={12} />
                 </Button>
               </Link>
             </div>
@@ -528,27 +760,23 @@ export default function Dashboard() {
           <CardContent className="p-0">
             {recentLeads.length === 0 ? (
               <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
-                No leads yet.{" "}
-                {isAuthenticated && (
-                  <Link href="/leads"><span className="text-primary underline cursor-pointer">Add one</span></Link>
-                )}
+                No leads yet. <Link href="/leads"><span className="text-primary underline cursor-pointer">Add one</span></Link>
               </div>
             ) : (
               <ul className="divide-y divide-border">
                 {recentLeads.map(lead => (
-                  <li key={lead.id} className="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 font-bold text-blue-600 dark:text-blue-400 text-sm">
+                  <li key={lead.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 font-bold text-blue-600 dark:text-blue-400 text-[11px]">
                       {lead.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{lead.name}</p>
-                      <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                        <Building2 size={10} />{lead.company}
-                        {lead.city && <><MapPin size={10} className="ml-1" />{lead.city}</>}
+                      <p className="text-[12px] font-semibold truncate">{lead.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                        <Building2 size={9} />{lead.company}
                       </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <LeadBadge status={lead.status} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${LEAD_BADGE[lead.status] || "bg-muted text-muted-foreground"}`}>{lead.status}</span>
                       <span className="text-[10px] text-muted-foreground">{relativeDate(lead.createdAt)}</span>
                     </div>
                   </li>
@@ -558,64 +786,133 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Documents */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Recent Documents</CardTitle>
-              <Link href="/documents">
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  All documents <ArrowRight size={12} />
-                </Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {recentDocs.length === 0 ? (
-              <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
-                No documents yet.{" "}
-                {isAuthenticated && (
-                  <Link href="/documents/new"><span className="text-primary underline cursor-pointer">Create one</span></Link>
-                )}
+        {/* Low stock + Recent customers */}
+        <div className="flex flex-col gap-4">
+
+          {/* Low stock alerts */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                  <AlertTriangle size={15} className={lowStockItems.length > 0 ? "text-amber-500" : "text-muted-foreground"} /> Stock Alerts
+                </CardTitle>
+                <Link href="/stock">
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                    Stock <ArrowRight size={12} />
+                  </Button>
+                </Link>
               </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {recentDocs.map(doc => {
-                  const meta = DOC_STATUS_META[doc.status] ?? DOC_STATUS_META["Draft"];
-                  return (
-                    <li key={doc.id} className="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
-                        <FileText size={14} className="text-violet-600 dark:text-violet-400" />
+            </CardHeader>
+            <CardContent className="p-0">
+              {lowStockItems.length === 0 ? (
+                <div className="px-4 pb-4 text-center py-5 text-[12px] text-muted-foreground border-t border-dashed flex flex-col items-center gap-1">
+                  <CheckCircle2 size={18} className="text-emerald-500" />
+                  All stock levels OK
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {lowStockItems.slice(0, 4).map(item => {
+                    const qty = parseFloat(item.quantity) || 0;
+                    const min = parseFloat(item.minLevel) || 0;
+                    return (
+                      <li key={item.id} className="flex items-center gap-2.5 px-4 py-2 hover:bg-amber-50/40 dark:hover:bg-amber-950/10 transition-colors">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${qty === 0 ? "bg-red-100 dark:bg-red-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+                          <Boxes size={11} className={qty === 0 ? "text-red-500" : "text-amber-500"} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-medium truncate">{item.productName}</p>
+                          <p className="text-[10px] text-muted-foreground">{item.sku || "No SKU"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`text-[13px] font-bold tabular-nums ${qty === 0 ? "text-red-500" : "text-amber-500"}`}>{qty}</p>
+                          <p className="text-[9px] text-muted-foreground">min {min}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent customers */}
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                  <UserCheck size={15} className="text-muted-foreground" /> New Customers
+                </CardTitle>
+                <Link href="/customers">
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                    All <ArrowRight size={12} />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {recentCustomers.length === 0 ? (
+                <div className="px-4 pb-4 text-center py-5 text-[12px] text-muted-foreground border-t border-dashed">
+                  No customers yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {recentCustomers.map(c => (
+                    <li key={c.id} className="flex items-center gap-2.5 px-4 py-2 hover:bg-muted/30 transition-colors">
+                      <div className="w-6 h-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 text-[10px] font-bold text-cyan-600 dark:text-cyan-400">
+                        {c.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.title || "Untitled Document"}</p>
-                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                          <Users size={10} />{doc.clientName}
-                          {doc.company && <><Building2 size={10} className="ml-1" />{doc.company}</>}
-                        </p>
+                        <p className="text-[12px] font-medium truncate">{c.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{c.company}</p>
                       </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.badge}`}>
-                          {meta.label}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">{relativeDate(doc.createdAt)}</span>
-                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                        c.status === "Active"   ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300" :
+                        c.status === "Inactive" ? "bg-gray-100 dark:bg-gray-800 text-gray-500" :
+                                                  "bg-red-100 dark:bg-red-900/40 text-red-600"
+                      }`}>{c.status}</span>
                     </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* ── Add Customer dialog ────────────────────────────────────────────── */}
+      {/* ══ System Summary Bar ════════════════════════════════════════════════ */}
+      <Card className="border-gray-100 dark:border-border">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-x-8 gap-y-3 items-center">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">System Overview</p>
+            {[
+              { icon: Users,        label: "Admin Users",   value: adminUsers.length      },
+              { icon: Users2,       label: "Staff",         value: staff.length           },
+              { icon: UserCheck,    label: "Customers",     value: customers.length       },
+              { icon: Package,      label: "Products",      value: products.length        },
+              { icon: Boxes,        label: "Stock Items",   value: stock.length           },
+              { icon: Receipt,      label: "Total Sales",   value: sales.length           },
+              { icon: ShoppingCart, label: "Purchase Orders", value: purchaseOrders.length },
+              { icon: FileText,     label: "Documents",     value: docs.length            },
+            ].map(({ icon: Icon, label, value }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <Icon size={12} className="text-muted-foreground" />
+                <span className="text-[12px] text-muted-foreground">{label}:</span>
+                <span className="text-[12px] font-semibold tabular-nums">{value}</span>
+              </div>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] text-muted-foreground">Local · No server</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ══ Add Customer Dialog ═══════════════════════════════════════════════ */}
       <Dialog open={addCustomerOpen} onOpenChange={v => { setAddCustomerOpen(v); if (!v) quickCustomerForm.reset(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserCheck size={18} /> Add New Customer
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><UserCheck size={18} /> Add New Customer</DialogTitle>
             <DialogDescription>Quickly add a customer. More details can be filled in on the Customers page.</DialogDescription>
           </DialogHeader>
           <Form {...quickCustomerForm}>
@@ -657,9 +954,7 @@ export default function Dashboard() {
                   <FormItem>
                     <FormLabel>Status</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="Active">Active</SelectItem>
                         <SelectItem value="Inactive">Inactive</SelectItem>
@@ -673,9 +968,7 @@ export default function Dashboard() {
                   <FormItem>
                     <FormLabel>Currency</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
                         {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} {c.symbol}</SelectItem>)}
                       </SelectContent>
@@ -706,6 +999,7 @@ export default function Dashboard() {
           </Form>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
