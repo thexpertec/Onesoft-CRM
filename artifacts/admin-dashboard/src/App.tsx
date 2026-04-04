@@ -1,9 +1,10 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/contexts/auth-context";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 import Login from "@/pages/login";
@@ -21,27 +22,43 @@ import SuppliersPage from "@/pages/suppliers";
 
 const queryClient = new QueryClient();
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const [location, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate(`/login?from=${encodeURIComponent(location)}`, { replace: true });
+    }
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) return null;
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/share/:id" component={ShareDocument} />
       <Route>
-        <Layout>
-          <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/leads" component={Leads} />
-            <Route path="/documents" component={Documents} />
-            <Route path="/documents/new" component={NewDocument} />
-            <Route path="/documents/edit/:id" component={NewDocument} />
-            <Route path="/documents/:id" component={DocumentDetail} />
-            <Route path="/customers" component={CustomersPage} />
-            <Route path="/products" component={ProductsPage} />
-            <Route path="/suppliers" component={SuppliersPage} />
-            <Route path="/users" component={UsersPage} />
-            <Route component={NotFound} />
-          </Switch>
-        </Layout>
+        <RequireAuth>
+          <Layout>
+            <Switch>
+              <Route path="/" component={Dashboard} />
+              <Route path="/leads" component={Leads} />
+              <Route path="/documents" component={Documents} />
+              <Route path="/documents/new" component={NewDocument} />
+              <Route path="/documents/edit/:id" component={NewDocument} />
+              <Route path="/documents/:id" component={DocumentDetail} />
+              <Route path="/customers" component={CustomersPage} />
+              <Route path="/products" component={ProductsPage} />
+              <Route path="/suppliers" component={SuppliersPage} />
+              <Route path="/users" component={UsersPage} />
+              <Route component={NotFound} />
+            </Switch>
+          </Layout>
+        </RequireAuth>
       </Route>
     </Switch>
   );

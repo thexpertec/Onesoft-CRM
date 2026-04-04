@@ -7,13 +7,20 @@ import { Lock, Eye, EyeOff } from "lucide-react";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
 export default function Login() {
-  const { login } = useAuth();
-  const [, setLocation] = useLocation();
+  const { login, isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  if (isAuthenticated) {
+    const params = new URLSearchParams(window.location.search);
+    const from = params.get("from") || "/";
+    navigate(from, { replace: true });
+    return null;
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +29,9 @@ export default function Login() {
     setTimeout(() => {
       const ok = login(username.trim(), password);
       if (ok) {
-        setLocation("/");
+        const params = new URLSearchParams(window.location.search);
+        const from = params.get("from") || "/";
+        navigate(from, { replace: true });
       } else {
         setError("Invalid username or password.");
       }
@@ -31,18 +40,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
+
+        {/* Logo + heading */}
         <div className="text-center mb-8">
-          <img src={logoUrl} alt="Onesoft" className="h-10 w-auto mx-auto mb-4 dark:brightness-0 dark:invert" />
-          <h1 className="text-2xl font-bold tracking-tight">Admin Login</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to manage documents and leads</p>
+          <img src={logoUrl} alt="Onesoft" className="h-10 w-auto mx-auto mb-5 dark:brightness-0 dark:invert" />
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-foreground">
+            Admin Portal
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1.5">
+            Sign in to access the dashboard
+          </p>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+        {/* Card */}
+        <div className="bg-white dark:bg-card border border-gray-100 dark:border-border rounded-2xl p-7 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="username">
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-gray-700 dark:text-foreground" htmlFor="username">
                 Username
               </label>
               <Input
@@ -52,13 +69,14 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="admin"
+                className="h-10 text-sm"
                 data-testid="input-username"
                 required
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="password">
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-gray-700 dark:text-foreground" htmlFor="password">
                 Password
               </label>
               <div className="relative">
@@ -69,14 +87,14 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="pr-10"
+                  className="h-10 text-sm pr-10"
                   data-testid="input-password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-muted-foreground dark:hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -85,25 +103,27 @@ export default function Login() {
             </div>
 
             {error && (
-              <p className="text-sm text-destructive font-medium" data-testid="login-error">
-                {error}
-              </p>
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900">
+                <p className="text-[12px] text-red-600 dark:text-red-400 font-medium" data-testid="login-error">
+                  {error}
+                </p>
+              </div>
             )}
 
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-10 mt-1 font-semibold"
               disabled={loading}
               data-testid="btn-login"
             >
-              <Lock className="mr-2 h-4 w-4" />
-              {loading ? "Signing in..." : "Sign In"}
+              <Lock className="mr-2 h-3.5 w-3.5" />
+              {loading ? "Signing in…" : "Sign In"}
             </Button>
           </form>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Onesoft Admin Dashboard &mdash; Authorised access only
+        <p className="text-center text-[11px] text-gray-400 dark:text-muted-foreground mt-6">
+          Onesoft Admin Portal &mdash; Authorised access only
         </p>
       </div>
     </div>
