@@ -5,7 +5,8 @@ import {
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
-  ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock,
+  ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
+  Package2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -18,7 +19,7 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
-import { getLeads, getCustomers, getSuppliers, getDocs } from "@/lib/store";
+import { getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff, getPurchaseOrders, getSales } from "@/lib/store";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -104,6 +105,13 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
+    key: "sales", label: "Sales", icon: Receipt,
+    items: [
+      { label: "All Sales",  href: "/sales",     icon: Receipt, desc: "Sales & invoices"   },
+      { label: "New Sale",   href: "/sales/new", icon: Plus,    desc: "Open POS terminal"  },
+    ],
+  },
+  {
     key: "documents", href: "/documents", label: "Documents", icon: FileText,
     items: [
       { label: "All Documents", href: "/documents",     icon: FileText },
@@ -116,6 +124,7 @@ const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
+const SALES_ROUTES     = ["/sales"];
 const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
 const QUICK_ADD: SubItem[] = [
@@ -124,6 +133,7 @@ const QUICK_ADD: SubItem[] = [
   { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
   { label: "Add Stock Item",     href: "/stock",         icon: Boxes       },
   { label: "New Purchase Order", href: "/purchases",     icon: ShoppingCart},
+  { label: "New Sale",           href: "/sales/new",     icon: Receipt     },
   { label: "New Document",       href: "/documents/new", icon: FilePlus    },
 ];
 
@@ -184,6 +194,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isProductsActive  = PRODUCTS_ROUTES.some(r  => location === r || location.startsWith(r));
   const isStockActive     = STOCK_ROUTES.some(r     => location === r || location.startsWith(r));
   const isPurchasesActive = PURCHASES_ROUTES.some(r => location === r || location.startsWith(r));
+  const isSalesActive     = SALES_ROUTES.some(r     => location === r || location.startsWith(r));
   const isHrmActive       = HRM_ROUTES.some(r       => location === r || location.startsWith(r));
 
   // Search
@@ -191,18 +202,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const hasQuery = q.length >= 2;
   const searchResults = hasQuery ? {
     leads:     getLeads().filter(l =>
-      l.name?.toLowerCase().includes(q) || l.company?.toLowerCase().includes(q)).slice(0, 5),
+      l.name?.toLowerCase().includes(q) || l.company?.toLowerCase().includes(q)).slice(0, 4),
     customers: getCustomers().filter(c =>
-      c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)).slice(0, 5),
+      c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)).slice(0, 4),
     suppliers: getSuppliers().filter(s =>
-      s.company?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q)).slice(0, 5),
+      s.company?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q)).slice(0, 4),
+    products:  getProducts().filter(p =>
+      p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q)).slice(0, 4),
+    staff:     getStaff().filter(s =>
+      s.name?.toLowerCase().includes(q) || s.department?.toLowerCase().includes(q) || s.designation?.toLowerCase().includes(q)).slice(0, 4),
+    purchases: getPurchaseOrders().filter(p =>
+      p.poNumber?.toLowerCase().includes(q) || p.supplier?.toLowerCase().includes(q) || p.notes?.toLowerCase().includes(q)).slice(0, 4),
+    sales:     getSales().filter(s =>
+      s.saleNumber?.toLowerCase().includes(q) || s.customer?.toLowerCase().includes(q) || s.notes?.toLowerCase().includes(q)).slice(0, 4),
     docs:      getDocs().filter(d =>
-      d.title?.toLowerCase().includes(q) || d.clientName?.toLowerCase().includes(q)).slice(0, 5),
+      d.title?.toLowerCase().includes(q) || d.clientName?.toLowerCase().includes(q)).slice(0, 4),
   } : null;
 
   const hasResults = searchResults &&
     (searchResults.leads.length + searchResults.customers.length +
-     searchResults.suppliers.length + searchResults.docs.length) > 0;
+     searchResults.suppliers.length + searchResults.products.length +
+     searchResults.staff.length + searchResults.purchases.length +
+     searchResults.sales.length + searchResults.docs.length) > 0;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col">
@@ -340,6 +361,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "products"  ? isProductsActive :
                 item.key === "stock"     ? isStockActive :
                 item.key === "purchases" ? isPurchasesActive :
+                item.key === "sales"     ? isSalesActive :
                 item.key === "hrm"       ? isHrmActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
@@ -619,6 +641,57 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <Truck size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{s.company}</span>
                       {s.contactPerson && <span className="text-muted-foreground text-[11px]">· {s.contactPerson}</span>}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {hasQuery && searchResults?.products.length ? (
+                <CommandGroup heading="Products">
+                  {searchResults.products.map(p => (
+                    <CommandItem key={p.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/products"); setSearchOpen(false); setSearchQuery(""); }}>
+                      <Package2 size={13} className="text-muted-foreground flex-shrink-0" />
+                      <span className="font-medium">{p.name}</span>
+                      {p.sku && <span className="text-muted-foreground text-[11px]">· {p.sku}</span>}
+                      {p.status && <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-zinc-100 text-zinc-500">{p.status}</span>}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {hasQuery && searchResults?.staff.length ? (
+                <CommandGroup heading="Staff">
+                  {searchResults.staff.map(s => (
+                    <CommandItem key={s.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/staff"); setSearchOpen(false); setSearchQuery(""); }}>
+                      <Users2 size={13} className="text-muted-foreground flex-shrink-0" />
+                      <span className="font-medium">{s.name}</span>
+                      {s.designation && <span className="text-muted-foreground text-[11px]">· {s.designation}</span>}
+                      {s.department && <span className="text-muted-foreground text-[11px]">, {s.department}</span>}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {hasQuery && searchResults?.purchases.length ? (
+                <CommandGroup heading="Purchase Orders">
+                  {searchResults.purchases.map(p => (
+                    <CommandItem key={p.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/purchases"); setSearchOpen(false); setSearchQuery(""); }}>
+                      <ShoppingCart size={13} className="text-muted-foreground flex-shrink-0" />
+                      <span className="font-medium">{p.poNumber}</span>
+                      {p.supplier && <span className="text-muted-foreground text-[11px]">· {p.supplier}</span>}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {hasQuery && searchResults?.sales.length ? (
+                <CommandGroup heading="Sales">
+                  {searchResults.sales.map(s => (
+                    <CommandItem key={s.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/sales"); setSearchOpen(false); setSearchQuery(""); }}>
+                      <Receipt size={13} className="text-muted-foreground flex-shrink-0" />
+                      <span className="font-medium">{s.saleNumber}</span>
+                      {s.customer && <span className="text-muted-foreground text-[11px]">· {s.customer}</span>}
+                      <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.status === "Completed" ? "bg-emerald-100 text-emerald-700" : s.status === "Refunded" ? "bg-amber-100 text-amber-700" : s.status === "Cancelled" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>{s.status}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

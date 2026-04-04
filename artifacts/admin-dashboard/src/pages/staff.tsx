@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_OPTS: StaffStatus[] = ["Active", "On Leave", "Terminated"];
@@ -69,6 +70,11 @@ export default function StaffPage() {
     const depts = [...new Set(staff.map(s => s.department).filter(Boolean))].sort();
     return depts;
   }, [staff]);
+
+  // ── Combobox options ──
+  const deptComboOpts  = useMemo<ComboOption[]>(() => DEPT_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
+  const desigComboOpts = useMemo<ComboOption[]>(() => DESIG_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
+  const roleComboOpts  = useMemo<ComboOption[]>(() => roleNames.map(r => ({ value: r, label: r })), [roleNames]);
 
   const filtered = useMemo(() => {
     let rows = [...staff];
@@ -153,11 +159,6 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
-      {/* datalists */}
-      <datalist id="dept-list">{DEPT_SUGGESTIONS.map(d => <option key={d} value={d} />)}</datalist>
-      <datalist id="desig-list">{DESIG_SUGGESTIONS.map(d => <option key={d} value={d} />)}</datalist>
-      <datalist id="role-list">{roleNames.map(r => <option key={r} value={r} />)}</datalist>
-
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -247,9 +248,19 @@ export default function StaffPage() {
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" />
+                    ) : isA && (c.field === "department" || c.field === "designation" || c.field === "role") ? (
+                      <div className="absolute inset-0 flex items-center">
+                        <Combobox autoFocus value={val}
+                          onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
+                          options={c.field === "department" ? deptComboOpts : c.field === "designation" ? desigComboOpts : roleComboOpts}
+                          placeholder={c.label}
+                          className="w-full h-full"
+                          inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                          onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
+                        />
+                      </div>
                     ) : isA ? (
                       <input autoFocus type={c.type === "email" ? "email" : c.type === "tel" ? "tel" : "text"} value={val} placeholder={c.label}
-                        list={c.field === "department" ? "dept-list" : c.field === "designation" ? "desig-list" : c.field === "role" ? "role-list" : undefined}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
@@ -321,6 +332,12 @@ export default function StaffPage() {
                           onCancel={() => setActiveCell(null)}
                           onTab={s => navigateCell(member.id, ci, s)}
                           onEnter={() => moveCellDown(member.id, ci)}
+                          suggestions={
+                            c.field === "department"  ? deptComboOpts :
+                            c.field === "designation" ? desigComboOpts :
+                            c.field === "role"        ? roleComboOpts :
+                            undefined
+                          }
                         />
                       )}
                     </td>

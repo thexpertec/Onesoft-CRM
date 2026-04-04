@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Star } from "lucide-react";
+import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── Preset colours (shared with products page) ────────────────────────────────
 export const PRESET_COLORS = [
@@ -41,6 +42,7 @@ export function EditableCell({
   onCancel,
   onTab,
   onEnter,
+  suggestions,
 }: {
   value: string;
   col: ColDef;
@@ -51,6 +53,7 @@ export function EditableCell({
   onCancel: () => void;
   onTab: (shift: boolean) => void;
   onEnter: () => void;
+  suggestions?: ComboOption[];
 }) {
   const [draft, setDraft] = useState(value);
   const inputRef  = useRef<HTMLInputElement>(null);
@@ -138,6 +141,27 @@ export function EditableCell({
       );
     }
 
+    if (suggestions && suggestions.length > 0 && (col.type === "text" || col.type === "email" || col.type === "tel")) {
+      return (
+        <div className="absolute inset-0 flex items-center">
+          <Combobox
+            value={draft}
+            onChange={v => setDraft(v)}
+            onSelect={opt => { setDraft(opt.value); commit(opt.value); }}
+            options={suggestions}
+            autoFocus
+            className="w-full h-full"
+            inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground"
+            onBlur={() => commit()}
+            onKeyDown={e => {
+              if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+              else if (e.key === "Enter") { e.preventDefault(); commit(); onEnter(); }
+              else if (e.key === "Tab") { e.preventDefault(); commit(); onTab(e.shiftKey); }
+            }}
+          />
+        </div>
+      );
+    }
     return (
       <input
         ref={inputRef}

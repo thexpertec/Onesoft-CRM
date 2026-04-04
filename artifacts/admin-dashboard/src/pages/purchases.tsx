@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── Status styles ────────────────────────────────────────────────────────────
 const STATUS_OPTS: PurchaseOrderStatus[] = ["Draft", "Sent", "Confirmed", "Received", "Cancelled"];
@@ -46,8 +47,8 @@ export default function PurchasesPage() {
   const { toast } = useToast();
 
   // ── supplier / product options ──
-  const supplierOpts = useMemo(() => getSuppliers().map(s => s.company), []);
-  const productNames = useMemo(() => getProducts().map(p => p.name), []);
+  const supplierComboOpts = useMemo<ComboOption[]>(() => getSuppliers().map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
+  const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
 
   // ── COLS (inside component to pick up dynamic supplier options) ──
   const COLS: ColDef[] = useMemo(() => [
@@ -265,10 +266,6 @@ export default function PurchasesPage() {
         <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {purchaseOrders.length}</div>
       </div>
 
-      {/* Supplier autocomplete datalist */}
-      <datalist id="po-supplier-names">
-        {supplierOpts.map(n => <option key={n} value={n} />)}
-      </datalist>
 
       {/* Excel grid */}
       <div ref={tableRef}>
@@ -309,9 +306,19 @@ export default function PurchasesPage() {
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editableIdx, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); navigateNewRow(editableIdx, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" />
+                    ) : isA && c.field === "supplier" ? (
+                      <div className="absolute inset-0 flex items-center">
+                        <Combobox autoFocus value={val}
+                          onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
+                          options={supplierComboOpts}
+                          placeholder="Select supplier…"
+                          className="w-full h-full"
+                          inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                          onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editableIdx, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
+                        />
+                      </div>
                     ) : isA ? (
                       <input autoFocus type="text" value={val} placeholder={c.label}
-                        list={c.field === "supplier" ? "po-supplier-names" : undefined}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editableIdx, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); navigateNewRow(editableIdx, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
@@ -388,6 +395,7 @@ export default function PurchasesPage() {
                           onCancel={() => setActiveCell(null)}
                           onTab={s => navigateCell(po.id, ci, s)}
                           onEnter={() => moveCellDown(po.id, ci)}
+                          suggestions={c.field === "supplier" ? supplierComboOpts : undefined}
                         />
                       )}
                     </td>
@@ -456,10 +464,6 @@ export default function PurchasesPage() {
               </Button>
             </div>
 
-            <datalist id="po-product-names">
-              {productNames.map(n => <option key={n} value={n} />)}
-            </datalist>
-
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -517,10 +521,17 @@ export default function PurchasesPage() {
                     <tr className="bg-amber-50 dark:bg-amber-900/20">
                       <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-zinc-400">{localItems.length + 1}</td>
                       <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        <input autoFocus list="po-product-names" placeholder="Product or service name *"
-                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
-                          value={newItem.productName}
-                          onChange={e => setNewItem(p => p ? { ...p, productName: e.target.value } : p)} />
+                        <Combobox autoFocus value={newItem.productName}
+                          onChange={v => setNewItem(p => p ? { ...p, productName: v } : p)}
+                          onSelect={opt => {
+                            const prod = getProducts().find(p => p.name === opt.value);
+                            setNewItem(prev => prev ? { ...prev, productName: opt.value, unit: prod?.unit || prev.unit, unitPrice: prod?.price || prev.unitPrice } : prev);
+                          }}
+                          options={productComboOpts}
+                          placeholder="Product or service name *"
+                          className="w-full"
+                          inputClassName="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                        />
                       </td>
                       <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
                         <input type="number" min="0" step="any" placeholder="1"

@@ -611,6 +611,71 @@ export const deletePurchaseOrder = (id: string): void => {
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
 };
 
+// ─── Sales / POS ─────────────────────────────────────────────────────────────
+export const SALE_STATUSES  = ["Draft", "Completed", "Refunded", "Cancelled"] as const;
+export type SaleStatus = typeof SALE_STATUSES[number];
+
+export const SALE_PAYMENTS  = ["Cash", "Card", "Bank Transfer", "Cheque", "Credit"] as const;
+export type SalePayment = typeof SALE_PAYMENTS[number];
+
+export type SaleItem = {
+  id: string;
+  productName: string; // locked — sourced from Products master
+  sku: string;         // locked — sourced from Products master
+  qty: string;
+  unit: string;
+  unitPrice: string;
+  discount: string;    // percentage 0-100
+  notes: string;
+};
+
+export type Sale = {
+  id: string;
+  saleNumber: string;
+  saleDate: string;
+  customer: string;
+  status: SaleStatus;
+  paymentMethod: SalePayment;
+  notes: string;
+  items: SaleItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const SALES_KEY = "admin-sales";
+
+const nextSaleNumber = (): string => {
+  const existing = getStored<Sale>(SALES_KEY);
+  const d = new Date();
+  const prefix = `SAL-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const max = existing
+    .filter(s => s.saleNumber.startsWith(prefix))
+    .map(s => parseInt(s.saleNumber.split("-").pop() ?? "0") || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+};
+
+export const getSales = (): Sale[] => getStored<Sale>(SALES_KEY);
+
+export const createSale = (data: Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt">): Sale => {
+  const sale: Sale = { ...data, id: crypto.randomUUID(), saleNumber: nextSaleNumber(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(SALES_KEY, [...getSales(), sale]);
+  return sale;
+};
+
+export const updateSale = (id: string, updates: Partial<Omit<Sale, "id" | "saleNumber" | "createdAt">>): Sale => {
+  const all = getSales();
+  const i = all.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Sale not found");
+  all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SALES_KEY, all);
+  return all[i];
+};
+
+export const deleteSale = (id: string): void => {
+  setStored(SALES_KEY, getSales().filter(s => s.id !== id));
+};
+
 // ─── Stock Tracking ───────────────────────────────────────────────────────────
 export const STOCK_TYPES = ["For Sale", "Not For Sale", "Business Asset"] as const;
 export type StockType = typeof STOCK_TYPES[number];

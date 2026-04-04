@@ -16,6 +16,7 @@ import DocumentDetail from "@/pages/document-detail";
 import NewDocument from "@/pages/new-document";
 import ShareDocument from "@/pages/share-document";
 import UsersPage from "@/pages/users";
+import SalesPage from "@/pages/sales";
 import StockPage from "@/pages/stock";
 import StaffPage from "@/pages/staff";
 import HrmRolesPage from "@/pages/hrm-roles";
@@ -67,6 +68,8 @@ function Router() {
               <Route path="/units" component={UnitsPage} />
               <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/purchases" component={PurchasesPage} />
+              <Route path="/sales/new" component={SalesPage} />
+              <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />
               <Route path="/stock" component={StockPage} />
               <Route path="/staff" component={StaffPage} />

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
+import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TYPE_BG: Record<StockType, string> = {
@@ -76,8 +77,10 @@ export default function StockPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const productNames  = useMemo(() => getProducts().map(p => p.name), []);
-  const customerNames = useMemo(() => getCustomers().map(c => c.name), []);
+  const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const storeComboOpts    = useMemo<ComboOption[]>(() => STORES_LIST.map(s => ({ value: s, label: s })), []);
+  const unitComboOpts     = useMemo<ComboOption[]>(() => UNITS_LIST.map(u => ({ value: u, label: u })), []);
+  const customerComboOpts = useMemo<ComboOption[]>(() => getCustomers().map(c => ({ value: c.name, label: c.name, sub: c.email || c.phone })), []);
 
   const [typeFilter,     setTypeFilter]     = useState<string>("All");
   const [customerFilter, setCustomerFilter] = useState<string>("All");
@@ -192,23 +195,9 @@ export default function StockPage() {
     setDeleteId(null);
   };
 
-  const getDatalist = (field: string) => {
-    if (field === "productName")  return "stock-products";
-    if (field === "store")        return "stock-stores";
-    if (field === "unit")         return "stock-units";
-    if (field === "holdCustomer") return "stock-customers";
-    return undefined;
-  };
-
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
-      {/* Datalists */}
-      <datalist id="stock-products">{productNames.map(n => <option key={n} value={n} />)}</datalist>
-      <datalist id="stock-stores">{STORES_LIST.map(s => <option key={s} value={s} />)}</datalist>
-      <datalist id="stock-units">{UNITS_LIST.map(u => <option key={u} value={u} />)}</datalist>
-      <datalist id="stock-customers">{customerNames.map(c => <option key={c} value={c} />)}</datalist>
-
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -340,9 +329,19 @@ export default function StockPage() {
                         onFocus={e => e.target.select()}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" />
+                    ) : isA && (c.field === "productName" || c.field === "store" || c.field === "unit" || c.field === "holdCustomer") ? (
+                      <div className="absolute inset-0 flex items-center">
+                        <Combobox autoFocus value={val}
+                          onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
+                          options={c.field === "productName" ? productComboOpts : c.field === "store" ? storeComboOpts : c.field === "unit" ? unitComboOpts : customerComboOpts}
+                          placeholder={c.label}
+                          className="w-full h-full"
+                          inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                          onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
+                        />
+                      </div>
                     ) : isA ? (
                       <input autoFocus type="text" value={val} placeholder={c.label}
-                        list={getDatalist(c.field)}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
@@ -450,6 +449,13 @@ export default function StockPage() {
                           onCancel={() => setActiveCell(null)}
                           onTab={s => navigateCell(item.id, ci, s)}
                           onEnter={() => moveCellDown(item.id, ci)}
+                          suggestions={
+                            c.field === "productName" ? productComboOpts :
+                            c.field === "store"       ? storeComboOpts :
+                            c.field === "unit"        ? unitComboOpts :
+                            c.field === "holdCustomer"? customerComboOpts :
+                            undefined
+                          }
                         />
                       )}
                     </td>

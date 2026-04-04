@@ -12,8 +12,9 @@ import {
   getStaff, createStaff, updateStaff, deleteStaff,
   getStaffRoles, createStaffRole, updateStaffRole, deleteStaffRole,
   getStock, createStockItem, updateStockItem, deleteStockItem,
+  getSales, createSale, updateSale, deleteSale,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
-  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem,
+  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -284,6 +285,16 @@ export function usePurchaseOrders() {
   };
 
   return { purchaseOrders, addPurchaseOrder, editPurchaseOrder, removePurchaseOrder, refresh: fetchOrders };
+}
+
+export function useSales() {
+  const [sales, setSales] = useState<Sale[]>([]);
+  const fetch = useCallback(() => setSales(getSales()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addSale    = (d: Parameters<typeof createSale>[0])               => { const s = createSale(d);    fetch(); return s; };
+  const editSale   = (id: string, u: Parameters<typeof updateSale>[1])   => { const s = updateSale(id, u); fetch(); return s; };
+  const removeSale = (id: string)                                         => { deleteSale(id);              fetch(); };
+  return { sales, addSale, editSale, removeSale, refresh: fetch };
 }
 
 export function useStock() {
