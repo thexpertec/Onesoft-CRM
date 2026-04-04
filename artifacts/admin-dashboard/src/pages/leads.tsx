@@ -24,7 +24,7 @@ import { Link } from "wouter";
 const leadSchema = z.object({
   name: z.string().min(2, "Name is required"),
   company: z.string().min(2, "Company is required"),
-  email: z.string().email("Invalid email"),
+  email: z.union([z.string().email("Invalid email"), z.literal("")]),
   phone: z.string().min(5, "Phone is required"),
   industry: z.string().min(2, "Industry is required"),
   city: z.string().min(2, "City is required"),
@@ -334,7 +334,10 @@ export default function Leads() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground block">Email</span>
-                  <a href={`mailto:${selectedLead.email}`} className="text-primary hover:underline">{selectedLead.email}</a>
+                  {selectedLead.email
+                    ? <a href={`mailto:${selectedLead.email}`} className="text-primary hover:underline">{selectedLead.email}</a>
+                    : <span className="text-muted-foreground">—</span>
+                  }
                 </div>
                 <div>
                   <span className="text-muted-foreground block">Phone</span>
