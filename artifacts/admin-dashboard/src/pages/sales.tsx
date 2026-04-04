@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment,
   SALE_STATUSES, SALE_PAYMENTS,
-  getProducts, getCustomers, getProductCategories, getSales, Product,
+  getProducts, getCustomers, getProductCategories, getSales, getStock, Product,
 } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -163,6 +163,13 @@ function POSView({
     localItems.forEach(i => { if (i.sku) m[i.sku] = (m[i.sku] || 0) + (parseFloat(i.qty) || 0); });
     return m;
   }, [localItems]);
+
+  // Stock qty per SKU (sum across all stock entries)
+  const stockMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    getStock().forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
+    return m;
+  }, []);
 
   const qtyChange = (itemId: string, delta: number) => {
     const item = localItems.find(i => i.id === itemId);
@@ -551,11 +558,13 @@ function POSView({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-2 content-start">
+              <div className="grid grid-cols-4 gap-2 content-start">
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
                   const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
                   const inCart   = cartQtyMap[product.sku] || 0;
+                  const stockQty = stockMap[product.sku] ?? null;
+                  const lowStock = stockQty !== null && stockQty <= 5;
                   return (
                     <button
                       key={product.id}
@@ -583,20 +592,23 @@ function POSView({
                       </div>
 
                       {/* Info */}
-                      <div className="p-2 flex flex-col gap-0.5">
+                      <div className="p-1.5 flex flex-col gap-0.5">
                         <div className="text-[11px] font-semibold text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-tight">
                           {product.name}
                         </div>
-                        <div className="text-[9px] text-gray-400 font-mono truncate">{product.sku || "—"}</div>
-                        <div className="flex items-center justify-between gap-1 mt-0.5">
-                          <span className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                             £{parseFloat(product.price || "0").toFixed(2)}
                           </span>
                           {product.category && (
-                            <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[50px] ${catColor}`}>
+                            <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[44px] ${catColor}`}>
                               {product.category}
                             </span>
                           )}
+                        </div>
+                        {/* Stock qty */}
+                        <div className={`text-[9px] font-medium ${stockQty === null ? "text-gray-300 dark:text-zinc-700" : lowStock ? "text-amber-500" : "text-gray-400"}`}>
+                          {stockQty === null ? "No stock data" : lowStock ? `⚠ ${stockQty} left` : `${stockQty} in stock`}
                         </div>
                       </div>
                     </button>
