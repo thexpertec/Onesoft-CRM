@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine, Monitor, Heart, GraduationCap, ShoppingCart, Truck, Scale, Home, Cloud, UtensilsCrossed, Hammer, Palette, CreditCard, BookOpen, Zap, Shield, Factory, Brain, Car, Handshake } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin, PenLine, Monitor, Heart, GraduationCap, ShoppingCart, Truck, Scale, Home, Cloud, UtensilsCrossed, Hammer, Palette, CreditCard, BookOpen, Zap, Shield, Factory, Brain, Car, Handshake, Check, Save } from "lucide-react";
 import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
 import RichTextEditor from "@/components/RichTextEditor";
 
@@ -748,6 +748,25 @@ function FormField({ children, label, required, hint }: { children: React.ReactN
   );
 }
 
+function SaveButton({ sectionKey, saved, onSave }: { sectionKey: string; saved: boolean; onSave: () => void }) {
+  return (
+    <div className="flex justify-end mt-6 pt-4 border-t border-border">
+      <button
+        type="button"
+        onClick={onSave}
+        className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+          saved
+            ? "bg-green-50 text-green-700 border border-green-200 shadow-none"
+            : "bg-primary text-white hover:bg-primary/90 shadow-sm"
+        }`}
+      >
+        {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+        {saved ? "Saved!" : "Update"}
+      </button>
+    </div>
+  );
+}
+
 function SectionDivider() {
   return <div className="border-t border-border/60 my-8" />;
 }
@@ -821,6 +840,78 @@ export default function RequirementDoc() {
   const [detailedNotes, setDetailedNotes] = useState("");
 
   const client = CLIENTS.find((c) => c.name === selectedClient);
+
+  // ── Per-section save ──────────────────────────────────────────────────────
+  const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
+
+  const markSaved = useCallback((key: string) => {
+    setSavedSections((prev) => ({ ...prev, [key]: true }));
+    setTimeout(() => setSavedSections((prev) => ({ ...prev, [key]: false })), 2000);
+  }, []);
+
+  const persist = (key: string, data: object) => {
+    const existing = JSON.parse(localStorage.getItem("req-doc") || "{}");
+    localStorage.setItem("req-doc", JSON.stringify({ ...existing, [key]: data }));
+  };
+
+  const saveS1 = () => { persist("s1", { docTitle, docDate, preparedBy, selectedClient }); markSaved("s1"); };
+  const saveS2 = () => { persist("s2", { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2"); };
+  const saveS3 = () => { persist("s3", { purpose, keyFeatures }); markSaved("s3"); };
+  const saveS35 = () => { persist("s35", { detailedNotes }); markSaved("s35"); };
+  const saveS4 = () => { persist("s4", { integrations, techStack, hosting, security }); markSaved("s4"); };
+  const saveS5 = () => { persist("s5", { paymentStructure, additionalCosts }); markSaved("s5"); };
+  const saveS6 = () => { persist("s6", { startDate, deliveryDate, milestones }); markSaved("s6"); };
+  const saveS7 = () => { persist("s7", { postLaunch, maintenance }); markSaved("s7"); };
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("req-doc");
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.s1) {
+        if (d.s1.docTitle)       setDocTitle(d.s1.docTitle);
+        if (d.s1.docDate)        setDocDate(d.s1.docDate);
+        if (d.s1.preparedBy)     setPreparedBy(d.s1.preparedBy);
+        if (d.s1.selectedClient) setSelectedClient(d.s1.selectedClient);
+      }
+      if (d.s2) {
+        if (d.s2.businessType)    setBusinessType(d.s2.businessType);
+        if (d.s2.targetAudience)  setTargetAudience(d.s2.targetAudience);
+        if (d.s2.keyProducts)     setKeyProducts(d.s2.keyProducts);
+        if (d.s2.businessGoals)   setBusinessGoals(d.s2.businessGoals);
+        if (d.s2.keyChallenges)   setKeyChallenges(d.s2.keyChallenges);
+        if (d.s2.currentSystems)  setCurrentSystems(d.s2.currentSystems);
+      }
+      if (d.s3) {
+        if (d.s3.purpose)      setPurpose(d.s3.purpose);
+        if (d.s3.keyFeatures)  setKeyFeatures(d.s3.keyFeatures);
+      }
+      if (d.s35) {
+        if (d.s35.detailedNotes) setDetailedNotes(d.s35.detailedNotes);
+      }
+      if (d.s4) {
+        if (d.s4.integrations) setIntegrations(d.s4.integrations);
+        if (d.s4.techStack)    setTechStack(d.s4.techStack);
+        if (d.s4.hosting)      setHosting(d.s4.hosting);
+        if (d.s4.security)     setSecurity(d.s4.security);
+      }
+      if (d.s5) {
+        if (d.s5.paymentStructure) setPaymentStructure(d.s5.paymentStructure);
+        if (d.s5.additionalCosts)  setAdditionalCosts(d.s5.additionalCosts);
+      }
+      if (d.s6) {
+        if (d.s6.startDate)    setStartDate(d.s6.startDate);
+        if (d.s6.deliveryDate) setDeliveryDate(d.s6.deliveryDate);
+        if (d.s6.milestones)   setMilestones(d.s6.milestones);
+      }
+      if (d.s7) {
+        if (d.s7.postLaunch)   setPostLaunch(d.s7.postLaunch);
+        if (d.s7.maintenance)  setMaintenance(d.s7.maintenance);
+      }
+    } catch { /* ignore parse errors */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const milestonesTotal = milestones.reduce((sum, m) => {
     const num = parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0;
@@ -949,6 +1040,7 @@ export default function RequirementDoc() {
               </div>
             )}
           </div>
+          <SaveButton sectionKey="s1" saved={!!savedSections.s1} onSave={saveS1} />
         </section>
 
         <SectionDivider />
@@ -1001,6 +1093,7 @@ export default function RequirementDoc() {
               </FormField>
             </div>
           </div>
+          <SaveButton sectionKey="s2" saved={!!savedSections.s2} onSave={saveS2} />
         </section>
 
         <SectionDivider />
@@ -1042,6 +1135,7 @@ export default function RequirementDoc() {
               </div>
             )}
           </div>
+          <SaveButton sectionKey="s3" saved={!!savedSections.s3} onSave={saveS3} />
         </section>
 
         <SectionDivider />
@@ -1058,6 +1152,7 @@ export default function RequirementDoc() {
             onChange={setDetailedNotes}
             placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
           />
+          <SaveButton sectionKey="s35" saved={!!savedSections.s35} onSave={saveS35} />
         </section>
 
         <SectionDivider />
@@ -1093,6 +1188,7 @@ export default function RequirementDoc() {
               <TextInput value={security} onChange={setSecurity} placeholder="e.g. AES-256 encryption, MFA, GDPR compliance..." />
             </FormField>
           </div>
+          <SaveButton sectionKey="s4" saved={!!savedSections.s4} onSave={saveS4} />
         </section>
 
         <SectionDivider />
@@ -1141,6 +1237,7 @@ export default function RequirementDoc() {
               )}
             </div>
           </div>
+          <SaveButton sectionKey="s5" saved={!!savedSections.s5} onSave={saveS5} />
         </section>
 
         <SectionDivider />
@@ -1282,6 +1379,7 @@ export default function RequirementDoc() {
               </div>
             </div>
           </div>
+          <SaveButton sectionKey="s6" saved={!!savedSections.s6} onSave={saveS6} />
         </section>
 
         <SectionDivider />
@@ -1304,6 +1402,7 @@ export default function RequirementDoc() {
               <SelectInput options={MAINTENANCE_OPTIONS} value={maintenance} onChange={setMaintenance} placeholder="Select duration" />
             </FormField>
           </div>
+          <SaveButton sectionKey="s7" saved={!!savedSections.s7} onSave={saveS7} />
         </section>
 
         <SectionDivider />
