@@ -31,6 +31,9 @@ const isLowStock = (item: StockItem) => {
   return min > 0 && qty <= min;
 };
 
+// Fields owned by the Products master table — read-only on this secondary page
+const PRODUCT_LOCKED = new Set(["productName", "sku"]);
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 const ALL_COLS: ColDef[] = [
   { field: "productName",  label: "Product / Service",  minW: 200, type: "text"   },
@@ -385,15 +388,29 @@ export default function StockPage() {
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === item.id && activeCell.col === ci;
                   const rawVal = String((item as unknown as Record<string, string>)[c.field] ?? "");
-                  const canEdit = isAuthenticated;
+                  const isProductLocked = PRODUCT_LOCKED.has(c.field);
+                  const canEdit = isAuthenticated && !isProductLocked;
                   return (
                     <td key={c.field}
-                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                      className={`border-r border-gray-100 dark:border-border relative p-0 ${
+                        isProductLocked
+                          ? "bg-gray-50/60 dark:bg-gray-800/20"
+                          : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10"
+                          : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: CELL_H }}
-                      onClick={() => !isA && canEdit && setActiveCell({ id: item.id, col: ci })}>
+                      onClick={() => !isProductLocked && !isA && canEdit && setActiveCell({ id: item.id, col: ci })}>
 
-                      {/* stockType cell — pill picker when active */}
-                      {c.field === "stockType" ? (
+                      {/* product-locked cell — read-only, managed in Products */}
+                      {isProductLocked ? (
+                        <div className="w-full h-full flex items-center px-3 cursor-default group/lock">
+                          <span className="truncate text-[13px] text-gray-500 dark:text-gray-400">{rawVal || "—"}</span>
+                          <span className="ml-auto opacity-0 group-hover/lock:opacity-50 transition-opacity text-[10px] text-gray-400 whitespace-nowrap flex items-center gap-0.5 pr-1">
+                            <Lock size={9} /> Products
+                          </span>
+                        </div>
+
+                      /* stockType cell — pill picker when active */
+                      ) : c.field === "stockType" ? (
                         isA ? (
                           <div className="absolute inset-0 flex items-center gap-1 px-2 bg-white dark:bg-card z-20">
                             {STOCK_TYPES.map(t => (

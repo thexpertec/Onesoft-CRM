@@ -479,18 +479,26 @@ export default function PurchasesPage() {
                     <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                       <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-400">{idx + 1}</td>
                       {(["productName", "qty", "unit", "unitPrice", "notes"] as (keyof PurchaseOrderItem2)[]).map(field => (
-                        <td key={field} className="py-1 px-1 border border-zinc-200 dark:border-zinc-700">
-                          <input
-                            list={field === "productName" ? "po-product-names" : undefined}
-                            type={field === "qty" || field === "unitPrice" ? "number" : "text"}
-                            min={field === "qty" || field === "unitPrice" ? "0" : undefined}
-                            step={field === "qty" || field === "unitPrice" ? "any" : undefined}
-                            placeholder={field === "productName" ? "Name *" : field === "qty" ? "1" : field === "unit" ? "e.g. pcs" : field === "unitPrice" ? "0.00" : ""}
-                            className="w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs"
-                            value={String(item[field])}
-                            onChange={e => handleItemFieldChange(item.id, field, e.target.value)}
-                            onBlur={handleItemBlur}
-                          />
+                        <td key={field} className={`py-1 px-1 border border-zinc-200 dark:border-zinc-700 ${field === "productName" ? "bg-gray-50/60 dark:bg-gray-800/20" : ""}`}>
+                          {field === "productName" ? (
+                            <div className="group/lock flex items-center gap-1 px-2 py-1">
+                              <span className="flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{String(item[field]) || "—"}</span>
+                              <span className="opacity-0 group-hover/lock:opacity-50 text-[10px] text-zinc-400 whitespace-nowrap flex items-center gap-0.5">
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Products
+                              </span>
+                            </div>
+                          ) : (
+                            <input
+                              type={field === "qty" || field === "unitPrice" ? "number" : "text"}
+                              min={field === "qty" || field === "unitPrice" ? "0" : undefined}
+                              step={field === "qty" || field === "unitPrice" ? "any" : undefined}
+                              placeholder={field === "qty" ? "1" : field === "unit" ? "e.g. pcs" : field === "unitPrice" ? "0.00" : ""}
+                              className="w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs"
+                              value={String(item[field])}
+                              onChange={e => handleItemFieldChange(item.id, field, e.target.value)}
+                              onBlur={handleItemBlur}
+                            />
+                          )}
                         </td>
                       ))}
                       <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums">
