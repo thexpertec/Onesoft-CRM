@@ -1,172 +1,543 @@
+import { useMemo } from "react";
+import { Link } from "wouter";
 import { useLeads, useDocs } from "@/hooks/use-data";
+import { useAuth } from "@/contexts/auth-context";
+import { getAdminUsers } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, FileText, Target, PoundSterling } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { format, isToday, isYesterday, formatDistanceToNow } from "date-fns";
+import {
+  Users, FileText, TrendingUp, PoundSterling, Plus, ArrowRight,
+  Target, CheckCircle2, Clock, Building2, MapPin, Layers, UserPlus,
+} from "lucide-react";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function formatGBP(n: number) {
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
+}
+
+function relativeDate(iso: string) {
+  const d = new Date(iso);
+  if (isToday(d)) return formatDistanceToNow(d, { addSuffix: true });
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "d MMM yyyy");
+}
+
+// Lead status colours
+const LEAD_STATUS_META: Record<string, { bg: string; text: string; label: string }> = {
+  New:             { bg: "bg-blue-500",   text: "text-blue-600 dark:text-blue-400",   label: "New" },
+  Contacted:       { bg: "bg-amber-400",  text: "text-amber-600 dark:text-amber-400", label: "Contacted" },
+  Qualified:       { bg: "bg-cyan-500",   text: "text-cyan-600 dark:text-cyan-400",   label: "Qualified" },
+  "Proposal Sent": { bg: "bg-violet-500", text: "text-violet-600 dark:text-violet-400", label: "Proposal Sent" },
+  Won:             { bg: "bg-emerald-500",text: "text-emerald-600 dark:text-emerald-400", label: "Won" },
+  Lost:            { bg: "bg-red-400",    text: "text-red-600 dark:text-red-400",     label: "Lost" },
+};
+
+const DOC_STATUS_META: Record<string, { color: string; label: string; badge: string }> = {
+  Draft:          { color: "#94a3b8", label: "Draft",        badge: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" },
+  "Under Review": { color: "#f59e0b", label: "Under Review", badge: "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300" },
+  Approved:       { color: "#10b981", label: "Approved",     badge: "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" },
+  Archived:       { color: "#cbd5e1", label: "Archived",     badge: "bg-slate-100 dark:bg-slate-800 text-slate-400" },
+};
+
+const LEAD_STATUS_ORDER = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"] as const;
+
+// ─── Mini SVG Donut ──────────────────────────────────────────────────────────
+function DonutChart({ segments }: { segments: { color: string; value: number }[] }) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (total === 0) {
+    return (
+      <svg viewBox="0 0 36 36" className="w-full h-full">
+        <circle cx="18" cy="18" r="13" fill="none" stroke="currentColor" strokeWidth="5" className="text-muted/30" />
+      </svg>
+    );
+  }
+  const r = 13;
+  const circ = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+      {segments.map((s, i) => {
+        const pct = s.value / total;
+        const dash = pct * circ;
+        const gap  = circ - dash;
+        const el = (
+          <circle
+            key={i}
+            cx="18" cy="18" r={r}
+            fill="none"
+            stroke={s.color}
+            strokeWidth="5"
+            strokeDasharray={`${dash} ${gap}`}
+            strokeDashoffset={-offset}
+          />
+        );
+        offset += dash;
+        return el;
+      })}
+    </svg>
+  );
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KpiCard({
+  icon: Icon, label, value, sub, accent, testId,
+}: { icon: React.ElementType; label: string; value: string | number; sub?: React.ReactNode; accent: string; testId?: string }) {
+  return (
+    <Card className={`relative overflow-hidden border-l-4 ${accent}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p className="text-3xl font-bold mt-1.5 text-foreground" data-testid={testId}>{value}</p>
+            {sub && <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>}
+          </div>
+          <div className="rounded-xl p-2.5 bg-muted/50 flex-shrink-0">
+            <Icon className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Lead status badge ────────────────────────────────────────────────────────
+function LeadBadge({ status }: { status: string }) {
+  const m = LEAD_STATUS_META[status];
+  const cls = {
+    New:             "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300",
+    Contacted:       "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
+    Qualified:       "bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300",
+    "Proposal Sent": "bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300",
+    Won:             "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
+    Lost:            "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300",
+  }[status] || "bg-muted text-muted-foreground";
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{m?.label ?? status}</span>;
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { leads } = useLeads();
-  const { docs } = useDocs();
+  const { docs }  = useDocs();
+  const { currentUser, isAuthenticated } = useAuth();
 
-  const totalLeads = leads.length;
-  const totalDocs = docs.length;
-  const wonLeads = leads.filter((l) => l.status === "Won").length;
-  const conversionRate = totalLeads ? Math.round((wonLeads / totalLeads) * 100) : 0;
-  
-  // Approximate pipeline value (docs with budgets)
-  const pipelineValue = docs.reduce((acc, doc) => {
-    // Extract max value from budget string like "£10,000 - £25,000"
-    const match = doc.budget.match(/£([\d,]+)/g);
-    if (match && match.length > 0) {
-      const valStr = match[match.length - 1].replace(/[£,]/g, "");
-      return acc + parseInt(valStr, 10);
+  // ── KPIs ──────────────────────────────────────────────────────────────────
+  const totalLeads    = leads.length;
+  const wonLeads      = leads.filter(l => l.status === "Won").length;
+  const lostLeads     = leads.filter(l => l.status === "Lost").length;
+  const activeLeads   = leads.filter(l => !["Won","Lost"].includes(l.status)).length;
+  const winRate       = totalLeads ? Math.round((wonLeads / totalLeads) * 100) : 0;
+  const totalDocs     = docs.length;
+  const approvedDocs  = docs.filter(d => d.status === "Approved").length;
+  const pendingDocs   = docs.filter(d => d.status === "Under Review").length;
+
+  const pipelineValue = useMemo(() => docs.reduce((acc, doc) => {
+    const match = doc.budget?.match(/£([\d,]+)/g);
+    if (match?.length) {
+      const val = parseInt(match[match.length - 1].replace(/[£,]/g, ""), 10);
+      return acc + (isNaN(val) ? 0 : val);
     }
     return acc;
-  }, 0);
+  }, 0), [docs]);
 
-  const formattedPipelineValue = new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: 0,
-  }).format(pipelineValue || 0);
+  // ── Lead pipeline breakdown ────────────────────────────────────────────────
+  const statusCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    LEAD_STATUS_ORDER.forEach(s => { map[s] = 0; });
+    leads.forEach(l => { if (map[l.status] !== undefined) map[l.status]++; });
+    return map;
+  }, [leads]);
 
-  const recentLeads = [...leads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
-  const recentDocs = [...docs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  // ── Lead source breakdown ──────────────────────────────────────────────────
+  const sourceCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    leads.forEach(l => {
+      const s = l.source || "Unknown";
+      map[s] = (map[s] || 0) + 1;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [leads]);
 
-  const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    New: "default",
-    Contacted: "secondary",
-    Qualified: "default",
-    "Proposal Sent": "secondary",
-    Won: "default",
-    Lost: "destructive",
-  };
+  // ── Industry breakdown ─────────────────────────────────────────────────────
+  const industryCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    leads.forEach(l => {
+      const s = l.industry || "Other";
+      map[s] = (map[s] || 0) + 1;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [leads]);
 
-  const docStatusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    Draft: "secondary",
-    "Under Review": "default",
-    Approved: "default",
-    Archived: "outline",
-  };
+  // ── Doc status for donut ───────────────────────────────────────────────────
+  const docStatusCounts = useMemo(() => {
+    const map: Record<string, number> = { Draft: 0, "Under Review": 0, Approved: 0, Archived: 0 };
+    docs.forEach(d => { if (map[d.status] !== undefined) map[d.status]++; });
+    return map;
+  }, [docs]);
+
+  const donutSegments = Object.entries(docStatusCounts).map(([k, v]) => ({
+    color: DOC_STATUS_META[k]?.color ?? "#ccc",
+    value: v,
+  }));
+
+  // ── Recent ─────────────────────────────────────────────────────────────────
+  const recentLeads = useMemo(() =>
+    [...leads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
+  , [leads]);
+
+  const recentDocs = useMemo(() =>
+    [...docs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
+  , [docs]);
+
+  // ── Greeting ──────────────────────────────────────────────────────────────
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const displayName = currentUser?.fullName?.split(" ")[0] || currentUser?.username || "there";
+
+  const adminUsers = useMemo(() => getAdminUsers(), []);
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-2">Overview of your pipeline and active documents.</p>
+    <div className="space-y-7 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+      {/* ── Welcome header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isAuthenticated ? `${greeting}, ${displayName} 👋` : "Onesoft Dashboard"}
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {format(new Date(), "EEEE, d MMMM yyyy")} &middot; Here's your business overview.
+          </p>
+        </div>
+        {isAuthenticated && (
+          <div className="flex gap-2">
+            <Link href="/leads">
+              <Button size="sm" variant="outline" className="gap-1.5"><UserPlus size={14} /> Add Lead</Button>
+            </Link>
+            <Link href="/documents/new">
+              <Button size="sm" className="gap-1.5"><Plus size={14} /> New Document</Button>
+            </Link>
+          </div>
+        )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover-elevate">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-total-leads">{totalLeads}</div>
-          </CardContent>
-        </Card>
-        <Card className="hover-elevate">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Req Documents</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-total-docs">{totalDocs}</div>
-          </CardContent>
-        </Card>
-        <Card className="hover-elevate">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-conversion-rate">{conversionRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Leads won</p>
-          </CardContent>
-        </Card>
-        <Card className="hover-elevate">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Est. Pipeline</CardTitle>
-            <PoundSterling className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="stat-pipeline-value">{formattedPipelineValue}</div>
-            <p className="text-xs text-muted-foreground mt-1">Based on active documents</p>
-          </CardContent>
-        </Card>
+      {/* ── KPI cards ───────────────────────────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          icon={Users}
+          label="Total Leads"
+          value={totalLeads}
+          sub={totalLeads > 0 ? <>{activeLeads} active · {lostLeads} lost</> : "No leads yet"}
+          accent="border-l-blue-500"
+          testId="stat-total-leads"
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          label="Deals Won"
+          value={wonLeads}
+          sub={<>Win rate: <strong>{winRate}%</strong></>}
+          accent="border-l-emerald-500"
+          testId="stat-conversion-rate"
+        />
+        <KpiCard
+          icon={FileText}
+          label="Req. Documents"
+          value={totalDocs}
+          sub={totalDocs > 0 ? <>{approvedDocs} approved · {pendingDocs} under review</> : "No documents yet"}
+          accent="border-l-violet-500"
+          testId="stat-total-docs"
+        />
+        <KpiCard
+          icon={PoundSterling}
+          label="Est. Pipeline"
+          value={formatGBP(pipelineValue)}
+          sub="Based on document budgets"
+          accent="border-l-amber-500"
+          testId="stat-pipeline-value"
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle>Recent Leads</CardTitle>
+      {/* ── Pipeline + Doc status + Team ────────────────────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        {/* Lead Pipeline */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Layers size={16} className="text-muted-foreground" /> Lead Pipeline
+              </CardTitle>
+              <Link href="/leads">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  View all <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
-          <CardContent className="flex-1">
-            {recentLeads.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentLeads.map((lead) => (
-                    <TableRow key={lead.id}>
-                      <TableCell className="font-medium">{lead.name}</TableCell>
-                      <TableCell>{lead.company}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusColors[lead.status] || "default"} className={lead.status === "Won" ? "bg-green-600 hover:bg-green-700" : ""}>
-                          {lead.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="text-sm text-muted-foreground py-6 text-center border rounded-md border-dashed">
-                No leads found.
+          <CardContent className="space-y-4">
+            {totalLeads === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No leads yet. <Link href="/leads"><span className="text-primary underline cursor-pointer">Add your first lead</span></Link>
               </div>
+            ) : (
+              <>
+                {/* Stacked bar */}
+                <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+                  {LEAD_STATUS_ORDER.map(s => {
+                    const count = statusCounts[s] || 0;
+                    const pct = totalLeads ? (count / totalLeads) * 100 : 0;
+                    if (pct === 0) return null;
+                    return (
+                      <div
+                        key={s}
+                        className={`${LEAD_STATUS_META[s].bg} transition-all`}
+                        style={{ width: `${pct}%` }}
+                        title={`${s}: ${count}`}
+                      />
+                    );
+                  })}
+                </div>
+                {/* Legend */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {LEAD_STATUS_ORDER.map(s => {
+                    const count = statusCounts[s] || 0;
+                    const pct = totalLeads ? Math.round((count / totalLeads) * 100) : 0;
+                    return (
+                      <div key={s} className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${LEAD_STATUS_META[s].bg}`} />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{s}</p>
+                          <p className="text-[11px] text-muted-foreground">{count} · {pct}%</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
 
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle>Recent Documents</CardTitle>
+        {/* Document Status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Target size={16} className="text-muted-foreground" /> Documents
+              </CardTitle>
+              <Link href="/documents">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  View all <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
-          <CardContent className="flex-1">
-            {recentDocs.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentDocs.map((doc) => (
-                    <TableRow key={doc.id}>
-                      <TableCell className="font-medium truncate max-w-[200px]">{doc.title}</TableCell>
-                      <TableCell>{doc.clientName}</TableCell>
-                      <TableCell>
-                        <Badge variant={docStatusColors[doc.status] || "default"} className={doc.status === "Approved" ? "bg-green-600 hover:bg-green-700" : ""}>
-                          {doc.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="text-sm text-muted-foreground py-6 text-center border rounded-md border-dashed">
-                No documents found.
+          <CardContent>
+            {totalDocs === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No documents yet.
               </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 flex-shrink-0">
+                  <DonutChart segments={donutSegments} />
+                </div>
+                <div className="space-y-2 flex-1 min-w-0">
+                  {Object.entries(docStatusCounts).filter(([, v]) => v > 0).map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: DOC_STATUS_META[k]?.color }} />
+                        <span className="text-xs truncate">{DOC_STATUS_META[k]?.label ?? k}</span>
+                      </div>
+                      <span className="text-xs font-semibold tabular-nums">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Insights row ────────────────────────────────────────────────────── */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+
+        {/* Lead Source breakdown */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp size={16} className="text-muted-foreground" /> Leads by Source
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {sourceCounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+            ) : sourceCounts.map(([src, cnt]) => {
+              const pct = totalLeads ? Math.round((cnt / totalLeads) * 100) : 0;
+              return (
+                <div key={src} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium truncate">{src}</span>
+                    <span className="text-muted-foreground ml-2">{cnt} ({pct}%)</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* Industry breakdown */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Building2 size={16} className="text-muted-foreground" /> Leads by Industry
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {industryCounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+            ) : industryCounts.map(([ind, cnt]) => {
+              const pct = totalLeads ? Math.round((cnt / totalLeads) * 100) : 0;
+              return (
+                <div key={ind} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium truncate">{ind}</span>
+                    <span className="text-muted-foreground ml-2">{cnt} ({pct}%)</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* Team / Sys info */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Clock size={16} className="text-muted-foreground" /> System Overview
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              { label: "Admin Users", value: adminUsers.length, icon: Users },
+              { label: "Total Leads", value: totalLeads, icon: TrendingUp },
+              { label: "Documents", value: totalDocs, icon: FileText },
+              { label: "Win Rate", value: `${winRate}%`, icon: Target },
+              { label: "Pipeline", value: formatGBP(pipelineValue), icon: PoundSterling },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Icon size={13} />
+                  <span>{label}</span>
+                </div>
+                <span className="text-sm font-semibold">{value}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Recent activity ──────────────────────────────────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+
+        {/* Recent Leads */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">Recent Leads</CardTitle>
+              <Link href="/leads">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  All leads <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {recentLeads.length === 0 ? (
+              <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
+                No leads yet.{" "}
+                {isAuthenticated && (
+                  <Link href="/leads"><span className="text-primary underline cursor-pointer">Add one</span></Link>
+                )}
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {recentLeads.map(lead => (
+                  <li key={lead.id} className="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 font-bold text-blue-600 dark:text-blue-400 text-sm">
+                      {lead.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{lead.name}</p>
+                      <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                        <Building2 size={10} />{lead.company}
+                        {lead.city && <><MapPin size={10} className="ml-1" />{lead.city}</>}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <LeadBadge status={lead.status} />
+                      <span className="text-[10px] text-muted-foreground">{relativeDate(lead.createdAt)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Documents */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">Recent Documents</CardTitle>
+              <Link href="/documents">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  All documents <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {recentDocs.length === 0 ? (
+              <div className="px-6 pb-6 text-center py-8 text-sm text-muted-foreground border-t border-dashed">
+                No documents yet.{" "}
+                {isAuthenticated && (
+                  <Link href="/documents/new"><span className="text-primary underline cursor-pointer">Create one</span></Link>
+                )}
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {recentDocs.map(doc => {
+                  const meta = DOC_STATUS_META[doc.status] ?? DOC_STATUS_META["Draft"];
+                  return (
+                    <li key={doc.id} className="flex items-center gap-3 px-6 py-3 hover:bg-muted/30 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
+                        <FileText size={14} className="text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.title || "Untitled Document"}</p>
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                          <Users size={10} />{doc.clientName}
+                          {doc.company && <><Building2 size={10} className="ml-1" />{doc.company}</>}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.badge}`}>
+                          {meta.label}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{relativeDate(doc.createdAt)}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>
