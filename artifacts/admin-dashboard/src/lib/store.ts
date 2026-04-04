@@ -822,6 +822,8 @@ export type AppSettings = {
   receiptHeader:        string;
   receiptFooter:        string;
   taxOnPOS:             boolean;
+  termsAndConditions:   string;
+  privacyPolicy:        string;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -845,6 +847,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   receiptHeader:        "",
   receiptFooter:        "Thank you for your business!",
   taxOnPOS:             true,
+  termsAndConditions:   "",
+  privacyPolicy:        "",
 };
 
 export function getSettings(): AppSettings {

@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback } from "react";
 import {
-  Building2, DollarSign, ShoppingBag, Database,
+  Building2, DollarSign, ShoppingBag, Database, Scale,
   Save, Upload, Download, Trash2, RefreshCw,
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
-  AlertTriangle, Check, ChevronRight, X,
+  AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
 } from "lucide-react";
+import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,13 +26,14 @@ import {
 import { CURRENCIES } from "@/lib/currencies";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
-type TabId = "company" | "financial" | "pos" | "data";
+type TabId = "company" | "financial" | "pos" | "legal" | "data";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: "company",   label: "Company Profile",  icon: Building2,   desc: "Name, logo & office contacts" },
-  { id: "financial", label: "Financial",         icon: DollarSign,  desc: "Currency, VAT & fiscal year"  },
-  { id: "pos",       label: "POS & Sales",       icon: ShoppingBag, desc: "Receipt, payment & tax defaults" },
-  { id: "data",      label: "Data Management",   icon: Database,    desc: "Backup, import & reset"       },
+  { id: "company",   label: "Company Profile",  icon: Building2,   desc: "Name, logo & office contacts"      },
+  { id: "financial", label: "Financial",         icon: DollarSign,  desc: "Currency, VAT & fiscal year"       },
+  { id: "pos",       label: "POS & Sales",       icon: ShoppingBag, desc: "Receipt, payment & tax defaults"   },
+  { id: "legal",     label: "Legal Documents",   icon: Scale,       desc: "Terms, conditions & privacy policy" },
+  { id: "data",      label: "Data Management",   icon: Database,    desc: "Backup, import & reset"            },
 ];
 
 const FISCAL_MONTHS = [
@@ -104,6 +106,174 @@ function ModuleResetRow({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+// ─── Legal starter templates ──────────────────────────────────────────────────
+const TERMS_TEMPLATE = `<h1>Terms and Conditions</h1>
+<p>Last updated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+<h2>1. Introduction</h2>
+<p>These Terms and Conditions ("Terms") govern your use of our products and services ("Services") provided by Onesoft ("we", "us", or "our"), registered in England and Wales. By using our Services, you agree to be bound by these Terms.</p>
+<h2>2. Services</h2>
+<p>We provide software development, IT consultancy, and related services. The specific scope, deliverables, and fees for each engagement shall be set out in a separate Statement of Work or Service Agreement signed by both parties.</p>
+<h2>3. Payment Terms</h2>
+<p>Invoices are due within 30 days of the invoice date unless otherwise agreed in writing. Late payments may attract interest at 8% per annum above the Bank of England base rate, pursuant to the Late Payment of Commercial Debts (Interest) Act 1998.</p>
+<h2>4. Intellectual Property</h2>
+<p>All intellectual property rights in deliverables created by us shall remain our property until full payment has been received, at which point ownership shall transfer to the client as specified in the relevant agreement.</p>
+<h2>5. Confidentiality</h2>
+<p>Both parties agree to keep confidential all non-public information received from the other party and to use it only for the purposes of fulfilling obligations under these Terms.</p>
+<h2>6. Limitation of Liability</h2>
+<p>Our total liability to you for any loss or damage arising under or in connection with these Terms shall not exceed the total fees paid by you in the 3 months preceding the relevant claim.</p>
+<h2>7. Governing Law</h2>
+<p>These Terms are governed by the laws of England and Wales. Any disputes shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>
+<h2>8. Contact</h2>
+<p>For any queries regarding these Terms, please contact us at our Hull, UK office.</p>`;
+
+const PRIVACY_TEMPLATE = `<h1>Privacy Policy</h1>
+<p>Last updated: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+<h2>1. Who We Are</h2>
+<p>Onesoft ("we", "us", "our") is a software and IT solutions company operating from Hull, UK and Islamabad, Pakistan. We are committed to protecting your personal data in accordance with the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.</p>
+<h2>2. Data We Collect</h2>
+<p>We may collect and process the following categories of personal data: name and contact details, company information, correspondence and communication records, payment and billing information, and data provided through our software systems.</p>
+<h2>3. How We Use Your Data</h2>
+<p>We use your personal data to: deliver our agreed services, process invoices and payments, communicate with you about your account, comply with legal obligations, and improve our services.</p>
+<h2>4. Legal Basis</h2>
+<p>We process your personal data on the basis of: contract performance, legitimate business interests, legal compliance, and where applicable, your explicit consent.</p>
+<h2>5. Data Retention</h2>
+<p>We retain personal data only for as long as necessary to fulfil the purposes for which it was collected, or as required by applicable law. Financial records are typically retained for 7 years.</p>
+<h2>6. Your Rights</h2>
+<p>Under UK GDPR, you have the right to: access your personal data, correct inaccurate data, request erasure ("right to be forgotten"), object to processing, and data portability. To exercise these rights, please contact us in writing.</p>
+<h2>7. Transfers Outside the UK</h2>
+<p>Where we transfer data to our Islamabad office, we ensure appropriate safeguards are in place in accordance with UK GDPR Chapter V requirements.</p>
+<h2>8. Contact</h2>
+<p>For data protection queries, please contact our Data Controller at our Hull, UK office.</p>`;
+
+// ─── LegalTab component ───────────────────────────────────────────────────────
+type LegalSubTab = "terms" | "privacy";
+
+function LegalTab({
+  form,
+  set,
+}: {
+  form: AppSettings;
+  set: <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => void;
+}) {
+  const [sub, setSub]         = useState<LegalSubTab>("terms");
+  const [preview, setPreview] = useState(false);
+
+  const currentValue = sub === "terms" ? form.termsAndConditions : form.privacyPolicy;
+  const currentKey   = sub === "terms" ? "termsAndConditions"    : "privacyPolicy";
+
+  function wordCount(html: string) {
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return text ? text.split(" ").length : 0;
+  }
+
+  function loadTemplate() {
+    const tpl = sub === "terms" ? TERMS_TEMPLATE : PRIVACY_TEMPLATE;
+    set(currentKey, tpl);
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ── Header ── */}
+      <SectionHeader
+        title="Legal Documents"
+        desc="Write your Terms & Conditions and Privacy Policy using the rich text editor. These are stored in Settings and can be referenced on sales documents and receipts."
+      />
+
+      {/* ── Info banner ── */}
+      <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40 rounded-xl p-4">
+        <Scale size={15} className="text-blue-500 mt-0.5 shrink-0" />
+        <div className="text-[12px] text-blue-700 dark:text-blue-300 leading-relaxed">
+          Use the editor below to draft your legal documents. You can insert headings, lists, bold/italic text, links and more.
+          Click <strong>Load Template</strong> to insert a UK-compliant starter draft which you can then customise.
+          <span className="block mt-1 text-blue-600/70 dark:text-blue-400/70">These documents are saved as part of Settings and can be printed or referenced on invoices and receipts.</span>
+        </div>
+      </div>
+
+      {/* ── Sub-tab switcher ── */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-muted rounded-lg">
+          {([
+            { id: "terms"  as LegalSubTab, label: "Terms & Conditions" },
+            { id: "privacy"as LegalSubTab, label: "Privacy Policy"     },
+          ]).map(s => (
+            <button
+              key={s.id}
+              onClick={() => { setSub(s.id); setPreview(false); }}
+              className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                sub === s.id
+                  ? "bg-white dark:bg-card shadow-sm text-gray-800 dark:text-foreground"
+                  : "text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {currentValue ? (
+            <span className="text-[11px] text-muted-foreground bg-gray-100 dark:bg-muted px-2 py-1 rounded-md">
+              ~{wordCount(currentValue)} words
+            </span>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-[12px]"
+            onClick={() => setPreview(p => !p)}
+            title={preview ? "Switch to editor" : "Preview rendered document"}
+          >
+            {preview ? <EyeOff size={12} /> : <Eye size={12} />}
+            {preview ? "Edit" : "Preview"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-[12px] border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+            onClick={loadTemplate}
+            title="Insert a starter UK-compliant template (you can then edit it)"
+          >
+            <Scale size={12} /> Load Template
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Editor or Preview ── */}
+      {preview ? (
+        <div
+          className="min-h-[520px] border border-gray-200 dark:border-border rounded-xl bg-white dark:bg-card p-8 overflow-auto prose prose-sm dark:prose-invert max-w-none"
+          dangerouslySetInnerHTML={{ __html: currentValue || "<p class='text-muted-foreground italic'>Nothing written yet. Switch to Edit mode to start writing.</p>" }}
+        />
+      ) : (
+        <div className="border border-gray-200 dark:border-border rounded-xl overflow-hidden">
+          <RichTextEditor
+            key={sub}
+            value={currentValue}
+            onChange={val => set(currentKey, val)}
+            placeholder={
+              sub === "terms"
+                ? "Start writing your Terms and Conditions… or click 'Load Template' above to insert a starter draft."
+                : "Start writing your Privacy Policy… or click 'Load Template' above to insert a starter draft."
+            }
+          />
+        </div>
+      )}
+
+      {/* ── Status strip ── */}
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+        <span>
+          {currentValue
+            ? `Document contains ~${wordCount(currentValue)} words`
+            : "No content yet — use the editor above or load a template"}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          Remember to click <strong>Save Changes</strong> after editing
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -216,7 +386,7 @@ export default function SettingsPage() {
           <Button
             onClick={handleSave}
             disabled={!dirty || saving || tab === "data"}
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white h-9 px-4 text-[13px]"
+            className={`gap-2 h-9 px-4 text-[13px] ${tab === "legal" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
           >
             {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? "Saving…" : "Save Changes"}
@@ -504,6 +674,11 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* ══ Legal Documents ══════════════════════════════════════════════ */}
+            {tab === "legal" && (
+              <LegalTab form={form} set={set} />
             )}
 
             {/* ══ Data Management ══════════════════════════════════════════════ */}
