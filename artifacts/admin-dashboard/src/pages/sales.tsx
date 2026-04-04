@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
-  ArrowLeft, Tag, Minus, Package, ChevronDown,
+  ArrowLeft, Minus, Package, ChevronDown, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,20 +119,13 @@ interface POSViewProps {
   onItemBlur: () => void;
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
-  onAddCustomItem: () => void;
   onSetStatus: (status: SaleStatus) => void;
-  addingItem: boolean;
-  newItem: SaleItem | null;
-  onNewItemChange: (item: SaleItem) => void;
-  onCommitNewItem: () => void;
-  onCancelNewItem: () => void;
 }
 
 function POSView({
   sale, localItems, localMeta, customerComboOpts, productComboOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
-  onDeleteItem, onAddProduct, onAddCustomItem, onSetStatus,
-  addingItem, newItem, onNewItemChange, onCommitNewItem, onCancelNewItem,
+  onDeleteItem, onAddProduct, onSetStatus,
 }: POSViewProps) {
   const [prodSearch, setProdSearch] = useState("");
   const [catFilter, setCatFilter]   = useState("All");
@@ -263,24 +256,19 @@ function POSView({
               Order Items
               <span className="text-[11px] text-gray-400 font-normal ml-1">({localItems.length})</span>
             </h2>
-            {isDraft && (
-              <button
-                onClick={onAddCustomItem}
-                className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-1 rounded transition-colors"
-              >
-                <Plus size={11} /> Custom Item
-              </button>
-            )}
+            <span className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+              <Lock size={9} /> Catalogue only
+            </span>
           </div>
 
           {/* Cart items — scrollable */}
           <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
 
-            {localItems.length === 0 && !addingItem && (
+            {localItems.length === 0 && (
               <div className="flex flex-col items-center justify-center h-40 text-gray-300 dark:text-zinc-600 gap-3">
                 <ShoppingCart size={36} strokeWidth={1.2} />
                 <span className="text-sm">
-                  {isDraft ? "Select products from the right to add them here" : "No items recorded"}
+                  {isDraft ? "Select products from the right panel to add them here" : "No items recorded"}
                 </span>
               </div>
             )}
@@ -404,69 +392,6 @@ function POSView({
               </div>
             ))}
 
-            {/* New custom item form */}
-            {addingItem && newItem && (
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border-2 border-amber-300 dark:border-amber-700 p-3 space-y-2">
-                <div className="text-[11px] font-semibold text-amber-600 mb-2">New Custom Item</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Product / Service *</label>
-                    <Combobox
-                      autoFocus
-                      value={newItem.productName}
-                      onChange={v => onNewItemChange({ ...newItem, productName: v })}
-                      onSelect={opt => {
-                        const prod = getProducts().find(p => p.name === opt.value);
-                        onNewItemChange({ ...newItem, productName: opt.value, sku: prod?.sku ?? newItem.sku, unit: prod?.unit || newItem.unit, unitPrice: prod?.price || newItem.unitPrice });
-                      }}
-                      options={productComboOpts}
-                      placeholder="Name *"
-                      className="w-full"
-                      inputClassName="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">SKU</label>
-                    <input value={newItem.sku}
-                      onChange={e => onNewItemChange({ ...newItem, sku: e.target.value })}
-                      placeholder="SKU"
-                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Qty</label>
-                    <input type="number" min="0" value={newItem.qty}
-                      onChange={e => onNewItemChange({ ...newItem, qty: e.target.value })}
-                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit</label>
-                    <input value={newItem.unit}
-                      onChange={e => onNewItemChange({ ...newItem, unit: e.target.value })}
-                      placeholder="pcs"
-                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Unit Price (£)</label>
-                    <input type="number" min="0" step="0.01" value={newItem.unitPrice}
-                      onChange={e => onNewItemChange({ ...newItem, unitPrice: e.target.value })}
-                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 text-right" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase tracking-wide">Discount %</label>
-                    <input type="number" min="0" max="100" value={newItem.discount}
-                      onChange={e => onNewItemChange({ ...newItem, discount: e.target.value })}
-                      className="w-full mt-0.5 px-2 py-1 border border-amber-300 dark:border-amber-600 rounded text-[12px] bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 text-right" />
-                  </div>
-                </div>
-                <div className="text-right font-mono font-semibold text-[13px] text-gray-700 dark:text-gray-300">
-                  Line Total: £{((parseFloat(newItem.qty)||0)*(parseFloat(newItem.unitPrice)||0)*(1-parseFloat(newItem.discount||"0")/100)).toFixed(2)}
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button size="sm" variant="outline" onClick={onCancelNewItem} className="h-7 text-[11px]">Cancel</Button>
-                  <Button size="sm" onClick={onCommitNewItem} className="h-7 gap-1 text-[11px]"><Plus size={11} /> Add to Sale</Button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* ── Totals + Action bar ─────────────────────────────────────────── */}
@@ -632,19 +557,11 @@ function POSView({
             )}
           </div>
 
-          {/* Bottom strip: custom item shortcut */}
-          {isDraft && (
-            <div className="shrink-0 border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-2">
-              <Tag size={12} className="text-gray-400" />
-              <span className="text-[11px] text-gray-400 flex-1">Can't find the product?</span>
-              <button
-                onClick={onAddCustomItem}
-                className="text-[11px] text-blue-500 hover:text-blue-700 font-medium px-2 py-0.5 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded transition-colors"
-              >
-                + Add Custom Item
-              </button>
-            </div>
-          )}
+          {/* Catalogue-only notice */}
+          <div className="shrink-0 border-t border-gray-100 dark:border-zinc-800 px-4 py-2 flex items-center gap-2">
+            <Lock size={11} className="text-gray-300" />
+            <span className="text-[11px] text-gray-400">Only catalogue products can be added to a sale. Manage products in the Products module.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -675,8 +592,6 @@ export default function SalesPage() {
   // ── POS state ──
   const [detailId,    setDetailId]   = useState<string | null>(null);
   const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
-  const [addingItem,  setAddingItem] = useState(false);
-  const [newItem,     setNewItem]    = useState<SaleItem | null>(null);
   const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string } | null>(null);
 
   // ── COLS ──
@@ -711,8 +626,6 @@ export default function SalesPage() {
   const openDetailDirect = useCallback((sale: Sale) => {
     setLocalItems([...sale.items]);
     setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes });
-    setAddingItem(false);
-    setNewItem(null);
     setDetailId(sale.id);
   }, []);
 
@@ -771,12 +684,6 @@ export default function SalesPage() {
 
   const handleDeleteItem = (itemId: string) => saveItems(localItems.filter(i => i.id !== itemId));
 
-  const handleCommitNewItem = () => {
-    if (!newItem?.productName.trim()) { toast({ title: "Product/service name is required", variant: "destructive" }); return; }
-    saveItems([...localItems, newItem]);
-    setNewItem(null); setAddingItem(false);
-  };
-
   const setStatus = (status: SaleStatus) => {
     if (!detailId || !localMeta) return;
     editSale(detailId, { ...localMeta, status, items: localItems });
@@ -788,8 +695,6 @@ export default function SalesPage() {
     setDetailId(null);
     setLocalMeta(null);
     setLocalItems([]);
-    setAddingItem(false);
-    setNewItem(null);
   };
 
   // ── List filtering ──
@@ -892,13 +797,7 @@ export default function SalesPage() {
         onItemBlur={handleItemBlur}
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
-        onAddCustomItem={() => { setAddingItem(true); setNewItem(blankSaleItem()); }}
         onSetStatus={setStatus}
-        addingItem={addingItem}
-        newItem={newItem}
-        onNewItemChange={setNewItem}
-        onCommitNewItem={handleCommitNewItem}
-        onCancelNewItem={() => { setNewItem(null); setAddingItem(false); }}
       />
     );
   }
