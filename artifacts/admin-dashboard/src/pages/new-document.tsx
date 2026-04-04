@@ -793,8 +793,8 @@ export default function NewDocument() {
           <FormField label="Payment Structure" required>
             <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
           </FormField>
-          <FormField label="Additional Costs" hint="Hosting fees, licences, third-party service costs, etc.">
-            <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. £50/mo hosting, £200/yr software licence..." />
+          <FormField label="Actual Cost" hint="Total cost of the project (e.g. 150,000 PKR, £8,000, etc.)">
+            <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 150,000 PKR, £8,000, $12,000..." />
           </FormField>
 
           <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">

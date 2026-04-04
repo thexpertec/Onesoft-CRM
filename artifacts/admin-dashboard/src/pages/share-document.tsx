@@ -131,7 +131,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1e40af;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #eff6ff;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#2563eb;display:inline-block;"></span>Budget &amp; Costing</div>
           <div style="display:flex;flex-direction:column;gap:12px;">
             ${field("Payment Structure", s5.paymentStructure)}
-            ${s5.additionalCosts ? field("Additional Costs", s5.additionalCosts) : ""}
+            ${s5.additionalCosts ? field("Actual Cost", s5.additionalCosts) : ""}
             ${milestonesTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Total Budget</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">£${milestonesTotal.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>` : ""}
           </div>
         </div>` : "";
@@ -674,7 +674,7 @@ export default function ShareDocument() {
             <SectionBlock icon={DollarSign} title="Budget & Costing">
               <div className="space-y-3">
                 <Field label="Payment Structure" value={s5.paymentStructure} />
-                {s5.additionalCosts && <Field label="Additional Costs" value={s5.additionalCosts} />}
+                {s5.additionalCosts && <Field label="Actual Cost" value={s5.additionalCosts} />}
                 {milestonesTotal > 0 && (
                   <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                     <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Budget</span>
