@@ -1,0 +1,79 @@
+Prepare a view only | frontend single page | Beautiful, and Simple Design
+
+Customer Requirement Collection Document
+•	Document Title: Input
+Instruction: Enter the title of the document. For example, "Software Requirements for [Customer Name]" or any relevant title.
+•	Date: Calendar Selection
+Instruction: Choose the date when the requirement gathering document is created or when the project start date is confirmed.
+•	Prepared By: Dropdown
+Instruction: Select the person or team responsible for preparing the document. This list should include all team members.
+•	Client Name: Select from Leads / Customers (add if doesn’t exist)
+Instruction: Select the client name from the Leads or Customers list. If the client is not available, use the "Add New Client" option to include them in the system.
+•	Contact Info: Auto display from Lead / Customer table
+Instruction: This field will automatically display the client’s contact information (Phone/Email) from the database. If this is not visible, ensure the contact details are correctly stored in the client record.
+•	Company Name: Auto display from Lead / Customer table
+Instruction: The company name will automatically populate based on the selected client. If the client’s company is missing, verify the client’s record in the database.
+•	Industry: Auto display from Lead / Customer table
+Instruction: The industry type will automatically fill from the system based on the selected client. Ensure that the client's industry information is updated.
+•	Website: Auto display from Lead / Customer table
+Instruction: The client’s website URL will auto-populate based on their record. If the website field is empty, make sure it is added to the client’s information.
+________________________________________
+2. Business Information:
+•	Business Type: Dropdown
+Instruction: Select the type of business from the list (e.g., B2B, B2C, SaaS, etc.).
+•	Target Audience: Text Input
+Instruction: Provide a brief description of the target audience, including age group, profession, and geographical location.
+•	Key Products/Services: Text Input
+Instruction: List the main products or services the client offers (e.g., software development, retail, consulting).
+•	Business Goals: Text Input
+Instruction: Describe the primary goals the client aims to achieve (e.g., increase sales, improve operational efficiency, expand customer base).
+•	Key Challenges: Text Input
+Instruction: Identify the major problems or challenges the client is currently facing (e.g., customer acquisition, inefficient processes).
+•	Current Software or Systems Used: Text Input
+Instruction: Provide details about any current software or systems the client is using (e.g., CRM, ERP, inventory management).
+________________________________________
+3. Software Requirements:
+•	Purpose: Text Input
+Instruction: Describe the main purpose of the software. What problem does it aim to solve or what functionality will it provide?
+•	Key Features: Multi-select/Drowpdown with search field
+Instruction: Select the key features required for the software (e.g., Lead Management, Customer CRM, Payment Processing, Analytics, User Roles, Notifications). You can add custom features based on client needs.
+•	Display a documented details of the client requirements submitted on admin side. 
+________________________________________
+4. Technical Requirements:
+•	Third-Party Integrations: Text Input
+Instruction: List any third-party services or systems that need to be integrated with the software (e.g., Payment Gateway, CRM, Email Marketing).
+•	Technology Stack: Text Input
+Instruction: Specify the preferred technology stack (e.g., Frontend: React, Backend: Node.js, Database: MongoDB, API Integrations).
+•	Hosting Requirements: Dropdown
+Instruction: Select the preferred hosting type (e.g., Cloud, On-premise, Hybrid).
+•	Security Requirements: Text Input
+Instruction: Describe any specific security needs (e.g., data encryption, multi-factor authentication, user access controls).
+________________________________________
+5. Project Timeline:
+•	Start Date: Calendar Selection
+Instruction: Select the start date for the project.
+•	Milestones: Text Input
+Instruction: Define the key milestones and their expected completion dates (e.g., Project Design, Development Phase, Testing Phase, Deployment).
+•	Expected Delivery Date: Calendar Selection
+Instruction: Select the expected date for the final delivery or project completion.
+________________________________________
+6. Budget:
+•	Estimated Range: Text Input
+Instruction: Provide the estimated budget range for the project (e.g., $5,000 – $10,000).
+•	Payment Structure: Dropdown
+Instruction: Select the payment structure (e.g., Hourly Rate, Fixed Price, Payment Milestones).
+•	Additional Costs: Text Input
+Instruction: Specify any additional costs (e.g., hosting fees, software licenses, third-party integration costs).
+________________________________________
+7. Support & Maintenance:
+•	Post-Launch Support: Text Input
+Instruction: Describe any post-launch support services required (e.g., bug fixes, updates, software improvements).
+•	Maintenance Duration: Dropdown
+Instruction: Select the maintenance duration (e.g., 3 months, 6 months, 1 year).
+________________________________________
+Footer:
+•	Version History: Text Input
+Instruction: Enter the version history of the document (e.g., Version 1.0 – [Date] – Initial Draft).
+•	Prepared By: Auto display
+Instruction: This field will automatically display the name of the person who prepared the document based on the user logged in.
+

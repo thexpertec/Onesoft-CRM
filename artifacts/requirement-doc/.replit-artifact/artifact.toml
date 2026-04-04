@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Customer Requirement Collection"
+version = "1.0.0"
+id = "artifacts/requirement-doc"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25357
+
+[services.development]
+run = "pnpm --filter @workspace/requirement-doc run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/requirement-doc", "run", "build" ]
+publicDir = "artifacts/requirement-doc/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25357"
+BASE_PATH = "/"
