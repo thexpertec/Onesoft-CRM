@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag } from "lucide-react";
+import { Calendar, ChevronDown, Building2, User, Globe, Phone, Mail, Briefcase, Target, Layers, Clock, DollarSign, Wrench, FileText, CheckSquare, Tag, MapPin } from "lucide-react";
+import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
 
 const TEAM_MEMBERS = [
   "Alice Johnson",
@@ -275,8 +276,30 @@ export default function RequirementDoc() {
   const client = CLIENTS.find((c) => c.name === selectedClient);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+    <div className="min-h-screen bg-background flex flex-col">
+
+      {/* Site Header */}
+      <header className="bg-white border-b border-border sticky top-0 z-20 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <img src={onesoftLogo} alt="Onesoft" className="h-8 w-auto object-contain" />
+          <div className="hidden sm:flex items-center gap-5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              Hull, UK &middot; Islamabad, Pakistan
+            </span>
+            <a href="tel:+447984273482" className="flex items-center gap-1.5 hover:text-primary transition-colors">
+              <Phone className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              +44 7984 273482
+            </a>
+            <a href="https://www.onesoft.org.uk" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:text-primary transition-colors">
+              <Globe className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              onesoft.org.uk
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-10">
 
         {/* Document Header */}
         <div className="mb-10 pb-8 border-b border-border">
@@ -534,8 +557,56 @@ export default function RequirementDoc() {
         </section>
 
         {/* Bottom padding */}
-        <div className="h-16" />
+        <div className="h-10" />
       </div>
+
+      {/* Site Footer */}
+      <footer className="border-t border-border bg-white mt-auto">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
+            {/* Logo & tagline */}
+            <div className="flex flex-col items-center sm:items-start gap-2">
+              <img src={onesoftLogo} alt="Onesoft" className="h-7 w-auto object-contain" />
+              <p className="text-xs text-muted-foreground">Crafting smart software solutions.</p>
+            </div>
+
+            {/* Contact details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2 text-xs text-muted-foreground">
+              <a href="tel:+447984273482" className="flex items-center gap-1.5 hover:text-primary transition-colors">
+                <Phone className="w-3 h-3 text-primary flex-shrink-0" />
+                +44 7984 273482 (UK)
+              </a>
+              <a href="tel:+923334199233" className="flex items-center gap-1.5 hover:text-primary transition-colors">
+                <Phone className="w-3 h-3 text-primary flex-shrink-0" />
+                +92 333 4199233 (PK)
+              </a>
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                Hull, United Kingdom
+              </span>
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                Islamabad, Pakistan
+              </span>
+              <a
+                href="https://www.onesoft.org.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 hover:text-primary transition-colors sm:col-span-2"
+              >
+                <Globe className="w-3 h-3 text-primary flex-shrink-0" />
+                www.onesoft.org.uk
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground/60">
+            <span>© {new Date().getFullYear()} Onesoft. All rights reserved.</span>
+            <span>Customer Requirement Collection Document</span>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
 }
