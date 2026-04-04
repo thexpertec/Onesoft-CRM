@@ -135,9 +135,9 @@ export default function RichTextEditor({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30">
+    <div className="rounded-xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
+      {/* Toolbar — sticky so it stays visible while scrolling the document */}
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-border bg-background/95 backdrop-blur-sm rounded-t-xl">
         {/* Undo / Redo */}
         <ToolbarButton
           title="Undo (Ctrl+Z)"
@@ -340,7 +340,7 @@ export default function RichTextEditor({
       <EditorContent editor={editor} />
 
       {/* Status bar */}
-      <div className="flex items-center justify-end px-4 py-1.5 border-t border-border/60 bg-muted/20">
+      <div className="flex items-center justify-end px-4 py-1.5 border-t border-border/60 bg-muted/20 rounded-b-xl">
         <span className="text-xs text-muted-foreground/50">
           {editor.getText().trim().length > 0
             ? `${editor.getText().trim().split(/\s+/).filter(Boolean).length} words · ${editor.getText().trim().length.toLocaleString()} characters`
