@@ -13,6 +13,7 @@ import Leads from "@/pages/leads";
 import Documents from "@/pages/documents";
 import DocumentDetail from "@/pages/document-detail";
 import NewDocument from "@/pages/new-document";
+import ShareDocument from "@/pages/share-document";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/share/:id" component={ShareDocument} />
       <Route>
         <Layout>
           <Switch>
