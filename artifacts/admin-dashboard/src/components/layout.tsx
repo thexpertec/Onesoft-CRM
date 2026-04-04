@@ -692,7 +692,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <Receipt size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{s.saleNumber}</span>
                       {s.customer && <span className="text-muted-foreground text-[11px]">· {s.customer}</span>}
-                      <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.status === "Completed" ? "bg-emerald-100 text-emerald-700" : s.status === "Refunded" ? "bg-amber-100 text-amber-700" : s.status === "Cancelled" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>{s.status}</span>
+                      <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.status === "Completed" ? "bg-emerald-100 text-emerald-700" : s.status === "On Credit" ? "bg-orange-100 text-orange-700" : s.status === "Refunded" ? "bg-amber-100 text-amber-700" : s.status === "Cancelled" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>{s.status}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

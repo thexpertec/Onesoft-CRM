@@ -797,7 +797,7 @@ export default function SalesPage() {
   const setStatus = (status: SaleStatus) => {
     if (!detailId || !localMeta) return;
     editSale(detailId, { ...localMeta, status, items: localItems });
-    toast({ title: status === "Completed" ? "Sale completed!" : status === "Refunded" ? "Sale refunded" : "Sale cancelled" });
+    toast({ title: status === "Completed" ? "Sale completed!" : status === "On Credit" ? "Issued on credit" : status === "Refunded" ? "Sale refunded" : "Sale cancelled" });
   };
 
   const closePOS = () => {
