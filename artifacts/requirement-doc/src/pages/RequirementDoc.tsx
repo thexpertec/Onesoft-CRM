@@ -1301,6 +1301,57 @@ export default function RequirementDoc() {
         <div className="h-10" />
       </div>
 
+      {/* Stats + CTA */}
+      <section className="border-t border-border bg-primary py-14 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-12">
+            {[
+              { value: "50+",   label: "Projects Delivered",  sub: "End-to-end solutions"       },
+              { value: "30+",   label: "Happy Clients",        sub: "UK & international"          },
+              { value: "5+",    label: "Years Experience",     sub: "Since 2019"                  },
+              { value: "98%",   label: "Client Satisfaction",  sub: "Rated excellent or good"     },
+            ].map(({ value, label, sub }) => (
+              <div key={label} className="text-center">
+                <p className="text-3xl sm:text-4xl font-extrabold text-white leading-none mb-1">{value}</p>
+                <p className="text-sm font-semibold text-white/90 mb-0.5">{label}</p>
+                <p className="text-[11px] text-white/60">{sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-white/15 mb-12" />
+
+          {/* CTA */}
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/60 mb-3">Start Your Project</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+              Ready to bring your idea to life?
+            </h2>
+            <p className="text-sm text-white/70 max-w-lg mx-auto mb-8">
+              Fill in this requirement form and our team will review your needs and get back to you within one business day.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a
+                href="mailto:info@onesoft.org.uk"
+                className="inline-flex items-center gap-2 bg-white text-primary font-semibold text-sm px-6 py-3 rounded-xl hover:bg-white/90 transition-colors shadow-sm"
+              >
+                <Mail className="w-4 h-4" />
+                info@onesoft.org.uk
+              </a>
+              <a
+                href="tel:+447984273482"
+                className="inline-flex items-center gap-2 bg-white/10 text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-white/20 transition-colors border border-white/20"
+              >
+                <Phone className="w-4 h-4" />
+                +44 7984 273482
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Businesses We've Worked With */}
       <section className="bg-muted/30 border-t border-border py-12 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
