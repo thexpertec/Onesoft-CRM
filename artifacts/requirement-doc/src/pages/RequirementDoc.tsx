@@ -1442,9 +1442,9 @@ export default function RequirementDoc() {
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-12">
             {[
-              { value: "50+",   label: "Projects Delivered",  sub: "End-to-end solutions"       },
-              { value: "30+",   label: "Happy Clients",        sub: "UK & international"          },
-              { value: "5+",    label: "Years Experience",     sub: "Since 2019"                  },
+              { value: "400+",  label: "Projects Delivered",  sub: "End-to-end solutions"       },
+              { value: "1000+", label: "Happy Clients",        sub: "UK & international"          },
+              { value: "12+",   label: "Years Experience",     sub: "Since 2012"                  },
               { value: "98%",   label: "Client Satisfaction",  sub: "Rated excellent or good"     },
             ].map(({ value, label, sub }) => (
               <div key={label} className="text-center">
