@@ -28,6 +28,7 @@ import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
 import SuppliersPage from "@/pages/suppliers";
 import PurchasesPage from "@/pages/purchases";
+import MediaLibraryPage from "@/pages/media";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ function Router() {
               <Route path="/units" component={UnitsPage} />
               <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/purchases" component={PurchasesPage} />
+              <Route path="/media" component={MediaLibraryPage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />

@@ -4,12 +4,13 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { ProductImagesDialog } from "@/components/product-images-dialog";
 
 type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "price" | "status" | "description";
 
@@ -29,12 +30,13 @@ export default function ProductsPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
-  const [search,       setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
-  const [deleteId,     setDeleteId]     = useState<string | null>(null);
-  const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
-  const [newRowActive, setNewRowActive] = useState<number | null>(null);
+  const [search,         setSearch]         = useState("");
+  const [statusFilter,   setStatusFilter]   = useState<string>("All");
+  const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
+  const [deleteId,       setDeleteId]       = useState<string | null>(null);
+  const [newRow,         setNewRow]         = useState<Record<EditableField, string> | null>(null);
+  const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
+  const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
 
   // Load reference data from other stores
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), [products]);
@@ -274,14 +276,31 @@ export default function ProductsPage() {
                     </td>
                   );
                 })}
-                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && (
-                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
-                        onClick={() => setDeleteId(prod.id)} data-testid={`btn-delete-product-${prod.id}`}>
-                        <Trash2 size={13} />
-                      </button>
-                    )}
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px`, width: 70 }} onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-center gap-0.5 h-full px-1">
+                    {/* Thumbnail indicator — always visible */}
+                    {prod.thumbnail ? (
+                      <img src={prod.thumbnail} alt="" title="Has thumbnail"
+                        className="w-5 h-5 rounded object-cover border border-zinc-200 dark:border-zinc-600 flex-shrink-0 cursor-pointer hover:opacity-80"
+                        onClick={() => isAuthenticated && setImagesDialogId(prod.id)} />
+                    ) : (prod.images?.length ?? 0) > 0 ? (
+                      <span className="text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 rounded px-1 flex-shrink-0 leading-4">{prod.images!.length}img</span>
+                    ) : null}
+                    {/* Action buttons — visible on row hover */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {isAuthenticated && (
+                        <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Manage images"
+                          onClick={() => setImagesDialogId(prod.id)}>
+                          <Camera size={13} />
+                        </button>
+                      )}
+                      {isAuthenticated && (
+                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
+                          onClick={() => setDeleteId(prod.id)} data-testid={`btn-delete-product-${prod.id}`}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -314,6 +333,24 @@ export default function ProductsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Images dialog */}
+      {imagesDialogId && (() => {
+        const prod = products.find(p => p.id === imagesDialogId);
+        if (!prod) return null;
+        return (
+          <ProductImagesDialog
+            key={imagesDialogId}
+            product={prod}
+            open={true}
+            onClose={() => setImagesDialogId(null)}
+            onSave={(thumbnail, images) => {
+              editProduct(imagesDialogId, { thumbnail, images });
+              toast({ title: "Images saved", description: `Images updated for "${prod.name}".` });
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -391,6 +391,8 @@ export type Product = {
   price: string;
   description: string;
   status: ProductStatus;
+  thumbnail?: string;
+  images?: string[];
   createdAt: string;
   updatedAt: string;
 };

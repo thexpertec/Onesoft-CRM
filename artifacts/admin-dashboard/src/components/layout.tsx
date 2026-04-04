@@ -6,7 +6,7 @@ import {
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
-  Package2,
+  Package2, Image as ImageIcon,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -87,8 +87,9 @@ const OTHER_NAV: NavItem[] = [
       { label: "Products",   href: "/products",   icon: Package,            desc: "Product catalogue"    },
       { label: "Brands",     href: "/brands",     icon: Bookmark,           desc: "Brand management"     },
       { label: "Categories", href: "/categories", icon: FolderOpen,         desc: "Product grouping"     },
-      { label: "Attributes", href: "/attributes", icon: SlidersHorizontal,  desc: "Product properties"   },
-      { label: "Units",      href: "/units",      icon: Ruler,              desc: "Measurement units"    },
+      { label: "Attributes",     href: "/attributes", icon: SlidersHorizontal,  desc: "Product properties"   },
+      { label: "Units",          href: "/units",      icon: Ruler,              desc: "Measurement units"    },
+      { label: "Media Library",  href: "/media",      icon: ImageIcon,          desc: "Product images"       },
     ],
   },
   {
@@ -121,7 +122,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units"];
+const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
 const SALES_ROUTES     = ["/sales"];
