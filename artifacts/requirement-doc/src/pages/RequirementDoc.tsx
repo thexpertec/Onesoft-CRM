@@ -1073,18 +1073,12 @@ export default function RequirementDoc() {
                   </button>
                 </div>
 
-                {/* Column header */}
-                <div className="hidden sm:grid sm:grid-cols-[24px_1fr_130px_110px_130px_120px_28px] gap-2 px-1 mb-1">
-                  {["#", "Milestone Title", "Due Date", "Payment", "Payment Status", "Task Status", ""].map((h) => (
-                    <span key={h} className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">{h}</span>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {milestones.map((m, index) => (
-                    <div key={m.id} className="rounded-lg border border-border bg-background p-2 sm:p-0 sm:border-0 sm:bg-transparent sm:rounded-none">
-                      {/* Mobile: stacked layout */}
-                      <div className="flex items-center gap-2 sm:hidden mb-2">
+                    <div key={m.id} className="rounded-xl border border-border bg-background overflow-hidden">
+
+                      {/* Row 1: Number + Title + Delete */}
+                      <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
                         <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
                           <span className="text-xs font-semibold text-primary">{index + 1}</span>
                         </div>
@@ -1095,91 +1089,6 @@ export default function RequirementDoc() {
                           placeholder={`e.g. Week ${index + 1}: Design & Planning`}
                           className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                         />
-                        <button type="button" onClick={() => removeMilestone(m.id)} disabled={milestones.length === 1} className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 sm:hidden">
-                        <input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, "date", e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-                        <input type="text" value={m.payment} onChange={(e) => updateMilestone(m.id, "payment", e.target.value)} placeholder="e.g. £500" className="px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-                        <div className="relative">
-                          <select value={m.paymentStatus} onChange={(e) => updateMilestone(m.id, "paymentStatus", e.target.value)} className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7">
-                            <option value="">Payment Status</option>
-                            {["Pending", "Partial", "Paid", "Overdue"].map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-                        <div className="relative">
-                          <select value={m.taskStatus} onChange={(e) => updateMilestone(m.id, "taskStatus", e.target.value)} className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7">
-                            <option value="">Task Status</option>
-                            {["Not Started", "In Progress", "Completed", "On Hold", "Cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-
-                      {/* Desktop: row layout */}
-                      <div className="hidden sm:grid sm:grid-cols-[24px_1fr_130px_110px_130px_120px_28px] gap-2 items-center">
-                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-xs font-semibold text-primary">{index + 1}</span>
-                        </div>
-
-                        <input
-                          type="text"
-                          value={m.title}
-                          onChange={(e) => updateMilestone(m.id, "title", e.target.value)}
-                          placeholder={`e.g. Week ${index + 1}: Design & Planning`}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                        />
-
-                        <input
-                          type="date"
-                          value={m.date}
-                          onChange={(e) => updateMilestone(m.id, "date", e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                        />
-
-                        <input
-                          type="text"
-                          value={m.payment}
-                          onChange={(e) => updateMilestone(m.id, "payment", e.target.value)}
-                          placeholder="e.g. £500"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                        />
-
-                        <div className="relative">
-                          <select
-                            value={m.paymentStatus}
-                            onChange={(e) => updateMilestone(m.id, "paymentStatus", e.target.value)}
-                            className="w-full appearance-none px-2.5 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
-                            style={{ color: m.paymentStatus === "Paid" ? "#16a34a" : m.paymentStatus === "Overdue" ? "#dc2626" : m.paymentStatus === "Partial" ? "#d97706" : undefined }}
-                          >
-                            <option value="">— Status —</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Partial">Partial</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Overdue">Overdue</option>
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-
-                        <div className="relative">
-                          <select
-                            value={m.taskStatus}
-                            onChange={(e) => updateMilestone(m.id, "taskStatus", e.target.value)}
-                            className="w-full appearance-none px-2.5 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
-                            style={{ color: m.taskStatus === "Completed" ? "#16a34a" : m.taskStatus === "Cancelled" ? "#dc2626" : m.taskStatus === "In Progress" ? "#2563eb" : m.taskStatus === "On Hold" ? "#d97706" : undefined }}
-                          >
-                            <option value="">— Status —</option>
-                            <option value="Not Started">Not Started</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
-                            <option value="On Hold">On Hold</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-
                         <button
                           type="button"
                           onClick={() => removeMilestone(m.id)}
@@ -1192,6 +1101,74 @@ export default function RequirementDoc() {
                           </svg>
                         </button>
                       </div>
+
+                      {/* Row 2: Due Date + Payment + Payment Status + Task Status */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 pb-3">
+                        {/* Due Date */}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Due Date</p>
+                          <input
+                            type="date"
+                            value={m.date}
+                            onChange={(e) => updateMilestone(m.id, "date", e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                          />
+                        </div>
+
+                        {/* Payment */}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment</p>
+                          <input
+                            type="text"
+                            value={m.payment}
+                            onChange={(e) => updateMilestone(m.id, "payment", e.target.value)}
+                            placeholder="e.g. £500"
+                            className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                          />
+                        </div>
+
+                        {/* Payment Status */}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment Status</p>
+                          <div className="relative">
+                            <select
+                              value={m.paymentStatus}
+                              onChange={(e) => updateMilestone(m.id, "paymentStatus", e.target.value)}
+                              className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
+                              style={{ color: m.paymentStatus === "Paid" ? "#16a34a" : m.paymentStatus === "Overdue" ? "#dc2626" : m.paymentStatus === "Partial" ? "#d97706" : undefined }}
+                            >
+                              <option value="">— Select —</option>
+                              <option value="Pending">Pending</option>
+                              <option value="Partial">Partial</option>
+                              <option value="Paid">Paid</option>
+                              <option value="Overdue">Overdue</option>
+                            </select>
+                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+
+                        {/* Task Status */}
+                        <div>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Task Status</p>
+                          <div className="relative">
+                            <select
+                              value={m.taskStatus}
+                              onChange={(e) => updateMilestone(m.id, "taskStatus", e.target.value)}
+                              className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
+                              style={{ color: m.taskStatus === "Completed" ? "#16a34a" : m.taskStatus === "Cancelled" ? "#dc2626" : m.taskStatus === "In Progress" ? "#2563eb" : m.taskStatus === "On Hold" ? "#d97706" : undefined }}
+                            >
+                              <option value="">— Select —</option>
+                              <option value="Not Started">Not Started</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                              <option value="On Hold">On Hold</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   ))}
                 </div>
