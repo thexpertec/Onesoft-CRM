@@ -614,7 +614,7 @@ export const deletePurchaseOrder = (id: string): void => {
 };
 
 // ─── Sales / POS ─────────────────────────────────────────────────────────────
-export const SALE_STATUSES  = ["Draft", "Completed", "Refunded", "Cancelled"] as const;
+export const SALE_STATUSES  = ["Draft", "Completed", "On Credit", "Refunded", "Cancelled"] as const;
 export type SaleStatus = typeof SALE_STATUSES[number];
 
 export const SALE_PAYMENTS  = ["Cash", "Card", "Bank Transfer", "Cheque", "Credit"] as const;

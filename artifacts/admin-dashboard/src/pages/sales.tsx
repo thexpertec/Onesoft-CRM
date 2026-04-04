@@ -24,10 +24,11 @@ import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_BG: Record<SaleStatus, string> = {
-  Draft:     "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
-  Completed: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
-  Refunded:  "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
-  Cancelled: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  Draft:       "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
+  Completed:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  "On Credit": "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
+  Refunded:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 const PAYMENT_ICON: Record<SalePayment, React.ReactNode> = {
@@ -156,6 +157,8 @@ function POSView({
   const discountAmt  = discountTotal(localItems);
   const isDraft      = sale.status === "Draft";
   const isCompleted  = sale.status === "Completed";
+  const isOnCredit   = sale.status === "On Credit";
+  const isCredit     = localMeta.paymentMethod === "Credit";
 
   // Blue badge on product card showing how many are already in cart
   const cartQtyMap = useMemo(() => {
@@ -436,11 +439,24 @@ function POSView({
             <div className="px-5 pb-4 space-y-2">
               {isDraft && (
                 <>
+                  {/* Credit sale notice */}
+                  {isCredit && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                      <CreditCard size={13} className="text-orange-500 shrink-0" />
+                      <span className="text-[11px] text-orange-700 dark:text-orange-300 font-medium">
+                        Credit sale — goods released now, payment collected later.
+                      </span>
+                    </div>
+                  )}
                   <button
-                    onClick={() => { onSetStatus("Completed"); onClose(); }}
-                    className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
+                    onClick={() => { onSetStatus(isCredit ? "On Credit" : "Completed"); onClose(); }}
+                    className={`w-full h-12 rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.99] ${
+                      isCredit
+                        ? "bg-orange-500 hover:bg-orange-600 shadow-orange-200 dark:shadow-none"
+                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 dark:shadow-none"
+                    }`}
                   >
-                    <Check size={17} /> Complete &amp; Pay
+                    {isCredit ? <><CreditCard size={17} /> Issue on Credit</> : <><Check size={17} /> Complete &amp; Pay</>}
                   </button>
                   <div className="flex gap-2">
                     <button
@@ -454,6 +470,36 @@ function POSView({
                       className="h-9 px-3 rounded-xl border-2 border-red-100 dark:border-red-900/50 text-[12px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-1.5 transition-colors"
                     >
                       <Ban size={13} /> Void
+                    </button>
+                  </div>
+                </>
+              )}
+              {isOnCredit && (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                    <CreditCard size={13} className="text-orange-500 shrink-0" />
+                    <span className="text-[11px] text-orange-700 dark:text-orange-300 font-medium">
+                      Payment outstanding — mark as paid when customer settles.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { onSetStatus("Completed"); onClose(); }}
+                    className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
+                  >
+                    <Check size={16} /> Mark as Paid
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onSetStatus("Refunded")}
+                      className="flex-1 h-9 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[12px] font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <RotateCcw size={13} /> Refund
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="flex-1 h-9 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Close
                     </button>
                   </div>
                 </>
