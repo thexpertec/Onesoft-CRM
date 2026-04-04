@@ -265,8 +265,20 @@ export default function RequirementDoc() {
   const [hosting, setHosting] = useState("");
   const [security, setSecurity] = useState("");
   const [startDate, setStartDate] = useState("");
-  const [milestones, setMilestones] = useState("");
+  const [milestones, setMilestones] = useState<{ id: string; title: string; date: string }[]>([
+    { id: "1", title: "", date: "" },
+  ]);
   const [deliveryDate, setDeliveryDate] = useState("");
+
+  const addMilestone = () =>
+    setMilestones((prev) => [...prev, { id: Date.now().toString(), title: "", date: "" }]);
+
+  const removeMilestone = (id: string) =>
+    setMilestones((prev) => prev.filter((m) => m.id !== id));
+
+  const updateMilestone = (id: string, field: "title" | "date", value: string) =>
+    setMilestones((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)));
+
   const [budget, setBudget] = useState("");
   const [paymentStructure, setPaymentStructure] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState("");
@@ -493,14 +505,55 @@ export default function RequirementDoc() {
               <DateInput value={deliveryDate} onChange={setDeliveryDate} />
             </FormField>
             <div className="sm:col-span-2">
-              <FormField label="Milestones" hint="Key phases and their expected completion dates">
-                <TextInput
-                  value={milestones}
-                  onChange={setMilestones}
-                  rows={4}
-                  placeholder="e.g.&#10;Week 1-2: Requirements & Design&#10;Week 3-6: Development Phase&#10;Week 7: Testing & QA&#10;Week 8: Deployment & Launch"
-                />
-              </FormField>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <FieldLabel label="Milestones" />
+                  <button
+                    type="button"
+                    onClick={addMilestone}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+                  >
+                    <span className="text-base leading-none">+</span>
+                    Add Milestone
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {milestones.map((m, index) => (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={m.title}
+                        onChange={(e) => updateMilestone(m.id, "title", e.target.value)}
+                        placeholder={`e.g. Week ${index + 1}: Design & Planning`}
+                        className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
+                      <input
+                        type="date"
+                        value={m.date}
+                        onChange={(e) => updateMilestone(m.id, "date", e.target.value)}
+                        className="w-38 px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeMilestone(m.id)}
+                        disabled={milestones.length === 1}
+                        title="Remove milestone"
+                        className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-2">Key phases and their expected completion dates</p>
+              </div>
             </div>
           </div>
         </section>
