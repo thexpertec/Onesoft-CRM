@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Moon, Sun, Menu, X,
-  LogOut, Lock, ShieldCheck, Shield, UserCheck, Package, Truck,
+  LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
+  ArrowRight,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -19,59 +20,93 @@ import { useAuth } from "@/contexts/auth-context";
 import { getLeads, getCustomers, getSuppliers, getDocs } from "@/lib/store";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
-// ─── Nav config ───────────────────────────────────────────────────────────────
-type SubItem = { label: string; href: string; icon: React.ElementType };
-type NavItem = { href: string; label: string; icon: React.ElementType; items: SubItem[] | null };
+// ─── Types ────────────────────────────────────────────────────────────────────
+type SubItem = { label: string; href: string; icon: React.ElementType; desc?: string };
+type NavItem = {
+  key: string;
+  href?: string;
+  label: string;
+  icon: React.ElementType;
+  items?: SubItem[] | null;
+  mega?: boolean;
+};
 
-const BASE_NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, items: null },
+// ─── CRM mega-menu columns ────────────────────────────────────────────────────
+const CRM_COLUMNS = [
   {
-    href: "/leads", label: "Leads", icon: Users,
-    items: [
-      { label: "All Leads",   href: "/leads", icon: Users },
-      { label: "Add Lead",    href: "/leads", icon: UserPlus },
+    href:  "/leads",
+    label: "Leads",
+    icon:  Users,
+    color: "text-blue-500",
+    bg:    "bg-blue-50 dark:bg-blue-950/40",
+    desc:  "Pipeline & prospecting",
+    links: [
+      { label: "All Leads",  href: "/leads", icon: Users },
+      { label: "Add Lead",   href: "/leads", icon: UserPlus },
     ],
   },
   {
-    href: "/customers", label: "Customers", icon: UserCheck,
-    items: [
-      { label: "All Customers",    href: "/customers", icon: UserCheck },
-      { label: "Add Customer",     href: "/customers", icon: UserPlus },
+    href:  "/customers",
+    label: "Customers",
+    icon:  UserCheck,
+    color: "text-emerald-500",
+    bg:    "bg-emerald-50 dark:bg-emerald-950/40",
+    desc:  "Client management",
+    links: [
+      { label: "All Customers",     href: "/customers", icon: UserCheck },
+      { label: "Add Customer",      href: "/customers", icon: UserPlus },
+      { label: "Convert from Lead", href: "/customers", icon: ArrowRight },
     ],
   },
   {
-    href: "/products", label: "Products", icon: Package,
+    href:  "/suppliers",
+    label: "Suppliers",
+    icon:  Truck,
+    color: "text-violet-500",
+    bg:    "bg-violet-50 dark:bg-violet-950/40",
+    desc:  "Vendor relationships",
+    links: [
+      { label: "All Suppliers", href: "/suppliers", icon: Truck },
+      { label: "Add Supplier",  href: "/suppliers", icon: UserPlus },
+    ],
+  },
+];
+
+// ─── Other nav items ──────────────────────────────────────────────────────────
+const OTHER_NAV: NavItem[] = [
+  { key: "dashboard", href: "/", label: "Dashboard", icon: LayoutDashboard, items: null },
+  {
+    key: "crm", label: "CRM", icon: Users, mega: true,
+    items: null,
+  },
+  {
+    key: "products", href: "/products", label: "Products", icon: Package,
     items: [
-      { label: "All Products",        href: "/products", icon: Package },
-      { label: "Manage Categories",   href: "/products", icon: Tag },
+      { label: "All Products",      href: "/products", icon: Package },
+      { label: "Manage Categories", href: "/products", icon: Tag },
     ],
   },
   {
-    href: "/suppliers", label: "Suppliers", icon: Truck,
+    key: "documents", href: "/documents", label: "Documents", icon: FileText,
     items: [
-      { label: "All Suppliers",  href: "/suppliers", icon: Truck },
-      { label: "Add Supplier",   href: "/suppliers", icon: UserPlus },
-    ],
-  },
-  {
-    href: "/documents", label: "Documents", icon: FileText,
-    items: [
-      { label: "All Documents",  href: "/documents",     icon: FileText },
-      { label: "New Document",   href: "/documents/new", icon: FilePlus },
+      { label: "All Documents", href: "/documents",     icon: FileText },
+      { label: "New Document",  href: "/documents/new", icon: FilePlus },
     ],
   },
 ];
 
 const USERS_NAV: NavItem = {
-  href: "/users", label: "Users", icon: Shield,
+  key: "users", href: "/users", label: "Users", icon: Shield,
   items: [{ label: "All Users", href: "/users", icon: Shield }],
 };
 
+const CRM_ROUTES = ["/leads", "/customers", "/suppliers"];
+
 const QUICK_ADD: SubItem[] = [
-  { label: "New Lead",       href: "/leads",         icon: UserPlus },
-  { label: "New Customer",   href: "/customers",     icon: UserCheck },
-  { label: "New Supplier",   href: "/suppliers",     icon: Truck },
-  { label: "New Document",   href: "/documents/new", icon: FilePlus },
+  { label: "New Lead",     href: "/leads",         icon: UserPlus },
+  { label: "New Customer", href: "/customers",     icon: UserCheck },
+  { label: "New Supplier", href: "/suppliers",     icon: Truck },
+  { label: "New Document", href: "/documents/new", icon: FilePlus },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -79,13 +114,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
   const { isSuperAdmin, currentUser, logout } = useAuth();
+
   const [mobileOpen,  setMobileOpen]  = useState(false);
   const [searchOpen,  setSearchOpen]  = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [crmOpen,     setCrmOpen]     = useState(false);
 
-  useEffect(() => { setMobileOpen(false); }, [location]);
+  const crmRef = useRef<HTMLDivElement>(null);
 
-  // Ctrl+K / ⌘K shortcut
+  // Close mega menu on outside click
+  useEffect(() => {
+    if (!crmOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (crmRef.current && !crmRef.current.contains(e.target as Node)) {
+        setCrmOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [crmOpen]);
+
+  // Close on route change
+  useEffect(() => { setCrmOpen(false); setMobileOpen(false); }, [location]);
+
+  // ⌘K shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -97,28 +149,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const navItems = isSuperAdmin ? [...BASE_NAV, USERS_NAV] : BASE_NAV;
+  const navItems = isSuperAdmin ? [...OTHER_NAV, USERS_NAV] : OTHER_NAV;
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
     .split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  // Live search results (min 2 chars)
+  const isCrmActive = CRM_ROUTES.some(r => location === r || location.startsWith(r));
+
+  // Search
   const q = searchQuery.toLowerCase();
   const hasQuery = q.length >= 2;
   const searchResults = hasQuery ? {
     leads:     getLeads().filter(l =>
-      l.name?.toLowerCase().includes(q) || l.company?.toLowerCase().includes(q)
-    ).slice(0, 5),
+      l.name?.toLowerCase().includes(q) || l.company?.toLowerCase().includes(q)).slice(0, 5),
     customers: getCustomers().filter(c =>
-      c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)
-    ).slice(0, 5),
+      c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)).slice(0, 5),
     suppliers: getSuppliers().filter(s =>
-      s.company?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q)
-    ).slice(0, 5),
-    docs: getDocs().filter(d =>
-      d.title?.toLowerCase().includes(q) || d.clientName?.toLowerCase().includes(q)
-    ).slice(0, 5),
+      s.company?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q)).slice(0, 5),
+    docs:      getDocs().filter(d =>
+      d.title?.toLowerCase().includes(q) || d.clientName?.toLowerCase().includes(q)).slice(0, 5),
   } : null;
 
   const hasResults = searchResults &&
@@ -128,11 +178,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col">
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════
           ROW 1 — Brand · Search · Actions
-      ═══════════════════════════════════════════════════════════════════════ */}
+      ═══════════════════════════════════════════════════════════════ */}
       <div className="sticky top-0 z-40 bg-white dark:bg-card shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-
         <div className="max-w-[1600px] mx-auto px-5 md:px-8 h-[60px] flex items-center gap-3">
 
           {/* Logo */}
@@ -142,7 +191,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="hidden md:block h-5 w-px bg-gray-100 dark:bg-border mx-1 flex-shrink-0" />
 
-          {/* Search bar */}
+          {/* Search */}
           <button
             onClick={() => setSearchOpen(true)}
             className="flex-1 max-w-md flex items-center gap-2 h-9 px-3 rounded-lg bg-gray-50 dark:bg-muted border border-gray-200 dark:border-border text-left text-[13px] text-gray-400 dark:text-muted-foreground hover:border-blue-300 dark:hover:border-blue-700 hover:bg-white dark:hover:bg-muted transition-colors group"
@@ -150,29 +199,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <Search size={14} className="flex-shrink-0 text-gray-400 group-hover:text-blue-400 transition-colors" />
             <span className="flex-1">Search anything...</span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] border border-gray-200 dark:border-border px-1.5 py-0.5 rounded bg-white dark:bg-card text-gray-300 font-mono">
-              ⌘K
-            </kbd>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] border border-gray-200 dark:border-border px-1.5 py-0.5 rounded bg-white dark:bg-card text-gray-300 font-mono">⌘K</kbd>
           </button>
 
-          {/* ── Right actions ── */}
+          {/* Right actions */}
           <div className="flex items-center gap-1 ml-auto flex-shrink-0">
 
             {/* Theme */}
-            <button
-              onClick={toggleTheme}
-              data-testid="toggle-theme"
+            <button onClick={toggleTheme} data-testid="toggle-theme"
               title={theme === "dark" ? "Light mode" : "Dark mode"}
-              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors"
-            >
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors">
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
             {/* Notifications */}
-            <button
-              title="Notifications"
-              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors relative"
-            >
+            <button title="Notifications"
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors relative">
               <Bell size={16} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-card" />
             </button>
@@ -187,16 +229,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                  Create New
-                </DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Create New</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {QUICK_ADD.map(item => (
-                  <DropdownMenuItem
-                    key={item.label}
-                    className="gap-2 cursor-pointer text-[13px]"
-                    onClick={() => navigate(item.href)}
-                  >
+                  <DropdownMenuItem key={item.label} className="gap-2 cursor-pointer text-[13px]" onClick={() => navigate(item.href)}>
                     <item.icon size={13} className="text-muted-foreground" />
                     {item.label}
                   </DropdownMenuItem>
@@ -245,11 +281,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
                 <DropdownMenuSeparator />
                 <div className="py-1">
-                  <DropdownMenuItem
-                    onClick={logout}
-                    data-testid="btn-logout"
-                    className="gap-2 cursor-pointer text-[13px] text-red-600 dark:text-red-400 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30"
-                  >
+                  <DropdownMenuItem onClick={logout} data-testid="btn-logout"
+                    className="gap-2 cursor-pointer text-[13px] text-red-600 dark:text-red-400 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/30">
                     <LogOut size={13} />
                     Sign Out
                   </DropdownMenuItem>
@@ -260,49 +293,131 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/* Mobile hamburger */}
             <button
               className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-muted transition-colors"
-              onClick={() => setMobileOpen(v => !v)}
-              aria-label="Toggle menu"
-            >
+              onClick={() => setMobileOpen(v => !v)}>
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            ROW 2 — Navigation bar with dropdowns (desktop)
-        ═══════════════════════════════════════════════════════════════════ */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ROW 2 — Navigation with mega menu (desktop)
+        ═══════════════════════════════════════════════════════════════ */}
         <div className="hidden md:block border-t border-gray-100 dark:border-border bg-white dark:bg-card">
           <div className="max-w-[1600px] mx-auto px-5 md:px-8 flex items-stretch h-[40px] gap-0">
+
             {navItems.map(item => {
               const isActive =
-                location === item.href ||
-                (item.href !== "/" && location.startsWith(item.href));
+                item.key === "crm"
+                  ? isCrmActive
+                  : location === item.href ||
+                    (item.href && item.href !== "/" && location.startsWith(item.href));
 
-              const linkClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
+              const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
                 isActive
                   ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20"
                   : "border-transparent text-gray-500 hover:text-gray-800 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted/40"
               }`;
 
-              if (!item.items) {
+              // ── CRM mega menu trigger ──────────────────────────────────────
+              if (item.key === "crm") {
                 return (
-                  <Link key={item.href} href={item.href} data-testid={`nav-${item.label.toLowerCase()}`} className={linkClass}>
+                  <div key="crm" ref={crmRef} className="relative flex items-stretch">
+                    <button
+                      data-testid="nav-crm"
+                      onClick={() => setCrmOpen(v => !v)}
+                      className={baseClass + " group"}
+                    >
+                      <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
+                      {item.label}
+                      <ChevronDown
+                        size={11}
+                        className={`ml-0.5 text-gray-400 transition-transform duration-200 ${crmOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {/* ── Mega menu panel ──────────────────────────────────── */}
+                    {crmOpen && (
+                      <div className="absolute top-full left-0 z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden"
+                        style={{ minWidth: "580px" }}>
+
+                        {/* Column grid */}
+                        <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-border">
+                          {CRM_COLUMNS.map(col => (
+                            <div key={col.href} className="p-5">
+                              {/* Column header */}
+                              <div className="flex items-center gap-2.5 mb-1">
+                                <div className={`w-8 h-8 rounded-lg ${col.bg} flex items-center justify-center flex-shrink-0`}>
+                                  <col.icon size={15} className={col.color} />
+                                </div>
+                                <div>
+                                  <Link
+                                    href={col.href}
+                                    className="text-[13px] font-semibold text-gray-800 dark:text-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                  >
+                                    {col.label}
+                                  </Link>
+                                  <p className="text-[10px] text-gray-400 dark:text-muted-foreground">{col.desc}</p>
+                                </div>
+                              </div>
+
+                              {/* Links */}
+                              <div className="mt-3 space-y-0.5">
+                                {col.links.map(link => (
+                                  <Link
+                                    key={link.label}
+                                    href={link.href}
+                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted transition-colors"
+                                  >
+                                    <link.icon size={12} className="text-gray-400 flex-shrink-0" />
+                                    {link.label}
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Footer bar */}
+                        <div className="px-5 py-2.5 bg-gray-50 dark:bg-muted/40 border-t border-gray-100 dark:border-border flex items-center justify-between">
+                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">
+                            Manage all your CRM records in one place
+                          </span>
+                          <Link
+                            href="/leads"
+                            className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
+                          >
+                            View pipeline <ArrowRight size={11} />
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── Plain link ─────────────────────────────────────────────────
+              if (!item.items || item.items.length === 0) {
+                return (
+                  <Link key={item.key} href={item.href!}
+                    data-testid={`nav-${item.label.toLowerCase()}`}
+                    className={baseClass}>
                     <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
                     {item.label}
                   </Link>
                 );
               }
 
+              // ── Regular dropdown ───────────────────────────────────────────
               return (
-                <DropdownMenu key={item.href}>
+                <DropdownMenu key={item.key}>
                   <DropdownMenuTrigger asChild>
-                    <button data-testid={`nav-${item.label.toLowerCase()}`} className={linkClass + " group"}>
+                    <button data-testid={`nav-${item.label.toLowerCase()}`} className={baseClass + " group"}>
                       <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
                       {item.label}
-                      <ChevronDown size={11} className="ml-0.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                      <ChevronDown size={11} className="ml-0.5 text-gray-400 group-data-[state=open]:rotate-180 transition-transform" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" sideOffset={0} className="w-48 rounded-t-none">
+                  <DropdownMenuContent align="start" sideOffset={0} className="w-48">
                     {item.items.map((sub, idx) => (
                       <DropdownMenuItem key={idx} asChild>
                         <Link href={sub.href} className="flex items-center gap-2 cursor-pointer text-[13px]">
@@ -320,31 +435,45 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile nav drawer */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-gray-100 dark:border-border bg-white dark:bg-card px-4 pb-4 pt-2 space-y-0.5">
-            {navItems.map(item => {
-              const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
+          <div className="md:hidden border-t border-gray-100 dark:border-border bg-white dark:bg-card px-4 pb-4 pt-2">
+            <div className="space-y-0.5">
+              {/* Dashboard */}
+              <Link href="/"
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  location === "/" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                <LayoutDashboard size={16} /> Dashboard
+              </Link>
+
+              {/* CRM group */}
+              <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">CRM</p>
+                {CRM_COLUMNS.map(col => (
+                  <Link key={col.href} href={col.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      location.startsWith(col.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                    <col.icon size={16} /> {col.label}
+                  </Link>
+                ))}
+              </div>
+
+              {/* Products, Documents, Users */}
+              {[
+                { href: "/products",  label: "Products",  icon: Package },
+                { href: "/documents", label: "Documents", icon: FileText },
+                ...(isSuperAdmin ? [{ href: "/users", label: "Users", icon: Shield }] : []),
+              ].map(item => (
+                <Link key={item.href} href={item.href}
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400"
-                      : "text-gray-500 hover:text-gray-900 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted"
-                  }`}
-                >
-                  <item.icon size={16} />
-                  {item.label}
+                    location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                  <item.icon size={16} /> {item.label}
                 </Link>
-              );
-            })}
-            <div className="pt-2 border-t border-gray-100 dark:border-border mt-2">
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-              >
-                <LogOut size={16} />
-                Sign Out
+              ))}
+            </div>
+
+            <div className="pt-2 mt-2 border-t border-gray-100">
+              <button onClick={logout}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
+                <LogOut size={16} /> Sign Out
               </button>
             </div>
           </div>
@@ -361,7 +490,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 placeholder="Search leads, customers, suppliers, documents..."
                 value={searchQuery}
                 onValueChange={setSearchQuery}
-                className="h-12 text-[13px] border-0 outline-none ring-0 shadow-none focus:ring-0 flex-1 bg-transparent"
+                className="h-12 text-[13px]"
               />
             </div>
             <CommandList className="max-h-80">
@@ -372,14 +501,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
               {hasQuery && !hasResults && (
-                <CommandEmpty className="py-10 text-[13px]">
-                  No results for &ldquo;{searchQuery}&rdquo;
-                </CommandEmpty>
+                <CommandEmpty className="py-10 text-[13px]">No results for &ldquo;{searchQuery}&rdquo;</CommandEmpty>
               )}
-              {hasQuery && searchResults && searchResults.leads.length > 0 && (
+              {hasQuery && searchResults?.leads.length ? (
                 <CommandGroup heading="Leads">
                   {searchResults.leads.map(l => (
-                    <CommandItem key={l.id} className="text-[13px] gap-2 cursor-pointer" onSelect={() => { navigate("/leads"); setSearchOpen(false); setSearchQuery(""); }}>
+                    <CommandItem key={l.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/leads"); setSearchOpen(false); setSearchQuery(""); }}>
                       <Users size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{l.name}</span>
                       {l.company && <span className="text-muted-foreground text-[11px]">· {l.company}</span>}
@@ -389,40 +517,43 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              )}
-              {hasQuery && searchResults && searchResults.customers.length > 0 && (
+              ) : null}
+              {hasQuery && searchResults?.customers.length ? (
                 <CommandGroup heading="Customers">
                   {searchResults.customers.map(c => (
-                    <CommandItem key={c.id} className="text-[13px] gap-2 cursor-pointer" onSelect={() => { navigate("/customers"); setSearchOpen(false); setSearchQuery(""); }}>
+                    <CommandItem key={c.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/customers"); setSearchOpen(false); setSearchQuery(""); }}>
                       <UserCheck size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{c.name}</span>
                       {c.company && <span className="text-muted-foreground text-[11px]">· {c.company}</span>}
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              )}
-              {hasQuery && searchResults && searchResults.suppliers.length > 0 && (
+              ) : null}
+              {hasQuery && searchResults?.suppliers.length ? (
                 <CommandGroup heading="Suppliers">
                   {searchResults.suppliers.map(s => (
-                    <CommandItem key={s.id} className="text-[13px] gap-2 cursor-pointer" onSelect={() => { navigate("/suppliers"); setSearchOpen(false); setSearchQuery(""); }}>
+                    <CommandItem key={s.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate("/suppliers"); setSearchOpen(false); setSearchQuery(""); }}>
                       <Truck size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{s.company}</span>
                       {s.contactPerson && <span className="text-muted-foreground text-[11px]">· {s.contactPerson}</span>}
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              )}
-              {hasQuery && searchResults && searchResults.docs.length > 0 && (
+              ) : null}
+              {hasQuery && searchResults?.docs.length ? (
                 <CommandGroup heading="Documents">
                   {searchResults.docs.map(d => (
-                    <CommandItem key={d.id} className="text-[13px] gap-2 cursor-pointer" onSelect={() => { navigate(`/documents/${d.id}`); setSearchOpen(false); setSearchQuery(""); }}>
+                    <CommandItem key={d.id} className="text-[13px] gap-2 cursor-pointer"
+                      onSelect={() => { navigate(`/documents/${d.id}`); setSearchOpen(false); setSearchQuery(""); }}>
                       <FileText size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{d.title || d.clientName || "Untitled"}</span>
                       {d.company && <span className="text-muted-foreground text-[11px]">· {d.company}</span>}
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              )}
+              ) : null}
             </CommandList>
           </Command>
         </DialogContent>
