@@ -46,6 +46,318 @@ function formatCurrency(str?: string) {
   return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function escHtml(s?: string) {
+  if (!s) return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function generatePrintHTML(doc: RequirementDoc, logo: string): string {
+  const s = (doc.sections ?? {}) as Sections;
+  const s1 = s.s1 ?? {};
+  const s2 = s.s2 ?? {};
+  const s3 = s.s3 ?? {};
+  const s35 = s.s35 ?? {};
+  const s4 = s.s4 ?? {};
+  const s5 = s.s5 ?? {};
+  const s6 = s.s6 ?? {};
+  const s7 = s.s7 ?? {};
+  const milestones: Milestone[] = s6.milestones ?? [];
+  const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[£$€,\s]/g, "") ?? "") || 0), 0);
+
+  const tags = (items?: string[]) =>
+    items && items.length > 0
+      ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${items.map(i => `<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:600;border:1px solid #bfdbfe;">${escHtml(i)}</span>`).join("")}</div>`
+      : `<span style="color:#94a3b8;font-style:italic;">—</span>`;
+
+  const field = (label: string, value?: string | null, html?: string) => {
+    if (!value && !html) return "";
+    return `<div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px;">${escHtml(label)}</div>
+      <div style="font-size:13px;color:#0f172a;line-height:1.6;">${html ?? escHtml(value ?? "")}</div>
+    </div>`;
+  };
+
+  const section = (title: string, content: string) => `
+    <div style="padding:24px 40px;border-bottom:1px solid #f1f5f9;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1e40af;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #eff6ff;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#2563eb;display:inline-block;flex-shrink:0;"></span>${escHtml(title)}
+      </div>
+      ${content}
+    </div>`;
+
+  const grid2 = (items: string[]) =>
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">${items.filter(Boolean).join("")}</div>`;
+
+  const featuresHtml = (items?: string[]) =>
+    items && items.length > 0
+      ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${items.map(f => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#0f172a;"><span style="width:14px;height:14px;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;">✓</span>${escHtml(f)}</div>`).join("")}</div>`
+      : "";
+
+  // Build milestone rows
+  const milestoneRows = milestones.filter(m => m.title || m.date || m.payment).map((m, i) => {
+    const payColors: Record<string,string> = { Paid:"background:#dcfce7;color:#166534;", Partial:"background:#fef9c3;color:#854d0e;", Pending:"background:#f1f5f9;color:#475569;", Overdue:"background:#fee2e2;color:#991b1b;" };
+    const pColor = payColors[m.paymentStatus] ?? "background:#f1f5f9;color:#475569;";
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:9px 10px;"><span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700;align-items:center;justify-content:center;">${i+1}</span></td>
+      <td style="padding:9px 10px;font-weight:600;color:#0f172a;">${escHtml(m.title || `Milestone ${i+1}`)}</td>
+      <td style="padding:9px 10px;color:#64748b;">${m.date ? formatDate(m.date) : "—"}</td>
+      <td style="padding:9px 10px;text-align:right;font-weight:700;color:#0f172a;">${m.payment ? (formatCurrency(m.payment) ?? m.payment) : "—"}</td>
+      <td style="padding:9px 10px;text-align:center;">${m.paymentStatus ? `<span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;${pColor}">${escHtml(m.paymentStatus)}</span>` : "—"}</td>
+      <td style="padding:9px 10px;text-align:center;font-size:12px;color:#64748b;">${escHtml(m.taskStatus || "—")}</td>
+    </tr>`;
+  }).join("");
+
+  const milestonesSection = milestones.some(m => m.title || m.date || m.payment) ? section("Project Milestones", `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="border-bottom:2px solid #e2e8f0;">
+        <th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:36px;">#</th>
+        <th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Milestone</th>
+        <th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Due Date</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Payment</th>
+        <th style="padding:8px 10px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Pay Status</th>
+        <th style="padding:8px 10px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Task</th>
+      </tr></thead>
+      <tbody>${milestoneRows}</tbody>
+      ${milestonesTotal > 0 ? `<tfoot><tr style="border-top:2px solid #bfdbfe;">
+        <td colspan="3" style="padding:10px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Total</td>
+        <td style="padding:10px 10px;text-align:right;font-size:15px;font-weight:800;color:#1d4ed8;">£${milestonesTotal.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td colspan="2"></td>
+      </tr></tfoot>` : ""}
+    </table>`) : "";
+
+  const budgetTimelineHtml = (() => {
+    const budgetContent = (s5.paymentStructure || s5.additionalCosts || milestonesTotal > 0)
+      ? `<div style="flex:1;padding:20px 24px;border:1px solid #e2e8f0;border-radius:8px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1e40af;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #eff6ff;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#2563eb;display:inline-block;"></span>Budget &amp; Costing</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            ${field("Payment Structure", s5.paymentStructure)}
+            ${s5.additionalCosts ? field("Additional Costs", s5.additionalCosts) : ""}
+            ${milestonesTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Total Budget</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">£${milestonesTotal.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>` : ""}
+          </div>
+        </div>` : "";
+
+    const durationStr = (() => {
+      if (!s6.startDate || !s6.deliveryDate) return null;
+      try {
+        const days = Math.ceil((new Date(s6.deliveryDate).getTime() - new Date(s6.startDate).getTime()) / 86400000);
+        return `${days} days (~${Math.round(days/7)} weeks)`;
+      } catch { return null; }
+    })();
+
+    const timelineContent = (s6.startDate || s6.deliveryDate)
+      ? `<div style="flex:1;padding:20px 24px;border:1px solid #e2e8f0;border-radius:8px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1e40af;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #eff6ff;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#2563eb;display:inline-block;"></span>Project Timeline</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            ${field("Start Date", formatDate(s6.startDate))}
+            ${field("Delivery Date", formatDate(s6.deliveryDate))}
+            ${durationStr ? field("Duration", durationStr) : ""}
+          </div>
+        </div>` : "";
+
+    if (!budgetContent && !timelineContent) return "";
+    return `<div style="padding:24px 40px;border-bottom:1px solid #f1f5f9;"><div style="display:flex;gap:20px;">${budgetContent}${timelineContent}</div></div>`;
+  })();
+
+  const clientInfoHtml = (doc.clientName || doc.company || doc.email || doc.phone)
+    ? section("Client Information", grid2([
+        field("Client Name", doc.clientName),
+        field("Company", doc.company),
+        field("Email", doc.email, doc.email ? `<a href="mailto:${escHtml(doc.email)}" style="color:#1d4ed8;">${escHtml(doc.email)}</a>` : undefined),
+        field("Phone", doc.phone, doc.phone ? `<a href="tel:${escHtml(doc.phone)}" style="color:#1d4ed8;">${escHtml(doc.phone)}</a>` : undefined),
+        field("Industry", doc.industry),
+        field("City", doc.city),
+      ])) : "";
+
+  const businessHtml = (s2.businessType || s2.targetAudience || s2.businessGoals || s2.keyChallenges || s2.currentSystems || (s2.keyProducts?.length ?? 0) > 0)
+    ? section("Business Information", `
+        ${grid2([field("Business Type", s2.businessType), field("Target Audience", s2.targetAudience)])}
+        ${(s2.keyProducts?.length ?? 0) > 0 ? `<div style="margin-top:14px;"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Key Products / Services</div>${tags(s2.keyProducts)}</div>` : ""}
+        ${s2.businessGoals ? `<div style="margin-top:14px;">${field("Business Goals", undefined, `<div style="font-size:13px;color:#0f172a;line-height:1.6;white-space:pre-wrap;">${escHtml(s2.businessGoals)}</div>`)}</div>` : ""}
+        ${s2.keyChallenges ? `<div style="margin-top:14px;">${field("Key Challenges", undefined, `<div style="font-size:13px;color:#0f172a;line-height:1.6;white-space:pre-wrap;">${escHtml(s2.keyChallenges)}</div>`)}</div>` : ""}
+        ${s2.currentSystems ? `<div style="margin-top:14px;">${field("Current Systems", s2.currentSystems)}</div>` : ""}`)
+    : "";
+
+  const softwareHtml = (s3.purpose || (s3.keyFeatures?.length ?? 0) > 0)
+    ? section("Software Requirements", `
+        ${s3.purpose ? field("Purpose", undefined, `<div style="font-size:13px;color:#0f172a;line-height:1.6;white-space:pre-wrap;">${escHtml(s3.purpose)}</div>`) : ""}
+        ${(s3.keyFeatures?.length ?? 0) > 0 ? `<div style="margin-top:14px;"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:8px;">Key Features (${s3.keyFeatures!.length})</div>${featuresHtml(s3.keyFeatures)}</div>` : ""}`)
+    : "";
+
+  const richTextHtml = (s35.detailedNotes && s35.detailedNotes !== "<p></p>")
+    ? section("Detailed Requirements Notes", `<div style="font-size:13px;line-height:1.7;color:#0f172a;">${s35.detailedNotes}</div>`)
+    : "";
+
+  const techHtml = ((s4.integrations?.length ?? 0) > 0 || (s4.techStack?.length ?? 0) > 0 || s4.hosting || s4.security)
+    ? section("Technical Requirements", `
+        ${grid2([field("Hosting", s4.hosting), field("Security Notes / Requirements", s4.security)])}
+        ${(s4.integrations?.length ?? 0) > 0 ? `<div style="margin-top:14px;"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Third-Party Integrations</div>${tags(s4.integrations)}</div>` : ""}
+        ${(s4.techStack?.length ?? 0) > 0 ? `<div style="margin-top:14px;"><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Technology Stack</div>${tags(s4.techStack)}</div>` : ""}`)
+    : "";
+
+  const supportHtml = (s7.postLaunch || s7.maintenance)
+    ? section("Support & Maintenance", grid2([
+        s7.postLaunch ? field("Post-Launch Support", undefined, `<div style="font-size:13px;color:#0f172a;line-height:1.6;white-space:pre-wrap;">${escHtml(s7.postLaunch)}</div>`) : "",
+        field("Maintenance Duration", s7.maintenance),
+      ])) : "";
+
+  const statusColors: Record<string,string> = {
+    Draft: "background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;",
+    "Under Review": "background:#fffbeb;color:#92400e;border:1px solid #fde68a;",
+    Approved: "background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;",
+    Archived: "background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;",
+  };
+  const sBadgeStyle = statusColors[doc.status] ?? statusColors.Draft;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escHtml(doc.title)} — Onesoft</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: #f1f5f9; color: #0f172a; }
+
+    /* ── Toolbar (screen only) ── */
+    .toolbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      background: #1e3a8a; color: #fff;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+    .toolbar-title { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toolbar-btn {
+      flex-shrink: 0; padding: 7px 18px; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; transition: opacity .15s;
+    }
+    .toolbar-btn:hover { opacity: .85; }
+    .btn-print { background: #fff; color: #1e40af; }
+    .btn-close  { background: rgba(255,255,255,.15); color: #fff; }
+
+    /* ── Document wrapper ── */
+    .wrap { max-width: 900px; margin: 70px auto 60px; background: #fff; border-radius: 12px; box-shadow: 0 4px 32px rgba(0,0,0,.12); overflow: hidden; }
+
+    /* ── Document header ── */
+    .doc-hd { background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); color: #fff; padding: 32px 40px 28px; }
+    .doc-hd-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+    .doc-logo { height: 32px; object-fit: contain; filter: brightness(0) invert(1); }
+    .doc-status { display: inline-flex; align-items: center; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; background: rgba(255,255,255,.2); color: #fff; }
+    .doc-label { font-size: 9px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; opacity: .75; margin-bottom: 8px; }
+    .doc-title { font-size: 26px; font-weight: 800; line-height: 1.25; margin-bottom: 14px; }
+    .doc-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; opacity: .9; }
+    .doc-meta-item { display: flex; align-items: center; gap: 5px; }
+
+    /* ── Stats row ── */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .stat { padding: 14px 20px; border-right: 1px solid #e2e8f0; }
+    .stat:last-child { border-right: none; }
+    .stat-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: 4px; }
+    .stat-val { font-size: 13px; font-weight: 600; color: #0f172a; }
+
+    /* ── Signature ── */
+    .sig-wrap { margin: 0 40px 24px; padding: 24px; background: #f8faff; border: 2px dashed #bfdbfe; border-radius: 10px; }
+    .sig-title { font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+    .sig-desc  { font-size: 12px; color: #64748b; line-height: 1.6; margin-bottom: 20px; }
+    .sig-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .sig-block-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: 12px; }
+    .sig-line  { border-top: 1.5px dashed #94a3b8; padding-top: 6px; margin-top: 44px; display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+
+    /* ── Footer ── */
+    .doc-ft { background: #f8faff; padding: 20px 40px; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .ft-logo { height: 24px; object-fit: contain; }
+    .ft-contact { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: #64748b; }
+    .ft-copy { font-size: 10px; color: #94a3b8; }
+
+    /* ── Print ── */
+    @media print {
+      @page { margin: 0; size: A4; }
+      html, body { background: #fff !important; }
+      .toolbar { display: none !important; }
+      .wrap { margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <span class="toolbar-title">📄 ${escHtml(doc.title)}</span>
+    <button class="toolbar-btn btn-close" onclick="window.close()">✕ Close</button>
+    <button class="toolbar-btn btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+
+  <div class="wrap">
+
+    <!-- Document header -->
+    <div class="doc-hd">
+      <div class="doc-hd-top">
+        <img src="${logo}" class="doc-logo" alt="Onesoft" />
+        <span class="doc-status">${escHtml(doc.status)}</span>
+      </div>
+      <div class="doc-label">Customer Requirement Document</div>
+      <div class="doc-title">${escHtml(doc.title)}</div>
+      <div class="doc-meta">
+        ${s1.preparedBy ? `<span class="doc-meta-item">👤 Prepared by: <strong>${escHtml(s1.preparedBy)}</strong></span>` : ""}
+        ${(s1.docDate || doc.createdAt) ? `<span class="doc-meta-item">📅 ${formatDate(s1.docDate || doc.createdAt)}</span>` : ""}
+        ${doc.clientName ? `<span class="doc-meta-item">🏢 ${escHtml(doc.company ? `${doc.clientName} · ${doc.company}` : doc.clientName)}</span>` : ""}
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="stats">
+      <div class="stat"><div class="stat-lbl">Industry</div><div class="stat-val">${escHtml(doc.industry || "—")}</div></div>
+      <div class="stat"><div class="stat-lbl">Software Type</div><div class="stat-val">${escHtml(doc.softwareType || "—")}</div></div>
+      <div class="stat"><div class="stat-lbl">Start Date</div><div class="stat-val">${formatDate(doc.startDate)}</div></div>
+      <div class="stat"><div class="stat-lbl">Delivery Date</div><div class="stat-val">${formatDate(doc.deliveryDate)}</div></div>
+    </div>
+
+    <!-- Sections -->
+    ${clientInfoHtml}
+    ${businessHtml}
+    ${softwareHtml}
+    ${richTextHtml}
+    ${techHtml}
+    ${budgetTimelineHtml}
+    ${milestonesSection}
+    ${supportHtml}
+
+    <!-- Signature -->
+    <div style="padding-top:24px;">
+      <div class="sig-wrap">
+        <div class="sig-title">Client Confirmation</div>
+        <div class="sig-desc">Please review the requirements outlined in this document carefully. If everything looks correct, you may confirm your agreement below or contact us with any amendments before we proceed.</div>
+        <div class="sig-grid">
+          <div>
+            <div class="sig-block-lbl">Client Signature</div>
+            <div class="sig-line"><span>Name: _______________</span><span>Date: _______________</span></div>
+          </div>
+          <div>
+            <div class="sig-block-lbl">Onesoft Representative</div>
+            <div class="sig-line"><span>Name: _______________</span><span>Date: _______________</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="doc-ft">
+      <img src="${logo}" class="ft-logo" alt="Onesoft" />
+      <div class="ft-contact">
+        <span>📞 +44 7984 273482 (UK)</span>
+        <span>📞 +92 333 4199233 (PK)</span>
+        <span>📍 Hull, UK &amp; Islamabad, PK</span>
+        <span>✉ info@onesoft.org.uk</span>
+        <span>🌐 www.onesoft.org.uk</span>
+      </div>
+      <div class="ft-copy">Confidential — for client review only</div>
+    </div>
+
+  </div>
+
+</body>
+</html>`;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   Draft: "bg-blue-50 text-blue-700 border border-blue-200",
   "Under Review": "bg-amber-50 text-amber-700 border border-amber-200",
@@ -180,8 +492,12 @@ export default function ShareDocument() {
               {doc.status}
             </span>
             <button
-              onClick={() => window.print()}
-              className="print:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              onClick={() => {
+                const html = generatePrintHTML(doc as RequirementDoc, logoUrl);
+                const win = window.open("", "_blank", "width=960,height=800,scrollbars=yes,resizable=yes");
+                if (win) { win.document.write(html); win.document.close(); }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
             >
               <Printer size={13} /> Print / Save PDF
             </button>
