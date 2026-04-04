@@ -817,6 +817,14 @@ export default function RequirementDoc() {
 
   const client = CLIENTS.find((c) => c.name === selectedClient);
 
+  const milestonesTotal = milestones.reduce((sum, m) => {
+    const num = parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0;
+    return sum + num;
+  }, 0);
+
+  const formatCurrency = (n: number) =>
+    n === 0 ? "—" : `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
 
@@ -1049,9 +1057,57 @@ export default function RequirementDoc() {
 
         <SectionDivider />
 
-        {/* Section 5: Project Timeline */}
+        {/* Section 5: Budget & Costing */}
         <section>
-          <SectionHeader icon={Clock} title="5. Project Timeline" subtitle="Milestones, start date, and expected delivery" />
+          <SectionHeader icon={DollarSign} title="5. Budget & Costing" subtitle="Estimated costs and payment arrangements — linked to milestone payments" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <FormField label="Payment Structure" required>
+              <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
+            </FormField>
+            <FormField label="Additional Costs" hint="Hosting fees, licences, third-party service costs, etc.">
+              <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. £50/mo hosting, £200/yr software licence..." />
+            </FormField>
+
+            {/* Live budget summary linked to milestones */}
+            <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-primary">Budget Breakdown</span>
+                <span className="ml-auto text-xs text-muted-foreground">Linked to milestone payments below</span>
+              </div>
+
+              {/* Milestone rows */}
+              {milestones.some((m) => m.payment.trim() !== "") ? (
+                <div className="space-y-1.5">
+                  {milestones.filter((m) => m.payment.trim() !== "").map((m, i) => {
+                    const amt = parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0;
+                    return (
+                      <div key={m.id} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <span className="inline-flex w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold items-center justify-center flex-shrink-0">{i + 1}</span>
+                          {m.title || `Milestone ${i + 1}`}
+                        </span>
+                        <span className="font-medium text-foreground tabular-nums">{formatCurrency(amt)}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="border-t border-primary/20 pt-2 mt-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">Total Milestone Budget</span>
+                    <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No milestone payments entered yet. Add milestones with payment amounts in the Timeline section below — they will appear here automatically.</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <SectionDivider />
+
+        {/* Section 6: Project Timeline */}
+        <section>
+          <SectionHeader icon={Clock} title="6. Project Timeline" subtitle="Milestones, start date, and expected delivery" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <FormField label="Start Date" required>
               <DateInput value={startDate} onChange={setStartDate} />
@@ -1173,28 +1229,17 @@ export default function RequirementDoc() {
                   ))}
                 </div>
 
-                <p className="text-xs text-muted-foreground mt-2">Key phases and their expected completion dates</p>
+                {/* Running total */}
+                {milestonesTotal > 0 && (
+                  <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/10 border border-primary/20 px-4 py-2.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Total across {milestones.filter((m) => m.payment.trim() !== "").length} milestone{milestones.filter((m) => m.payment.trim() !== "").length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-2">Key phases and their expected completion dates — payments auto-update the Budget section above</p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <SectionDivider />
-
-        {/* Section 6: Budget */}
-        <section>
-          <SectionHeader icon={DollarSign} title="6. Budget" subtitle="Estimated costs and payment arrangements" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <FormField label="Estimated Budget Range" required hint="Provide a min-max range (e.g. $10,000 – $25,000)">
-              <TextInput value={budget} onChange={setBudget} placeholder="e.g. $10,000 – $25,000" />
-            </FormField>
-            <FormField label="Payment Structure" required>
-              <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
-            </FormField>
-            <div className="sm:col-span-2">
-              <FormField label="Additional Costs" hint="Hosting fees, licenses, third-party service costs, etc.">
-                <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. $50/mo hosting, $200/yr software license..." />
-              </FormField>
             </div>
           </div>
         </section>
