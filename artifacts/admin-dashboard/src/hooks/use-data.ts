@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
-  Lead, RequirementDoc, Customer,
+  getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
+  Lead, RequirementDoc, Customer, ProductCategory,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -102,4 +103,37 @@ export function useCustomers() {
   };
 
   return { customers, addCustomer, editCustomer, removeCustomer, refresh: fetchCustomers };
+}
+
+export function useProductCategories() {
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+
+  const fetchCategories = useCallback(() => {
+    setCategories(getProductCategories());
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+    window.addEventListener("storage", fetchCategories);
+    return () => window.removeEventListener("storage", fetchCategories);
+  }, [fetchCategories]);
+
+  const addCategory = (data: Parameters<typeof createProductCategory>[0]) => {
+    const c = createProductCategory(data);
+    fetchCategories();
+    return c;
+  };
+
+  const editCategory = (id: string, updates: Parameters<typeof updateProductCategory>[1]) => {
+    const c = updateProductCategory(id, updates);
+    fetchCategories();
+    return c;
+  };
+
+  const removeCategory = (id: string) => {
+    deleteProductCategory(id);
+    fetchCategories();
+  };
+
+  return { categories, addCategory, editCategory, removeCategory, refresh: fetchCategories };
 }

@@ -202,6 +202,44 @@ export const convertLeadToCustomer = (lead: Lead): Customer => {
   });
 };
 
+// ─── Product Categories API ───────────────────────────────────────────────────
+export type ProductCategory = {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const PRODUCT_CATEGORIES_KEY = "admin-product-categories";
+
+export const getProductCategories = (): ProductCategory[] => getStored<ProductCategory>(PRODUCT_CATEGORIES_KEY);
+
+export const createProductCategory = (data: Omit<ProductCategory, "id" | "createdAt" | "updatedAt">): ProductCategory => {
+  const item: ProductCategory = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(PRODUCT_CATEGORIES_KEY, [...getProductCategories(), item]);
+  return item;
+};
+
+export const updateProductCategory = (id: string, updates: Partial<Omit<ProductCategory, "id" | "createdAt">>): ProductCategory => {
+  const items = getProductCategories();
+  const i = items.findIndex(c => c.id === id);
+  if (i === -1) throw new Error("Category not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PRODUCT_CATEGORIES_KEY, items);
+  return items[i];
+};
+
+export const deleteProductCategory = (id: string): void => {
+  setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
+};
+
 // ─── Admin Users API ──────────────────────────────────────────────────────────
 export type UserRole = "superadmin" | "admin";
 
