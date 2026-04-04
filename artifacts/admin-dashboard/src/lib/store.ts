@@ -131,6 +131,79 @@ export const deleteDoc = (id: string): void => {
   setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
 };
 
+// ─── Admin Users API ──────────────────────────────────────────────────────────
+export type UserRole = "superadmin" | "admin";
+
+export type AdminUser = {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string;
+  role: UserRole;
+  password: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const USERS_KEY = "admin-users";
+
+function ensureDefaultSuperadmin() {
+  try {
+    const raw = localStorage.getItem(USERS_KEY);
+    const existing: AdminUser[] = raw ? JSON.parse(raw) : [];
+    const hasSuper = existing.some(u => u.id === "u-superadmin");
+    if (!hasSuper) {
+      const superadmin: AdminUser = {
+        id: "u-superadmin",
+        username: "admin",
+        fullName: "Super Admin",
+        email: "admin@onesoft.com",
+        role: "superadmin",
+        password: "Onesoft@2024",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(USERS_KEY, JSON.stringify([superadmin, ...existing.filter(u => u.id !== "u-superadmin")]));
+    }
+  } catch { /* ignore */ }
+}
+ensureDefaultSuperadmin();
+
+export const getAdminUsers = (): AdminUser[] => {
+  ensureDefaultSuperadmin();
+  return getStored<AdminUser>(USERS_KEY);
+};
+
+export const getAdminUserByUsername = (username: string): AdminUser | undefined =>
+  getAdminUsers().find(u => u.username.toLowerCase() === username.toLowerCase());
+
+export const getAdminUserById = (id: string): AdminUser | undefined =>
+  getAdminUsers().find(u => u.id === id);
+
+export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "updatedAt">): AdminUser => {
+  const newUser: AdminUser = {
+    ...user,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(USERS_KEY, [...getAdminUsers(), newUser]);
+  return newUser;
+};
+
+export const updateAdminUser = (id: string, updates: Partial<Omit<AdminUser, "id" | "createdAt">>): AdminUser => {
+  const users = getAdminUsers();
+  const index = users.findIndex(u => u.id === id);
+  if (index === -1) throw new Error("User not found");
+  users[index] = { ...users[index], ...updates, updatedAt: new Date().toISOString() };
+  setStored(USERS_KEY, users);
+  return users[index];
+};
+
+export const deleteAdminUser = (id: string): void => {
+  setStored(USERS_KEY, getAdminUsers().filter(u => u.id !== id));
+};
+
 // ─── Team Members API (for New Document "Prepared By") ───────────────────────
 const TEAM_KEY = "admin-team-members";
 const DEFAULT_TEAM = ["Ali Raza", "Umar Farooq", "Hassan Sheikh", "Bilal Ahmed", "Zainab Mirza", "Sara Qureshi"];

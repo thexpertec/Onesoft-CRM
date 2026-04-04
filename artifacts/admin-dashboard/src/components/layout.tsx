@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Moon, Sun, Menu, LogIn, LogOut, Lock, ShieldCheck, Shield } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -7,35 +7,37 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
+const BASE_NAV = [
+  { href: "/",          label: "Dashboard", icon: LayoutDashboard },
+  { href: "/leads",     label: "Leads",     icon: Users },
   { href: "/documents", label: "Documents", icon: FileText },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isSuperAdmin, currentUser, logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  useEffect(() => {
-    setIsMobileOpen(false);
-  }, [location]);
+  useEffect(() => { setIsMobileOpen(false); }, [location]);
 
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const navItems = isSuperAdmin
+    ? [...BASE_NAV, { href: "/users", label: "Users", icon: Shield }]
+    : BASE_NAV;
+
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   const SidebarContent = () => (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+      {/* Logo */}
       <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
         <img src={logoUrl} alt="Onesoft Logo" className="h-8 mr-2 brightness-0 invert" />
         <span className="font-semibold text-lg tracking-tight">Admin</span>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
           return (
             <Link
@@ -55,13 +57,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
+      {/* Footer */}
       <div className="p-4 border-t border-sidebar-border space-y-2">
         {isAuthenticated ? (
           <>
-            <div className="flex items-center px-3 py-2 text-xs text-sidebar-foreground/60 font-medium">
-              <Lock className="mr-2 h-3.5 w-3.5 text-green-400" />
-              Signed in as Admin
+            {/* Signed-in user info */}
+            <div className="flex items-start gap-2.5 px-3 py-2 rounded-md bg-sidebar-accent/30">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                {isSuperAdmin ? (
+                  <ShieldCheck size={13} className="text-purple-400" />
+                ) : (
+                  <Lock size={13} className="text-green-400" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-sidebar-foreground truncate">
+                  {currentUser?.fullName || currentUser?.username}
+                </p>
+                <p className="text-[10px] text-sidebar-foreground/50 truncate">
+                  {isSuperAdmin ? "Super Admin" : "Admin"}
+                  {currentUser?.email ? ` · ${currentUser.email}` : ""}
+                </p>
+              </div>
             </div>
+
             <Button
               variant="ghost"
               className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
