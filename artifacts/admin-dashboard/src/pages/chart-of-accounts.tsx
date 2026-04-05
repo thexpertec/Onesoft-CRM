@@ -6,6 +6,7 @@ import {
   BookOpen, Plus, Search, X, Trash2, Save, Pencil,
   CheckCircle, XCircle, ChevronDown, ChevronRight,
   GitBranch, FolderOpen, FileText,
+  Upload, Download, AlertTriangle, Info, FileSpreadsheet, ChevronUp,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -136,6 +137,221 @@ const defaultModal = (
 // ─── Edit form type ───────────────────────────────────────────────────────────
 type EditForm = Omit<Account, "id" | "createdAt" | "updatedAt">;
 
+// ─── Import types ─────────────────────────────────────────────────────────────
+type ImportRow = {
+  _line: number;
+  code: string;
+  name: string;
+  head: string;
+  type: string;
+  subType: string;
+  parentCode: string;
+  openingBalance: string;
+  description: string;
+  errors: string[];
+  warnings: string[];
+};
+
+// ─── CSV utilities ────────────────────────────────────────────────────────────
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === "," && !inQ) { result.push(cur.trim()); cur = ""; }
+    else { cur += ch; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseImportCsv(raw: string): ImportRow[] {
+  const lines = raw.split(/\r?\n/);
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.startsWith("#") || l === "") continue;
+    headerIdx = i;
+    break;
+  }
+  if (headerIdx === -1) return [];
+  const headerCols = parseCsvLine(lines[headerIdx]).map(h => h.replace(/^["']|["']$/g, "").toLowerCase().trim());
+  const col = (row: string[], name: string) => {
+    const idx = headerCols.indexOf(name);
+    return idx >= 0 ? (row[idx] ?? "").replace(/^["']|["']$/g, "").trim() : "";
+  };
+  const rows: ImportRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l === "" || l.startsWith("#")) continue;
+    const cells = parseCsvLine(lines[i]);
+    rows.push({
+      _line: i + 1,
+      code:          col(cells, "code"),
+      name:          col(cells, "name"),
+      head:          col(cells, "head"),
+      type:          col(cells, "type"),
+      subType:       col(cells, "subtype"),
+      parentCode:    col(cells, "parentcode"),
+      openingBalance: col(cells, "openingbalance") || "0",
+      description:   col(cells, "description"),
+      errors: [], warnings: [],
+    });
+  }
+  return rows;
+}
+
+function validateImportRows(rows: ImportRow[], existing: Account[]): ImportRow[] {
+  const existingCodes = new Set(existing.map(a => a.code));
+  const existingLedgerNames = new Set(existing.filter(a => a.accountType === "Ledger").map(a => a.name.trim().toLowerCase()));
+  const fileCodes = new Set<string>();
+  const fileLedgerNames = new Set<string>();
+
+  return rows.map(r => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!r.code) errors.push("Code is required");
+    if (!r.name) errors.push("Name is required");
+
+    const head = r.head as AccountHead;
+    if (!ACCOUNT_HEADS.includes(head)) {
+      errors.push(`Head "${r.head}" is invalid — must be one of: ${ACCOUNT_HEADS.join(" | ")}`);
+    }
+
+    if (r.type !== "Group" && r.type !== "Ledger") {
+      errors.push(`Type "${r.type}" is invalid — must be Group or Ledger`);
+    }
+
+    if (r.code && fileCodes.has(r.code)) {
+      errors.push(`Duplicate code "${r.code}" within the import file`);
+    } else if (r.code && existingCodes.has(r.code)) {
+      errors.push(`Code "${r.code}" already exists in the current chart of accounts`);
+    }
+
+    if (r.type === "Ledger" && r.name) {
+      const nl = r.name.trim().toLowerCase();
+      if (fileLedgerNames.has(nl)) {
+        errors.push(`Duplicate ledger name "${r.name}" within the import file`);
+      } else if (existingLedgerNames.has(nl)) {
+        errors.push(`Ledger name "${r.name}" already exists in the current chart of accounts`);
+      }
+    }
+
+    if (ACCOUNT_HEADS.includes(head) && r.subType) {
+      const validSubs = HEAD_SUB_TYPES[head];
+      if (!validSubs.includes(r.subType)) {
+        errors.push(`SubType "${r.subType}" is invalid for head "${head}" — valid: ${validSubs.join(" | ")}`);
+      }
+    } else if (!r.subType) {
+      errors.push("SubType is required");
+    }
+
+    if (r.parentCode) {
+      const parentInFile = rows.find(pr => pr.code === r.parentCode);
+      const parentInExisting = existing.find(a => a.code === r.parentCode);
+      if (!parentInFile && !parentInExisting) {
+        errors.push(`Parent code "${r.parentCode}" not found in file or existing accounts`);
+      } else if (parentInFile && parentInFile.type === "Ledger") {
+        errors.push(`Parent "${r.parentCode}" is a Ledger — Ledgers cannot have sub-accounts`);
+      } else if (parentInExisting && parentInExisting.accountType === "Ledger") {
+        errors.push(`Parent "${r.parentCode}" is a Ledger — Ledgers cannot have sub-accounts`);
+      }
+    }
+
+    if (r.code) fileCodes.add(r.code);
+    if (r.type === "Ledger" && r.name) fileLedgerNames.add(r.name.trim().toLowerCase());
+
+    if (r.type === "Group" && r.openingBalance && r.openingBalance !== "0") {
+      warnings.push("Opening balance is only used for Ledger accounts");
+    }
+
+    return { ...r, errors, warnings };
+  });
+}
+
+function topoSortImportRows(rows: ImportRow[]): ImportRow[] {
+  const byCode = new Map(rows.map(r => [r.code, r]));
+  const visited = new Set<string>();
+  const result: ImportRow[] = [];
+  function visit(r: ImportRow) {
+    if (visited.has(r.code)) return;
+    if (r.parentCode && byCode.has(r.parentCode)) visit(byCode.get(r.parentCode)!);
+    visited.add(r.code);
+    result.push(r);
+  }
+  rows.forEach(r => visit(r));
+  return result;
+}
+
+function downloadCoATemplate() {
+  const lines = [
+    "# CHART OF ACCOUNTS — IMPORT TEMPLATE",
+    "# ─────────────────────────────────────────────────────────────────────────────",
+    "# COLUMNS (case-insensitive headers, order does not matter):",
+    "#   code          | required | Account code, e.g. 1  or  1.1  or  1.1.2",
+    "#   name          | required | Account name",
+    "#   head          | required | Assets | Liabilities | Revenue / Income | Expense | Equity",
+    "#   type          | required | Group  (can have children)  or  Ledger  (leaf / final entry)",
+    "#   subType       | required | Must be valid for the chosen head (see below)",
+    "#   parentCode    | optional | Leave blank for root accounts; enter parent's code for sub-accounts",
+    "#   openingBalance| optional | Number — Ledger accounts only; leave 0 or blank for Groups",
+    "#   description   | optional | Free text",
+    "#",
+    "# VALID subType VALUES BY HEAD:",
+    "#   Assets           → Current Asset | Fixed Asset | Other Asset",
+    "#   Liabilities      → Current Liability | Long-term Liability | Other Liability",
+    "#   Revenue / Income → Operating Revenue | Other Income",
+    "#   Expense          → Cost of Goods Sold | Operating Expense | Other Expense",
+    "#   Equity           → Owner's Equity | Retained Earnings",
+    "#",
+    "# RULES:",
+    "#   1. Every account must have a unique code (no duplicates in file or existing data).",
+    "#   2. Every Ledger account must have a unique name across the ENTIRE chart of accounts.",
+    "#   3. A Ledger account cannot be a parent of any other account.",
+    "#   4. parentCode must reference a code that appears earlier in this file",
+    "#      OR already exists in your chart of accounts.",
+    "#   5. Lines starting with # are comments and are ignored.",
+    "#   6. You may delete these example rows — the header row (code,name,...) must remain.",
+    "#",
+    "# ─────────────────────────────────────────────────────────────────────────────",
+    "code,name,head,type,subType,parentCode,openingBalance,description",
+    "1,Fixed Assets,Assets,Group,Fixed Asset,,0,Long-term tangible assets",
+    "1.1,Machinery & Equipment,Assets,Group,Fixed Asset,1,0,",
+    "1.1.1,CNC Machine — Islamabad,Assets,Ledger,Fixed Asset,1.1,50000,Purchased Jan 2024",
+    "1.1.2,CNC Machine — Hull UK,Assets,Ledger,Fixed Asset,1.1,35000,",
+    "1.2,Office Equipment,Assets,Group,Fixed Asset,1,0,",
+    "1.2.1,Computers & Laptops,Assets,Ledger,Fixed Asset,1.2,15000,",
+    "2,Current Assets,Assets,Group,Current Asset,,0,",
+    "2.1,Bank & Cash,Assets,Group,Current Asset,2,0,",
+    "2.1.1,Cash in Hand — Islamabad,Assets,Ledger,Current Asset,2.1,5000,",
+    "2.1.2,Cash in Hand — Hull,Assets,Ledger,Current Asset,2.1,3000,",
+    "2.1.3,HBL Business Account,Assets,Ledger,Current Asset,2.1,120000,",
+    "3,Short-term Loans,Liabilities,Group,Current Liability,,0,",
+    "3.1,Bank Overdraft — HBL,Liabilities,Ledger,Current Liability,3,0,",
+    "4,Long-term Finance,Liabilities,Group,Long-term Liability,,0,",
+    "5,Sales Revenue,Revenue / Income,Group,Operating Revenue,,0,",
+    "5.1,Software License Sales,Revenue / Income,Ledger,Operating Revenue,5,0,",
+    "5.2,Consulting & Services,Revenue / Income,Ledger,Operating Revenue,5,0,",
+    "6,Operating Expenses,Expense,Group,Operating Expense,,0,",
+    "6.1,Staff Salaries,Expense,Ledger,Operating Expense,6,0,",
+    "6.2,Office Rent,Expense,Ledger,Operating Expense,6,0,",
+    "7,Owner's Capital,Equity,Group,Owner's Equity,,0,",
+    "7.1,Share Capital,Equity,Ledger,Owner's Equity,7,0,",
+  ];
+  const csv = lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "onesoft-coa-import-template.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ChartOfAccountsPage() {
   const { accounts, addAccount, editAccount, removeAccount } = useAccounts();
@@ -146,6 +362,12 @@ export default function ChartOfAccountsPage() {
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
   const [nodeCollapsed, setNodeCollapsed] = useState<Record<string, boolean>>({});
   const [headCollapsed, setHeadCollapsed] = useState<Record<string, boolean>>({});
+
+  // ── Import state ──────────────────────────────────────────────────────────
+  const [showImport,     setShowImport]    = useState(false);
+  const [importRows,     setImportRows]    = useState<ImportRow[]>([]);
+  const [importFileName, setImportFileName] = useState("");
+  const [instrExpanded,  setInstrExpanded]  = useState(true);
 
   // ── Create modal ──────────────────────────────────────────────────────────
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -355,6 +577,44 @@ export default function ChartOfAccountsPage() {
     closeModal();
   }, [modal, accounts, addAccount, toast]);
 
+  // ── Import handlers ───────────────────────────────────────────────────────────
+  const handleImportFile = (file: File) => {
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target?.result as string;
+      const parsed = parseImportCsv(text);
+      const validated = validateImportRows(parsed, accounts);
+      setImportRows(validated);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmImport = useCallback(() => {
+    const validRows = importRows.filter(r => r.errors.length === 0);
+    if (validRows.length === 0) return;
+    const sorted = topoSortImportRows(validRows);
+    const codeToId = new Map(accounts.map(a => [a.code, a.id]));
+    sorted.forEach(r => {
+      const parentId = r.parentCode ? (codeToId.get(r.parentCode) ?? null) : null;
+      const created = addAccount({
+        code: r.code, name: r.name,
+        head: r.head as AccountHead,
+        subType: r.subType,
+        description: r.description,
+        parentId,
+        accountType: r.type as AccountKind,
+        openingBalance: r.type === "Ledger" ? (parseFloat(r.openingBalance) || 0) : 0,
+        isActive: true,
+      });
+      codeToId.set(r.code, created.id);
+    });
+    toast({ title: `${sorted.length} account${sorted.length !== 1 ? "s" : ""} imported successfully` });
+    setShowImport(false);
+    setImportRows([]);
+    setImportFileName("");
+  }, [importRows, accounts, addAccount, toast]);
+
   // ── Delete ────────────────────────────────────────────────────────────────────
   const hasChildren = (id: string) => accounts.some(a => (a.parentId ?? null) === id);
   const accountToDelete = accounts.find(a => a.id === deleteId);
@@ -522,12 +782,20 @@ export default function ChartOfAccountsPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => openCreate(null, headForCreate)}
-            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold shadow-md transition-colors"
-          >
-            <Plus size={15} /> New Account
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowImport(true); setImportRows([]); setImportFileName(""); }}
+              className="flex items-center gap-2 h-9 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 text-[13px] font-bold transition-colors"
+            >
+              <Upload size={15} /> Import
+            </button>
+            <button
+              onClick={() => openCreate(null, headForCreate)}
+              className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold shadow-md transition-colors"
+            >
+              <Plus size={15} /> New Account
+            </button>
+          </div>
         </div>
 
         {/* Summary cards */}
@@ -952,6 +1220,218 @@ export default function ChartOfAccountsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Import Modal ─────────────────────────────────────────────────────── */}
+      <Dialog open={showImport} onOpenChange={v => { if (!v) { setShowImport(false); setImportRows([]); setImportFileName(""); } }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800 flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
+              <FileSpreadsheet size={17} className="text-blue-500" />
+              Import Chart of Accounts
+              <span className="text-[11px] font-normal text-gray-400 ml-1">Upload a CSV file to bulk-add accounts</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto">
+            {/* Instructions panel */}
+            <div className="mx-6 mt-5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 overflow-hidden">
+              <button
+                onClick={() => setInstrExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+              >
+                <div className="flex items-center gap-2 text-[13px] font-bold text-blue-700 dark:text-blue-300">
+                  <Info size={14} /> How to fill in the import file
+                </div>
+                {instrExpanded ? <ChevronUp size={14} className="text-blue-500" /> : <ChevronDown size={14} className="text-blue-500" />}
+              </button>
+              {instrExpanded && (
+                <div className="px-4 pb-4 space-y-4 border-t border-blue-200 dark:border-blue-800">
+                  {/* Steps */}
+                  <div className="grid grid-cols-2 gap-3 pt-3">
+                    {[
+                      { n: "1", title: "Download the template", body: 'Click "Download Template" below. Open it in Excel, Google Sheets, or any spreadsheet app.' },
+                      { n: "2", title: "Keep the header row", body: 'The first non-comment row must be the header: code, name, head, type, subType, parentCode, openingBalance, description' },
+                      { n: "3", title: "Add your accounts", body: "One row per account. Groups first, then their child accounts. Parent must appear above (or already in system)." },
+                      { n: "4", title: "Fill required columns", body: "code, name, head, type, subType are mandatory. parentCode, openingBalance, description are optional." },
+                      { n: "5", title: "Upload & review errors", body: "Upload your CSV — any validation errors will be highlighted in red. Fix them before importing." },
+                      { n: "6", title: "Import valid rows", body: "Only error-free rows are imported. Rows with errors are skipped." },
+                    ].map(s => (
+                      <div key={s.n} className="flex gap-2.5">
+                        <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{s.n}</div>
+                        <div>
+                          <div className="text-[12px] font-bold text-blue-800 dark:text-blue-200">{s.title}</div>
+                          <div className="text-[11px] text-blue-600 dark:text-blue-400 leading-relaxed">{s.body}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Column reference table */}
+                  <div>
+                    <div className="text-[11px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider mb-2">Column Reference</div>
+                    <div className="rounded-lg overflow-hidden border border-blue-200 dark:border-blue-800 text-[11px]">
+                      <div className="grid grid-cols-[90px_60px_1fr] bg-blue-600 text-white font-bold">
+                        <div className="px-2.5 py-1.5">Column</div>
+                        <div className="px-2.5 py-1.5">Required</div>
+                        <div className="px-2.5 py-1.5">Valid values / Notes</div>
+                      </div>
+                      {[
+                        ["code",          "Yes", "Unique code, e.g. 1 · 1.1 · 1.1.2 — no duplicates allowed"],
+                        ["name",          "Yes", "Account name — Ledger names must be unique across entire chart"],
+                        ["head",          "Yes", "Assets · Liabilities · Revenue / Income · Expense · Equity"],
+                        ["type",          "Yes", "Group (can have children) · Ledger (leaf / final entry, no children)"],
+                        ["subType",       "Yes", "Assets → Current Asset · Fixed Asset · Other Asset\nLiabilities → Current Liability · Long-term Liability · Other Liability\nRevenue / Income → Operating Revenue · Other Income\nExpense → Cost of Goods Sold · Operating Expense · Other Expense\nEquity → Owner's Equity · Retained Earnings"],
+                        ["parentCode",    "No",  "Code of the parent account — leave blank for root-level accounts"],
+                        ["openingBalance","No",  "Number — applies to Ledger accounts only; default 0"],
+                        ["description",   "No",  "Free text description"],
+                      ].map(([col, req, note], i) => (
+                        <div key={col} className={`grid grid-cols-[90px_60px_1fr] ${i % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-blue-50/60 dark:bg-blue-950/10"}`}>
+                          <div className="px-2.5 py-1.5 font-mono font-bold text-blue-700 dark:text-blue-400">{col}</div>
+                          <div className={`px-2.5 py-1.5 font-bold ${req === "Yes" ? "text-red-600" : "text-gray-400"}`}>{req}</div>
+                          <div className="px-2.5 py-1.5 text-gray-600 dark:text-gray-400 whitespace-pre-line leading-relaxed">{note}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Download template + Upload */}
+            <div className="mx-6 mt-4 flex gap-3">
+              <button
+                onClick={downloadCoATemplate}
+                className="flex items-center gap-2 h-10 px-5 rounded-xl border-2 border-blue-500 text-blue-600 dark:text-blue-400 text-[13px] font-bold hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+              >
+                <Download size={15} /> Download Template CSV
+              </button>
+              <label className="flex items-center gap-2 h-10 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold cursor-pointer transition-colors">
+                <Upload size={15} />
+                {importFileName ? `Change file` : "Upload CSV"}
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={e => { if (e.target.files?.[0]) handleImportFile(e.target.files[0]); e.target.value = ""; }}
+                />
+              </label>
+              {importFileName && (
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-[12px] text-gray-600 dark:text-gray-300">
+                  <FileSpreadsheet size={13} className="text-green-500" />
+                  <span className="font-mono truncate max-w-[200px]">{importFileName}</span>
+                  <button onClick={() => { setImportRows([]); setImportFileName(""); }} className="ml-1 text-gray-400 hover:text-red-500">
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Drag & drop area (shown only when no file loaded) */}
+            {!importFileName && (
+              <div
+                className="mx-6 mt-3 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-400 hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors"
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImportFile(f); }}
+              >
+                <Upload size={28} className="opacity-40" />
+                <div className="text-[13px] font-medium">Drag & drop your CSV file here</div>
+                <div className="text-[11px]">or click "Upload CSV" above</div>
+              </div>
+            )}
+
+            {/* Preview table */}
+            {importRows.length > 0 && (() => {
+              const errorCount   = importRows.filter(r => r.errors.length > 0).length;
+              const warningCount = importRows.filter(r => r.errors.length === 0 && r.warnings.length > 0).length;
+              const validCount   = importRows.filter(r => r.errors.length === 0).length;
+              return (
+                <div className="mx-6 mt-4 mb-4">
+                  {/* Summary bar */}
+                  <div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700">
+                    <div className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-600"><CheckCircle size={14} /> {validCount} valid</div>
+                    {errorCount > 0 && <div className="flex items-center gap-1.5 text-[12px] font-bold text-red-600"><XCircle size={14} /> {errorCount} with errors</div>}
+                    {warningCount > 0 && <div className="flex items-center gap-1.5 text-[12px] font-bold text-amber-500"><AlertTriangle size={14} /> {warningCount} with warnings</div>}
+                    <div className="flex-1" />
+                    <div className="text-[11px] text-gray-500">{importRows.length} row{importRows.length !== 1 ? "s" : ""} in file</div>
+                  </div>
+
+                  {/* Table */}
+                  <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+                    <div className="overflow-x-auto max-h-64">
+                      <table className="w-full text-[11px]">
+                        <thead className="bg-gray-50 dark:bg-zinc-800/60 sticky top-0">
+                          <tr>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-10">Row</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-14">Status</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-16">Code</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-40">Name</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-28">Head</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-16">Type</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-28">SubType</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider w-16">Parent</th>
+                            <th className="px-2 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">Issues</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importRows.map((r, ri) => {
+                            const hasErr = r.errors.length > 0;
+                            const hasWarn = r.warnings.length > 0;
+                            return (
+                              <tr key={ri} className={`border-t border-gray-100 dark:border-zinc-800 ${hasErr ? "bg-red-50/60 dark:bg-red-950/10" : hasWarn ? "bg-amber-50/40 dark:bg-amber-950/10" : ri % 2 === 0 ? "" : "bg-gray-50/40 dark:bg-zinc-800/10"}`}>
+                                <td className="px-2 py-1.5 text-gray-400 font-mono">{r._line}</td>
+                                <td className="px-2 py-1.5">
+                                  {hasErr
+                                    ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-600 bg-red-100 dark:bg-red-950/30 px-1.5 py-0.5 rounded-full"><XCircle size={9} /> Error</span>
+                                    : hasWarn
+                                      ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full"><AlertTriangle size={9} /> Warn</span>
+                                      : <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-full"><CheckCircle size={9} /> OK</span>
+                                  }
+                                </td>
+                                <td className="px-2 py-1.5 font-mono font-bold text-blue-600 dark:text-blue-400">{r.code || <span className="text-red-400 italic">missing</span>}</td>
+                                <td className="px-2 py-1.5 text-gray-800 dark:text-gray-200 max-w-[160px] truncate">{r.name || <span className="text-red-400 italic">missing</span>}</td>
+                                <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400">{r.head}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${r.type === "Ledger" ? "bg-violet-100 dark:bg-violet-950/30 text-violet-600" : "bg-blue-100 dark:bg-blue-950/30 text-blue-600"}`}>{r.type || "—"}</span>
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 truncate max-w-[110px]">{r.subType || <span className="text-red-400 italic">missing</span>}</td>
+                                <td className="px-2 py-1.5 font-mono text-gray-500">{r.parentCode || <span className="text-gray-300 dark:text-zinc-600">—</span>}</td>
+                                <td className="px-2 py-1.5">
+                                  {r.errors.map((e, i) => <div key={i} className="text-red-600 dark:text-red-400 leading-snug">{e}</div>)}
+                                  {r.warnings.map((w, i) => <div key={i} className="text-amber-600 dark:text-amber-400 leading-snug">{w}</div>)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Footer actions */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/40 flex-shrink-0">
+            <button
+              onClick={() => { setShowImport(false); setImportRows([]); setImportFileName(""); }}
+              className="h-9 px-5 rounded-lg border border-gray-200 dark:border-zinc-700 text-[13px] text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
+            >
+              Cancel
+            </button>
+            {importRows.length > 0 && (
+              <button
+                onClick={handleConfirmImport}
+                disabled={importRows.filter(r => r.errors.length === 0).length === 0}
+                className="flex items-center gap-2 h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-bold transition-colors"
+              >
+                <Upload size={14} />
+                Import {importRows.filter(r => r.errors.length === 0).length} Valid Account{importRows.filter(r => r.errors.length === 0).length !== 1 ? "s" : ""}
+              </button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
