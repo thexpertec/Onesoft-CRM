@@ -476,96 +476,104 @@ function POSView({
                 {localItems.map((item, idx) => {
                   const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
                   return (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors">
+                    <div key={item.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50/80 dark:hover:bg-zinc-900/50 transition-colors group">
 
                       {/* Row number */}
-                      <span className="text-[11px] text-gray-300 dark:text-zinc-700 w-4 text-center shrink-0">{idx + 1}</span>
+                      <span className="text-[12px] text-gray-300 dark:text-zinc-700 w-5 text-center shrink-0 font-medium">{idx + 1}</span>
 
-                      {/* Small thumbnail */}
-                      <div className="w-8 h-8 rounded-md overflow-hidden shrink-0">
+                      {/* Thumbnail */}
+                      <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 ring-1 ring-gray-100 dark:ring-zinc-800">
                         <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />
                       </div>
 
-                      {/* Product info + notes */}
+                      {/* Product name + unit + stock */}
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate leading-tight">{item.productName || "—"}</div>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-[10px] text-gray-400">—</span>
-                          <span className="text-[10px] text-gray-400">{item.unit}</span>
+                        <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">{item.productName || "—"}</div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {item.unit && (
+                            <span className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400">
+                              {item.unit}
+                            </span>
+                          )}
+                          {(() => {
+                            const avail = item.sku ? (stockMap[item.sku] ?? null) : null;
+                            if (avail === null) return null;
+                            const low = avail <= 5;
+                            return (
+                              <span className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                                low
+                                  ? "bg-red-50 dark:bg-red-950/30 text-red-500 dark:text-red-400"
+                                  : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
+                              }`}>
+                                Stock: {avail}
+                              </span>
+                            );
+                          })()}
                         </div>
-                        {isDraft && (
-                          <input
-                            value={item.notes}
-                            onChange={e => onItemChange(item.id, "notes", e.target.value)}
-                            onBlur={onItemBlur}
-                            placeholder="Add a note…"
-                            className="mt-0.5 w-full text-[11px] text-gray-400 bg-transparent placeholder:text-gray-300 dark:placeholder:text-zinc-700 outline-none border-b border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-300 transition-colors"
-                          />
-                        )}
                       </div>
 
-                      {/* Qty stepper — flat, minimal */}
+                      {/* Qty stepper */}
                       <div className="shrink-0 flex items-center">
                         {isDraft ? (
-                          <div className="flex items-center border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                          <div className="flex items-center border-2 border-gray-200 dark:border-zinc-700 rounded-xl overflow-hidden">
                             <button
                               onClick={() => qtyChange(item.id, -1)}
-                              className="w-7 h-7 flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
+                              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
                             >
-                              <Minus size={11} />
+                              <Minus size={13} />
                             </button>
                             <input
                               type="number" min="0"
                               value={item.qty}
                               onChange={e => onItemChange(item.id, "qty", e.target.value)}
                               onBlur={onItemBlur}
-                              className="w-10 h-7 text-center text-[13px] font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none border-x border-gray-200 dark:border-zinc-700 focus:bg-blue-50 dark:focus:bg-blue-950/20"
+                              className="w-12 h-9 text-center text-[15px] font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-zinc-800 outline-none border-x-2 border-gray-200 dark:border-zinc-700 focus:bg-blue-50 dark:focus:bg-blue-950/20"
                             />
                             <button
                               onClick={() => qtyChange(item.id, 1)}
-                              className="w-7 h-7 flex items-center justify-center text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 transition-colors"
+                              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 transition-colors"
                             >
-                              <Plus size={11} />
+                              <Plus size={13} />
                             </button>
                           </div>
                         ) : (
-                          <span className="text-[13px] font-bold text-gray-600 dark:text-gray-300 w-12 text-center">×{item.qty}</span>
+                          <span className="text-[15px] font-bold text-gray-600 dark:text-gray-300 w-14 text-center">×{item.qty}</span>
                         )}
                       </div>
 
                       {/* Unit price */}
-                      <div className="shrink-0 w-[76px]">
-                        <div className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Unit £</div>
+                      <div className="shrink-0 w-[88px]">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Unit £</div>
                         <input
                           type="number" min="0" step="0.01"
                           value={item.unitPrice}
                           onChange={e => onItemChange(item.id, "unitPrice", e.target.value)}
                           onBlur={onItemBlur}
                           disabled={!isDraft}
-                          className="w-full text-[12px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-gray-200 dark:border-zinc-700 focus:border-blue-400 transition-colors"
+                          className="w-full text-[15px] font-bold text-right text-gray-800 dark:text-gray-100 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-gray-200 dark:border-zinc-700 focus:border-blue-400 dark:focus:border-blue-500 transition-colors pb-0.5"
                         />
                       </div>
 
                       {/* Discount */}
-                      <div className="shrink-0 w-12">
-                        <div className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Disc %</div>
+                      <div className="shrink-0 w-[62px]">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Disc %</div>
                         <input
                           type="number" min="0" max="100"
                           value={item.discount}
                           onChange={e => onItemChange(item.id, "discount", e.target.value)}
                           onBlur={onItemBlur}
                           disabled={!isDraft}
-                          className="w-full text-[12px] font-semibold text-right text-gray-700 dark:text-gray-200 bg-transparent outline-none disabled:pointer-events-none border-b border-gray-200 dark:border-zinc-700 focus:border-blue-400 transition-colors"
+                          className="w-full text-[15px] font-bold text-right text-gray-800 dark:text-gray-100 bg-transparent outline-none disabled:pointer-events-none border-b-2 border-gray-200 dark:border-zinc-700 focus:border-blue-400 dark:focus:border-blue-500 transition-colors pb-0.5"
                         />
                       </div>
 
-                      {/* Line total */}
-                      <div className="shrink-0 w-[72px] text-right">
-                        <div className="text-[14px] font-bold font-mono tabular-nums text-gray-800 dark:text-gray-100">
+                      {/* Subtotal */}
+                      <div className="shrink-0 w-[88px] text-right">
+                        <div className="text-[18px] font-extrabold font-mono tabular-nums text-gray-900 dark:text-gray-100 leading-tight">
                           £{lineTotal(item).toFixed(2)}
                         </div>
                         {parseFloat(item.discount) > 0 && (
-                          <div className="text-[9px] text-emerald-500 font-mono">
+                          <div className="text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 font-mono">
                             −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
                           </div>
                         )}
@@ -575,9 +583,9 @@ function POSView({
                       <button
                         onClick={() => isDraft && onDeleteItem(item.id)}
                         disabled={!isDraft}
-                        className={`shrink-0 w-6 h-6 rounded flex items-center justify-center transition-colors ${isDraft ? "text-gray-300 hover:text-red-400" : "opacity-0 pointer-events-none"}`}
+                        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDraft ? "text-gray-300 dark:text-zinc-700 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" : "opacity-0 pointer-events-none"}`}
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   );
