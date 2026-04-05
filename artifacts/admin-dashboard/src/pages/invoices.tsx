@@ -166,6 +166,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
   const products  = useMemo(() => getProducts(), []);
   const customers = useMemo(() => getCustomers(), []);
+  const productOpts = useMemo<ComboOption[]>(() =>
+    products.map(p => ({
+      value: p.name,
+      label: p.name,
+      sub:   p.sku,
+      tag:   p.category || undefined,
+    })),
+  [products]);
   const customerOpts = useMemo<ComboOption[]>(() =>
     customers.map(c => ({
       value: c.name,
@@ -427,16 +435,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[10px] font-bold text-gray-400 w-5 shrink-0">{idx + 1}.</span>
                     <div className="relative flex-1">
-                      <input
-                        list={`inv-products-${item.id}`}
+                      <Combobox
                         value={item.productName}
-                        onChange={e => pickProduct(item.id, e.target.value)}
-                        placeholder="Product / service name"
-                        className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        onChange={v => pickProduct(item.id, v)}
+                        onSelect={opt => pickProduct(item.id, opt.value)}
+                        options={productOpts}
+                        placeholder="Search product / service…"
+                        className="w-full"
+                        inputClassName="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                       />
-                      <datalist id={`inv-products-${item.id}`}>
-                        {products.map(p => <option key={p.id} value={p.name} />)}
-                      </datalist>
                     </div>
                     {/* Item status pill */}
                     <button
