@@ -96,37 +96,42 @@ type LedgerEntry = { _key: string; code: string; name: string; openingBalance: s
 
 type ModalState = {
   open: boolean;
-  parentAccount: Account | null;
-  defaultHead: AccountHead;
+  head: AccountHead;         // selected head (may change)
+  headLocked: boolean;       // true when triggered from a specific head/account
+  parentId: string | null;   // selected parent account id (may change)
   accountType: AccountKind;
-  // For Group: single entry
   groupCode: string;
   groupName: string;
   groupSubType: string;
-  // For Ledger: multiple entries
   ledgerEntries: LedgerEntry[];
 };
 
 const defaultModal = (
-  parent: Account | null,
+  parentId: string | null,
   head: AccountHead,
+  headLocked: boolean,
   allAccounts: Account[],
-): ModalState => ({
-  open: true,
-  parentAccount: parent,
-  defaultHead: head,
-  accountType: "Group",
-  groupCode: suggestCode(parent, head, allAccounts),
-  groupName: "",
-  groupSubType: HEAD_SUB_TYPES[head][0],
-  ledgerEntries: [{
-    _key: crypto.randomUUID(),
-    code: suggestCode(parent, head, allAccounts),
-    name: "",
-    openingBalance: "0",
-    subType: HEAD_SUB_TYPES[head][0],
-  }],
-});
+): ModalState => {
+  const parent = parentId ? (allAccounts.find(a => a.id === parentId) ?? null) : null;
+  const code0 = suggestCode(parent, head, allAccounts);
+  return {
+    open: true,
+    head,
+    headLocked,
+    parentId,
+    accountType: "Group",
+    groupCode: code0,
+    groupName: "",
+    groupSubType: HEAD_SUB_TYPES[head][0],
+    ledgerEntries: [{
+      _key: crypto.randomUUID(),
+      code: code0,
+      name: "",
+      openingBalance: "0",
+      subType: HEAD_SUB_TYPES[head][0],
+    }],
+  };
+};
 
 // ─── Edit form type ───────────────────────────────────────────────────────────
 type EditForm = Omit<Account, "id" | "createdAt" | "updatedAt">;
@@ -175,8 +180,43 @@ export default function ChartOfAccountsPage() {
   const openCreate = useCallback((parent: Account | null, head: AccountHead) => {
     setShowEdit(false);
     setEditingId(null);
-    setModal(defaultModal(parent, head, accounts));
+    // headLocked = true when triggered from a specific account row (head cannot change)
+    setModal(defaultModal(parent?.id ?? null, head, parent !== null, accounts));
   }, [accounts]);
+
+  // Change head inside modal (unlocked mode only) – resets parent & re-suggests code
+  const handleModalHeadChange = useCallback((h: AccountHead) => {
+    if (!modal) return;
+    const code0 = suggestCode(null, h, accounts);
+    setModal(m => m ? {
+      ...m,
+      head: h,
+      parentId: null,
+      groupSubType: HEAD_SUB_TYPES[h][0],
+      groupCode: code0,
+      ledgerEntries: m.ledgerEntries.map((e, i) => ({
+        ...e,
+        code: suggestCode(null, h, accounts, i),
+        subType: HEAD_SUB_TYPES[h][0],
+      })),
+    } : m);
+  }, [modal, accounts]);
+
+  // Change parent inside modal – re-suggests code
+  const handleModalParentChange = useCallback((parentId: string | null) => {
+    if (!modal) return;
+    const parent = parentId ? (accounts.find(a => a.id === parentId) ?? null) : null;
+    const code0 = suggestCode(parent, modal.head, accounts);
+    setModal(m => m ? {
+      ...m,
+      parentId,
+      groupCode: code0,
+      ledgerEntries: m.ledgerEntries.map((e, i) => ({
+        ...e,
+        code: suggestCode(parent, modal.head, accounts, i),
+      })),
+    } : m);
+  }, [modal, accounts]);
 
   // ── Open edit inline ─────────────────────────────────────────────────────────
   const openEdit = (acc: Account) => {
@@ -214,8 +254,8 @@ export default function ChartOfAccountsPage() {
 
   const setModalType = (t: AccountKind) => {
     if (!modal) return;
-    const parent = modal.parentAccount;
-    const head = modal.defaultHead;
+    const parent = modal.parentId ? (accounts.find(a => a.id === modal.parentId) ?? null) : null;
+    const head = modal.head;
     if (t === "Ledger") {
       setModal(m => m ? {
         ...m,
@@ -242,14 +282,15 @@ export default function ChartOfAccountsPage() {
   const addLedgerEntry = () => {
     if (!modal) return;
     const idx = modal.ledgerEntries.length;
+    const parent = modal.parentId ? (accounts.find(a => a.id === modal.parentId) ?? null) : null;
     setModal(m => m ? {
       ...m,
       ledgerEntries: [...m.ledgerEntries, {
         _key: crypto.randomUUID(),
-        code: suggestCode(modal.parentAccount, modal.defaultHead, accounts, idx),
+        code: suggestCode(parent, modal.head, accounts, idx),
         name: "",
         openingBalance: "0",
-        subType: HEAD_SUB_TYPES[modal.defaultHead][0],
+        subType: HEAD_SUB_TYPES[modal.head][0],
       }],
     } : m);
   };
@@ -265,8 +306,7 @@ export default function ChartOfAccountsPage() {
 
   const handleModalSave = useCallback(() => {
     if (!modal) return;
-    const { parentAccount, defaultHead: head, accountType } = modal;
-    const parentId = parentAccount?.id ?? null;
+    const { parentId, head, accountType } = modal;
 
     if (accountType === "Group") {
       const code = modal.groupCode.trim();
@@ -715,13 +755,6 @@ export default function ChartOfAccountsPage() {
             <DialogTitle className="flex items-center gap-2 text-[15px]">
               <FolderOpen size={16} className="text-blue-500" />
               Create Group / Ledger
-              {modal?.parentAccount && (
-                <span className="text-[12px] font-normal text-gray-500 ml-1">
-                  under <span className="font-semibold text-gray-700 dark:text-gray-300">
-                    {modal.parentAccount.code} | {modal.parentAccount.name}
-                  </span>
-                </span>
-              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -758,22 +791,56 @@ export default function ChartOfAccountsPage() {
                 </div>
               </div>
 
-              {/* Parent display */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                  Parent Account <span className="text-red-500">*</span>
-                </label>
-                <div className={`px-3 py-2.5 rounded-lg border text-[13px] ${
-                  modal.parentAccount
-                    ? "border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 text-gray-700 dark:text-gray-300"
-                    : "border-dashed border-gray-300 dark:border-zinc-600 bg-gray-50 dark:bg-zinc-800/30 text-gray-400 italic"
-                }`}>
-                  {modal.parentAccount
-                    ? <><span className="font-mono font-bold text-blue-600">{modal.parentAccount.code}</span> | {modal.parentAccount.name} <span className={`text-[10px] px-1.5 py-0.5 rounded-md ml-1 ${HEAD_STYLE[modal.parentAccount.head].bg} ${HEAD_STYLE[modal.parentAccount.head].text}`}>{modal.parentAccount.head}</span></>
-                    : "Root level — no parent (top-level account under head)"
-                  }
+              {/* Head selector (shown when not locked to a specific head) */}
+              {!modal.headLocked && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Account Head <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={modal.head}
+                    onChange={e => handleModalHeadChange(e.target.value as AccountHead)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    {ACCOUNT_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
                 </div>
-              </div>
+              )}
+
+              {/* Parent account selector (dropdown) */}
+              {(() => {
+                // Build tree-ordered parent options for modal.head
+                const opts: { id: string; label: string; depth: number }[] = [];
+                function walkOpts(pid: string | null, depth: number) {
+                  accounts
+                    .filter(a => a.head === modal.head && (a.parentId ?? null) === pid)
+                    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                    .forEach(a => {
+                      opts.push({ id: a.id, label: `${a.code} | ${a.name}`, depth });
+                      walkOpts(a.id, depth + 1);
+                    });
+                }
+                walkOpts(null, 0);
+                return (
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Select Account Group <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={modal.parentId ?? ""}
+                      onChange={e => handleModalParentChange(e.target.value || null)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                      <option value="">— No parent (root level under {modal.head}) —</option>
+                      {opts.map(o => (
+                        <option key={o.id} value={o.id}>
+                          {"\u00a0\u00a0\u00a0\u00a0".repeat(o.depth)}{o.depth > 0 ? "↳ " : ""}{o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* GROUP: single code+name */}
               {modal.accountType === "Group" && (
@@ -840,7 +907,7 @@ export default function ChartOfAccountsPage() {
                             onChange={e => updateLedgerEntry(entry._key, "subType", e.target.value)}
                             className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                           >
-                            {HEAD_SUB_TYPES[modal.defaultHead].map(t => <option key={t} value={t}>{t}</option>)}
+                            {HEAD_SUB_TYPES[modal.head].map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </div>
                         {modal.ledgerEntries.length > 1 && (
