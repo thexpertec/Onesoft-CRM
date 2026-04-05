@@ -6,13 +6,14 @@ import {
   Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getStock, Product,
-  deductStockForSale, restoreStockForSale,
+  deductStockForSale, restoreStockForSale, getSettings,
 } from "@/lib/store";
+import { printSaleInvoice } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
-  ArrowLeft, Minus, Package, ChevronDown, Lock,
+  ArrowLeft, Minus, Package, ChevronDown, Lock, Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -717,6 +718,12 @@ function POSView({
                   >
                     <Check size={16} /> Mark as Paid
                   </button>
+                  <button
+                    onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
+                    className="w-full h-10 rounded-xl border-2 border-blue-200 dark:border-blue-800 text-[13px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Printer size={14} /> Print Invoice
+                  </button>
                   <div className="flex gap-2">
                     <button
                       onClick={() => onSetStatus("Refunded")}
@@ -734,19 +741,27 @@ function POSView({
                 </>
               )}
               {isCompleted && (
-                <div className="flex gap-2">
+                <div className="space-y-2">
                   <button
-                    onClick={() => onSetStatus("Refunded")}
-                    className="flex-1 h-10 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[13px] font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-2 transition-colors"
+                    onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
+                    className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-200 dark:shadow-none"
                   >
-                    <RotateCcw size={14} /> Refund
+                    <Printer size={16} /> Print Invoice
                   </button>
-                  <button
-                    onClick={onClose}
-                    className="flex-1 h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Close
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onSetStatus("Refunded")}
+                      className="flex-1 h-10 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[13px] font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <RotateCcw size={14} /> Refund
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="flex-1 h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               )}
               {(sale.status === "Refunded" || sale.status === "Cancelled") && (
@@ -1102,7 +1117,7 @@ export default function SalesPage() {
       deductStockForSale(localItems);
     }
 
-    editSale(detailId, {
+    const completedSale = editSale(detailId, {
       ...localMeta,
       status: "Completed",
       items: localItems,
@@ -1111,7 +1126,12 @@ export default function SalesPage() {
       paidAt: new Date().toISOString(),
       stockDeducted: true,
     });
+
     toast({ title: "Sale completed!", description: `£${parseFloat(amountPaid || "0").toFixed(2)} received` });
+
+    // Open print invoice window
+    try { printSaleInvoice(completedSale, getSettings()); } catch { /* ignore popup blockers */ }
+
     closePOS();
   };
 
