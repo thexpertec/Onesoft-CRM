@@ -9,6 +9,7 @@ import {
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
 import { Combobox, ComboOption } from "@/components/combobox";
+import RichTextEditor from "@/components/RichTextEditor";
 import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -212,8 +213,14 @@ function DocPicker({
           if (!val) return;
           // Check built-ins first, then custom docs
           const builtin = builtins.find(b => b.label === val);
-          if (builtin) { onPick(builtin.value); e.currentTarget.value = ""; return; }
+          if (builtin) {
+            // Wrap plain text in <p> tag so it becomes valid HTML for the rich text editor
+            onPick(`<p>${builtin.value}</p>`);
+            e.currentTarget.value = "";
+            return;
+          }
           const doc = docs.find(d => d.id === val);
+          // Legal doc content is already HTML from the rich text editor
           if (doc) { onPick(doc.content); e.currentTarget.value = ""; }
         }}
         className="flex-1 px-2 py-1 text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
@@ -735,11 +742,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Payment Terms</label>
             </div>
             <DocPicker docs={legalDocs} kind="paymentTerms" onPick={content => setF("paymentTerms", content)} />
-            <textarea
-              rows={3} value={form.paymentTerms}
-              onChange={e => setF("paymentTerms", e.target.value)}
+            <RichTextEditor
+              value={form.paymentTerms}
+              onChange={html => setF("paymentTerms", html)}
               placeholder="e.g. Payment is due within 30 days of invoice date. Late payments may incur a 2% monthly fee…"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+              minHeight="120px"
             />
           </div>
 
@@ -749,11 +756,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Agreement</label>
             </div>
             <DocPicker docs={legalDocs} kind="agreement" onPick={content => setF("agreement", content)} />
-            <textarea
-              rows={4} value={form.agreement}
-              onChange={e => setF("agreement", e.target.value)}
+            <RichTextEditor
+              value={form.agreement}
+              onChange={html => setF("agreement", html)}
               placeholder="By accepting this invoice, the buyer agrees to the terms and conditions set out herein…"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+              minHeight="150px"
             />
           </div>
 
@@ -763,11 +770,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Additional Notes / Terms</label>
             </div>
             <DocPicker docs={legalDocs} kind="notes" onPick={content => setF("notes", content)} />
-            <textarea
-              rows={3} value={form.notes}
-              onChange={e => setF("notes", e.target.value)}
+            <RichTextEditor
+              value={form.notes}
+              onChange={html => setF("notes", html)}
               placeholder="Any extra notes, special conditions, or remarks shown on the invoice…"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+              minHeight="120px"
             />
           </div>
 

@@ -16,6 +16,15 @@ const esc = (s: string) =>
 const nl2br = (s: string) =>
   esc(s).replace(/\n/g, "<br/>");
 
+/** Render rich-text HTML or plain text safely for the print template */
+const renderContent = (s: string) => {
+  const t = s.trim();
+  // If it looks like HTML (starts with a tag), output it directly
+  if (t.startsWith("<")) return t;
+  // Otherwise treat as plain text — escape and convert newlines
+  return nl2br(t);
+};
+
 function fmtDate(iso: string): string {
   if (!iso) return "—";
   return new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {
@@ -289,7 +298,15 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .notes-grid { display: flex; gap: 14pt; margin-bottom: 10pt; }
   .notes-box { flex: 1; }
   .notes-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #1e3a5f; margin-bottom: 4pt; }
-  .notes-text { font-size: 8pt; color: #374151; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 4pt; padding: 6pt 8pt; white-space: pre-wrap; line-height: 1.5; }
+  .notes-text { font-size: 8pt; color: #374151; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 4pt; padding: 6pt 8pt; line-height: 1.5; }
+  .notes-text p { margin: 0 0 4pt; }
+  .notes-text p:last-child { margin-bottom: 0; }
+  .notes-text ul, .notes-text ol { margin: 0 0 4pt; padding-left: 14pt; }
+  .notes-text li { margin-bottom: 2pt; }
+  .notes-text h1, .notes-text h2, .notes-text h3 { font-size: 9pt; font-weight: 700; margin: 4pt 0 2pt; color: #1e3a5f; }
+  .notes-text strong { font-weight: 700; }
+  .notes-text em { font-style: italic; }
+  .notes-text blockquote { border-left: 2pt solid #cbd5e1; margin: 4pt 0; padding-left: 6pt; color: #6b7280; }
 
   /* ── FOOTER ─────────────────────────────────────── */
   .inv-footer {
@@ -460,17 +477,22 @@ ${(inv.paymentHistory ?? []).length > 0 ? `
 ` : ""}
 
 <!-- ═══════════════════ TERMS & NOTES ═══════════════════ -->
-${(inv.paymentTerms || settings.invoiceTerms || inv.notes) ? `
+${(inv.paymentTerms || settings.invoiceTerms || inv.notes || inv.agreement) ? `
 <div class="notes-grid">
   ${(inv.paymentTerms || settings.invoiceTerms) ? `
   <div class="notes-box">
     <div class="notes-label">Payment Terms</div>
-    <div class="notes-text">${nl2br(inv.paymentTerms || settings.invoiceTerms)}</div>
+    <div class="notes-text">${renderContent(inv.paymentTerms || settings.invoiceTerms)}</div>
+  </div>` : ""}
+  ${inv.agreement ? `
+  <div class="notes-box">
+    <div class="notes-label">Agreement</div>
+    <div class="notes-text">${renderContent(inv.agreement)}</div>
   </div>` : ""}
   ${inv.notes ? `
   <div class="notes-box">
     <div class="notes-label">Additional Notes</div>
-    <div class="notes-text">${nl2br(inv.notes)}</div>
+    <div class="notes-text">${renderContent(inv.notes)}</div>
   </div>` : ""}
 </div>` : ""}
 

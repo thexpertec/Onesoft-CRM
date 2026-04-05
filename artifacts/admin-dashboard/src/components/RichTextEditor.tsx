@@ -74,12 +74,14 @@ interface RichTextEditorProps {
   value?: string;
   onChange?: (html: string) => void;
   placeholder?: string;
+  minHeight?: string;
 }
 
 export default function RichTextEditor({
   value,
   onChange,
   placeholder = "Type your detailed notes here...",
+  minHeight = "320px",
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -103,8 +105,8 @@ export default function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class:
-          "min-h-[320px] w-full px-4 py-4 text-sm text-foreground leading-relaxed focus:outline-none",
+        class: `w-full px-4 py-4 text-sm text-foreground leading-relaxed focus:outline-none`,
+        style: `min-height: ${minHeight}`,
       },
     },
   });
