@@ -33,6 +33,7 @@ import MediaLibraryPage from "@/pages/media";
 import SettingsPage from "@/pages/settings";
 import TenantsPage from "@/pages/tenants";
 import ModuleGroupsPage from "@/pages/module-groups";
+import ChartOfAccountsPage from "@/pages/chart-of-accounts";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ function Router() {
               <Route path="/users" component={UsersPage} />
               <Route path="/tenants" component={TenantsPage} />
               <Route path="/module-groups" component={ModuleGroupsPage} />
+              <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>

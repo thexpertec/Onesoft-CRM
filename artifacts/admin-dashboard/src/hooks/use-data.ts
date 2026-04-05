@@ -14,8 +14,9 @@ import {
   getStock, createStockItem, updateStockItem, deleteStockItem,
   getSales, createSale, updateSale, deleteSale,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
+  getAccounts, createAccount, updateAccount, deleteAccount,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
-  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice,
+  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -316,6 +317,16 @@ export function useStock() {
   const editItem   = (id: string, u: Parameters<typeof updateStockItem>[1])       => { const s = updateStockItem(id, u); fetch(); return s; };
   const removeItem = (id: string)                                                  => { deleteStockItem(id);              fetch(); };
   return { stock, addItem, editItem, removeItem, refresh: fetch };
+}
+
+export function useAccounts() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const fetch = useCallback(() => setAccounts(getAccounts()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addAccount    = (d: Parameters<typeof createAccount>[0])               => { const a = createAccount(d);    fetch(); return a; };
+  const editAccount   = (id: string, u: Parameters<typeof updateAccount>[1])   => { const a = updateAccount(id, u); fetch(); return a; };
+  const removeAccount = (id: string)                                            => { deleteAccount(id);              fetch(); };
+  return { accounts, addAccount, editAccount, removeAccount, refresh: fetch };
 }
 
 export function useStaff() {

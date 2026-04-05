@@ -6,7 +6,7 @@ import {
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
-  Package2, Image as ImageIcon, Settings, Globe,
+  Package2, Image as ImageIcon, Settings, Globe, BookOpen,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -108,9 +108,10 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "sales", label: "Sales", icon: Receipt,
     items: [
-      { label: "All Sales",    href: "/sales",     icon: Receipt,  desc: "Sales & POS terminal" },
-      { label: "New Sale",     href: "/sales/new", icon: Plus,     desc: "Open POS terminal"    },
-      { label: "Invoices",     href: "/invoices",  icon: FileText, desc: "Invoice management"   },
+      { label: "All Sales",         href: "/sales",               icon: Receipt,   desc: "Sales & POS terminal"   },
+      { label: "New Sale",          href: "/sales/new",           icon: Plus,      desc: "Open POS terminal"      },
+      { label: "Invoices",          href: "/invoices",            icon: FileText,  desc: "Invoice management"     },
+      { label: "Chart of Accounts", href: "/chart-of-accounts",  icon: BookOpen,  desc: "5-head account ledger"  },
     ],
   },
   {
@@ -127,7 +128,7 @@ const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
-const SALES_ROUTES     = ["/sales", "/invoices"];
+const SALES_ROUTES     = ["/sales", "/invoices", "/chart-of-accounts"];
 const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
 const QUICK_ADD: SubItem[] = [
