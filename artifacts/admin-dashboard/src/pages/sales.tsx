@@ -1160,6 +1160,7 @@ export default function SalesPage() {
     sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotal(s.items), 0), [sales]);
 
   const filteredSums = useMemo(() => ({
+    items:   filtered.reduce((s, sale) => s + sale.items.reduce((q, i) => q + (parseFloat(i.qty) || 0), 0), 0),
     total:   filtered.reduce((s, sale) => s + saleTotal(sale.items), 0),
     paid:    filtered.reduce((s, sale) => s + (parseFloat(sale.amountPaid || "0") || 0), 0),
     balance: filtered.reduce((s, sale) => s + Math.max(0, saleTotal(sale.items) - (parseFloat(sale.amountPaid || "0") || 0)), 0),
@@ -1470,6 +1471,10 @@ export default function SalesPage() {
                   {c.field === "saleNumber" ? (
                     <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                       {filtered.length} sale{filtered.length !== 1 ? "s" : ""}
+                    </span>
+                  ) : c.field === "itemCount" ? (
+                    <span className="text-[13px] font-mono font-bold text-gray-900 dark:text-foreground tabular-nums">
+                      {Number.isInteger(filteredSums.items) ? filteredSums.items : filteredSums.items.toFixed(1)}
                     </span>
                   ) : c.field === "total" ? (
                     <span className="text-[13px] font-mono font-bold text-gray-900 dark:text-foreground tabular-nums">
