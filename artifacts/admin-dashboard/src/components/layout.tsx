@@ -108,10 +108,9 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "sales", label: "Sales", icon: Receipt,
     items: [
-      { label: "All Sales",         href: "/sales",               icon: Receipt,   desc: "Sales & POS terminal"   },
-      { label: "New Sale",          href: "/sales/new",           icon: Plus,      desc: "Open POS terminal"      },
-      { label: "Invoices",          href: "/invoices",            icon: FileText,  desc: "Invoice management"     },
-      { label: "Chart of Accounts", href: "/chart-of-accounts",  icon: BookOpen,  desc: "5-head account ledger"  },
+      { label: "All Sales", href: "/sales",     icon: Receipt,  desc: "Sales & POS terminal" },
+      { label: "New Sale",  href: "/sales/new", icon: Plus,     desc: "Open POS terminal"    },
+      { label: "Invoices",  href: "/invoices",  icon: FileText, desc: "Invoice management"   },
     ],
   },
   {
@@ -121,14 +120,15 @@ const OTHER_NAV: NavItem[] = [
       { label: "New Document",  href: "/documents/new", icon: FilePlus },
     ],
   },
-  { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
+  { key: "accounts", href: "/chart-of-accounts", label: "Accounts", icon: BookOpen, items: null },
+  { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
 ];
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
-const SALES_ROUTES     = ["/sales", "/invoices", "/chart-of-accounts"];
+const SALES_ROUTES     = ["/sales", "/invoices"];
 const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
 const QUICK_ADD: SubItem[] = [
@@ -221,6 +221,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         case "purchases": return isModuleAllowed("purchases");
         case "sales":     return isModuleAllowed("sales") || isModuleAllowed("invoices");
         case "documents": return isModuleAllowed("documents");
+        case "accounts":  return true; // Chart of Accounts — always visible, standalone
         case "settings":  return isModuleAllowed("settings");
         default:          return true; // dashboard always shown
       }
