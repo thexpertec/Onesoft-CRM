@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useLocation, useParams } from "wouter";
 import { useInvoices } from "@/hooks/use-data";
 import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
@@ -12,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
-  Save, CreditCard, ArrowLeft,
+  Save, CreditCard, ArrowLeft, Eye,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -305,7 +306,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
       {/* ══ Single-column Body ════════════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-3xl mx-auto space-y-4">
+        <div className="space-y-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
             <div className="px-5 py-4 space-y-4">
 
@@ -670,23 +671,75 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export default function InvoicesPage() {
+// ─── Invoice Form Page (route wrapper) ────────────────────────────────────────
+export function InvoiceFormPage() {
+  const params = useParams<{ id?: string }>();
+  const [, navigate] = useLocation();
   const { invoices, addInvoice, editInvoice, removeInvoice } = useInvoices();
   const { toast } = useToast();
 
+  const invoiceId = params.id;
+  const isNewRoute = !invoiceId || invoiceId === "new";
+  const invoice = isNewRoute ? null : invoices.find(i => i.id === invoiceId) ?? null;
+
+  const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
+    if (id) {
+      editInvoice(id, { ...data });
+      toast({ title: "Invoice updated" });
+    } else {
+      const inv = addInvoice(data);
+      toast({ title: "Invoice created", description: inv.invoiceNumber });
+      navigate(`/invoices/${inv.id}`);
+    }
+  }, [editInvoice, addInvoice, toast, navigate]);
+
+  const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
+    const inv = invoices.find(i => i.id === id);
+    if (!inv) return;
+    const updates: Partial<Invoice> = { status };
+    if (amountPaid !== undefined) updates.amountPaid = amountPaid;
+    if (status === "Paid" || status === "Partial") {
+      if (!inv.paidAt) updates.paidAt = new Date().toISOString();
+    }
+    if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
+      deductStockForSale(inv.items);
+      updates.stockDeducted = true;
+    }
+    if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
+      restoreStockForSale(inv.items);
+      updates.stockDeducted = false;
+      updates.paidAt = "";
+    }
+    editInvoice(id, updates);
+    toast({ title: `Invoice marked ${status}` });
+  }, [invoices, editInvoice, toast]);
+
+  const handleDelete = useCallback((id: string) => {
+    const inv = invoices.find(i => i.id === id);
+    if (inv?.stockDeducted) restoreStockForSale(inv.items);
+    removeInvoice(id);
+    toast({ title: "Invoice deleted", variant: "destructive" });
+    navigate("/invoices");
+  }, [invoices, removeInvoice, toast, navigate]);
+
+  return (
+    <InvoicePanel
+      invoice={invoice}
+      onClose={() => navigate("/invoices")}
+      onSave={handleSave}
+      onDelete={handleDelete}
+      onStatusChange={handleStatusChange}
+    />
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function InvoicesPage() {
+  const { invoices } = useInvoices();
+  const [, navigate] = useLocation();
+
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
   const [search,       setSearch]       = useState("");
-  const [panelId,      setPanelId]      = useState<string | "new" | null>(null);
-
-  const openNew       = () => setPanelId("new");
-  const openDetail    = (id: string) => setPanelId(id);
-  const closePanel    = () => setPanelId(null);
-
-  const activeInvoice = useMemo(() =>
-    panelId && panelId !== "new" ? invoices.find(i => i.id === panelId) ?? null : null,
-    [panelId, invoices]
-  );
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -705,57 +758,6 @@ export default function InvoicesPage() {
     INVOICE_STATUSES.forEach(s => { c[s] = invoices.filter(i => i.status === s).length; });
     return c;
   }, [invoices]);
-
-  // ── Save ──
-  const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
-    if (id) {
-      editInvoice(id, { ...data });
-      toast({ title: "Invoice updated" });
-    } else {
-      const inv = addInvoice(data);
-      toast({ title: "Invoice created", description: inv.invoiceNumber });
-      setPanelId(inv.id);
-    }
-  }, [editInvoice, addInvoice, toast]);
-
-  // ── Status Change ──
-  const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
-    const inv = invoices.find(i => i.id === id);
-    if (!inv) return;
-
-    const updates: Partial<Invoice> = { status };
-
-    if (amountPaid !== undefined) updates.amountPaid = amountPaid;
-
-    // Set paidAt timestamp when marking Paid or Partial
-    if (status === "Paid" || status === "Partial") {
-      if (!inv.paidAt) updates.paidAt = new Date().toISOString();
-    }
-
-    // Deduct stock when Paid or Partial (only once)
-    if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
-      deductStockForSale(inv.items);
-      updates.stockDeducted = true;
-    }
-
-    // Restore stock when reverted to Draft or Cancelled
-    if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
-      restoreStockForSale(inv.items);
-      updates.stockDeducted = false;
-      updates.paidAt = "";
-    }
-
-    editInvoice(id, updates);
-    toast({ title: `Invoice marked ${status}` });
-  }, [invoices, editInvoice, toast]);
-
-  // ── Delete ──
-  const handleDelete = useCallback((id: string) => {
-    const inv = invoices.find(i => i.id === id);
-    if (inv?.stockDeducted) restoreStockForSale(inv.items);
-    removeInvoice(id);
-    toast({ title: "Invoice deleted", variant: "destructive" });
-  }, [invoices, removeInvoice, toast]);
 
   const TAB_DEFS: Array<{ label: string; value: "All" | InvoiceStatus }> = [
     { label: "All",       value: "All"       },
@@ -783,7 +785,7 @@ export default function InvoicesPage() {
             </div>
           </div>
           <button
-            onClick={openNew}
+            onClick={() => navigate("/invoices/new")}
             className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold shadow-md shadow-blue-200 dark:shadow-none transition-colors"
           >
             <Plus size={15} /> New Invoice
@@ -840,7 +842,7 @@ export default function InvoicesPage() {
               {invoices.length === 0 ? "No invoices yet" : "No invoices match your filters"}
             </p>
             {invoices.length === 0 && (
-              <button onClick={openNew} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-bold mx-auto hover:bg-blue-700 transition-colors">
+              <button onClick={() => navigate("/invoices/new")} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-bold mx-auto hover:bg-blue-700 transition-colors">
                 <Plus size={14} /> Create First Invoice
               </button>
             )}
@@ -867,7 +869,7 @@ export default function InvoicesPage() {
               return (
                 <div
                   key={inv.id}
-                  onClick={() => openDetail(inv.id)}
+                  onClick={() => navigate(`/invoices/${inv.id}`)}
                   className="grid grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto] gap-0 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors items-center group"
                 >
                   {/* Invoice # */}
@@ -928,16 +930,6 @@ export default function InvoicesPage() {
         )}
       </div>
 
-      {/* ── Panel ── */}
-      {panelId && (
-        <InvoicePanel
-          invoice={activeInvoice}
-          onClose={closePanel}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onStatusChange={handleStatusChange}
-        />
-      )}
     </div>
   );
 }
