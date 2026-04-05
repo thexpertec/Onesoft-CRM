@@ -13,8 +13,9 @@ import {
   getStaffRoles, createStaffRole, updateStaffRole, deleteStaffRole,
   getStock, createStockItem, updateStockItem, deleteStockItem,
   getSales, createSale, updateSale, deleteSale,
+  getInvoices, createInvoice, updateInvoice, deleteInvoice,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier,
-  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale,
+  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -285,6 +286,16 @@ export function usePurchaseOrders() {
   };
 
   return { purchaseOrders, addPurchaseOrder, editPurchaseOrder, removePurchaseOrder, refresh: fetchOrders };
+}
+
+export function useInvoices() {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const fetch = useCallback(() => setInvoices(getInvoices()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addInvoice    = (d: Parameters<typeof createInvoice>[0])                 => { const inv = createInvoice(d);    fetch(); return inv; };
+  const editInvoice   = (id: string, u: Parameters<typeof updateInvoice>[1])     => { const inv = updateInvoice(id, u); fetch(); return inv; };
+  const removeInvoice = (id: string)                                              => { deleteInvoice(id);               fetch(); };
+  return { invoices, addInvoice, editInvoice, removeInvoice, refresh: fetch };
 }
 
 export function useSales() {

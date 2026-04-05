@@ -17,6 +17,7 @@ import NewDocument from "@/pages/new-document";
 import ShareDocument from "@/pages/share-document";
 import UsersPage from "@/pages/users";
 import SalesPage from "@/pages/sales";
+import InvoicesPage from "@/pages/invoices";
 import StockPage from "@/pages/stock";
 import StaffPage from "@/pages/staff";
 import HrmRolesPage from "@/pages/hrm-roles";
@@ -73,6 +74,7 @@ function Router() {
               <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/purchases" component={PurchasesPage} />
               <Route path="/media" component={MediaLibraryPage} />
+              <Route path="/invoices" component={InvoicesPage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />

@@ -108,8 +108,9 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "sales", label: "Sales", icon: Receipt,
     items: [
-      { label: "All Sales",  href: "/sales",     icon: Receipt, desc: "Sales & invoices"   },
-      { label: "New Sale",   href: "/sales/new", icon: Plus,    desc: "Open POS terminal"  },
+      { label: "All Sales",    href: "/sales",     icon: Receipt,  desc: "Sales & POS terminal" },
+      { label: "New Sale",     href: "/sales/new", icon: Plus,     desc: "Open POS terminal"    },
+      { label: "Invoices",     href: "/invoices",  icon: FileText, desc: "Invoice management"   },
     ],
   },
   {
@@ -126,7 +127,7 @@ const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
-const SALES_ROUTES     = ["/sales"];
+const SALES_ROUTES     = ["/sales", "/invoices"];
 const HRM_ROUTES       = ["/staff", "/roles", "/users"];
 
 const QUICK_ADD: SubItem[] = [
@@ -217,7 +218,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         case "products":  return isModuleAllowed("products");
         case "stock":     return isModuleAllowed("stock");
         case "purchases": return isModuleAllowed("purchases");
-        case "sales":     return isModuleAllowed("sales");
+        case "sales":     return isModuleAllowed("sales") || isModuleAllowed("invoices");
         case "documents": return isModuleAllowed("documents");
         case "settings":  return isModuleAllowed("settings");
         default:          return true; // dashboard always shown

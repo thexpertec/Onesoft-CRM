@@ -330,7 +330,7 @@ export const deleteProductCategory = (id: string): void => {
 export type ModuleId =
   | "crm_leads" | "crm_customers" | "crm_suppliers"
   | "products" | "stock" | "purchases"
-  | "sales"
+  | "sales" | "invoices"
   | "documents"
   | "hrm_staff" | "hrm_roles"
   | "media"
@@ -355,6 +355,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "purchases",     label: "Purchases",       desc: "Purchase orders from suppliers", group: "Products", href: "/purchases" },
   // Sales
   { id: "sales",         label: "Sales & POS",     desc: "Sales, invoices & POS terminal", group: "Sales",    href: "/sales"     },
+  { id: "invoices",      label: "Invoices",         desc: "Invoice management & tracking",  group: "Sales",    href: "/invoices"  },
   // Documents
   { id: "documents",     label: "Documents",       desc: "Requirement & client docs",      group: "Other",    href: "/documents" },
   // HRM
@@ -971,6 +972,68 @@ export const restoreStockForSale = (saleItems: SaleItem[]): void => {
   setStored(STOCK_KEY, stocks);
 };
 
+// ─── Invoices (standalone, separate from POS Sales) ──────────────────────────
+export const INVOICE_STATUSES  = ["Draft", "Sent", "Paid", "Partial", "Overdue", "Cancelled"] as const;
+export type InvoiceStatus = typeof INVOICE_STATUSES[number];
+
+export type Invoice = {
+  id:             string;
+  invoiceNumber:  string;
+  invoiceDate:    string;   // YYYY-MM-DD
+  dueDate:        string;   // YYYY-MM-DD
+  customer:       string;
+  status:         InvoiceStatus;
+  paymentMethod:  SalePayment;
+  notes:          string;
+  items:          SaleItem[];
+  taxRate:        string;   // percentage string e.g. "20"
+  amountPaid:     string;
+  paidAt:         string;   // ISO timestamp; "" if unpaid
+  stockDeducted:  boolean;
+  createdAt:      string;
+  updatedAt:      string;
+};
+
+const INVOICES_KEY = "admin-invoices";
+
+const nextInvoiceNumber = (): string => {
+  const existing = getStored<Invoice>(INVOICES_KEY);
+  const d = new Date();
+  const prefix = `INV-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const max = existing
+    .filter(inv => inv.invoiceNumber.startsWith(prefix))
+    .map(inv => parseInt(inv.invoiceNumber.split("-").pop() ?? "0") || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+};
+
+export const getInvoices = (): Invoice[] => getStored<Invoice>(INVOICES_KEY);
+
+export const createInvoice = (data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">): Invoice => {
+  const inv: Invoice = {
+    ...data,
+    id: crypto.randomUUID(),
+    invoiceNumber: nextInvoiceNumber(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(INVOICES_KEY, [...getInvoices(), inv]);
+  return inv;
+};
+
+export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | "invoiceNumber" | "createdAt">>): Invoice => {
+  const all = getInvoices();
+  const i = all.findIndex(inv => inv.id === id);
+  if (i === -1) throw new Error("Invoice not found");
+  all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(INVOICES_KEY, all);
+  return all[i];
+};
+
+export const deleteInvoice = (id: string): void => {
+  setStored(INVOICES_KEY, getInvoices().filter(inv => inv.id !== id));
+};
+
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────
 export type StaffStatus = "Active" | "On Leave" | "Terminated";
 
@@ -1149,7 +1212,7 @@ export function saveSettings(s: AppSettings): void {
 export const ALL_STORE_KEYS = [
   "admin-leads", "admin-req-docs", "admin-customers", "admin-suppliers",
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
-  "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales",
+  "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
   "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
   "admin-settings",
 ] as const;
@@ -1161,7 +1224,7 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
   Products:   ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
   Stock:      ["admin-stock"],
   Purchases:  ["admin-purchase-orders"],
-  Sales:      ["admin-sales"],
+  Sales:      ["admin-sales", "admin-invoices"],
   Documents:  ["admin-req-docs"],
   HRM:        ["admin-hrm-staff", "admin-hrm-roles"],
   Users:      ["admin-users"],
