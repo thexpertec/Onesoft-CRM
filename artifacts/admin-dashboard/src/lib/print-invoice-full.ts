@@ -209,8 +209,9 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   }
 
   /* ── BILL FROM / BILL TO ────────────────────────── */
+  .parties-row { display: flex; gap: 14pt; }
+  .parties-row .party { flex: 1; margin-bottom: 0; }
   .party {
-    width: 100%;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-left: 4px solid #1e3a5f;
@@ -393,7 +394,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 </div>
 
 <!-- ═══════════════════ FROM / TO ═══════════════════ -->
-<div class="section">
+<div class="section parties-row">
   <div class="party">
     <div class="party-label">Bill From</div>
     <div class="party-name">${esc(settings.companyName)}</div>
