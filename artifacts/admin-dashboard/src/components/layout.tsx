@@ -180,13 +180,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hrmItems: SubItem[] = [
-    { label: "Staff",           href: "/staff",  icon: Users2,    desc: "Employees by dept & designation" },
-    { label: "Roles",           href: "/roles",  icon: KeyRound,  desc: "Permission roles"                },
-    ...(isSuperAdmin ? [{ label: "Admin Accounts", href: "/users", icon: Shield, desc: "System users" }] : []),
+    { label: "Staff",           href: "/staff",   icon: Users2,    desc: "Employees by dept & designation" },
+    { label: "Roles",           href: "/roles",   icon: KeyRound,  desc: "Permission roles"                },
+    ...(isSuperAdmin ? [
+      { label: "Admin Accounts", href: "/users",    icon: Shield, desc: "System users"              },
+      { label: "Tenants",        href: "/tenants",  icon: Globe,  desc: "Client organisations"      },
+    ] : []),
   ];
-  const HRM_NAV: NavItem     = { key: "hrm",     label: "HRM",     icon: Building2, items: hrmItems };
-  const TENANTS_NAV: NavItem = { key: "tenants", label: "Tenants", icon: Globe, href: "/tenants", items: null };
-  const navItems = [...OTHER_NAV, HRM_NAV, ...(isSuperAdmin ? [TENANTS_NAV] : [])];
+  const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, items: hrmItems };
+  const navItems = [...OTHER_NAV, HRM_NAV];
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -563,9 +565,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">HRM</p>
                 {[
-                  { href: "/staff",  label: "Staff",  icon: Users2   },
-                  { href: "/roles",  label: "Roles",  icon: KeyRound },
-                  ...(isSuperAdmin ? [{ href: "/users", label: "Admin Accounts", icon: Shield }] : []),
+                  { href: "/staff",   label: "Staff",          icon: Users2   },
+                  { href: "/roles",   label: "Roles",          icon: KeyRound },
+                  ...(isSuperAdmin ? [
+                    { href: "/users",   label: "Admin Accounts", icon: Shield },
+                    { href: "/tenants", label: "Tenants",        icon: Globe  },
+                  ] : []),
                 ].map(item => (
                   <Link key={item.href} href={item.href}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -574,15 +579,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </Link>
                 ))}
               </div>
-
-              {/* Tenants (superadmin only) */}
-              {isSuperAdmin && (
-                <Link href="/tenants"
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    location.startsWith("/tenants") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                  <Globe size={16} /> Tenants
-                </Link>
-              )}
             </div>
 
             <div className="pt-2 mt-2 border-t border-gray-100">
