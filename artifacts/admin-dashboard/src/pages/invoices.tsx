@@ -127,24 +127,110 @@ function printInvoice(inv: Invoice) {
   printFullInvoice(inv, getSettings());
 }
 
-// ─── DocPicker — insert content from a saved legal document ──────────────────
-function DocPicker({ onPick, docs }: { onPick: (content: string) => void; docs: LegalDocument[] }) {
-  if (!docs.length) return null;
+// ─── Built-in template snippets per field kind ────────────────────────────────
+const BUILTIN_TEMPLATES: Record<"paymentTerms" | "agreement" | "notes", Array<{ label: string; value: string }>> = {
+  paymentTerms: [
+    {
+      label: "Net 30",
+      value: "Payment is due within 30 days of the invoice date. Late payments may incur a 2% monthly finance charge on the outstanding balance.",
+    },
+    {
+      label: "Net 14",
+      value: "Payment is due within 14 days of the invoice date. Please reference the invoice number on your payment.",
+    },
+    {
+      label: "Due on Receipt",
+      value: "Payment is due upon receipt of this invoice. Please contact us if you have any queries regarding this invoice.",
+    },
+    {
+      label: "50% Upfront / 50% on Completion",
+      value: "A 50% deposit is required before work commences. The remaining 50% balance is due upon project completion and delivery.",
+    },
+    {
+      label: "Monthly Retainer",
+      value: "This invoice is payable on the 1st of each month as part of the agreed monthly retainer. Direct Debit / Standing Order preferred.",
+    },
+  ],
+  agreement: [
+    {
+      label: "Standard Acceptance Clause",
+      value: "By accepting and/or paying this invoice, the buyer agrees to the terms and conditions set out herein. All work is performed subject to our standard terms of service, available upon request.",
+    },
+    {
+      label: "English Law Clause",
+      value: "This agreement is governed by and construed in accordance with the laws of England and Wales. Any disputes arising shall be subject to the exclusive jurisdiction of the courts of England and Wales.",
+    },
+    {
+      label: "Intellectual Property Transfer",
+      value: "Upon receipt of full payment, all intellectual property rights in the deliverables are assigned to the client. Until full payment is received, all rights remain with the supplier.",
+    },
+    {
+      label: "Confidentiality",
+      value: "Both parties agree to keep all information exchanged in connection with this invoice and the associated project strictly confidential and not to disclose it to any third party without prior written consent.",
+    },
+  ],
+  notes: [
+    {
+      label: "Bank Transfer Reminder",
+      value: "Please transfer payment directly to our bank account. Kindly quote the invoice number as the payment reference to ensure prompt allocation.",
+    },
+    {
+      label: "Thank You Note",
+      value: "Thank you for your business — we truly appreciate the opportunity to work with you and look forward to continuing our partnership.",
+    },
+    {
+      label: "Queries Contact",
+      value: "If you have any questions regarding this invoice or the services provided, please do not hesitate to contact us before the payment due date.",
+    },
+    {
+      label: "VAT Note",
+      value: "All amounts shown are exclusive of VAT unless otherwise stated. VAT will be applied at the prevailing rate where applicable.",
+    },
+  ],
+};
+
+// ─── DocPicker — insert content from a built-in template or saved legal doc ───
+function DocPicker({
+  onPick,
+  docs,
+  kind,
+}: {
+  onPick: (content: string) => void;
+  docs: LegalDocument[];
+  kind: "paymentTerms" | "agreement" | "notes";
+}) {
+  const builtins = BUILTIN_TEMPLATES[kind];
+  const hasCustom = docs.length > 0;
+
   return (
     <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">Insert from Legal Docs:</span>
+      <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">Insert template:</span>
       <select
-        defaultValue=""
+        value=""
         onChange={e => {
-          const doc = docs.find(d => d.id === e.target.value);
+          const val = e.target.value;
+          if (!val) return;
+          // Check built-ins first, then custom docs
+          const builtin = builtins.find(b => b.label === val);
+          if (builtin) { onPick(builtin.value); e.currentTarget.value = ""; return; }
+          const doc = docs.find(d => d.id === val);
           if (doc) { onPick(doc.content); e.currentTarget.value = ""; }
         }}
         className="flex-1 px-2 py-1 text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
       >
-        <option value="" disabled>-- select a document --</option>
-        {docs.map(d => (
-          <option key={d.id} value={d.id}>{d.title}</option>
-        ))}
+        <option value="">— choose a template —</option>
+        <optgroup label="Built-in Templates">
+          {builtins.map(b => (
+            <option key={b.label} value={b.label}>{b.label}</option>
+          ))}
+        </optgroup>
+        {hasCustom && (
+          <optgroup label="My Legal Documents">
+            {docs.map(d => (
+              <option key={d.id} value={d.id}>{d.title}</option>
+            ))}
+          </optgroup>
+        )}
       </select>
     </div>
   );
@@ -648,7 +734,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Payment Terms</label>
             </div>
-            <DocPicker docs={legalDocs} onPick={content => setF("paymentTerms", content)} />
+            <DocPicker docs={legalDocs} kind="paymentTerms" onPick={content => setF("paymentTerms", content)} />
             <textarea
               rows={3} value={form.paymentTerms}
               onChange={e => setF("paymentTerms", e.target.value)}
@@ -662,7 +748,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Agreement</label>
             </div>
-            <DocPicker docs={legalDocs} onPick={content => setF("agreement", content)} />
+            <DocPicker docs={legalDocs} kind="agreement" onPick={content => setF("agreement", content)} />
             <textarea
               rows={4} value={form.agreement}
               onChange={e => setF("agreement", e.target.value)}
@@ -676,7 +762,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Additional Notes / Terms</label>
             </div>
-            <DocPicker docs={legalDocs} onPick={content => setF("notes", content)} />
+            <DocPicker docs={legalDocs} kind="notes" onPick={content => setF("notes", content)} />
             <textarea
               rows={3} value={form.notes}
               onChange={e => setF("notes", e.target.value)}
