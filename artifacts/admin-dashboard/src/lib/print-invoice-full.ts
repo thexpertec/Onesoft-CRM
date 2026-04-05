@@ -510,27 +510,29 @@ ${(inv.paymentHistory ?? []).length > 0 ? `
 ` : ""}
 
 <!-- ═══════════════════ TERMS & NOTES ═══════════════════ -->
-${(inv.paymentTerms || settings.invoiceTerms || inv.notes || inv.agreement) ? `
+${(() => {
+  // Prefer new invoiceDocs; fall back to legacy fields for old invoices
+  const docsToRender: Array<{title: string; content: string}> = [];
+  if (inv.invoiceDocs?.length) {
+    inv.invoiceDocs.forEach(d => { if (d.content) docsToRender.push(d); });
+  } else {
+    if (inv.paymentTerms || settings.invoiceTerms) docsToRender.push({ title: "Payment Terms",    content: inv.paymentTerms || settings.invoiceTerms });
+    if (inv.agreement)    docsToRender.push({ title: "Agreement",        content: inv.agreement    });
+    if (inv.notes)        docsToRender.push({ title: "Additional Notes", content: inv.notes        });
+  }
+  if (!docsToRender.length) return "";
+  return `
 <div class="section">
   <div class="section-title">Terms &amp; Notes</div>
   <div class="notes-stack">
-    ${(inv.paymentTerms || settings.invoiceTerms) ? `
+    ${docsToRender.map(d => `
     <div class="notes-box">
-      <div class="notes-label">Payment Terms</div>
-      <div class="notes-text">${renderContent(inv.paymentTerms || settings.invoiceTerms)}</div>
-    </div>` : ""}
-    ${inv.agreement ? `
-    <div class="notes-box">
-      <div class="notes-label">Agreement</div>
-      <div class="notes-text">${renderContent(inv.agreement)}</div>
-    </div>` : ""}
-    ${inv.notes ? `
-    <div class="notes-box">
-      <div class="notes-label">Additional Notes</div>
-      <div class="notes-text">${renderContent(inv.notes)}</div>
-    </div>` : ""}
+      <div class="notes-label">${esc(d.title)}</div>
+      <div class="notes-text">${renderContent(d.content)}</div>
+    </div>`).join("")}
   </div>
-</div>` : ""}
+</div>`;
+})()}
 
 <!-- ═══════════════════ FOOTER ═══════════════════ -->
 <div class="inv-footer">

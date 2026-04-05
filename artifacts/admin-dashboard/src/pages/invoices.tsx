@@ -4,7 +4,7 @@ import { useInvoices } from "@/hooks/use-data";
 import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
-  PaymentRecord, LegalDocument,
+  PaymentRecord, LegalDocument, InvoiceDoc,
   getProducts, getCustomers, getSettings,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
@@ -16,6 +16,7 @@ import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
   Save, CreditCard, ArrowLeft, Eye,
+  ChevronDown, ChevronUp, PlusCircle,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -190,6 +191,27 @@ const BUILTIN_TEMPLATES: Record<"paymentTerms" | "agreement" | "notes", Array<{ 
   ],
 };
 
+// ─── DocBlock types ────────────────────────────────────────────────────────────
+type DocKind = "paymentTerms" | "agreement" | "notes";
+
+interface DocBlock extends InvoiceDoc {
+  kind: DocKind;
+  open: boolean;
+}
+
+const PREDEFINED_DOC_TYPES: Array<{ kind: DocKind; title: string }> = [
+  { kind: "paymentTerms", title: "Payment Terms" },
+  { kind: "agreement",    title: "Agreement"      },
+  { kind: "notes",        title: "Additional Notes" },
+];
+
+function titleToKind(title: string): DocKind {
+  const t = title.toLowerCase();
+  if (t.includes("payment") || t.includes("term")) return "paymentTerms";
+  if (t.includes("agreement") || t.includes("contract") || t.includes("t&c")) return "agreement";
+  return "notes";
+}
+
 // ─── DocPicker — insert content from a built-in template or saved legal doc ───
 function DocPicker({
   onPick,
@@ -198,9 +220,9 @@ function DocPicker({
 }: {
   onPick: (content: string) => void;
   docs: LegalDocument[];
-  kind: "paymentTerms" | "agreement" | "notes";
+  kind: DocKind;
 }) {
-  const builtins = BUILTIN_TEMPLATES[kind];
+  const builtins = BUILTIN_TEMPLATES[kind] ?? BUILTIN_TEMPLATES.notes;
   const hasCustom = docs.length > 0;
 
   return (
@@ -273,11 +295,29 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
   const [deleteOpen, setDeleteOpen]   = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
+  const [addDocOpen, setAddDocOpen]   = useState(false);
+
+  // ── Docs state ──
+  const initDocs = (inv: Invoice | null): DocBlock[] => {
+    if (!inv) return [];
+    if (inv.invoiceDocs?.length) {
+      return inv.invoiceDocs.map(d => ({ ...d, kind: titleToKind(d.title), open: true }));
+    }
+    // Backward-compat: migrate old fields
+    const migrated: DocBlock[] = [];
+    if (inv.paymentTerms) migrated.push({ id: crypto.randomUUID(), kind: "paymentTerms", title: "Payment Terms",    content: inv.paymentTerms, open: true });
+    if (inv.agreement)    migrated.push({ id: crypto.randomUUID(), kind: "agreement",    title: "Agreement",        content: inv.agreement,    open: true });
+    if (inv.notes)        migrated.push({ id: crypto.randomUUID(), kind: "notes",        title: "Additional Notes", content: inv.notes,        open: true });
+    return migrated;
+  };
+  const [docs, setDocs] = useState<DocBlock[]>(() => initDocs(invoice));
+
   useEffect(() => {
     setForm(invoice ? { ...invoice } : blankInvoice());
     setItems(invoice?.items ?? [blankItem()]);
     setPayHist(invoice?.paymentHistory ?? []);
     setPayInput(invoice?.amountPaid ?? "");
+    setDocs(initDocs(invoice));
   }, [invoice?.id]);
 
   const products    = useMemo(() => getProducts(), []);
@@ -353,7 +393,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   const removeItem = (id: string) => setItems(p => p.filter(i => i.id !== id));
 
   const handleSave = () => {
-    onSave({ ...form, items, paymentHistory: payHistory, amountPaid: payInput }, invoice?.id);
+    onSave({
+      ...form,
+      items,
+      paymentHistory: payHistory,
+      amountPaid:     payInput,
+      invoiceDocs:    docs.map(({ id, title, content }) => ({ id, title, content })),
+      // Clear legacy fields — data now lives in invoiceDocs
+      paymentTerms:   "",
+      notes:          "",
+      agreement:      "",
+    }, invoice?.id);
   };
 
   const inv = invoice;
@@ -736,46 +786,71 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             </div>
           </div>{/* /payment history card */}
 
-          {/* ── Payment Terms ────────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-6 py-5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Payment Terms</label>
+          {/* ── Dynamic Document Blocks ───────────────────────────────────────── */}
+          {docs.map((doc, idx) => (
+            <div key={doc.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/60">
+                <input
+                  value={doc.title}
+                  onChange={e => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, title: e.target.value, kind: titleToKind(e.target.value) } : d))}
+                  className="flex-1 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 bg-transparent border-none outline-none placeholder:text-gray-300 dark:placeholder:text-gray-600 min-w-0"
+                  placeholder="Document Title"
+                />
+                <button
+                  onClick={() => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, open: !d.open } : d))}
+                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition-colors"
+                  title={doc.open ? "Collapse" : "Expand"}
+                >
+                  {doc.open ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+                </button>
+                <button
+                  onClick={() => setDocs(prev => prev.filter((_, i) => i !== idx))}
+                  className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
+                  title="Remove document"
+                >
+                  <X size={15}/>
+                </button>
+              </div>
+              {/* Body */}
+              {doc.open && (
+                <div className="px-5 py-4">
+                  <DocPicker
+                    docs={legalDocs}
+                    kind={doc.kind}
+                    onPick={content => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, content } : d))}
+                  />
+                  <RichTextEditor
+                    value={doc.content}
+                    onChange={html => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, content: html } : d))}
+                    placeholder="Start typing or insert a template above…"
+                    minHeight="120px"
+                  />
+                </div>
+              )}
             </div>
-            <DocPicker docs={legalDocs} kind="paymentTerms" onPick={content => setF("paymentTerms", content)} />
-            <RichTextEditor
-              value={form.paymentTerms}
-              onChange={html => setF("paymentTerms", html)}
-              placeholder="e.g. Payment is due within 30 days of invoice date. Late payments may incur a 2% monthly fee…"
-              minHeight="120px"
-            />
-          </div>
+          ))}
 
-          {/* ── Agreement ────────────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-6 py-5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Agreement</label>
+          {/* ── Add Document ──────────────────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Add Document</p>
+            <div className="flex flex-wrap gap-2">
+              {PREDEFINED_DOC_TYPES.map(pt => (
+                <button
+                  key={pt.kind}
+                  onClick={() => setDocs(prev => [...prev, { id: crypto.randomUUID(), kind: pt.kind, title: pt.title, content: "", open: true }])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-zinc-600 text-xs text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  <PlusCircle size={13}/> {pt.title}
+                </button>
+              ))}
+              <button
+                onClick={() => setDocs(prev => [...prev, { id: crypto.randomUUID(), kind: "notes", title: "Custom Document", content: "", open: true }])}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-zinc-600 text-xs text-gray-500 dark:text-gray-400 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+              >
+                <PlusCircle size={13}/> Custom Document
+              </button>
             </div>
-            <DocPicker docs={legalDocs} kind="agreement" onPick={content => setF("agreement", content)} />
-            <RichTextEditor
-              value={form.agreement}
-              onChange={html => setF("agreement", html)}
-              placeholder="By accepting this invoice, the buyer agrees to the terms and conditions set out herein…"
-              minHeight="150px"
-            />
-          </div>
-
-          {/* ── Additional Notes / Terms ──────────────────────────────────────── */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-6 py-5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Additional Notes / Terms</label>
-            </div>
-            <DocPicker docs={legalDocs} kind="notes" onPick={content => setF("notes", content)} />
-            <RichTextEditor
-              value={form.notes}
-              onChange={html => setF("notes", html)}
-              placeholder="Any extra notes, special conditions, or remarks shown on the invoice…"
-              minHeight="120px"
-            />
           </div>
 
           {/* ── Footer Preview + editable text ──────────────────────────────── */}

@@ -987,6 +987,12 @@ export type PaymentRecord = {
   note:   string;
 };
 
+export interface InvoiceDoc {
+  id:      string;
+  title:   string;
+  content: string;
+}
+
 export type Invoice = {
   id:                string;
   invoiceNumber:     string;
@@ -1014,9 +1020,10 @@ export type Invoice = {
   handlingFee:       string;
   shippingMethod:    string;
   // Extra
-  notes:             string;    // additional notes/terms
-  agreement:         string;    // agreement / T&C text
+  notes:             string;    // legacy — use invoiceDocs
+  agreement:         string;    // legacy — use invoiceDocs
   invoiceFooter:     string;    // footer text printed at bottom of invoice
+  invoiceDocs?:      InvoiceDoc[];  // dynamic document blocks (replaces paymentTerms/notes/agreement)
   stockDeducted:     boolean;
   createdAt:         string;
   updatedAt:         string;
