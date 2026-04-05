@@ -189,7 +189,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
   const products    = useMemo(() => getProducts(), []);
   const customers   = useMemo(() => getCustomers(), []);
-  const legalDocs   = useMemo(() => getSettings().legalDocuments ?? [], []);
+  const settings    = useMemo(() => getSettings(), []);
+  const legalDocs   = useMemo(() => settings.legalDocuments ?? [], [settings]);
   const productOpts = useMemo<ComboOption[]>(() =>
     products.map(p => ({
       value: p.name,
@@ -684,15 +685,70 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             />
           </div>
 
-          {/* ── Footer ───────────────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
-            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Invoice Footer</label>
-            <textarea
-              rows={2} value={form.invoiceFooter}
-              onChange={e => setF("invoiceFooter", e.target.value)}
-              placeholder="e.g. Thank you for your business! · Company Reg: 12345678 · VAT: GB123456789"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-            />
+          {/* ── Footer Preview + editable text ──────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+            {/* Fixed company footer preview */}
+            <div className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 px-5 py-4">
+              <p className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Footer Preview (from Company Settings)</p>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                {/* Logo + company name */}
+                <div className="flex items-center gap-3 shrink-0">
+                  {settings.logoBase64 ? (
+                    <img src={settings.logoBase64} alt="Logo" className="h-8 w-auto max-w-[80px] object-contain" />
+                  ) : (
+                    <span className="text-[14px] font-bold text-blue-700 dark:text-blue-400">{settings.companyName}</span>
+                  )}
+                  {settings.logoBase64 && settings.companyName && (
+                    <span className="text-[12px] font-bold text-gray-800 dark:text-gray-200">{settings.companyName}</span>
+                  )}
+                </div>
+                {/* Contact columns */}
+                <div className="flex gap-6 flex-wrap text-[11px] text-gray-600 dark:text-gray-400">
+                  {(settings.phoneHull || settings.phoneIslamabad) && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Phone</p>
+                      {settings.phoneHull      && <p>{settings.phoneHull} <span className="text-gray-400 text-[9px]">(UK)</span></p>}
+                      {settings.phoneIslamabad && <p>{settings.phoneIslamabad} <span className="text-gray-400 text-[9px]">(PK)</span></p>}
+                    </div>
+                  )}
+                  {(settings.emailHull || settings.emailIslamabad) && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Email</p>
+                      {settings.emailHull      && <p>{settings.emailHull}</p>}
+                      {settings.emailIslamabad && <p>{settings.emailIslamabad}</p>}
+                    </div>
+                  )}
+                  {(settings.addressHull || settings.addressIslamabad) && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Address</p>
+                      {settings.addressHull      && <p className="max-w-[160px] leading-tight">{settings.addressHull}</p>}
+                      {settings.addressIslamabad && <p className="max-w-[160px] leading-tight">{settings.addressIslamabad}</p>}
+                    </div>
+                  )}
+                  {settings.website && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Web</p>
+                      <p>{settings.website}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {(!settings.phoneHull && !settings.phoneIslamabad && !settings.emailHull && !settings.emailIslamabad && !settings.addressHull && !settings.addressIslamabad) && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 italic mt-1">
+                  No contact details set — add them in Settings → Company.
+                </p>
+              )}
+            </div>
+            {/* Editable footer text */}
+            <div className="px-5 py-4">
+              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Additional Footer Text</label>
+              <textarea
+                rows={2} value={form.invoiceFooter}
+                onChange={e => setF("invoiceFooter", e.target.value)}
+                placeholder="e.g. Thank you for your business! · Company Reg: 12345678 · VAT: GB123456789"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+              />
+            </div>
           </div>
 
           {/* Status Actions */}

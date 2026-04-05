@@ -476,11 +476,44 @@ ${(inv.paymentTerms || settings.invoiceTerms || inv.notes) ? `
 
 <!-- ═══════════════════ FOOTER ═══════════════════ -->
 <div class="inv-footer">
-  <strong>${esc(settings.companyName)}</strong>${settings.companyTagline ? ` — ${esc(settings.companyTagline)}` : ""}
-  ${footerParts.length > 0 ? `<br/>${footerParts.join(" &nbsp;·&nbsp; ")}` : ""}
-  ${settingsFooter ? `<br/>${nl2br(settingsFooter)}` : ""}
-  <br/>
-  <span style="font-size:7pt;color:#d1d5db;">This is a computer-generated document. No signature required.</span>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:16pt;flex-wrap:wrap;">
+    <!-- Logo + company name -->
+    <div style="display:flex;align-items:center;gap:8pt;">
+      ${settings.logoBase64
+        ? `<img src="${esc(settings.logoBase64)}" alt="Logo" style="max-height:32pt;max-width:80pt;object-fit:contain;"/>`
+        : `<span style="font-size:13pt;font-weight:700;color:#1e3a5f;">${esc(settings.companyName)}</span>`}
+      ${settings.logoBase64 && settings.companyName ? `<span style="font-size:10pt;font-weight:700;color:#1e3a5f;">${esc(settings.companyName)}</span>` : ""}
+    </div>
+    <!-- Contact columns -->
+    <div style="display:flex;gap:16pt;flex-wrap:wrap;font-size:7.5pt;color:#374151;text-align:left;">
+      ${(settings.phoneHull || settings.phoneIslamabad) ? `
+      <div>
+        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Phone</div>
+        ${settings.phoneHull        ? `<div>${esc(settings.phoneHull)} <span style="color:#9ca3af;font-size:6.5pt;">(UK)</span></div>` : ""}
+        ${settings.phoneIslamabad   ? `<div>${esc(settings.phoneIslamabad)} <span style="color:#9ca3af;font-size:6.5pt;">(PK)</span></div>` : ""}
+      </div>` : ""}
+      ${(settings.emailHull || settings.emailIslamabad) ? `
+      <div>
+        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Email</div>
+        ${settings.emailHull        ? `<div>${esc(settings.emailHull)}</div>` : ""}
+        ${settings.emailIslamabad   ? `<div>${esc(settings.emailIslamabad)}</div>` : ""}
+      </div>` : ""}
+      ${(settings.addressHull || settings.addressIslamabad) ? `
+      <div>
+        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Address</div>
+        ${settings.addressHull      ? `<div>${esc(settings.addressHull)}</div>` : ""}
+        ${settings.addressIslamabad ? `<div>${esc(settings.addressIslamabad)}</div>` : ""}
+      </div>` : ""}
+      ${settings.website ? `
+      <div>
+        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Web</div>
+        <div>${esc(settings.website)}</div>
+      </div>` : ""}
+    </div>
+  </div>
+  ${footerParts.length > 0 ? `<div style="margin-top:5pt;font-size:7pt;color:#6b7280;">${footerParts.join(" &nbsp;·&nbsp; ")}</div>` : ""}
+  ${settingsFooter ? `<div style="margin-top:3pt;font-size:7.5pt;">${nl2br(settingsFooter)}</div>` : ""}
+  <div style="margin-top:5pt;font-size:6.5pt;color:#d1d5db;">This is a computer-generated document. No signature required.</div>
 </div>
 
 </body>
