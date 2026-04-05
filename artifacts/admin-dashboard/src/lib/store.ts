@@ -1015,6 +1015,8 @@ export type Invoice = {
   shippingMethod:    string;
   // Extra
   notes:             string;    // additional notes/terms
+  agreement:         string;    // agreement / T&C text
+  invoiceFooter:     string;    // footer text printed at bottom of invoice
   stockDeducted:     boolean;
   createdAt:         string;
   updatedAt:         string;

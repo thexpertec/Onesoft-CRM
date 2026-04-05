@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useInvoices } from "@/hooks/use-data";
 import {
-  Invoice, InvoiceStatus, INVOICE_STATUSES, INVOICE_TITLES,
+  Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
   PaymentRecord,
   getProducts, getCustomers, getSettings,
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
-  Save, CreditCard, ChevronDown, ChevronUp, ArrowLeft,
+  Save, CreditCard, ArrowLeft,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -79,6 +79,8 @@ const blankInvoice = (): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "u
     handlingFee:    "",
     shippingMethod: "",
     notes:          "",
+    agreement:      "",
+    invoiceFooter:  "",
     stockDeducted:  false,
   };
 };
@@ -153,17 +155,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
   const [deleteOpen, setDeleteOpen]   = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
-  const [showBuyer,   setShowBuyer]   = useState(true);
-  const [showShip,    setShowShip]    = useState(false);
-  const [showBank,    setShowBank]    = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-
   useEffect(() => {
     setForm(invoice ? { ...invoice } : blankInvoice());
     setItems(invoice?.items ?? [blankItem()]);
     setPayHist(invoice?.paymentHistory ?? []);
     setPayInput(invoice?.amountPaid ?? "");
-    setShowBuyer(false); setShowShip(false); setShowBank(false); setShowHistory(false);
   }, [invoice?.id]);
 
   const products  = useMemo(() => getProducts(), []);
@@ -313,22 +309,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
             <div className="px-5 py-4 space-y-4">
 
-            {/* Invoice Title */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Invoice Type</label>
-              <select
-                value={form.invoiceTitle}
-                onChange={e => setF("invoiceTitle", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                {INVOICE_TITLES.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-
-            {/* Customer + Customer ID */}
+            {/* Customer + ID */}
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer Name</label>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer</label>
                 <input
                   list="inv-customers"
                   value={form.customer}
@@ -351,7 +335,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               </div>
             </div>
 
-            {/* Dates */}
+            {/* Invoice Date + Due Date */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Invoice Date</label>
@@ -391,139 +375,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
-            </div>
-
-            {/* ── Buyer Details (collapsible) ── */}
-            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowBuyer(v => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
-              >
-                <span>Buyer / Billing Details</span>
-                {showBuyer ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-              </button>
-              {showBuyer && (
-                <div className="px-3 py-3 space-y-2 bg-white dark:bg-zinc-900">
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Billing Address</label>
-                    <textarea
-                      rows={3} value={form.buyerAddress}
-                      onChange={e => setF("buyerAddress", e.target.value)}
-                      placeholder="Street, City, Postcode, Country"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Phone</label>
-                      <input
-                        value={form.buyerPhone}
-                        onChange={e => setF("buyerPhone", e.target.value)}
-                        placeholder="+44 ..."
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Email</label>
-                      <input
-                        type="email" value={form.buyerEmail}
-                        onChange={e => setF("buyerEmail", e.target.value)}
-                        placeholder="buyer@email.com"
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ── Shipping & Handling (collapsible) ── */}
-            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowShip(v => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
-              >
-                <span>Shipping &amp; Handling</span>
-                {showShip ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-              </button>
-              {showShip && (
-                <div className="px-3 py-3 grid grid-cols-3 gap-2 bg-white dark:bg-zinc-900">
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Shipping Fee</label>
-                    <input
-                      type="number" min="0" step="0.01" value={form.shippingFee}
-                      onChange={e => setF("shippingFee", e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Handling Fee</label>
-                    <input
-                      type="number" min="0" step="0.01" value={form.handlingFee}
-                      onChange={e => setF("handlingFee", e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Shipping Method</label>
-                    <input
-                      value={form.shippingMethod}
-                      onChange={e => setF("shippingMethod", e.target.value)}
-                      placeholder="e.g. DHL, Royal Mail"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ── Payment Terms & Bank Details (collapsible) ── */}
-            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowBank(v => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
-              >
-                <span>Payment Terms &amp; Bank Details</span>
-                {showBank ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-              </button>
-              {showBank && (
-                <div className="px-3 py-3 space-y-2 bg-white dark:bg-zinc-900">
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Payment Terms</label>
-                    <input
-                      value={form.paymentTerms}
-                      onChange={e => setF("paymentTerms", e.target.value)}
-                      placeholder="e.g. Net 30, Due on receipt…"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Bank / Payment Details</label>
-                    <textarea
-                      rows={4} value={form.bankDetails}
-                      onChange={e => setF("bankDetails", e.target.value)}
-                      placeholder={"Bank: HSBC UK\nAccount: 12345678\nSort Code: 40-47-84\nIBAN: GB29 NWBK..."}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Additional Notes / Terms</label>
-              <textarea
-                rows={2} value={form.notes}
-                onChange={e => setF("notes", e.target.value)}
-                placeholder="Additional notes or terms shown on the invoice…"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-              />
             </div>
           </div>
 
@@ -693,51 +544,91 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
                 </div>
               )}
             </div>
+          </div>{/* /sub-total card */}
 
-            {/* Payment History */}
-            <div className="px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setShowHistory(v => !v)}
-                className="w-full flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                <span>Payment History {payHistory.length > 0 ? `(${payHistory.length})` : ""}</span>
-                {showHistory ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+          {/* ── Payment History ─────────────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
+              <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment History</span>
+              <button onClick={addPayRec} className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
+                <Plus size={12}/> Add Record
               </button>
-              {showHistory && (
-                <div className="mt-3 space-y-2">
-                  {payHistory.map(rec => (
-                    <div key={rec.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
-                      <div className="grid grid-cols-12 gap-2 items-end">
-                        <div className="col-span-3">
-                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Date</label>
-                          <input type="date" value={rec.date} onChange={e => updatePayRec(rec.id, "date", e.target.value)} className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div className="col-span-3">
-                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Amount</label>
-                          <input type="number" min="0" step="0.01" value={rec.amount} onChange={e => updatePayRec(rec.id, "amount", e.target.value)} placeholder="0.00" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div className="col-span-3">
-                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Method</label>
-                          <input value={rec.method} onChange={e => updatePayRec(rec.id, "method", e.target.value)} placeholder="Bank, Cash…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Note</label>
-                          <input value={rec.note} onChange={e => updatePayRec(rec.id, "note", e.target.value)} placeholder="Ref…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div className="col-span-1 pb-0.5">
-                          <button onClick={() => removePayRec(rec.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"><X size={13}/></button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <button onClick={addPayRec} className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
-                    <Plus size={12}/> Add Payment Record
-                  </button>
-                </div>
-              )}
             </div>
-          </div>{/* /totals-history card */}
+            <div className="px-4 pb-4 pt-2 space-y-2">
+              {payHistory.length === 0 && (
+                <p className="text-[12px] text-gray-400 dark:text-gray-500 py-2 text-center">No payment records yet. Click "Add Record" to start.</p>
+              )}
+              {payHistory.map(rec => (
+                <div key={rec.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
+                  <div className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-3">
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Date</label>
+                      <input type="date" value={rec.date} onChange={e => updatePayRec(rec.id, "date", e.target.value)} className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Amount</label>
+                      <input type="number" min="0" step="0.01" value={rec.amount} onChange={e => updatePayRec(rec.id, "amount", e.target.value)} placeholder="0.00" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Method</label>
+                      <input value={rec.method} onChange={e => updatePayRec(rec.id, "method", e.target.value)} placeholder="Bank, Cash…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Note</label>
+                      <input value={rec.note} onChange={e => updatePayRec(rec.id, "note", e.target.value)} placeholder="Ref…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
+                    <div className="col-span-1 pb-0.5">
+                      <button onClick={() => removePayRec(rec.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"><X size={13}/></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>{/* /payment history card */}
+
+          {/* ── Payment Terms ────────────────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
+            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Payment Terms</label>
+            <textarea
+              rows={3} value={form.paymentTerms}
+              onChange={e => setF("paymentTerms", e.target.value)}
+              placeholder="e.g. Payment is due within 30 days of invoice date. Late payments may incur a 2% monthly fee…"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
+
+          {/* ── Agreement ────────────────────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
+            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Agreement</label>
+            <textarea
+              rows={4} value={form.agreement}
+              onChange={e => setF("agreement", e.target.value)}
+              placeholder="By accepting this invoice, the buyer agrees to the terms and conditions set out herein…"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
+
+          {/* ── Additional Notes / Terms ──────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
+            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Additional Notes / Terms</label>
+            <textarea
+              rows={3} value={form.notes}
+              onChange={e => setF("notes", e.target.value)}
+              placeholder="Any extra notes, special conditions, or remarks shown on the invoice…"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
+
+          {/* ── Footer ───────────────────────────────────────────────────────── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
+            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Invoice Footer</label>
+            <textarea
+              rows={2} value={form.invoiceFooter}
+              onChange={e => setF("invoiceFooter", e.target.value)}
+              placeholder="e.g. Thank you for your business! · Company Reg: 12345678 · VAT: GB123456789"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
 
           {/* Status Actions */}
           {statusActions && (
