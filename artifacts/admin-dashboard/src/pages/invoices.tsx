@@ -4,7 +4,7 @@ import { useInvoices } from "@/hooks/use-data";
 import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
-  PaymentRecord,
+  PaymentRecord, LegalDocument,
   getProducts, getCustomers, getSettings,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
@@ -127,6 +127,29 @@ function printInvoice(inv: Invoice) {
   printFullInvoice(inv, getSettings());
 }
 
+// ─── DocPicker — insert content from a saved legal document ──────────────────
+function DocPicker({ onPick, docs }: { onPick: (content: string) => void; docs: LegalDocument[] }) {
+  if (!docs.length) return null;
+  return (
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">Insert from Legal Docs:</span>
+      <select
+        defaultValue=""
+        onChange={e => {
+          const doc = docs.find(d => d.id === e.target.value);
+          if (doc) { onPick(doc.content); e.currentTarget.value = ""; }
+        }}
+        className="flex-1 px-2 py-1 text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+      >
+        <option value="" disabled>-- select a document --</option>
+        {docs.map(d => (
+          <option key={d.id} value={d.id}>{d.title}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: InvoiceStatus }) {
   const s = STATUS_STYLE[status];
@@ -164,8 +187,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
     setPayInput(invoice?.amountPaid ?? "");
   }, [invoice?.id]);
 
-  const products  = useMemo(() => getProducts(), []);
-  const customers = useMemo(() => getCustomers(), []);
+  const products    = useMemo(() => getProducts(), []);
+  const customers   = useMemo(() => getCustomers(), []);
+  const legalDocs   = useMemo(() => getSettings().legalDocuments ?? [], []);
   const productOpts = useMemo<ComboOption[]>(() =>
     products.map(p => ({
       value: p.name,
@@ -620,7 +644,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
           {/* ── Payment Terms ────────────────────────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
-            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Payment Terms</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Terms</label>
+            </div>
+            <DocPicker docs={legalDocs} onPick={content => setF("paymentTerms", content)} />
             <textarea
               rows={3} value={form.paymentTerms}
               onChange={e => setF("paymentTerms", e.target.value)}
@@ -631,7 +658,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
           {/* ── Agreement ────────────────────────────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
-            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Agreement</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Agreement</label>
+            </div>
+            <DocPicker docs={legalDocs} onPick={content => setF("agreement", content)} />
             <textarea
               rows={4} value={form.agreement}
               onChange={e => setF("agreement", e.target.value)}
@@ -642,7 +672,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
           {/* ── Additional Notes / Terms ──────────────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
-            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Additional Notes / Terms</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Additional Notes / Terms</label>
+            </div>
+            <DocPicker docs={legalDocs} onPick={content => setF("notes", content)} />
             <textarea
               rows={3} value={form.notes}
               onChange={e => setF("notes", e.target.value)}
