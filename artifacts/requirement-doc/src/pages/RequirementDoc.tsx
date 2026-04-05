@@ -2,7 +2,7 @@ import onesoftLogo from "@assets/Onesoft_Logo_1775302706939.png";
 import {
   BarChart3, Users, ShoppingCart, FileText, Package,
   Shield, Zap, Globe, Phone, Mail, ArrowRight, CheckCircle2,
-  TrendingUp, Receipt, Layers, Building2,
+  TrendingUp, Receipt, BookOpen, Building2,
 } from "lucide-react";
 
 const FEATURES = [
