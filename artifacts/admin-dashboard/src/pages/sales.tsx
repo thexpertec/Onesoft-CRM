@@ -1159,6 +1159,12 @@ export default function SalesPage() {
   const revenue = useMemo(() =>
     sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotal(s.items), 0), [sales]);
 
+  const filteredSums = useMemo(() => ({
+    total:   filtered.reduce((s, sale) => s + saleTotal(sale.items), 0),
+    paid:    filtered.reduce((s, sale) => s + (parseFloat(sale.amountPaid || "0") || 0), 0),
+    balance: filtered.reduce((s, sale) => s + Math.max(0, saleTotal(sale.items) - (parseFloat(sale.amountPaid || "0") || 0)), 0),
+  }), [filtered]);
+
   // ── Grid handlers ──
   const commitCell = useCallback((id: string, field: string, value: string) => {
     const sale = sales.find(s => s.id === id);
@@ -1454,6 +1460,35 @@ export default function SalesPage() {
               </td>
             </tr>
           ))}
+
+          {/* ── Totals row ── */}
+          {filtered.length > 0 && (
+            <tr className="border-t-2 border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20 sticky bottom-0 z-10">
+              <td className="border-r border-blue-200 dark:border-blue-800 text-center text-[11px] font-bold text-blue-500 dark:text-blue-400 select-none" style={{ height: CELL_H }}>Σ</td>
+              {COLS.map((c) => (
+                <td key={c.field} className="border-r border-blue-100 dark:border-blue-900/50 px-3" style={{ height: CELL_H }}>
+                  {c.field === "saleNumber" ? (
+                    <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                      {filtered.length} sale{filtered.length !== 1 ? "s" : ""}
+                    </span>
+                  ) : c.field === "total" ? (
+                    <span className="text-[13px] font-mono font-bold text-gray-900 dark:text-foreground tabular-nums">
+                      £{filteredSums.total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                    </span>
+                  ) : c.field === "amountPaid" ? (
+                    <span className="text-[13px] font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      £{filteredSums.paid.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                    </span>
+                  ) : c.field === "balance" ? (
+                    <span className={`text-[13px] font-mono font-bold tabular-nums ${filteredSums.balance > 0.005 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-muted-foreground"}`}>
+                      £{filteredSums.balance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                    </span>
+                  ) : null}
+                </td>
+              ))}
+              <td className="sticky right-0 bg-blue-50/60 dark:bg-blue-950/20 border-l border-blue-100 dark:border-blue-900/50" style={{ height: CELL_H }} />
+            </tr>
+          )}
 
           {/* Add row */}
           {isAuthenticated && !newRow && (
