@@ -61,21 +61,58 @@ function clearDemoData() {
 }
 clearDemoData();
 
+// ─── Multi-tenant storage namespace ───────────────────────────────────────────
+let _activeTenantId: string | null = null;
+
+export function setActiveTenant(id: string | null): void {
+  _activeTenantId = id;
+}
+
+export function getActiveTenantId(): string | null {
+  return _activeTenantId;
+}
+
+/** Prefix a key with the active tenant ID (null = superadmin = no prefix). */
+function tenantKey(baseKey: string): string {
+  if (_activeTenantId === null) return baseKey;
+  return `t:${_activeTenantId}:${baseKey}`;
+}
+
 // ─── Storage helpers ──────────────────────────────────────────────────────────
+
+/** Tenant-namespaced read (all business data). */
 function getStored<T>(key: string): T[] {
+  try {
+    const item = localStorage.getItem(tenantKey(key));
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error(`Error reading ${tenantKey(key)} from localStorage`, e);
+  }
+  return [];
+}
+
+/** Tenant-namespaced write. */
+function setStored<T>(key: string, data: T[]) {
+  localStorage.setItem(tenantKey(key), JSON.stringify(data));
+}
+
+/** Platform-level read (always unprefixed — for users & tenants registry). */
+function getGlobal<T>(key: string): T[] {
   try {
     const item = localStorage.getItem(key);
     if (item) {
       const parsed = JSON.parse(item);
       if (Array.isArray(parsed)) return parsed;
     }
-  } catch (e) {
-    console.error(`Error reading ${key} from localStorage`, e);
-  }
+  } catch { }
   return [];
 }
 
-function setStored<T>(key: string, data: T[]) {
+/** Platform-level write. */
+function setGlobal<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
@@ -289,6 +326,86 @@ export const deleteProductCategory = (id: string): void => {
   setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
 };
 
+// ─── Tenants API (platform-level, always global/unprefixed) ───────────────────
+export type TenantStatus = "active" | "trial" | "suspended";
+export type TenantPlan   = "starter" | "professional" | "enterprise";
+
+export type Tenant = {
+  id:             string;
+  name:           string;
+  slug:           string;
+  adminUsername:  string;
+  adminPassword:  string;
+  contactEmail:   string;
+  status:         TenantStatus;
+  plan:           TenantPlan;
+  createdAt:      string;
+  updatedAt:      string;
+};
+
+const TENANTS_KEY = "admin-tenants";
+
+export const tenantToAdminUser = (t: Tenant): AdminUser => ({
+  id:        `tenant:${t.id}`,
+  username:  t.adminUsername,
+  fullName:  `${t.name} Admin`,
+  email:     t.contactEmail,
+  role:      "admin" as UserRole,
+  password:  t.adminPassword,
+  createdAt: t.createdAt,
+  updatedAt: t.updatedAt,
+});
+
+export const getTenants = (): Tenant[] => getGlobal<Tenant>(TENANTS_KEY);
+
+export const getTenantById = (id: string): Tenant | undefined =>
+  getTenants().find(t => t.id === id);
+
+export const getTenantBySlug = (slug: string): Tenant | undefined =>
+  getTenants().find(t => t.slug.toLowerCase() === slug.toLowerCase());
+
+export const getTenantByCredentials = (username: string, password: string): Tenant | undefined =>
+  getTenants().find(
+    t => t.adminUsername.toLowerCase() === username.toLowerCase() && t.adminPassword === password
+  );
+
+export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt">): Tenant => {
+  const now = new Date().toISOString();
+  const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+  setGlobal(TENANTS_KEY, [...getTenants(), tenant]);
+  return tenant;
+};
+
+export const updateTenant = (id: string, updates: Partial<Omit<Tenant, "id" | "createdAt">>): Tenant => {
+  const tenants = getTenants();
+  const idx = tenants.findIndex(t => t.id === id);
+  if (idx === -1) throw new Error("Tenant not found");
+  tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
+  setGlobal(TENANTS_KEY, tenants);
+  return tenants[idx];
+};
+
+export const deleteTenant = (id: string): void => {
+  setGlobal(TENANTS_KEY, getTenants().filter(t => t.id !== id));
+};
+
+/** Returns estimated record counts for a tenant (reads all namespaced keys). */
+export const getTenantStats = (tenantId: string): Record<string, number> => {
+  const keys: string[] = [
+    "admin-leads", "admin-customers", "admin-suppliers", "admin-products",
+    "admin-sales", "admin-purchase-orders", "admin-stock", "admin-hrm-staff",
+  ];
+  const result: Record<string, number> = {};
+  for (const k of keys) {
+    try {
+      const raw = localStorage.getItem(`t:${tenantId}:${k}`);
+      const arr = raw ? JSON.parse(raw) : [];
+      result[k] = Array.isArray(arr) ? arr.length : 0;
+    } catch { result[k] = 0; }
+  }
+  return result;
+};
+
 // ─── Admin Users API ──────────────────────────────────────────────────────────
 export type UserRole = "superadmin" | "admin";
 
@@ -307,8 +424,7 @@ const USERS_KEY = "admin-users";
 
 function ensureDefaultSuperadmin() {
   try {
-    const raw = localStorage.getItem(USERS_KEY);
-    const existing: AdminUser[] = raw ? JSON.parse(raw) : [];
+    const existing: AdminUser[] = getGlobal<AdminUser>(USERS_KEY);
     const hasSuper = existing.some(u => u.id === "u-superadmin");
     if (!hasSuper) {
       const superadmin: AdminUser = {
@@ -321,22 +437,29 @@ function ensureDefaultSuperadmin() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      localStorage.setItem(USERS_KEY, JSON.stringify([superadmin, ...existing.filter(u => u.id !== "u-superadmin")]));
+      setGlobal(USERS_KEY, [superadmin, ...existing.filter(u => u.id !== "u-superadmin")]);
     }
   } catch { /* ignore */ }
 }
 ensureDefaultSuperadmin();
 
+// Platform users (always global/unprefixed)
 export const getAdminUsers = (): AdminUser[] => {
   ensureDefaultSuperadmin();
-  return getStored<AdminUser>(USERS_KEY);
+  return getGlobal<AdminUser>(USERS_KEY);
 };
 
 export const getAdminUserByUsername = (username: string): AdminUser | undefined =>
   getAdminUsers().find(u => u.username.toLowerCase() === username.toLowerCase());
 
-export const getAdminUserById = (id: string): AdminUser | undefined =>
-  getAdminUsers().find(u => u.id === id);
+export const getAdminUserById = (id: string): AdminUser | undefined => {
+  if (id.startsWith("tenant:")) {
+    const tenantId = id.slice(7);
+    const tenant = getTenantById(tenantId);
+    return tenant ? tenantToAdminUser(tenant) : undefined;
+  }
+  return getAdminUsers().find(u => u.id === id);
+};
 
 export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "updatedAt">): AdminUser => {
   const newUser: AdminUser = {
@@ -345,7 +468,7 @@ export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "upda
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(USERS_KEY, [...getAdminUsers(), newUser]);
+  setGlobal(USERS_KEY, [...getAdminUsers(), newUser]);
   return newUser;
 };
 
@@ -354,12 +477,12 @@ export const updateAdminUser = (id: string, updates: Partial<Omit<AdminUser, "id
   const index = users.findIndex(u => u.id === id);
   if (index === -1) throw new Error("User not found");
   users[index] = { ...users[index], ...updates, updatedAt: new Date().toISOString() };
-  setStored(USERS_KEY, users);
+  setGlobal(USERS_KEY, users);
   return users[index];
 };
 
 export const deleteAdminUser = (id: string): void => {
-  setStored(USERS_KEY, getAdminUsers().filter(u => u.id !== id));
+  setGlobal(USERS_KEY, getAdminUsers().filter(u => u.id !== id));
 };
 
 // ─── Team Members API (for New Document "Prepared By") ───────────────────────
@@ -368,13 +491,13 @@ const DEFAULT_TEAM = ["Ali Raza", "Umar Farooq", "Hassan Sheikh", "Bilal Ahmed",
 
 export const getTeamMembers = (): string[] => {
   try {
-    const raw = localStorage.getItem(TEAM_KEY);
+    const raw = localStorage.getItem(tenantKey(TEAM_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch { /* ignore */ }
-  localStorage.setItem(TEAM_KEY, JSON.stringify(DEFAULT_TEAM));
+  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(DEFAULT_TEAM));
   return DEFAULT_TEAM;
 };
 
@@ -864,7 +987,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export function getSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
+    const raw = localStorage.getItem(tenantKey(SETTINGS_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed };
@@ -894,7 +1017,7 @@ export function getSettings(): AppSettings {
 }
 
 export function saveSettings(s: AppSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  localStorage.setItem(tenantKey(SETTINGS_KEY), JSON.stringify(s));
 }
 
 // All localStorage keys for export/import/reset
@@ -923,12 +1046,12 @@ export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;
   const updated = [...current, name];
-  localStorage.setItem(TEAM_KEY, JSON.stringify(updated));
+  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(updated));
   return updated;
 };
 
 export const removeTeamMember = (name: string): string[] => {
   const updated = getTeamMembers().filter(m => m !== name);
-  localStorage.setItem(TEAM_KEY, JSON.stringify(updated));
+  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(updated));
   return updated;
 };

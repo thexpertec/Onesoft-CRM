@@ -6,7 +6,7 @@ import {
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
-  Package2, Image as ImageIcon, Settings,
+  Package2, Image as ImageIcon, Settings, Globe,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -143,7 +143,7 @@ const QUICK_ADD: SubItem[] = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin, currentUser, logout } = useAuth();
+  const { isSuperAdmin, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
 
   const [mobileOpen,  setMobileOpen]  = useState(false);
   const [searchOpen,  setSearchOpen]  = useState(false);
@@ -184,8 +184,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { label: "Roles",           href: "/roles",  icon: KeyRound,  desc: "Permission roles"                },
     ...(isSuperAdmin ? [{ label: "Admin Accounts", href: "/users", icon: Shield, desc: "System users" }] : []),
   ];
-  const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, items: hrmItems };
-  const navItems = [...OTHER_NAV, HRM_NAV];
+  const HRM_NAV: NavItem     = { key: "hrm",     label: "HRM",     icon: Building2, items: hrmItems };
+  const TENANTS_NAV: NavItem = { key: "tenants", label: "Tenants", icon: Globe, href: "/tenants", items: null };
+  const navItems = [...OTHER_NAV, HRM_NAV, ...(isSuperAdmin ? [TENANTS_NAV] : [])];
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -573,6 +574,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </Link>
                 ))}
               </div>
+
+              {/* Tenants (superadmin only) */}
+              {isSuperAdmin && (
+                <Link href="/tenants"
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    location.startsWith("/tenants") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                  <Globe size={16} /> Tenants
+                </Link>
+              )}
             </div>
 
             <div className="pt-2 mt-2 border-t border-gray-100">
@@ -714,6 +724,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Command>
         </DialogContent>
       </Dialog>
+
+      {/* ── Active-tenant banner (superadmin viewing a tenant) ───────────────── */}
+      {isSuperAdmin && currentTenantId && currentTenant && (
+        <div className="sticky top-0 z-30 bg-amber-500 text-white px-5 md:px-8 py-2 flex items-center gap-3 shadow-sm">
+          <Globe size={14} className="flex-shrink-0" />
+          <span className="text-[13px] font-semibold flex-1">
+            Viewing as: <span className="font-bold">{currentTenant.name}</span>
+            <span className="ml-2 text-amber-100 font-normal text-[11px]">
+              — all data reads &amp; writes are scoped to this tenant
+            </span>
+          </span>
+          <button
+            onClick={() => switchTenant(null)}
+            className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
+          >
+            <X size={12} /> Exit Tenant View
+          </button>
+        </div>
+      )}
 
       {/* ── Main content ─────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto">

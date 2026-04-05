@@ -30,6 +30,7 @@ import SuppliersPage from "@/pages/suppliers";
 import PurchasesPage from "@/pages/purchases";
 import MediaLibraryPage from "@/pages/media";
 import SettingsPage from "@/pages/settings";
+import TenantsPage from "@/pages/tenants";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +79,7 @@ function Router() {
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
               <Route path="/users" component={UsersPage} />
+              <Route path="/tenants" component={TenantsPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>

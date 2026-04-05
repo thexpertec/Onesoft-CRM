@@ -25,6 +25,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/suppliers` | Supplier management | `admin-suppliers` |
 | `/documents` | Requirement documents | `admin-req-docs` |
 | `/users` | User management (superadmin) | `admin-users` |
+| `/tenants` | Tenant management (superadmin) — create/edit/delete client orgs, switch views | `admin-tenants` (global) |
 | `/settings` | App settings — company profile, financial, POS defaults, data management | `admin-settings` |
 
 Key files: `src/lib/store.ts`, `src/hooks/use-data.ts`, `src/components/editable-cell.tsx`, `src/components/layout.tsx`
