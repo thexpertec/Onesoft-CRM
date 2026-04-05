@@ -327,11 +327,20 @@ export default function ChartOfAccountsPage() {
         toast({ title: "Each entry needs a Code and Name", variant: "destructive" }); return;
       }
       const codes = entries.map(e => e.code.trim());
+      const names = entries.map(e => e.name.trim().toLowerCase());
       const allCodes = accounts.map(a => a.code);
       const dupCode = codes.find(c => allCodes.includes(c));
       if (dupCode) { toast({ title: `Code "${dupCode}" already in use`, variant: "destructive" }); return; }
       const dupWithin = codes.find((c, i) => codes.indexOf(c) !== i);
       if (dupWithin) { toast({ title: `Duplicate code "${dupWithin}" in entries`, variant: "destructive" }); return; }
+      // No duplicate ledger names anywhere in the entire chart of accounts
+      const existingLedgerNames = accounts
+        .filter(a => a.accountType === "Ledger")
+        .map(a => a.name.trim().toLowerCase());
+      const dupName = names.find(n => existingLedgerNames.includes(n));
+      if (dupName) { toast({ title: `Ledger name "${entries.find(e => e.name.trim().toLowerCase() === dupName)!.name}" already exists`, variant: "destructive" }); return; }
+      const dupNameWithin = names.find((n, i) => names.indexOf(n) !== i);
+      if (dupNameWithin) { toast({ title: `Duplicate ledger name within entries`, variant: "destructive" }); return; }
 
       entries.forEach(e => {
         addAccount({
@@ -357,7 +366,7 @@ export default function ChartOfAccountsPage() {
     const opts: { id: string; label: string; depth: number }[] = [];
     function walk(parentId: string | null, depth: number) {
       accounts
-        .filter(a => a.head === editForm!.head && (a.parentId ?? null) === parentId && !excluded.has(a.id))
+        .filter(a => a.head === editForm!.head && (a.parentId ?? null) === parentId && !excluded.has(a.id) && (a.accountType ?? "Group") !== "Ledger")
         .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
         .forEach(a => { opts.push({ id: a.id, label: `${a.code} — ${a.name}`, depth }); walk(a.id, depth + 1); });
     }
@@ -374,10 +383,10 @@ export default function ChartOfAccountsPage() {
     return (
       <div
         key={acc.id}
-        onClick={() => openCreate(acc, acc.head)}
-        className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[40px] cursor-pointer ${
-          !acc.isActive ? "opacity-40" : ri % 2 === 0 ? "" : "bg-gray-50/40 dark:bg-zinc-800/10"
-        } hover:bg-blue-50/50 dark:hover:bg-blue-950/20`}
+        onClick={() => { if (!isLedger) openCreate(acc, acc.head); }}
+        className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[40px] ${
+          isLedger ? "cursor-default" : "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+        } ${!acc.isActive ? "opacity-40" : ri % 2 === 0 ? "" : "bg-gray-50/40 dark:bg-zinc-800/10"}`}
       >
         {/* Tree indent + toggle */}
         <div className="flex items-center flex-shrink-0 pl-3" style={{ width: 44 + acc.depth * INDENT_W }}>
@@ -676,8 +685,8 @@ export default function ChartOfAccountsPage() {
                   const s = HEAD_STYLE[acc.head];
                   const isLedger = acc.accountType === "Ledger";
                   return (
-                    <div key={acc.id} onClick={() => openCreate(acc, acc.head)}
-                      className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[40px] cursor-pointer ${!acc.isActive ? "opacity-40" : ri % 2 === 0 ? "" : "bg-gray-50/40 dark:bg-zinc-800/10"} hover:bg-blue-50/50 dark:hover:bg-blue-950/20`}>
+                    <div key={acc.id} onClick={() => { if (!isLedger) openCreate(acc, acc.head); }}
+                      className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[40px] ${isLedger ? "cursor-default" : "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"} ${!acc.isActive ? "opacity-40" : ri % 2 === 0 ? "" : "bg-gray-50/40 dark:bg-zinc-800/10"}`}>
                       <div className="w-12 flex-shrink-0 pl-3" />
                       <div className="w-7 flex-shrink-0 text-[11px] text-gray-400 font-mono">{ri + 1}</div>
                       <div className={`w-24 flex-shrink-0 font-mono text-[12px] font-bold ${s.text} pr-2`}>{acc.code}</div>
@@ -813,7 +822,7 @@ export default function ChartOfAccountsPage() {
                 const opts: { id: string; label: string; depth: number }[] = [];
                 function walkOpts(pid: string | null, depth: number) {
                   accounts
-                    .filter(a => a.head === modal.head && (a.parentId ?? null) === pid)
+                    .filter(a => a.head === modal.head && (a.parentId ?? null) === pid && (a.accountType ?? "Group") !== "Ledger")
                     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
                     .forEach(a => {
                       opts.push({ id: a.id, label: `${a.code} | ${a.name}`, depth });
