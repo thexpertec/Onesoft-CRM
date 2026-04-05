@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
-  Save, CreditCard, ChevronDown, ChevronUp,
+  Save, CreditCard, ChevronDown, ChevronUp, ArrowLeft,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -153,7 +153,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
   const [deleteOpen, setDeleteOpen]   = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
-  const [showBuyer,   setShowBuyer]   = useState(false);
+  const [showBuyer,   setShowBuyer]   = useState(true);
   const [showShip,    setShowShip]    = useState(false);
   const [showBank,    setShowBank]    = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -214,56 +214,106 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   };
 
   const inv = invoice;
-  const canPay = inv && (inv.status === "Sent" || inv.status === "Draft" || inv.status === "Overdue" || inv.status === "Partial");
+  const s   = inv?.status;
+
+  const statusActions = !isNew && inv ? (
+    <div className="space-y-2">
+      <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Status Actions</p>
+      <div className="grid grid-cols-2 gap-2">
+        {(s === "Draft") && (
+          <button onClick={() => onStatusChange(inv.id, "Sent")}
+            className="h-9 rounded-xl border-2 border-blue-200 dark:border-blue-800 text-[12px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors">
+            <Send size={13}/> Send Invoice
+          </button>
+        )}
+        {(s === "Sent" || s === "Draft" || s === "Overdue" || s === "Partial") && (
+          <button onClick={() => onStatusChange(inv.id, "Paid", payInput)}
+            className="h-9 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1.5 transition-colors">
+            <CheckCircle size={13}/> Mark Paid
+          </button>
+        )}
+        {(s === "Sent" || s === "Draft" || s === "Overdue") && (
+          <button onClick={() => onStatusChange(inv.id, "Partial", payInput)}
+            className="h-9 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[12px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-1.5 transition-colors">
+            <CreditCard size={13}/> Mark Partial
+          </button>
+        )}
+        {(s === "Sent" || s === "Draft") && (
+          <button onClick={() => onStatusChange(inv.id, "Overdue")}
+            className="h-9 rounded-xl border-2 border-red-200 dark:border-red-800 text-[12px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors">
+            <AlertTriangle size={13}/> Mark Overdue
+          </button>
+        )}
+        {(s === "Paid" || s === "Partial") && (
+          <button onClick={() => onStatusChange(inv.id, "Draft")}
+            className="h-9 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
+            <RotateCcw size={13}/> Revert to Draft
+          </button>
+        )}
+        {(s !== "Cancelled") && (
+          <button onClick={() => onStatusChange(inv.id, "Cancelled")}
+            className="h-9 rounded-xl border-2 border-zinc-200 dark:border-zinc-700 text-[12px] font-semibold text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
+            <Ban size={13}/> Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <div className="fixed inset-0 z-40 flex">
-      {/* Backdrop */}
-      <div className="flex-1 bg-black/30 dark:bg-black/50" onClick={onClose} />
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex flex-col">
 
-      {/* Panel */}
-      <div className="w-[600px] max-w-full bg-white dark:bg-zinc-900 shadow-2xl flex flex-col h-full overflow-hidden">
-
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <FileText size={16} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                {isNew ? "New Invoice" : invoice.invoiceNumber}
-              </p>
-              {!isNew && (
-                <div className="flex items-center gap-2 mt-0.5">
-                  <StatusBadge status={invoice.status} />
-                  {isOverdue(invoice) && invoice.status !== "Overdue" && (
-                    <span className="text-[10px] font-bold text-red-500">⚠ Overdue</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+      {/* ══ Top Bar ══════════════════════════════════════════════════════════ */}
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-10">
+        {/* Left: back + breadcrumb */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            <ArrowLeft size={14}/> Invoices
+          </button>
+          <span className="text-gray-300 dark:text-zinc-600">/</span>
           <div className="flex items-center gap-2">
-            {!isNew && (
-              <button
-                onClick={() => { try { printInvoice(invoice); } catch { /* blocked */ } }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
-              >
-                <Printer size={13} /> Print
-              </button>
-            )}
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg transition-colors">
-              <X size={18} />
-            </button>
+            <div className="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center">
+              <FileText size={12} className="text-white"/>
+            </div>
+            <span className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
+              {isNew ? "New Invoice" : invoice.invoiceNumber}
+            </span>
           </div>
+          {!isNew && <StatusBadge status={invoice.status}/>}
+          {!isNew && isOverdue(invoice) && invoice.status !== "Overdue" && (
+            <span className="text-[11px] font-bold text-red-500">⚠ Overdue</span>
+          )}
         </div>
 
-        {/* ── Scrollable Body ── */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Right: actions */}
+        <div className="flex items-center gap-2">
+          {!isNew && (
+            <button
+              onClick={() => { try { printInvoice(invoice); } catch { /* blocked */ } }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
+            >
+              <Printer size={13}/> Print Invoice
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold shadow-md shadow-blue-200 dark:shadow-none transition-colors"
+          >
+            <Save size={13}/> {isNew ? "Create Invoice" : "Save Changes"}
+          </button>
+        </div>
+      </div>
 
-          {/* ── Meta Form ── */}
-          <div className="px-5 py-4 space-y-3 border-b border-gray-100 dark:border-zinc-800">
+      {/* ══ Two-column Body ══════════════════════════════════════════════════ */}
+      <div className="flex-1 grid grid-cols-5 gap-6 px-6 py-6 max-w-[1400px] mx-auto w-full items-start">
+
+        {/* ─── LEFT: Invoice Details ─────────────────────────────────────── */}
+        <div className="col-span-3 space-y-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
+            <div className="px-5 py-4 space-y-4">
 
             {/* Invoice Title */}
             <div>
@@ -479,19 +529,33 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             </div>
           </div>
 
-          {/* ── Items Table ── */}
-          <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800">
-            <div className="flex items-center justify-between mb-3">
+          {/* ── Timestamps ── */}
+          {!isNew && (
+            <div className="border-t border-gray-100 dark:border-zinc-800 px-5 py-3 grid grid-cols-2 gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+              <div><span className="font-semibold text-gray-700 dark:text-gray-300">Created:</span> {new Date(invoice.createdAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
+              <div><span className="font-semibold text-gray-700 dark:text-gray-300">Updated:</span> {new Date(invoice.updatedAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
+              {invoice.paidAt && <div className="col-span-2 text-emerald-600 dark:text-emerald-400"><span className="font-semibold">Paid at:</span> {new Date(invoice.paidAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>}
+            </div>
+          )}
+        </div>{/* /left card */}
+        </div>{/* /left col */}
+
+        {/* ─── RIGHT: Items + Pricing ───────────────────────────────────────── */}
+        <div className="col-span-2 space-y-4">
+
+          {/* Items Card */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
               <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Line Items</span>
               <button
                 onClick={addItem}
                 className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
               >
-                <Plus size={12} /> Add Item
+                <Plus size={12}/> Add Item
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="px-4 pb-4 pt-2 space-y-2">
               {items.map((item, idx) => (
                 <div key={item.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
                   {/* Row 1: product name + delete */}
@@ -584,198 +648,109 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             </div>
           </div>
 
-          {/* ── Totals ── */}
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-zinc-800 space-y-1.5">
-            <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
-              <span>Subtotal</span><span className="font-mono">{fmtCcy(subtotal)}</span>
-            </div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
-                <span>Discount</span><span className="font-mono">−{fmtCcy(discountAmt)}</span>
-              </div>
-            )}
-            {parseFloat(form.taxRate) > 0 && (
+          {/* ── Totals + Payment History Card ── */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
+            <div className="px-5 py-4 space-y-1.5 border-b border-gray-100 dark:border-zinc-800">
               <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
-                <span>Tax / VAT ({form.taxRate}%)</span><span className="font-mono">{fmtCcy(tax)}</span>
+                <span>Subtotal</span><span className="font-mono">{fmtCcy(subtotal)}</span>
               </div>
-            )}
-            {shipping > 0 && (
-              <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
-                <span>Shipping{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
-                <span className="font-mono">{fmtCcy(shipping)}</span>
+              {discountAmt > 0 && (
+                <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
+                  <span>Discount</span><span className="font-mono">−{fmtCcy(discountAmt)}</span>
+                </div>
+              )}
+              {parseFloat(form.taxRate) > 0 && (
+                <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
+                  <span>Tax / VAT ({form.taxRate}%)</span><span className="font-mono">{fmtCcy(tax)}</span>
+                </div>
+              )}
+              {shipping > 0 && (
+                <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
+                  <span>Shipping{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
+                  <span className="font-mono">{fmtCcy(shipping)}</span>
+                </div>
+              )}
+              {handling > 0 && (
+                <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
+                  <span>Handling</span><span className="font-mono">{fmtCcy(handling)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-[15px] font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
+                <span>Total</span><span className="font-mono">{fmtCcy(total)}</span>
               </div>
-            )}
-            {handling > 0 && (
-              <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
-                <span>Handling</span><span className="font-mono">{fmtCcy(handling)}</span>
+              <div className="flex items-center gap-3 pt-2">
+                <span className="text-[12px] text-gray-600 dark:text-gray-400 whitespace-nowrap">Amount Paid</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={payInput}
+                  onChange={e => setPayInput(e.target.value)}
+                  placeholder="0.00"
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
               </div>
-            )}
-            <div className="flex justify-between text-[15px] font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
-              <span>Total</span><span className="font-mono">{fmtCcy(total)}</span>
+              {balance > 0.005 && (
+                <div className="flex justify-between text-[13px] font-bold text-red-600 dark:text-red-400">
+                  <span>Balance Due</span><span className="font-mono">{fmtCcy(balance)}</span>
+                </div>
+              )}
+              {paid > 0 && balance <= 0.005 && (
+                <div className="flex justify-between text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span>✓ Fully Paid</span><span className="font-mono">{fmtCcy(total)}</span>
+                </div>
+              )}
             </div>
 
-            {/* Amount Paid row */}
-            <div className="flex items-center gap-3 pt-2">
-              <span className="text-[12px] text-gray-600 dark:text-gray-400 whitespace-nowrap">Amount Paid</span>
-              <input
-                type="number" min="0" step="0.01"
-                value={payInput}
-                onChange={e => setPayInput(e.target.value)}
-                placeholder="0.00"
-                className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            {balance > 0.005 && (
-              <div className="flex justify-between text-[13px] font-bold text-red-600 dark:text-red-400">
-                <span>Balance Due</span><span className="font-mono">{fmtCcy(balance)}</span>
-              </div>
-            )}
-            {paid > 0 && balance <= 0.005 && (
-              <div className="flex justify-between text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
-                <span>✓ Fully Paid</span><span className="font-mono">{fmtCcy(total)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* ── Payment History (collapsible) ── */}
-          <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => setShowHistory(v => !v)}
-              className="w-full flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-            >
-              <span>Payment History {payHistory.length > 0 ? `(${payHistory.length})` : ""}</span>
-              {showHistory ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-            </button>
-
-            {showHistory && (
-              <div className="mt-3 space-y-2">
-                {payHistory.map(rec => (
-                  <div key={rec.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
-                    <div className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-3">
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Date</label>
-                        <input
-                          type="date" value={rec.date}
-                          onChange={e => updatePayRec(rec.id, "date", e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Amount</label>
-                        <input
-                          type="number" min="0" step="0.01" value={rec.amount}
-                          onChange={e => updatePayRec(rec.id, "amount", e.target.value)}
-                          placeholder="0.00"
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Method</label>
-                        <input
-                          value={rec.method}
-                          onChange={e => updatePayRec(rec.id, "method", e.target.value)}
-                          placeholder="Bank, Cash…"
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Note</label>
-                        <input
-                          value={rec.note}
-                          onChange={e => updatePayRec(rec.id, "note", e.target.value)}
-                          placeholder="Ref…"
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="col-span-1 pb-0.5">
-                        <button
-                          onClick={() => removePayRec(rec.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
-                        >
-                          <X size={13} />
-                        </button>
+            {/* Payment History */}
+            <div className="px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setShowHistory(v => !v)}
+                className="w-full flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                <span>Payment History {payHistory.length > 0 ? `(${payHistory.length})` : ""}</span>
+                {showHistory ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+              </button>
+              {showHistory && (
+                <div className="mt-3 space-y-2">
+                  {payHistory.map(rec => (
+                    <div key={rec.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-3">
+                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Date</label>
+                          <input type="date" value={rec.date} onChange={e => updatePayRec(rec.id, "date", e.target.value)} className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div className="col-span-3">
+                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Amount</label>
+                          <input type="number" min="0" step="0.01" value={rec.amount} onChange={e => updatePayRec(rec.id, "amount", e.target.value)} placeholder="0.00" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div className="col-span-3">
+                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Method</label>
+                          <input value={rec.method} onChange={e => updatePayRec(rec.id, "method", e.target.value)} placeholder="Bank, Cash…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Note</label>
+                          <input value={rec.note} onChange={e => updatePayRec(rec.id, "note", e.target.value)} placeholder="Ref…" className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div className="col-span-1 pb-0.5">
+                          <button onClick={() => removePayRec(rec.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"><X size={13}/></button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-                <button
-                  onClick={addPayRec}
-                  className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                >
-                  <Plus size={12} /> Add Payment Record
-                </button>
-              </div>
-            )}
-          </div>
+                  ))}
+                  <button onClick={addPayRec} className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
+                    <Plus size={12}/> Add Payment Record
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>{/* /totals-history card */}
 
-          {/* ── Timestamps (existing invoice) ── */}
-          {!isNew && (
-            <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800 grid grid-cols-2 gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-              <div><span className="font-semibold text-gray-700 dark:text-gray-300">Created:</span> {new Date(invoice.createdAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
-              <div><span className="font-semibold text-gray-700 dark:text-gray-300">Updated:</span> {new Date(invoice.updatedAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
-              {invoice.paidAt && <div className="col-span-2 text-emerald-600 dark:text-emerald-400"><span className="font-semibold">Paid at:</span> {new Date(invoice.paidAt).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>}
+          {/* Status Actions */}
+          {statusActions && (
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4">
+              {statusActions}
             </div>
           )}
-        </div>
-
-        {/* ── Footer Actions ── */}
-        <div className="shrink-0 px-5 py-4 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 space-y-2">
-          {/* Save / Save & Send */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              className="flex-1 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-[13px] flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-200 dark:shadow-none"
-            >
-              <Save size={14} /> {isNew ? "Create Invoice" : "Save Changes"}
-            </button>
-          </div>
-
-          {/* Status Actions (existing invoice only) */}
-          {!isNew && (() => {
-            const s = invoice.status;
-            return (
-              <div className="grid grid-cols-2 gap-2">
-                {(s === "Draft") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Sent")}
-                    className="h-9 rounded-xl border-2 border-blue-200 dark:border-blue-800 text-[12px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <Send size={13} /> Send Invoice
-                  </button>
-                )}
-                {(s === "Sent" || s === "Draft" || s === "Overdue" || s === "Partial") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Paid", payInput)}
-                    className="h-9 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <CheckCircle size={13} /> Mark Paid
-                  </button>
-                )}
-                {(s === "Sent" || s === "Draft" || s === "Overdue") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Partial", payInput)}
-                    className="h-9 rounded-xl border-2 border-amber-200 dark:border-amber-800 text-[12px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <CreditCard size={13} /> Mark Partial
-                  </button>
-                )}
-                {(s === "Sent" || s === "Draft") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Overdue")}
-                    className="h-9 rounded-xl border-2 border-red-200 dark:border-red-800 text-[12px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <AlertTriangle size={13} /> Mark Overdue
-                  </button>
-                )}
-                {(s === "Paid" || s === "Partial") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Draft")}
-                    className="h-9 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
-                    <RotateCcw size={13} /> Revert to Draft
-                  </button>
-                )}
-                {(s !== "Cancelled") && (
-                  <button onClick={() => onStatusChange(invoice.id, "Cancelled")}
-                    className="h-9 rounded-xl border-2 border-zinc-200 dark:border-zinc-700 text-[12px] font-semibold text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
-                    <Ban size={13} /> Cancel
-                  </button>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Delete */}
           {!isNew && (
@@ -783,11 +758,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               onClick={() => setDeleteOpen(true)}
               className="w-full h-9 rounded-xl border-2 border-red-100 dark:border-red-900/50 text-[12px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors"
             >
-              <Trash2 size={13} /> Delete Invoice
+              <Trash2 size={13}/> Delete Invoice
             </button>
           )}
-        </div>
-      </div>
+        </div>{/* /right col */}
+      </div>{/* /two-column grid */}
 
       {/* Delete confirm */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
