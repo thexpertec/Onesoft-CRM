@@ -941,6 +941,36 @@ export const deleteStockItem = (id: string): void => {
   setStored(STOCK_KEY, getStock().filter(s => s.id !== id));
 };
 
+export const deductStockForSale = (saleItems: SaleItem[]): void => {
+  const stocks = getStock();
+  saleItems.forEach(item => {
+    if (!item.sku) return;
+    let remaining = parseFloat(item.qty) || 0;
+    for (let i = 0; i < stocks.length && remaining > 0; i++) {
+      if (stocks[i].sku !== item.sku) continue;
+      const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+      const deduct = Math.min(current, remaining);
+      stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+      remaining -= deduct;
+    }
+  });
+  setStored(STOCK_KEY, stocks);
+};
+
+export const restoreStockForSale = (saleItems: SaleItem[]): void => {
+  const stocks = getStock();
+  saleItems.forEach(item => {
+    if (!item.sku) return;
+    const qty = parseFloat(item.qty) || 0;
+    const i = stocks.findIndex(s => s.sku === item.sku);
+    if (i >= 0) {
+      const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+      stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
+    }
+  });
+  setStored(STOCK_KEY, stocks);
+};
+
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────
 export type StaffStatus = "Active" | "On Leave" | "Terminated";
 

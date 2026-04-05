@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import { useSales } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  Sale, SaleItem, SaleStatus, SalePayment,
+  Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getStock, Product,
+  deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -29,6 +30,12 @@ const STATUS_BG: Record<SaleStatus, string> = {
   "On Credit": "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
   Refunded:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
   Cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+};
+
+const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
+  Reserved:  "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50",
+  Delivered: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50",
+  Pending:   "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50",
 };
 
 const PAYMENT_ICON: Record<SalePayment, React.ReactNode> = {
@@ -57,13 +64,13 @@ const subTotal = (items: SaleItem[]): number =>
 
 const blankSaleItem = (): SaleItem => ({
   id: crypto.randomUUID(), productName: "", sku: "", qty: "1",
-  unit: "pcs", unitPrice: "0.00", discount: "0", notes: "",
+  unit: "pcs", unitPrice: "0.00", discount: "0", notes: "", itemStatus: "Reserved",
 });
 
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
   customer: "", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
-  taxRate: "0", amountPaid: "0",
+  taxRate: "0", amountPaid: "0", paidAt: "", stockDeducted: false,
 });
 
 const blankNewRow = (): Record<string, string> => ({
@@ -439,12 +446,29 @@ function POSView({
           </div>
         </div>
 
-        {/* Right: saved time */}
-        <div className="px-4 py-2 flex flex-col justify-center text-right border-l border-gray-100 dark:border-zinc-800 shrink-0">
-          <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Saved</div>
-          <div className="text-[12px] font-semibold text-gray-500 mt-0.5">
-            {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+        {/* Right: timestamps */}
+        <div className="px-4 py-2 flex flex-col justify-center text-right border-l border-gray-100 dark:border-zinc-800 shrink-0 gap-1.5">
+          <div>
+            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Created</div>
+            <div className="text-[11px] font-semibold text-gray-500 font-mono mt-0.5">
+              {new Date(sale.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </div>
           </div>
+          {sale.paidAt ? (
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">Paid at</div>
+              <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                {new Date(sale.paidAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Updated</div>
+              <div className="text-[11px] font-semibold text-gray-400 font-mono mt-0.5">
+                {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -499,7 +523,7 @@ function POSView({
                         <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />
                       </div>
 
-                      {/* Product name + unit + stock */}
+                      {/* Product name + unit + stock + item status */}
                       <div className="flex-1 min-w-0">
                         <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">{item.productName || "—"}</div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -522,6 +546,19 @@ function POSView({
                               </span>
                             );
                           })()}
+                          {/* Item delivery status — clickable pill cycles through states */}
+                          <button
+                            title="Click to change delivery status"
+                            onClick={() => {
+                              const cur = (item.itemStatus as ItemStatus) || "Reserved";
+                              const next = ITEM_STATUSES[(ITEM_STATUSES.indexOf(cur) + 1) % ITEM_STATUSES.length];
+                              onItemChange(item.id, "itemStatus", next);
+                              onItemBlur();
+                            }}
+                            className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md cursor-pointer select-none transition-colors ${ITEM_STATUS_STYLE[(item.itemStatus as ItemStatus) || "Reserved"]}`}
+                          >
+                            {item.itemStatus || "Reserved"}
+                          </button>
                         </div>
                       </div>
 
@@ -1034,7 +1071,19 @@ export default function SalesPage() {
 
   const setStatus = (status: SaleStatus) => {
     if (!detailId || !localMeta) return;
-    editSale(detailId, { ...localMeta, status, items: localItems });
+    const wasDeducted = detailSale?.stockDeducted ?? false;
+    let stockDeducted = wasDeducted;
+
+    if (status === "On Credit" && !wasDeducted) {
+      deductStockForSale(localItems);
+      stockDeducted = true;
+    }
+    if ((status === "Refunded" || status === "Cancelled") && wasDeducted) {
+      restoreStockForSale(localItems);
+      stockDeducted = false;
+    }
+
+    editSale(detailId, { ...localMeta, status, items: localItems, stockDeducted });
     toast({ title: status === "Completed" ? "Sale completed!" : status === "On Credit" ? "Issued on credit" : status === "Refunded" ? "Sale refunded" : "Sale cancelled" });
   };
 
@@ -1047,7 +1096,21 @@ export default function SalesPage() {
 
   const handleComplete = (amountPaid: string, taxRate: string) => {
     if (!detailId || !localMeta) return;
-    editSale(detailId, { ...localMeta, status: "Completed", items: localItems, amountPaid, taxRate });
+
+    // Deduct stock only if not already done (avoids double-deduction on re-payment)
+    if (!(detailSale?.stockDeducted ?? false)) {
+      deductStockForSale(localItems);
+    }
+
+    editSale(detailId, {
+      ...localMeta,
+      status: "Completed",
+      items: localItems,
+      amountPaid,
+      taxRate,
+      paidAt: new Date().toISOString(),
+      stockDeducted: true,
+    });
     toast({ title: "Sale completed!", description: `£${parseFloat(amountPaid || "0").toFixed(2)} received` });
     closePOS();
   };
@@ -1116,6 +1179,7 @@ export default function SalesPage() {
       customer: newRow.customer, status: (newRow.status as SaleStatus) || "Draft",
       paymentMethod: (newRow.paymentMethod as SalePayment) || "Cash",
       notes: newRow.notes, items: [], taxRate: "0", amountPaid: "0",
+      paidAt: "", stockDeducted: false,
     });
     toast({ title: "Sale created", description: `${sale.saleNumber} saved` });
     setNewRow(null); setNewRowActive(null);
