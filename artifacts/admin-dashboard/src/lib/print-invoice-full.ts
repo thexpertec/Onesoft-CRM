@@ -249,14 +249,15 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 
   /* ── SECTION TITLE ──────────────────────────────── */
   .section-title {
-    font-size: 8.5pt;
-    font-weight: 700;
+    font-size: 11pt;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #1e3a5f;
-    padding: 5pt 0 5pt;
-    border-bottom: 2px solid #1e3a5f;
-    margin-bottom: 10pt;
+    letter-spacing: 1.5px;
+    color: #fff;
+    background: #1e3a5f;
+    padding: 6pt 12pt;
+    border-radius: 4pt;
+    margin-bottom: 12pt;
   }
 
   /* ── ITEMS TABLE ────────────────────────────────── */
@@ -322,7 +323,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .notes-stack { margin-bottom: 0; }
   .notes-box { margin-bottom: 12pt; }
   .notes-box:last-child { margin-bottom: 0; }
-  .notes-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #1e3a5f; margin-bottom: 5pt; }
+  .notes-label { font-size: 9.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #1e3a5f; margin-bottom: 6pt; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 3pt; }
   .notes-text {
     font-size: 9pt;
     color: #374151;
