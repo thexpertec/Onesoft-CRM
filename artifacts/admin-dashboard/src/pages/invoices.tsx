@@ -307,11 +307,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
         </div>
       </div>
 
-      {/* ══ Two-column Body ══════════════════════════════════════════════════ */}
-      <div className="flex-1 grid grid-cols-5 gap-6 px-6 py-6 max-w-[1400px] mx-auto w-full items-start">
-
-        {/* ─── LEFT: Invoice Details ─────────────────────────────────────── */}
-        <div className="col-span-3 space-y-4">
+      {/* ══ Single-column Body ════════════════════════════════════════════════ */}
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="max-w-3xl mx-auto space-y-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
             <div className="px-5 py-4 space-y-4">
 
@@ -538,10 +536,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             </div>
           )}
         </div>{/* /left card */}
-        </div>{/* /left col */}
-
-        {/* ─── RIGHT: Items + Pricing ───────────────────────────────────────── */}
-        <div className="col-span-2 space-y-4">
 
           {/* Items Card */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
@@ -761,8 +755,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <Trash2 size={13}/> Delete Invoice
             </button>
           )}
-        </div>{/* /right col */}
-      </div>{/* /two-column grid */}
+        </div>{/* /inner container */}
+      </div>{/* /body */}
 
       {/* Delete confirm */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
