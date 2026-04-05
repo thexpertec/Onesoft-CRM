@@ -976,22 +976,48 @@ export const restoreStockForSale = (saleItems: SaleItem[]): void => {
 export const INVOICE_STATUSES  = ["Draft", "Sent", "Paid", "Partial", "Overdue", "Cancelled"] as const;
 export type InvoiceStatus = typeof INVOICE_STATUSES[number];
 
+export const INVOICE_TITLES = ["Invoice", "Tax Invoice", "Proforma Invoice", "Credit Note", "Debit Note"] as const;
+export type InvoiceTitle = typeof INVOICE_TITLES[number];
+
+export type PaymentRecord = {
+  id:     string;
+  date:   string;   // YYYY-MM-DD
+  amount: string;
+  method: string;
+  note:   string;
+};
+
 export type Invoice = {
-  id:             string;
-  invoiceNumber:  string;
-  invoiceDate:    string;   // YYYY-MM-DD
-  dueDate:        string;   // YYYY-MM-DD
-  customer:       string;
-  status:         InvoiceStatus;
-  paymentMethod:  SalePayment;
-  notes:          string;
-  items:          SaleItem[];
-  taxRate:        string;   // percentage string e.g. "20"
-  amountPaid:     string;
-  paidAt:         string;   // ISO timestamp; "" if unpaid
-  stockDeducted:  boolean;
-  createdAt:      string;
-  updatedAt:      string;
+  id:                string;
+  invoiceNumber:     string;
+  invoiceTitle:      string;    // "Invoice" | "Tax Invoice" | etc.
+  invoiceDate:       string;    // YYYY-MM-DD
+  dueDate:           string;    // YYYY-MM-DD
+  // Buyer info
+  customer:          string;
+  customerId:        string;
+  buyerAddress:      string;
+  buyerPhone:        string;
+  buyerEmail:        string;
+  // Status & payment
+  status:            InvoiceStatus;
+  paymentMethod:     SalePayment;
+  paymentTerms:      string;    // e.g. "Net 30", "Due on receipt"
+  bankDetails:       string;    // bank account details for payment
+  amountPaid:        string;
+  paidAt:            string;    // ISO timestamp; "" if unpaid
+  paymentHistory:    PaymentRecord[];
+  // Items & pricing
+  items:             SaleItem[];
+  taxRate:           string;    // percentage string e.g. "20"
+  shippingFee:       string;
+  handlingFee:       string;
+  shippingMethod:    string;
+  // Extra
+  notes:             string;    // additional notes/terms
+  stockDeducted:     boolean;
+  createdAt:         string;
+  updatedAt:         string;
 };
 
 const INVOICES_KEY = "admin-invoices";
@@ -1145,6 +1171,12 @@ export type AppSettings = {
   termsAndConditions:   string;
   privacyPolicy:        string;
   legalDocuments:       LegalDocument[];
+  // Invoice-related company info
+  bankDetails:          string;   // bank name, account no, sort code, IBAN, etc.
+  companyRegistration:  string;   // registered company number
+  socialLinks:          string;   // social media links (one per line)
+  invoiceTerms:         string;   // default payment terms text
+  invoiceFooter:        string;   // default invoice footer text
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -1171,6 +1203,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   termsAndConditions:   "",
   privacyPolicy:        "",
   legalDocuments:       [],
+  bankDetails:          "",
+  companyRegistration:  "",
+  socialLinks:          "",
+  invoiceTerms:         "Payment is due within 30 days of the invoice date.",
+  invoiceFooter:        "",
 };
 
 export function getSettings(): AppSettings {

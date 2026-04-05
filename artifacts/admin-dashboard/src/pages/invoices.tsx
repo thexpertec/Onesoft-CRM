@@ -1,17 +1,18 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useInvoices } from "@/hooks/use-data";
 import {
-  Invoice, InvoiceStatus, INVOICE_STATUSES,
+  Invoice, InvoiceStatus, INVOICE_STATUSES, INVOICE_TITLES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
+  PaymentRecord,
   getProducts, getCustomers, getSettings,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
-import { printSaleInvoice } from "@/lib/print-invoice";
+import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
-  Save, CreditCard, Eye,
+  Save, CreditCard, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -54,19 +55,33 @@ const blankItem = (): SaleItem => ({
   itemStatus: "Reserved",
 });
 
-const blankInvoice = (): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => ({
-  invoiceDate:   today(),
-  dueDate:       in30(),
-  customer:      "",
-  status:        "Draft",
-  paymentMethod: "Bank Transfer",
-  notes:         "",
-  items:         [blankItem()],
-  taxRate:       getSettings().vatRate || "20",
-  amountPaid:    "",
-  paidAt:        "",
-  stockDeducted: false,
-});
+const blankInvoice = (): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => {
+  const s = getSettings();
+  return {
+    invoiceTitle:   "Tax Invoice",
+    invoiceDate:    today(),
+    dueDate:        in30(),
+    customer:       "",
+    customerId:     "",
+    buyerAddress:   "",
+    buyerPhone:     "",
+    buyerEmail:     "",
+    status:         "Draft",
+    paymentMethod:  "Bank Transfer",
+    paymentTerms:   "",
+    bankDetails:    s.bankDetails || "",
+    amountPaid:     "",
+    paidAt:         "",
+    paymentHistory: [],
+    items:          [blankItem()],
+    taxRate:        s.vatRate || "20",
+    shippingFee:    "",
+    handlingFee:    "",
+    shippingMethod: "",
+    notes:          "",
+    stockDeducted:  false,
+  };
+};
 
 function fmtDate(iso: string): string {
   if (!iso) return "—";
@@ -81,15 +96,20 @@ function fmtCcy(n: number): string {
   return `${sym}${n.toFixed(2)}`;
 }
 
-function computeTotals(items: SaleItem[], taxRate: string, amountPaid: string) {
+function computeTotals(
+  items: SaleItem[], taxRate: string, amountPaid: string,
+  shippingFee = "0", handlingFee = "0"
+) {
   const subtotal    = itemsSubtotal(items);
   const discountAmt = itemsDiscount(items);
   const after       = subtotal - discountAmt;
   const tax         = after * (parseFloat(taxRate) || 0) / 100;
-  const total       = after + tax;
+  const shipping    = parseFloat(shippingFee) || 0;
+  const handling    = parseFloat(handlingFee) || 0;
+  const total       = after + tax + shipping + handling;
   const paid        = parseFloat(amountPaid) || 0;
   const balance     = Math.max(0, total - paid);
-  return { subtotal, discountAmt, after, tax, total, paid, balance };
+  return { subtotal, discountAmt, after, tax, shipping, handling, total, paid, balance };
 }
 
 function isOverdue(inv: Invoice): boolean {
@@ -98,20 +118,9 @@ function isOverdue(inv: Invoice): boolean {
   return new Date(inv.dueDate) < new Date(today());
 }
 
-// ─── Print (maps Invoice → Sale-shaped object for the thermal printer) ───────
+// ─── Print — full A4 professional invoice ────────────────────────────────────
 function printInvoice(inv: Invoice) {
-  printSaleInvoice(
-    {
-      id: inv.id, saleNumber: inv.invoiceNumber,
-      saleDate: inv.invoiceDate, customer: inv.customer,
-      status: "Completed", paymentMethod: inv.paymentMethod,
-      notes: inv.notes, items: inv.items,
-      taxRate: inv.taxRate, amountPaid: inv.amountPaid,
-      paidAt: inv.paidAt, stockDeducted: inv.stockDeducted,
-      createdAt: inv.createdAt, updatedAt: inv.updatedAt,
-    },
-    getSettings()
-  );
+  printFullInvoice(inv, getSettings());
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -137,27 +146,43 @@ interface PanelProps {
 function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: PanelProps) {
   const isNew = !invoice;
 
-  const [form, setForm]   = useState<ReturnType<typeof blankInvoice>>(
+  const [form, setForm]         = useState<ReturnType<typeof blankInvoice>>(
     () => invoice ? { ...invoice } : blankInvoice()
   );
-  const [items, setItems] = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [payInput, setPayInput]     = useState(invoice?.amountPaid ?? "");
+  const [items, setItems]       = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
+  const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
+  const [deleteOpen, setDeleteOpen]   = useState(false);
+  const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
+  const [showBuyer,   setShowBuyer]   = useState(false);
+  const [showShip,    setShowShip]    = useState(false);
+  const [showBank,    setShowBank]    = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     setForm(invoice ? { ...invoice } : blankInvoice());
     setItems(invoice?.items ?? [blankItem()]);
+    setPayHist(invoice?.paymentHistory ?? []);
     setPayInput(invoice?.amountPaid ?? "");
+    setShowBuyer(false); setShowShip(false); setShowBank(false); setShowHistory(false);
   }, [invoice?.id]);
 
-  const products = useMemo(() => getProducts(), []);
+  const products  = useMemo(() => getProducts(), []);
   const customers = useMemo(() => getCustomers(), []);
 
   const setF = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const { subtotal, discountAmt, tax, total, paid, balance } =
-    computeTotals(items, form.taxRate, payInput || "0");
+  const { subtotal, discountAmt, tax, shipping, handling, total, paid, balance } =
+    computeTotals(items, form.taxRate, payInput || "0", form.shippingFee, form.handlingFee);
+
+  // ── Payment history helpers ──
+  const blankPayRec = (): PaymentRecord => ({
+    id: crypto.randomUUID(), date: today(), amount: "", method: "Bank Transfer", note: "",
+  });
+  const addPayRec    = () => setPayHist(p => [...p, blankPayRec()]);
+  const removePayRec = (id: string) => setPayHist(p => p.filter(r => r.id !== id));
+  const updatePayRec = (id: string, field: keyof PaymentRecord, val: string) =>
+    setPayHist(p => p.map(r => r.id === id ? { ...r, [field]: val } : r));
 
   // ── Item helpers ──
   const updateItem = (id: string, field: keyof SaleItem, value: string) =>
@@ -185,7 +210,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   const removeItem = (id: string) => setItems(p => p.filter(i => i.id !== id));
 
   const handleSave = () => {
-    onSave({ ...form, items, amountPaid: payInput }, invoice?.id);
+    onSave({ ...form, items, paymentHistory: payHistory, amountPaid: payInput }, invoice?.id);
   };
 
   const inv = invoice;
@@ -238,71 +263,217 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
         <div className="flex-1 overflow-y-auto">
 
           {/* ── Meta Form ── */}
-          <div className="px-5 py-4 grid grid-cols-2 gap-3 border-b border-gray-100 dark:border-zinc-800">
-            {/* Customer */}
-            <div className="col-span-2">
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer</label>
-              <input
-                list="inv-customers"
-                value={form.customer}
-                onChange={e => setF("customer", e.target.value)}
-                placeholder="Customer name"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              />
-              <datalist id="inv-customers">
-                {customers.map(c => <option key={c.id} value={c.firstName + " " + c.lastName} />)}
-              </datalist>
-            </div>
+          <div className="px-5 py-4 space-y-3 border-b border-gray-100 dark:border-zinc-800">
 
-            {/* Invoice Date */}
+            {/* Invoice Title */}
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Invoice Date</label>
-              <input
-                type="date" value={form.invoiceDate}
-                onChange={e => setF("invoiceDate", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Due Date</label>
-              <input
-                type="date" value={form.dueDate}
-                onChange={e => setF("dueDate", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            {/* Payment Method */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Payment Method</label>
+              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Invoice Type</label>
               <select
-                value={form.paymentMethod}
-                onChange={e => setF("paymentMethod", e.target.value as SalePayment)}
+                value={form.invoiceTitle}
+                onChange={e => setF("invoiceTitle", e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {SALE_PAYMENTS.map(p => <option key={p}>{p}</option>)}
+                {INVOICE_TITLES.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
 
-            {/* Tax Rate */}
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Tax / VAT %</label>
-              <input
-                type="number" min="0" max="100" value={form.taxRate}
-                onChange={e => setF("taxRate", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+            {/* Customer + Customer ID */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer Name</label>
+                <input
+                  list="inv-customers"
+                  value={form.customer}
+                  onChange={e => setF("customer", e.target.value)}
+                  placeholder="Customer / company name"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <datalist id="inv-customers">
+                  {customers.map(c => <option key={c.id} value={c.firstName + " " + c.lastName} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer ID</label>
+                <input
+                  value={form.customerId}
+                  onChange={e => setF("customerId", e.target.value)}
+                  placeholder="Ref / ID"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Invoice Date</label>
+                <input
+                  type="date" value={form.invoiceDate}
+                  onChange={e => setF("invoiceDate", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Due Date</label>
+                <input
+                  type="date" value={form.dueDate}
+                  onChange={e => setF("dueDate", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Payment Method + Tax */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Payment Method</label>
+                <select
+                  value={form.paymentMethod}
+                  onChange={e => setF("paymentMethod", e.target.value as SalePayment)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {SALE_PAYMENTS.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Tax / VAT %</label>
+                <input
+                  type="number" min="0" max="100" value={form.taxRate}
+                  onChange={e => setF("taxRate", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* ── Buyer Details (collapsible) ── */}
+            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowBuyer(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
+              >
+                <span>Buyer / Billing Details</span>
+                {showBuyer ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+              </button>
+              {showBuyer && (
+                <div className="px-3 py-3 space-y-2 bg-white dark:bg-zinc-900">
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Billing Address</label>
+                    <textarea
+                      rows={3} value={form.buyerAddress}
+                      onChange={e => setF("buyerAddress", e.target.value)}
+                      placeholder="Street, City, Postcode, Country"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Phone</label>
+                      <input
+                        value={form.buyerPhone}
+                        onChange={e => setF("buyerPhone", e.target.value)}
+                        placeholder="+44 ..."
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Email</label>
+                      <input
+                        type="email" value={form.buyerEmail}
+                        onChange={e => setF("buyerEmail", e.target.value)}
+                        placeholder="buyer@email.com"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Shipping & Handling (collapsible) ── */}
+            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowShip(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
+              >
+                <span>Shipping &amp; Handling</span>
+                {showShip ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+              </button>
+              {showShip && (
+                <div className="px-3 py-3 grid grid-cols-3 gap-2 bg-white dark:bg-zinc-900">
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Shipping Fee</label>
+                    <input
+                      type="number" min="0" step="0.01" value={form.shippingFee}
+                      onChange={e => setF("shippingFee", e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Handling Fee</label>
+                    <input
+                      type="number" min="0" step="0.01" value={form.handlingFee}
+                      onChange={e => setF("handlingFee", e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Shipping Method</label>
+                    <input
+                      value={form.shippingMethod}
+                      onChange={e => setF("shippingMethod", e.target.value)}
+                      placeholder="e.g. DHL, Royal Mail"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Payment Terms & Bank Details (collapsible) ── */}
+            <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowBank(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-zinc-800/50 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-zinc-700/50 transition-colors"
+              >
+                <span>Payment Terms &amp; Bank Details</span>
+                {showBank ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+              </button>
+              {showBank && (
+                <div className="px-3 py-3 space-y-2 bg-white dark:bg-zinc-900">
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Payment Terms</label>
+                    <input
+                      value={form.paymentTerms}
+                      onChange={e => setF("paymentTerms", e.target.value)}
+                      placeholder="e.g. Net 30, Due on receipt…"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Bank / Payment Details</label>
+                    <textarea
+                      rows={4} value={form.bankDetails}
+                      onChange={e => setF("bankDetails", e.target.value)}
+                      placeholder={"Bank: HSBC UK\nAccount: 12345678\nSort Code: 40-47-84\nIBAN: GB29 NWBK..."}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[12px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none font-mono"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Notes */}
-            <div className="col-span-2">
-              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Notes</label>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Additional Notes / Terms</label>
               <textarea
                 rows={2} value={form.notes}
                 onChange={e => setF("notes", e.target.value)}
-                placeholder="Additional notes…"
+                placeholder="Additional notes or terms shown on the invoice…"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
               />
             </div>
@@ -425,7 +596,18 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             )}
             {parseFloat(form.taxRate) > 0 && (
               <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
-                <span>Tax ({form.taxRate}%)</span><span className="font-mono">{fmtCcy(tax)}</span>
+                <span>Tax / VAT ({form.taxRate}%)</span><span className="font-mono">{fmtCcy(tax)}</span>
+              </div>
+            )}
+            {shipping > 0 && (
+              <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
+                <span>Shipping{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
+                <span className="font-mono">{fmtCcy(shipping)}</span>
+              </div>
+            )}
+            {handling > 0 && (
+              <div className="flex justify-between text-[12px] text-gray-600 dark:text-gray-400">
+                <span>Handling</span><span className="font-mono">{fmtCcy(handling)}</span>
               </div>
             )}
             <div className="flex justify-between text-[15px] font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
@@ -451,7 +633,79 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             )}
             {paid > 0 && balance <= 0.005 && (
               <div className="flex justify-between text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
-                <span>Change</span><span className="font-mono">{fmtCcy(Math.max(0, paid - total))}</span>
+                <span>✓ Fully Paid</span><span className="font-mono">{fmtCcy(total)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Payment History (collapsible) ── */}
+          <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setShowHistory(v => !v)}
+              className="w-full flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            >
+              <span>Payment History {payHistory.length > 0 ? `(${payHistory.length})` : ""}</span>
+              {showHistory ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+            </button>
+
+            {showHistory && (
+              <div className="mt-3 space-y-2">
+                {payHistory.map(rec => (
+                  <div key={rec.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Date</label>
+                        <input
+                          type="date" value={rec.date}
+                          onChange={e => updatePayRec(rec.id, "date", e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Amount</label>
+                        <input
+                          type="number" min="0" step="0.01" value={rec.amount}
+                          onChange={e => updatePayRec(rec.id, "amount", e.target.value)}
+                          placeholder="0.00"
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Method</label>
+                        <input
+                          value={rec.method}
+                          onChange={e => updatePayRec(rec.id, "method", e.target.value)}
+                          placeholder="Bank, Cash…"
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[9px] font-bold text-gray-400 uppercase mb-0.5">Note</label>
+                        <input
+                          value={rec.note}
+                          onChange={e => updatePayRec(rec.id, "note", e.target.value)}
+                          placeholder="Ref…"
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-[11px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="col-span-1 pb-0.5">
+                        <button
+                          onClick={() => removePayRec(rec.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 rounded transition-colors"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={addPayRec}
+                  className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                >
+                  <Plus size={12} /> Add Payment Record
+                </button>
               </div>
             )}
           </div>

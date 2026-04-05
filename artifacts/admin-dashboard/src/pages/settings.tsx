@@ -858,6 +858,48 @@ export default function SettingsPage() {
                       className="text-[13px] resize-none" rows={3}
                       placeholder="Thank you for your business!" />
                   </Field>
+
+                  {/* ── Invoice Settings ── */}
+                  <div className="col-span-2 pt-4 border-t border-gray-100 dark:border-zinc-800">
+                    <h3 className="text-[13px] font-bold text-gray-800 dark:text-gray-100 mb-4">Invoice Defaults</h3>
+                    <div className="grid gap-4">
+                      <Field label="Bank / Payment Details" hint="Printed on all invoices by default. Include account number, sort code, IBAN, etc.">
+                        <Textarea
+                          value={form.bankDetails}
+                          onChange={e => set("bankDetails", e.target.value)}
+                          className="text-[13px] resize-none font-mono" rows={5}
+                          placeholder={"Bank: HSBC UK\nAccount Name: Onesoft Ltd\nAccount No: 12345678\nSort Code: 40-47-84\nIBAN: GB29 NWBK 6016 1331 9268 19"} />
+                      </Field>
+                      <Field label="Company Registration Number" hint="E.g. Companies House number (UK). Shown in invoice footer.">
+                        <Input
+                          value={form.companyRegistration}
+                          onChange={e => set("companyRegistration", e.target.value)}
+                          className="text-[13px]"
+                          placeholder="e.g. 12345678" />
+                      </Field>
+                      <Field label="Social Links" hint="One per line. Shown in invoice footer.">
+                        <Textarea
+                          value={form.socialLinks}
+                          onChange={e => set("socialLinks", e.target.value)}
+                          className="text-[13px] resize-none" rows={3}
+                          placeholder={"linkedin.com/company/onesoft\ntwitter.com/onesoft"} />
+                      </Field>
+                      <Field label="Default Payment Terms" hint="Pre-fills the Payment Terms field on every new invoice.">
+                        <Input
+                          value={form.invoiceTerms}
+                          onChange={e => set("invoiceTerms", e.target.value)}
+                          className="text-[13px]"
+                          placeholder="Payment is due within 30 days of the invoice date." />
+                      </Field>
+                      <Field label="Invoice Footer Text" hint="Custom text shown at the bottom of every printed invoice.">
+                        <Textarea
+                          value={form.invoiceFooter}
+                          onChange={e => set("invoiceFooter", e.target.value)}
+                          className="text-[13px] resize-none" rows={2}
+                          placeholder="E-&OE. All prices are subject to VAT." />
+                      </Field>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Preview */}
