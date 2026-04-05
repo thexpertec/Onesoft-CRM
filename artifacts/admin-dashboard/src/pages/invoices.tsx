@@ -286,10 +286,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
   ) : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex flex-col">
+    /*
+     * Negative margins cancel the layout's px-5/md:px-8 py-6/md:py-8 wrapper so the
+     * editor fills edge-to-edge inside <main>.  With the internal body scroll removed,
+     * <main> becomes the scroll container and "sticky top-0" on the header works.
+     */
+    <div className="-mx-5 md:-mx-8 -my-6 md:-my-8 min-h-full bg-gray-50 dark:bg-zinc-950 flex flex-col">
 
       {/* ══ Top Bar ══════════════════════════════════════════════════════════ */}
-      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-10">
+      <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-20">
         {/* Left: back + breadcrumb */}
         <div className="flex items-center gap-3">
           <button
@@ -333,7 +338,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
       </div>
 
       {/* ══ Single-column Body ════════════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 px-6 py-6">
         <div className="space-y-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
             <div className="px-5 py-4 space-y-4">
