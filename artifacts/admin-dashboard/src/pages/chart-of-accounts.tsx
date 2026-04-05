@@ -778,7 +778,7 @@ export default function ChartOfAccountsPage() {
             <div>
               <h1 className="text-[18px] font-bold text-gray-900 dark:text-gray-100">Chart of Accounts</h1>
               <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                {accounts.length} accounts · click any row to add a sub-account
+                {accounts.length === 0 ? "No accounts yet — use + Add or Import to get started" : `${accounts.length} account${accounts.length !== 1 ? "s" : ""} · click any Group row to add a sub-account`}
               </p>
             </div>
           </div>
