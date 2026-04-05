@@ -832,6 +832,9 @@ export type SaleStatus = typeof SALE_STATUSES[number];
 export const SALE_PAYMENTS  = ["Cash", "Card", "Bank Transfer", "Cheque", "Credit"] as const;
 export type SalePayment = typeof SALE_PAYMENTS[number];
 
+export const ITEM_STATUSES = ["Reserved", "Delivered", "Pending"] as const;
+export type ItemStatus = typeof ITEM_STATUSES[number];
+
 export type SaleItem = {
   id: string;
   productName: string; // locked — sourced from Products master
@@ -841,6 +844,7 @@ export type SaleItem = {
   unitPrice: string;
   discount: string;    // percentage 0-100
   notes: string;
+  itemStatus: ItemStatus; // per-line delivery status
 };
 
 export type Sale = {
@@ -852,8 +856,10 @@ export type Sale = {
   paymentMethod: SalePayment;
   notes: string;
   items: SaleItem[];
-  taxRate: string;    // VAT / tax percentage, e.g. "20"
-  amountPaid: string; // amount actually received at payment
+  taxRate: string;       // VAT / tax percentage, e.g. "20"
+  amountPaid: string;    // amount actually received at payment
+  paidAt: string;        // ISO timestamp of payment confirmation; "" if unpaid
+  stockDeducted: boolean; // true after stock has been deducted for this sale
   createdAt: string;
   updatedAt: string;
 };
