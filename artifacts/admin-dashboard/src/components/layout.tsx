@@ -19,7 +19,7 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
-import { getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff, getPurchaseOrders, getSales } from "@/lib/store";
+import { getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff, getPurchaseOrders, getSales, getModuleGroupById, ModuleId } from "@/lib/store";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -179,16 +179,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // ── Module access enforcement ────────────────────────────────────────────
+  // When the superadmin is in "view as tenant" mode (currentTenantId set),
+  // apply the tenant's module group restrictions — same view the tenant would have.
+  // When superadmin is in their own context (no tenant), full access always.
+  const isModuleAllowed = (moduleId: ModuleId): boolean => {
+    if (isSuperAdmin && !currentTenantId) return true; // superadmin in own context
+    if (!currentTenant?.moduleGroupId) return true;    // tenant has no group → full access
+    const group = getModuleGroupById(currentTenant.moduleGroupId);
+    if (!group) return true;
+    return group.modules.includes(moduleId);
+  };
+
+  const allowedCrmColumns = CRM_COLUMNS.filter(col =>
+    col.href === "/leads"     ? isModuleAllowed("crm_leads")     :
+    col.href === "/customers" ? isModuleAllowed("crm_customers") :
+    col.href === "/suppliers" ? isModuleAllowed("crm_suppliers") : true
+  );
+
   const hrmItems: SubItem[] = [
-    { label: "Staff",           href: "/staff",   icon: Users2,    desc: "Employees by dept & designation" },
-    { label: "Roles",           href: "/roles",   icon: KeyRound,  desc: "Permission roles"                },
+    ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff", href: "/staff", icon: Users2,   desc: "Employees by dept & designation" }] : []),
+    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles", href: "/roles", icon: KeyRound, desc: "Permission roles"                }] : []),
     ...(isSuperAdmin ? [
-      { label: "Admin Accounts", href: "/users",    icon: Shield, desc: "System users"              },
-      { label: "Tenants",        href: "/tenants",  icon: Globe,  desc: "Client organisations"      },
+      { label: "Admin Accounts", href: "/users",          icon: Shield,          desc: "System users"           },
+      { label: "Tenants",        href: "/tenants",         icon: Globe,           desc: "Client organisations"   },
+      { label: "Module Groups",  href: "/module-groups",   icon: LayoutDashboard, desc: "Feature access groups"  },
     ] : []),
   ];
+
   const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, items: hrmItems };
-  const navItems = [...OTHER_NAV, HRM_NAV];
+
+  // Filter top-level nav by module access (maintains original order)
+  const navItems: NavItem[] = [
+    ...OTHER_NAV.filter(item => {
+      switch (item.key) {
+        case "crm":       return allowedCrmColumns.length > 0;
+        case "products":  return isModuleAllowed("products");
+        case "stock":     return isModuleAllowed("stock");
+        case "purchases": return isModuleAllowed("purchases");
+        case "sales":     return isModuleAllowed("sales");
+        case "documents": return isModuleAllowed("documents");
+        case "settings":  return isModuleAllowed("settings");
+        default:          return true; // dashboard always shown
+      }
+    }),
+    ...(hrmItems.length > 0 ? [HRM_NAV] : []),
+  ];
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -399,8 +435,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         style={{ minWidth: "580px" }}>
 
                         {/* Column grid */}
-                        <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-border">
-                          {CRM_COLUMNS.map(col => (
+                        <div className="grid divide-x divide-gray-100 dark:divide-border" style={{ gridTemplateColumns: `repeat(${allowedCrmColumns.length || 1}, minmax(0, 1fr))` }}>
+                          {allowedCrmColumns.map(col => (
                             <div key={col.href} className="p-5">
                               {/* Column header */}
                               <div className="flex items-center gap-2.5 mb-1">
@@ -503,19 +539,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Link>
 
               {/* CRM group */}
-              <div className="pt-1 pb-0.5">
+              {allowedCrmColumns.length > 0 && <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">CRM</p>
-                {CRM_COLUMNS.map(col => (
+                {allowedCrmColumns.map(col => (
                   <Link key={col.href} href={col.href}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       location.startsWith(col.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                     <col.icon size={16} /> {col.label}
                   </Link>
                 ))}
-              </div>
+              </div>}
 
               {/* Products group */}
-              <div className="pt-1 pb-0.5">
+              {isModuleAllowed("products") && <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products</p>
                 {[
                   { href: "/products",   label: "Products",   icon: Package           },
@@ -530,17 +566,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <item.icon size={16} /> {item.label}
                   </Link>
                 ))}
-              </div>
+              </div>}
 
               {/* Purchases */}
-              <Link href="/purchases"
+              {isModuleAllowed("purchases") && <Link href="/purchases"
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   location.startsWith("/purchases") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                 <ShoppingCart size={16} /> Purchases
-              </Link>
+              </Link>}
 
               {/* Stock */}
-              <div className="pt-1 pb-0.5">
+              {isModuleAllowed("stock") && <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Stock</p>
                 {[
                   { href: "/stock",       label: "All Stock",   icon: Boxes },
@@ -552,33 +588,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <item.icon size={16} /> {item.label}
                   </Link>
                 ))}
-              </div>
+              </div>}
 
               {/* Documents */}
-              <Link href="/documents"
+              {isModuleAllowed("documents") && <Link href="/documents"
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   location.startsWith("/documents") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                 <FileText size={16} /> Documents
-              </Link>
+              </Link>}
 
-              {/* HRM group */}
-              <div className="pt-1 pb-0.5">
+              {/* HRM group — uses same hrmItems computed above */}
+              {hrmItems.length > 0 && <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">HRM</p>
-                {[
-                  { href: "/staff",   label: "Staff",          icon: Users2   },
-                  { href: "/roles",   label: "Roles",          icon: KeyRound },
-                  ...(isSuperAdmin ? [
-                    { href: "/users",   label: "Admin Accounts", icon: Shield },
-                    { href: "/tenants", label: "Tenants",        icon: Globe  },
-                  ] : []),
-                ].map(item => (
+                {hrmItems.map(item => (
                   <Link key={item.href} href={item.href}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                     <item.icon size={16} /> {item.label}
                   </Link>
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className="pt-2 mt-2 border-t border-gray-100">

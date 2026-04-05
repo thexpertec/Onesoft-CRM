@@ -2,12 +2,14 @@ import { useState, useMemo } from "react";
 import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
-  Crown, Zap, Rocket, Shield, RefreshCw, Search,
+  Crown, Zap, Rocket, Shield, Search, Layers,
 } from "lucide-react";
 import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, createTenant, updateTenant, deleteTenant,
   getTenantStats,
+  ModuleGroup, getModuleGroups, getModuleGroupById,
+  MODULE_DEFINITIONS,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +54,7 @@ const blankForm = (): Omit<Tenant, "id" | "createdAt" | "updatedAt"> => ({
   contactEmail:  "",
   status:        "trial",
   plan:          "starter",
+  moduleGroupId: undefined,
 });
 
 // ─── Tenant form modal ────────────────────────────────────────────────────────
@@ -66,9 +69,10 @@ function TenantModal({
   onClose: () => void;
   onSave:  (data: Omit<Tenant, "id" | "createdAt" | "updatedAt">) => void;
 }) {
-  const [form,      setForm]      = useState(() => editing ? { ...editing } : blankForm());
-  const [showPwd,   setShowPwd]   = useState(false);
+  const [form,       setForm]       = useState(() => editing ? { ...editing } : blankForm());
+  const [showPwd,    setShowPwd]    = useState(false);
   const [slugLocked, setSlugLocked] = useState(!!editing);
+  const [moduleGroups, setModuleGroups] = useState<ModuleGroup[]>(() => getModuleGroups());
 
   // Reset form when modal opens
   useState(() => {
@@ -76,6 +80,7 @@ function TenantModal({
       setForm(editing ? { ...editing } : blankForm());
       setSlugLocked(!!editing);
       setShowPwd(false);
+      setModuleGroups(getModuleGroups());
     }
   });
 
@@ -160,6 +165,57 @@ function TenantModal({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Module Group */}
+          <div className="space-y-1.5">
+            <Label className="text-[12px] flex items-center gap-1.5">
+              <Layers size={11} className="text-blue-500" /> Module Group
+              <span className="text-muted-foreground font-normal">(controls feature access)</span>
+            </Label>
+            <Select
+              value={form.moduleGroupId ?? "__none__"}
+              onValueChange={v => patch("moduleGroupId", v === "__none__" ? undefined : v)}
+            >
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="No restriction — full access" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__" className="text-[13px] text-muted-foreground">
+                  No restriction — full access
+                </SelectItem>
+                {moduleGroups.map(g => (
+                  <SelectItem key={g.id} value={g.id} className="text-[13px]">
+                    {g.name}
+                    <span className="ml-2 text-muted-foreground text-[11px]">({g.modules.length} modules)</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {form.moduleGroupId && (() => {
+              const g = moduleGroups.find(x => x.id === form.moduleGroupId);
+              if (!g) return null;
+              return (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {g.modules.slice(0, 6).map(id => {
+                    const def = MODULE_DEFINITIONS.find(m => m.id === id);
+                    return def ? (
+                      <span key={id} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold">
+                        {def.label}
+                      </span>
+                    ) : null;
+                  })}
+                  {g.modules.length > 6 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500">
+                      +{g.modules.length - 6} more
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+            {moduleGroups.length === 0 && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                No module groups defined yet — create them in HRM → Module Groups.
+              </p>
+            )}
           </div>
 
           {/* Contact email */}
@@ -423,6 +479,19 @@ export default function TenantsPage() {
                   <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${planMeta.color}`}>
                     <PlanIcon size={9} /> {planMeta.label}
                   </span>
+                  {t.moduleGroupId && (() => {
+                    const grp = getModuleGroups().find(g => g.id === t.moduleGroupId);
+                    return grp ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                        <Layers size={9} /> {grp.name}
+                      </span>
+                    ) : null;
+                  })()}
+                  {!t.moduleGroupId && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground px-2 py-0.5 rounded-full bg-gray-50 dark:bg-zinc-900/50 border border-dashed border-gray-200 dark:border-zinc-700">
+                      Full access
+                    </span>
+                  )}
                 </div>
 
                 {/* Info row */}

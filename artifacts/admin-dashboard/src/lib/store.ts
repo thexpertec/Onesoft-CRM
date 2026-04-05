@@ -326,6 +326,94 @@ export const deleteProductCategory = (id: string): void => {
   setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
 };
 
+// ─── Module Definitions (platform-level feature catalogue) ───────────────────
+export type ModuleId =
+  | "crm_leads" | "crm_customers" | "crm_suppliers"
+  | "products" | "stock" | "purchases"
+  | "sales"
+  | "documents"
+  | "hrm_staff" | "hrm_roles"
+  | "media"
+  | "settings";
+
+export type ModuleDef = {
+  id:    ModuleId;
+  label: string;
+  desc:  string;
+  group: string;
+  href:  string;
+};
+
+export const MODULE_DEFINITIONS: ModuleDef[] = [
+  // CRM
+  { id: "crm_leads",     label: "Leads",          desc: "Lead pipeline & prospecting",    group: "CRM",      href: "/leads"     },
+  { id: "crm_customers", label: "Customers",       desc: "Customer records & history",     group: "CRM",      href: "/customers" },
+  { id: "crm_suppliers", label: "Suppliers",       desc: "Supplier contacts & details",    group: "CRM",      href: "/suppliers" },
+  // Products & Inventory
+  { id: "products",      label: "Products",        desc: "Catalogue, brands, categories",  group: "Products", href: "/products"  },
+  { id: "stock",         label: "Stock",           desc: "Inventory & stock holds",        group: "Products", href: "/stock"     },
+  { id: "purchases",     label: "Purchases",       desc: "Purchase orders from suppliers", group: "Products", href: "/purchases" },
+  // Sales
+  { id: "sales",         label: "Sales & POS",     desc: "Sales, invoices & POS terminal", group: "Sales",    href: "/sales"     },
+  // Documents
+  { id: "documents",     label: "Documents",       desc: "Requirement & client docs",      group: "Other",    href: "/documents" },
+  // HRM
+  { id: "hrm_staff",     label: "Staff",           desc: "Employee records & departments", group: "HRM",      href: "/staff"     },
+  { id: "hrm_roles",     label: "Roles",           desc: "Permission roles",               group: "HRM",      href: "/roles"     },
+  // Other
+  { id: "media",         label: "Media Library",   desc: "File & image management",        group: "Other",    href: "/media"     },
+  { id: "settings",      label: "Settings",        desc: "Company profile & app config",   group: "Other",    href: "/settings"  },
+];
+
+export const ALL_MODULE_IDS: ModuleId[] = MODULE_DEFINITIONS.map(m => m.id);
+
+// ─── Module Groups API (platform-level, always global/unprefixed) ──────────────
+export type ModuleGroup = {
+  id:          string;
+  name:        string;
+  description: string;
+  modules:     ModuleId[];
+  createdAt:   string;
+  updatedAt:   string;
+};
+
+const MODULE_GROUPS_KEY = "admin-module-groups";
+
+export const getModuleGroups = (): ModuleGroup[] => {
+  try {
+    const raw = localStorage.getItem(MODULE_GROUPS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+};
+
+export const getModuleGroupById = (id: string): ModuleGroup | undefined =>
+  getModuleGroups().find(g => g.id === id);
+
+export const createModuleGroup = (
+  data: Omit<ModuleGroup, "id" | "createdAt" | "updatedAt">
+): ModuleGroup => {
+  const now = new Date().toISOString();
+  const group: ModuleGroup = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify([...getModuleGroups(), group]));
+  return group;
+};
+
+export const updateModuleGroup = (
+  id: string,
+  updates: Partial<Omit<ModuleGroup, "id" | "createdAt">>
+): ModuleGroup => {
+  const groups = getModuleGroups();
+  const idx = groups.findIndex(g => g.id === id);
+  if (idx === -1) throw new Error("Module group not found");
+  groups[idx] = { ...groups[idx], ...updates, updatedAt: new Date().toISOString() };
+  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(groups));
+  return groups[idx];
+};
+
+export const deleteModuleGroup = (id: string): void => {
+  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(getModuleGroups().filter(g => g.id !== id)));
+};
+
 // ─── Tenants API (platform-level, always global/unprefixed) ───────────────────
 export type TenantStatus = "active" | "trial" | "suspended";
 export type TenantPlan   = "starter" | "professional" | "enterprise";
@@ -339,6 +427,7 @@ export type Tenant = {
   contactEmail:   string;
   status:         TenantStatus;
   plan:           TenantPlan;
+  moduleGroupId?: string;
   createdAt:      string;
   updatedAt:      string;
 };
