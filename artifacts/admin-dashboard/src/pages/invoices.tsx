@@ -8,6 +8,7 @@ import {
   getProducts, getCustomers, getSettings,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
+import { Combobox, ComboOption } from "@/components/combobox";
 import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -165,6 +166,25 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
   const products  = useMemo(() => getProducts(), []);
   const customers = useMemo(() => getCustomers(), []);
+  const customerOpts = useMemo<ComboOption[]>(() =>
+    customers.map(c => ({
+      value: c.name,
+      label: c.name,
+      sub:   [c.company, c.email, c.phone].filter(Boolean).join(" · "),
+    })),
+  [customers]);
+
+  const handleCustomerSelect = useCallback((name: string) => {
+    const c = customers.find(x => x.name === name);
+    setForm(f => ({
+      ...f,
+      customer:    name,
+      customerId:  c ? c.id.slice(-8).toUpperCase() : f.customerId,
+      buyerPhone:  c?.phone  || f.buyerPhone,
+      buyerEmail:  c?.email  || f.buyerEmail,
+      buyerAddress: c ? [c.company, c.city].filter(Boolean).join(", ") : f.buyerAddress,
+    }));
+  }, [customers]);
 
   const setF = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -314,16 +334,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer</label>
-                <input
-                  list="inv-customers"
+                <Combobox
                   value={form.customer}
-                  onChange={e => setF("customer", e.target.value)}
-                  placeholder="Customer / company name"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  onChange={v => setF("customer", v)}
+                  onSelect={opt => handleCustomerSelect(opt.value)}
+                  options={customerOpts}
+                  placeholder="Search or type customer name…"
+                  className="w-full"
+                  inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                 />
-                <datalist id="inv-customers">
-                  {customers.map(c => <option key={c.id} value={c.firstName + " " + c.lastName} />)}
-                </datalist>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Customer ID</label>
