@@ -170,13 +170,13 @@ function parseImportCsv(raw: string): ImportRow[] {
   const lines = raw.split(/\r?\n/);
   let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].trim();
-    if (l.startsWith("#") || l === "") continue;
+    const l = lines[i].trim().replace(/^\uFEFF/, ""); // strip BOM if present
+    if (l === "" || l.startsWith("#") || /^sep=/i.test(l)) continue;
     headerIdx = i;
     break;
   }
   if (headerIdx === -1) return [];
-  const headerCols = parseCsvLine(lines[headerIdx]).map(h => h.replace(/^["']|["']$/g, "").toLowerCase().trim());
+  const headerCols = parseCsvLine(lines[headerIdx]).map(h => h.replace(/^\uFEFF/, "").replace(/^["']|["']$/g, "").toLowerCase().trim());
   const col = (row: string[], name: string) => {
     const idx = headerCols.indexOf(name);
     return idx >= 0 ? (row[idx] ?? "").replace(/^["']|["']$/g, "").trim() : "";
@@ -340,8 +340,9 @@ function downloadCoATemplate() {
     "7,Owner Capital,Equity,Group,Owner's Equity,,0,",
     "7.1,Share Capital,Equity,Ledger,Owner's Equity,7,0,",
   ];
-  // Prepend UTF-8 BOM (\uFEFF) so Excel opens the file correctly without garbling characters
-  const csv = "\uFEFF" + lines.join("\r\n");
+  // UTF-8 BOM + "sep=," directive: BOM tells Excel the encoding is UTF-8,
+  // and "sep=," overrides Excel's regional list-separator so commas always split columns.
+  const csv = "\uFEFF" + "sep=,\r\n" + lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
