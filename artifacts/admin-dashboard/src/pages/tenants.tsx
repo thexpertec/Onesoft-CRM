@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -100,187 +100,221 @@ function TenantModal({
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 size={16} className="text-blue-500" />
-            {editing ? "Edit Tenant" : "Add New Tenant"}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl p-0 overflow-hidden">
 
-        <div className="space-y-4 py-2">
-          {/* Company name */}
-          <div className="space-y-1.5">
-            <Label className="text-[12px]">Company Name <span className="text-red-500">*</span></Label>
-            <Input
-              value={form.name}
-              onChange={e => patch("name", e.target.value)}
-              placeholder="Acme Corp"
-              className="h-9 text-[13px]"
-            />
+        {/* ── Modal Header ─────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-7 py-5 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/60">
+          <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 flex items-center justify-center shrink-0">
+            <Building2 size={17} className="text-blue-600 dark:text-blue-400" />
           </div>
-
-          {/* Slug */}
-          <div className="space-y-1.5">
-            <Label className="text-[12px]">
-              Slug <span className="text-red-500">*</span>
-              <span className="ml-1 text-muted-foreground font-normal">(used as unique identifier)</span>
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                value={form.slug}
-                onChange={e => { setSlugLocked(true); patch("slug", slugify(e.target.value)); }}
-                placeholder="acme-corp"
-                className="h-9 text-[13px] font-mono"
-              />
-              {slugLocked && !editing && (
-                <Button size="sm" variant="ghost" className="h-9 px-2 text-[11px] text-muted-foreground" onClick={() => setSlugLocked(false)}>
-                  Auto
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Plan + Status row */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-[12px]">Plan</Label>
-              <Select value={form.plan} onValueChange={v => patch("plan", v as TenantPlan)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(PLAN_META) as TenantPlan[]).map(p => (
-                    <SelectItem key={p} value={p} className="text-[13px]">{PLAN_META[p].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[12px]">Status</Label>
-              <Select value={form.status} onValueChange={v => patch("status", v as TenantStatus)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(STATUS_META) as TenantStatus[]).map(s => (
-                    <SelectItem key={s} value={s} className="text-[13px]">{STATUS_META[s].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Module Group */}
-          <div className="space-y-1.5">
-            <Label className="text-[12px] flex items-center gap-1.5">
-              <Layers size={11} className="text-blue-500" /> Module Group
-              <span className="text-muted-foreground font-normal">(controls feature access)</span>
-            </Label>
-            <Select
-              value={form.moduleGroupId ?? "__none__"}
-              onValueChange={v => patch("moduleGroupId", v === "__none__" ? undefined : v)}
-            >
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="No restriction — full access" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__" className="text-[13px] text-muted-foreground">
-                  No restriction — full access
-                </SelectItem>
-                {moduleGroups.map(g => (
-                  <SelectItem key={g.id} value={g.id} className="text-[13px]">
-                    {g.name}
-                    <span className="ml-2 text-muted-foreground text-[11px]">({g.modules.length} modules)</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.moduleGroupId && (() => {
-              const g = moduleGroups.find(x => x.id === form.moduleGroupId);
-              if (!g) return null;
-              return (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {g.modules.slice(0, 6).map(id => {
-                    const def = MODULE_DEFINITIONS.find(m => m.id === id);
-                    return def ? (
-                      <span key={id} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold">
-                        {def.label}
-                      </span>
-                    ) : null;
-                  })}
-                  {g.modules.length > 6 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500">
-                      +{g.modules.length - 6} more
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
-            {moduleGroups.length === 0 && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                No module groups defined yet — create them in HRM → Module Groups.
-              </p>
-            )}
-          </div>
-
-          {/* Contact email */}
-          <div className="space-y-1.5">
-            <Label className="text-[12px]">Contact Email</Label>
-            <Input
-              type="email"
-              value={form.contactEmail}
-              onChange={e => patch("contactEmail", e.target.value)}
-              placeholder="admin@acmecorp.com"
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-dashed border-gray-200 dark:border-border pt-3">
-            <p className="text-[11px] text-muted-foreground mb-3 flex items-center gap-1">
-              <Shield size={11} /> Login credentials for this tenant's admin user
+          <div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-none">
+              {editing ? "Edit Tenant" : "Add New Tenant"}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {editing ? "Update tenant details and credentials" : "Set up a new isolated client organisation"}
             </p>
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-[12px]">Admin Username <span className="text-red-500">*</span></Label>
+          </div>
+        </div>
+
+        {/* ── Two-column body ───────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-zinc-800">
+
+          {/* ── LEFT: General Info ─────────────────────────────────────────── */}
+          <div className="px-7 py-6 space-y-5">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">
+              Organisation Details
+            </p>
+
+            {/* Company Name */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Company Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={form.name}
+                onChange={e => patch("name", e.target.value)}
+                placeholder="Acme Corp"
+                className="h-10 text-sm"
+              />
+            </div>
+
+            {/* Slug */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Slug <span className="text-red-500">*</span>
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">— unique identifier</span>
+              </Label>
+              <div className="flex gap-2">
                 <Input
-                  value={form.adminUsername}
-                  onChange={e => patch("adminUsername", e.target.value)}
-                  placeholder="acme-admin"
-                  className="h-9 text-[13px] font-mono"
+                  value={form.slug}
+                  onChange={e => { setSlugLocked(true); patch("slug", slugify(e.target.value)); }}
+                  placeholder="acme-corp"
+                  className="h-10 text-sm font-mono"
                 />
+                {slugLocked && !editing && (
+                  <Button size="sm" variant="ghost" className="h-10 px-3 text-xs text-muted-foreground shrink-0" onClick={() => setSlugLocked(false)}>
+                    Auto
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Plan + Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Plan</Label>
+                <Select value={form.plan} onValueChange={v => patch("plan", v as TenantPlan)}>
+                  <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PLAN_META) as TenantPlan[]).map(p => (
+                      <SelectItem key={p} value={p} className="text-sm">{PLAN_META[p].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[12px]">
-                  Admin Password {!editing && <span className="text-red-500">*</span>}
-                  {editing && <span className="text-muted-foreground font-normal ml-1">(leave blank to keep current)</span>}
-                </Label>
-                <div className="relative">
+                <Label className="text-sm font-medium">Status</Label>
+                <Select value={form.status} onValueChange={v => patch("status", v as TenantStatus)}>
+                  <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(STATUS_META) as TenantStatus[]).map(s => (
+                      <SelectItem key={s} value={s} className="text-sm">{STATUS_META[s].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Contact Email */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Contact Email</Label>
+              <Input
+                type="email"
+                value={form.contactEmail}
+                onChange={e => patch("contactEmail", e.target.value)}
+                placeholder="admin@acmecorp.com"
+                className="h-10 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* ── RIGHT: Access & Credentials ───────────────────────────────── */}
+          <div className="px-7 py-6 space-y-5">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">
+              Access &amp; Credentials
+            </p>
+
+            {/* Module Group */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Layers size={13} className="text-blue-500" /> Module Group
+              </Label>
+              <Select
+                value={form.moduleGroupId ?? "__none__"}
+                onValueChange={v => patch("moduleGroupId", v === "__none__" ? undefined : v)}
+              >
+                <SelectTrigger className="h-10 text-sm"><SelectValue placeholder="No restriction — full access" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__" className="text-sm text-muted-foreground">
+                    No restriction — full access
+                  </SelectItem>
+                  {moduleGroups.map(g => (
+                    <SelectItem key={g.id} value={g.id} className="text-sm">
+                      {g.name}
+                      <span className="ml-2 text-muted-foreground text-xs">({g.modules.length} modules)</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.moduleGroupId && (() => {
+                const g = moduleGroups.find(x => x.id === form.moduleGroupId);
+                if (!g) return null;
+                return (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {g.modules.slice(0, 6).map(id => {
+                      const def = MODULE_DEFINITIONS.find(m => m.id === id);
+                      return def ? (
+                        <span key={id} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-medium">
+                          {def.label}
+                        </span>
+                      ) : null;
+                    })}
+                    {g.modules.length > 6 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500">
+                        +{g.modules.length - 6} more
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+              {moduleGroups.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  No module groups defined yet — create them in HRM → Module Groups.
+                </p>
+              )}
+            </div>
+
+            {/* Credentials divider */}
+            <div className="border-t border-dashed border-gray-200 dark:border-zinc-700 pt-4">
+              <p className="text-xs text-muted-foreground mb-4 flex items-center gap-1.5">
+                <Shield size={12} className="text-gray-400" />
+                Login credentials for this tenant's admin user
+              </p>
+              <div className="space-y-4">
+                {/* Admin Username */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">
+                    Admin Username <span className="text-red-500">*</span>
+                  </Label>
                   <Input
-                    type={showPwd ? "text" : "password"}
-                    value={form.adminPassword}
-                    onChange={e => patch("adminPassword", e.target.value)}
-                    placeholder={editing ? "••••••••" : "Set a strong password"}
-                    className="h-9 text-[13px] pr-9"
+                    value={form.adminUsername}
+                    onChange={e => patch("adminUsername", e.target.value)}
+                    placeholder="acme-admin"
+                    className="h-10 text-sm font-mono"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPwd(p => !p)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
+                </div>
+
+                {/* Admin Password */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">
+                    Admin Password {!editing && <span className="text-red-500">*</span>}
+                    {editing && <span className="text-muted-foreground font-normal ml-1 text-xs">(blank = keep current)</span>}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      type={showPwd ? "text" : "password"}
+                      value={form.adminPassword}
+                      onChange={e => patch("adminPassword", e.target.value)}
+                      placeholder={editing ? "••••••••" : "Set a strong password"}
+                      className="h-10 text-sm pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwd(p => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    >
+                      {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="h-9 text-[13px]">Cancel</Button>
+        {/* ── Footer ───────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/60">
+          <Button variant="outline" onClick={onClose} className="h-10 px-5 text-sm">Cancel</Button>
           <Button
             disabled={!canSave}
             onClick={() => onSave(form)}
-            className="h-9 text-[13px] bg-blue-600 hover:bg-blue-700 text-white"
+            className="h-10 px-5 text-sm bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <Check size={14} /> {editing ? "Save Changes" : "Create Tenant"}
+            <Check size={15} className="mr-1.5" /> {editing ? "Save Changes" : "Create Tenant"}
           </Button>
-        </DialogFooter>
+        </div>
+
       </DialogContent>
     </Dialog>
   );
