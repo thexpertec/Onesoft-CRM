@@ -218,7 +218,7 @@ function DocPicker({
   docs,
   kind,
 }: {
-  onPick: (content: string) => void;
+  onPick: (content: string, docTitle?: string) => void;
   docs: LegalDocument[];
   kind: DocKind;
 }) {
@@ -233,17 +233,16 @@ function DocPicker({
         onChange={e => {
           const val = e.target.value;
           if (!val) return;
-          // Check built-ins first, then custom docs
+          // Built-in template — no title update
           const builtin = builtins.find(b => b.label === val);
           if (builtin) {
-            // Wrap plain text in <p> tag so it becomes valid HTML for the rich text editor
             onPick(`<p>${builtin.value}</p>`);
             e.currentTarget.value = "";
             return;
           }
+          // Saved legal document — pass its title so the block title can sync
           const doc = docs.find(d => d.id === val);
-          // Legal doc content is already HTML from the rich text editor
-          if (doc) { onPick(doc.content); e.currentTarget.value = ""; }
+          if (doc) { onPick(doc.content, doc.title); e.currentTarget.value = ""; }
         }}
         className="flex-1 px-2 py-1 text-[11px] rounded-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
       >
@@ -787,49 +786,75 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
           </div>{/* /payment history card */}
 
           {/* ── Dynamic Document Blocks ───────────────────────────────────────── */}
-          {docs.map((doc, idx) => (
-            <div key={doc.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/60">
-                <input
-                  value={doc.title}
-                  onChange={e => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, title: e.target.value, kind: titleToKind(e.target.value) } : d))}
-                  className="flex-1 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 bg-transparent border-none outline-none placeholder:text-gray-300 dark:placeholder:text-gray-600 min-w-0"
-                  placeholder="Document Title"
-                />
-                <button
+          {docs.map((doc, idx) => {
+            // Strip HTML for a plain-text content preview when collapsed
+            const plainPreview = doc.content
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 100);
+
+            return (
+              <div key={doc.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+                {/* ── Header ── */}
+                <div
+                  className="flex items-center gap-2 px-5 py-3 bg-gray-50 dark:bg-zinc-800/60 cursor-pointer select-none group"
                   onClick={() => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, open: !d.open } : d))}
-                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition-colors"
-                  title={doc.open ? "Collapse" : "Expand"}
                 >
-                  {doc.open ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
-                </button>
-                <button
-                  onClick={() => setDocs(prev => prev.filter((_, i) => i !== idx))}
-                  className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-                  title="Remove document"
-                >
-                  <X size={15}/>
-                </button>
-              </div>
-              {/* Body */}
-              {doc.open && (
-                <div className="px-5 py-4">
-                  <DocPicker
-                    docs={legalDocs}
-                    kind={doc.kind}
-                    onPick={content => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, content } : d))}
+                  {/* Collapse indicator */}
+                  <span className="text-gray-400 dark:text-gray-500 flex-shrink-0 transition-transform duration-150" style={{ transform: doc.open ? "rotate(0deg)" : "rotate(-90deg)" }}>
+                    <ChevronDown size={15}/>
+                  </span>
+
+                  {/* Editable title — stop propagation so clicking the input doesn't toggle collapse */}
+                  <input
+                    value={doc.title}
+                    onChange={e => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, title: e.target.value, kind: titleToKind(e.target.value) } : d))}
+                    onClick={e => e.stopPropagation()}
+                    className="flex-1 text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 bg-transparent outline-none border-b border-transparent hover:border-gray-300 focus:border-blue-400 dark:hover:border-zinc-600 dark:focus:border-blue-500 transition-colors min-w-0 pb-0.5"
+                    placeholder="Document Title"
                   />
-                  <RichTextEditor
-                    value={doc.content}
-                    onChange={html => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, content: html } : d))}
-                    placeholder="Start typing or insert a template above…"
-                    minHeight="120px"
-                  />
+
+                  {/* Collapsed content preview */}
+                  {!doc.open && plainPreview && (
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[240px] hidden sm:block">
+                      {plainPreview}{doc.content.length > 100 ? "…" : ""}
+                    </span>
+                  )}
+
+                  {/* Remove button */}
+                  <button
+                    onClick={e => { e.stopPropagation(); setDocs(prev => prev.filter((_, i) => i !== idx)); }}
+                    className="p-1 text-gray-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors flex-shrink-0"
+                    title="Remove document"
+                  >
+                    <X size={14}/>
+                  </button>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* ── Body ── */}
+                {doc.open && (
+                  <div className="px-5 py-4 border-t border-gray-100 dark:border-zinc-800">
+                    <DocPicker
+                      docs={legalDocs}
+                      kind={doc.kind}
+                      onPick={(content, docTitle) => setDocs(prev => prev.map((d, i) =>
+                        i === idx
+                          ? { ...d, content, ...(docTitle ? { title: docTitle, kind: titleToKind(docTitle) } : {}) }
+                          : d
+                      ))}
+                    />
+                    <RichTextEditor
+                      value={doc.content}
+                      onChange={html => setDocs(prev => prev.map((d, i) => i === idx ? { ...d, content: html } : d))}
+                      placeholder="Start typing or insert a template above…"
+                      minHeight="120px"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* ── Add Document ──────────────────────────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
