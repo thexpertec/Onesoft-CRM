@@ -160,133 +160,156 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <title>${esc(inv.invoiceTitle || "Invoice")} ${esc(inv.invoiceNumber)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 12mm 14mm 14mm 14mm; }
+  @page { size: A4 portrait; margin: 22mm 20mm 22mm 20mm; }
   @media print { html, body { width: 210mm; } }
 
   body {
     font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-    font-size: 9pt;
+    font-size: 9.5pt;
     color: #1a1a2e;
     background: #fff;
-    line-height: 1.4;
+    line-height: 1.5;
   }
+
+  /* ── SECTION SPACING ────────────────────────────── */
+  .section { margin-bottom: 18pt; }
 
   /* ── HEADER ─────────────────────────────────────── */
   .inv-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding-bottom: 12pt;
+    padding-bottom: 14pt;
     border-bottom: 3px solid #1e3a5f;
-    margin-bottom: 14pt;
+    margin-bottom: 18pt;
   }
   .inv-header-left { flex: 1; }
-  .logo { max-height: 60px; max-width: 180px; object-fit: contain; }
+  .logo { max-height: 64px; max-width: 180px; object-fit: contain; }
   .logo-text { font-size: 22pt; font-weight: 700; color: #1e3a5f; letter-spacing: -0.5px; }
-  .company-tagline { font-size: 8pt; color: #6b7280; margin-top: 2pt; }
+  .company-tagline { font-size: 8.5pt; color: #6b7280; margin-top: 3pt; }
+  .company-detail { font-size: 8.5pt; color: #4b5563; margin-top: 1.5pt; }
 
-  .inv-header-right { text-align: right; }
-  .inv-title { font-size: 22pt; font-weight: 800; color: #1e3a5f; letter-spacing: 1px; text-transform: uppercase; }
-  .inv-meta { margin-top: 8pt; }
-  .inv-meta-row { display: flex; justify-content: flex-end; gap: 4pt; font-size: 8.5pt; margin-bottom: 2pt; }
+  .inv-header-right { text-align: right; flex-shrink: 0; }
+  .inv-title { font-size: 24pt; font-weight: 800; color: #1e3a5f; letter-spacing: 1.5px; text-transform: uppercase; }
+  .inv-meta { margin-top: 10pt; }
+  .inv-meta-row { display: flex; justify-content: flex-end; gap: 6pt; font-size: 9pt; margin-bottom: 3pt; }
   .inv-meta-label { color: #6b7280; }
   .inv-meta-value { font-weight: 600; min-width: 90pt; text-align: right; }
   .status-badge {
     display: inline-block;
-    padding: 2pt 8pt;
+    padding: 3pt 10pt;
     border-radius: 20pt;
-    font-size: 7.5pt;
+    font-size: 8pt;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    margin-top: 6pt;
+    margin-top: 8pt;
     border: 1.5px solid ${statusColor};
     color: ${statusColor};
   }
 
-  /* ── FROM / TO ──────────────────────────────────── */
-  .parties { display: flex; gap: 14pt; margin-bottom: 12pt; }
-  .party { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6pt; padding: 10pt 12pt; }
-  .party-label { font-size: 7pt; font-weight: 700; color: #1e3a5f; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6pt; padding-bottom: 4pt; border-bottom: 1px solid #e2e8f0; }
-  .party-name { font-size: 11pt; font-weight: 700; color: #1a1a2e; margin-bottom: 4pt; }
-  .party-line { font-size: 8pt; color: #4b5563; margin-bottom: 2pt; }
+  /* ── BILL FROM / BILL TO ────────────────────────── */
+  .party {
+    width: 100%;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #1e3a5f;
+    border-radius: 0 6pt 6pt 0;
+    padding: 10pt 14pt;
+    margin-bottom: 10pt;
+  }
+  .party:last-child { margin-bottom: 0; }
+  .party-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 5pt;
+    padding-bottom: 4pt;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .party-name { font-size: 11.5pt; font-weight: 700; color: #1a1a2e; margin-bottom: 4pt; }
+  .party-line { font-size: 8.5pt; color: #4b5563; margin-bottom: 2pt; }
 
   /* ── BANK DETAILS ───────────────────────────────── */
   .bank-box {
+    width: 100%;
     background: #eff6ff;
     border: 1px solid #bfdbfe;
-    border-radius: 6pt;
-    padding: 8pt 12pt;
-    margin-bottom: 12pt;
-    font-size: 8pt;
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 6pt 6pt 0;
+    padding: 10pt 14pt;
+    font-size: 8.5pt;
     color: #1e3a5f;
+    margin-bottom: 18pt;
   }
-  .bank-box-label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4pt; color: #1d4ed8; }
+  .bank-box-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5pt; color: #1d4ed8; }
+
+  /* ── SECTION TITLE ──────────────────────────────── */
+  .section-title {
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #1e3a5f;
+    padding: 5pt 0 5pt;
+    border-bottom: 2px solid #1e3a5f;
+    margin-bottom: 10pt;
+  }
 
   /* ── ITEMS TABLE ────────────────────────────────── */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; }
   thead th {
     background: #1e3a5f;
     color: #fff;
-    font-size: 7.5pt;
+    font-size: 8pt;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    padding: 6pt 8pt;
+    padding: 7pt 9pt;
     text-align: left;
   }
   thead th.td-right { text-align: right; }
   thead th.td-center { text-align: center; }
   tbody tr { border-bottom: 1px solid #f1f5f9; }
   tbody tr:nth-child(even) { background: #f8fafc; }
-  tbody td { padding: 6pt 8pt; vertical-align: top; }
+  tbody td { padding: 7pt 9pt; vertical-align: top; }
   .td-right { text-align: right; }
   .td-center { text-align: center; }
   .fw-600 { font-weight: 600; }
-  .item-name { font-weight: 600; font-size: 8.5pt; }
-  .item-sku { font-size: 7pt; color: #9ca3af; margin-top: 1pt; }
+  .item-name { font-weight: 600; font-size: 9pt; }
+  .item-sku { font-size: 7.5pt; color: #9ca3af; margin-top: 1.5pt; }
 
   /* ── TOTALS BLOCK ───────────────────────────────── */
-  .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 4pt; margin-bottom: 12pt; }
-  .totals-table { width: 230pt; }
-  .totals-row { display: flex; justify-content: space-between; padding: 3pt 0; font-size: 8.5pt; border-bottom: 1px solid #f1f5f9; }
+  .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 6pt; margin-bottom: 0; }
+  .totals-table { width: 240pt; }
+  .totals-row { display: flex; justify-content: space-between; padding: 4pt 0; font-size: 9pt; border-bottom: 1px solid #f1f5f9; }
   .totals-row:last-child { border-bottom: none; }
   .totals-label { color: #6b7280; }
   .totals-value { font-weight: 600; text-align: right; }
   .totals-total {
     background: #1e3a5f;
     color: #fff;
-    padding: 6pt 10pt;
+    padding: 7pt 10pt;
     border-radius: 4pt;
-    margin-top: 4pt;
+    margin-top: 5pt;
     display: flex;
     justify-content: space-between;
-    font-size: 11pt;
+    font-size: 12pt;
     font-weight: 700;
   }
   .totals-balance {
     background: #fef3c7;
     border: 1px solid #fcd34d;
     color: #92400e;
-    padding: 4pt 10pt;
+    padding: 5pt 10pt;
     border-radius: 4pt;
-    margin-top: 4pt;
+    margin-top: 5pt;
     display: flex;
     justify-content: space-between;
-    font-size: 9pt;
+    font-size: 9.5pt;
     font-weight: 700;
-  }
-
-  /* ── SECTION HEADINGS ───────────────────────────── */
-  .section-title {
-    font-size: 8pt;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #1e3a5f;
-    padding: 6pt 0 4pt;
-    border-bottom: 2px solid #1e3a5f;
-    margin-bottom: 8pt;
   }
 
   /* ── PAYMENT HISTORY ────────────────────────────── */
@@ -294,31 +317,41 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .hist-table tbody tr:nth-child(even) { background: #f9fafb; }
   .hist-total-row { background: #f0fdf4 !important; font-weight: 700; }
 
-  /* ── TERMS / NOTES ──────────────────────────────── */
-  .notes-grid { display: flex; gap: 14pt; margin-bottom: 10pt; }
-  .notes-box { flex: 1; }
-  .notes-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #1e3a5f; margin-bottom: 4pt; }
-  .notes-text { font-size: 8pt; color: #374151; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 4pt; padding: 6pt 8pt; line-height: 1.5; }
-  .notes-text p { margin: 0 0 4pt; }
+  /* ── TERMS / NOTES (single-column stacked) ──────── */
+  .notes-stack { margin-bottom: 0; }
+  .notes-box { margin-bottom: 12pt; }
+  .notes-box:last-child { margin-bottom: 0; }
+  .notes-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #1e3a5f; margin-bottom: 5pt; }
+  .notes-text {
+    font-size: 9pt;
+    color: #374151;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid #94a3b8;
+    border-radius: 0 6pt 6pt 0;
+    padding: 9pt 12pt;
+    line-height: 1.6;
+  }
+  .notes-text p { margin: 0 0 5pt; }
   .notes-text p:last-child { margin-bottom: 0; }
-  .notes-text ul, .notes-text ol { margin: 0 0 4pt; padding-left: 14pt; }
-  .notes-text li { margin-bottom: 2pt; }
-  .notes-text h1, .notes-text h2, .notes-text h3 { font-size: 9pt; font-weight: 700; margin: 4pt 0 2pt; color: #1e3a5f; }
+  .notes-text ul, .notes-text ol { margin: 0 0 5pt; padding-left: 16pt; }
+  .notes-text li { margin-bottom: 2.5pt; }
+  .notes-text h1, .notes-text h2, .notes-text h3 { font-size: 10pt; font-weight: 700; margin: 5pt 0 3pt; color: #1e3a5f; }
   .notes-text strong { font-weight: 700; }
   .notes-text em { font-style: italic; }
-  .notes-text blockquote { border-left: 2pt solid #cbd5e1; margin: 4pt 0; padding-left: 6pt; color: #6b7280; }
+  .notes-text blockquote { border-left: 2pt solid #cbd5e1; margin: 5pt 0; padding-left: 8pt; color: #6b7280; }
 
   /* ── FOOTER ─────────────────────────────────────── */
   .inv-footer {
     border-top: 2px solid #e5e7eb;
-    margin-top: 14pt;
-    padding-top: 8pt;
-    font-size: 7.5pt;
-    color: #9ca3af;
+    margin-top: 20pt;
+    padding-top: 10pt;
+    font-size: 8pt;
+    color: #6b7280;
     text-align: center;
-    line-height: 1.6;
+    line-height: 1.7;
   }
-  .inv-footer strong { color: #6b7280; }
+  .inv-footer strong { color: #374151; }
 
   .page-break { page-break-before: always; }
 </style>
@@ -360,7 +393,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 </div>
 
 <!-- ═══════════════════ FROM / TO ═══════════════════ -->
-<div class="parties">
+<div class="section">
   <div class="party">
     <div class="party-label">Bill From</div>
     <div class="party-name">${esc(settings.companyName)}</div>
@@ -478,64 +511,57 @@ ${(inv.paymentHistory ?? []).length > 0 ? `
 
 <!-- ═══════════════════ TERMS & NOTES ═══════════════════ -->
 ${(inv.paymentTerms || settings.invoiceTerms || inv.notes || inv.agreement) ? `
-<div class="notes-grid">
-  ${(inv.paymentTerms || settings.invoiceTerms) ? `
-  <div class="notes-box">
-    <div class="notes-label">Payment Terms</div>
-    <div class="notes-text">${renderContent(inv.paymentTerms || settings.invoiceTerms)}</div>
-  </div>` : ""}
-  ${inv.agreement ? `
-  <div class="notes-box">
-    <div class="notes-label">Agreement</div>
-    <div class="notes-text">${renderContent(inv.agreement)}</div>
-  </div>` : ""}
-  ${inv.notes ? `
-  <div class="notes-box">
-    <div class="notes-label">Additional Notes</div>
-    <div class="notes-text">${renderContent(inv.notes)}</div>
-  </div>` : ""}
+<div class="section">
+  <div class="section-title">Terms &amp; Notes</div>
+  <div class="notes-stack">
+    ${(inv.paymentTerms || settings.invoiceTerms) ? `
+    <div class="notes-box">
+      <div class="notes-label">Payment Terms</div>
+      <div class="notes-text">${renderContent(inv.paymentTerms || settings.invoiceTerms)}</div>
+    </div>` : ""}
+    ${inv.agreement ? `
+    <div class="notes-box">
+      <div class="notes-label">Agreement</div>
+      <div class="notes-text">${renderContent(inv.agreement)}</div>
+    </div>` : ""}
+    ${inv.notes ? `
+    <div class="notes-box">
+      <div class="notes-label">Additional Notes</div>
+      <div class="notes-text">${renderContent(inv.notes)}</div>
+    </div>` : ""}
+  </div>
 </div>` : ""}
 
 <!-- ═══════════════════ FOOTER ═══════════════════ -->
 <div class="inv-footer">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:16pt;flex-wrap:wrap;">
-    <!-- Logo + company name -->
-    <div style="display:flex;align-items:center;gap:8pt;">
-      ${settings.logoBase64
-        ? `<img src="${esc(settings.logoBase64)}" alt="Logo" style="max-height:32pt;max-width:80pt;object-fit:contain;"/>`
-        : `<span style="font-size:13pt;font-weight:700;color:#1e3a5f;">${esc(settings.companyName)}</span>`}
-      ${settings.logoBase64 && settings.companyName ? `<span style="font-size:10pt;font-weight:700;color:#1e3a5f;">${esc(settings.companyName)}</span>` : ""}
-    </div>
-    <!-- Contact columns -->
-    <div style="display:flex;gap:16pt;flex-wrap:wrap;font-size:7.5pt;color:#374151;text-align:left;">
-      ${(settings.phoneHull || settings.phoneIslamabad) ? `
-      <div>
-        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Phone</div>
-        ${settings.phoneHull        ? `<div>${esc(settings.phoneHull)} <span style="color:#9ca3af;font-size:6.5pt;">(UK)</span></div>` : ""}
-        ${settings.phoneIslamabad   ? `<div>${esc(settings.phoneIslamabad)} <span style="color:#9ca3af;font-size:6.5pt;">(PK)</span></div>` : ""}
-      </div>` : ""}
-      ${(settings.emailHull || settings.emailIslamabad) ? `
-      <div>
-        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Email</div>
-        ${settings.emailHull        ? `<div>${esc(settings.emailHull)}</div>` : ""}
-        ${settings.emailIslamabad   ? `<div>${esc(settings.emailIslamabad)}</div>` : ""}
-      </div>` : ""}
-      ${(settings.addressHull || settings.addressIslamabad) ? `
-      <div>
-        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Address</div>
-        ${settings.addressHull      ? `<div>${esc(settings.addressHull)}</div>` : ""}
-        ${settings.addressIslamabad ? `<div>${esc(settings.addressIslamabad)}</div>` : ""}
-      </div>` : ""}
-      ${settings.website ? `
-      <div>
-        <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:6.5pt;color:#6b7280;margin-bottom:2pt;">Web</div>
-        <div>${esc(settings.website)}</div>
-      </div>` : ""}
-    </div>
+  <!-- Company identity -->
+  <div style="margin-bottom:5pt;">
+    ${settings.logoBase64
+      ? `<img src="${esc(settings.logoBase64)}" alt="Logo" style="max-height:28pt;max-width:90pt;object-fit:contain;vertical-align:middle;margin-right:6pt;"/>`
+      : ""}
+    <strong>${esc(settings.companyName)}</strong>
+    ${settings.companyTagline ? `&nbsp;·&nbsp; ${esc(settings.companyTagline)}` : ""}
   </div>
-  ${footerParts.length > 0 ? `<div style="margin-top:5pt;font-size:7pt;color:#6b7280;">${footerParts.join(" &nbsp;·&nbsp; ")}</div>` : ""}
-  ${settingsFooter ? `<div style="margin-top:3pt;font-size:7.5pt;">${nl2br(settingsFooter)}</div>` : ""}
-  <div style="margin-top:5pt;font-size:6.5pt;color:#d1d5db;">This is a computer-generated document. No signature required.</div>
+  <!-- Contact line -->
+  ${(settings.phoneHull || settings.phoneIslamabad || settings.emailHull || settings.emailIslamabad || settings.website) ? `
+  <div style="margin-bottom:4pt;">
+    ${settings.phoneHull        ? `<span>${esc(settings.phoneHull)} (UK)</span>` : ""}
+    ${settings.phoneIslamabad   ? `<span>${settings.phoneHull ? " &nbsp;·&nbsp; " : ""}${esc(settings.phoneIslamabad)} (PK)</span>` : ""}
+    ${settings.emailHull        ? `<span>&nbsp;·&nbsp; ${esc(settings.emailHull)}</span>` : ""}
+    ${settings.emailIslamabad   ? `<span>&nbsp;·&nbsp; ${esc(settings.emailIslamabad)}</span>` : ""}
+    ${settings.website          ? `<span>&nbsp;·&nbsp; ${esc(settings.website)}</span>` : ""}
+  </div>` : ""}
+  <!-- Address line -->
+  ${(settings.addressHull || settings.addressIslamabad) ? `
+  <div style="margin-bottom:4pt;">
+    ${settings.addressHull      ? `<span>${esc(settings.addressHull)}</span>` : ""}
+    ${settings.addressIslamabad ? `<span>${settings.addressHull ? " &nbsp;·&nbsp; " : ""}${esc(settings.addressIslamabad)}</span>` : ""}
+  </div>` : ""}
+  <!-- Registration / VAT / social -->
+  ${footerParts.length > 0 ? `<div style="margin-bottom:4pt;">${footerParts.join(" &nbsp;·&nbsp; ")}</div>` : ""}
+  <!-- Custom invoice footer text -->
+  ${settingsFooter ? `<div style="margin-bottom:4pt;">${nl2br(settingsFooter)}</div>` : ""}
+  <div style="margin-top:6pt;font-size:7pt;color:#d1d5db;">This is a computer-generated document. No signature required.</div>
 </div>
 
 </body>
