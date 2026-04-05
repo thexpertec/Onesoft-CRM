@@ -1302,6 +1302,7 @@ export type Account = {
   head: AccountHead;
   subType: string;
   description: string;
+  parentId: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1353,7 +1354,11 @@ const SEED_ACCOUNTS: Account[] = [
 export function getAccounts(): Account[] {
   try {
     const raw = localStorage.getItem(tenantKey(COA_KEY));
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      // Normalise: add parentId: null for accounts stored before parent-child was introduced
+      const parsed: Account[] = JSON.parse(raw);
+      return parsed.map(a => ({ ...a, parentId: a.parentId ?? null }));
+    }
   } catch { /* ignore */ }
   localStorage.setItem(tenantKey(COA_KEY), JSON.stringify(SEED_ACCOUNTS));
   return SEED_ACCOUNTS;
