@@ -22,17 +22,10 @@ import {
   ArrowUpRight, ArrowDownRight, Truck, BarChart3, CreditCard,
   Banknote, Wifi, WifiOff, Tag, Shield, Settings,
 } from "lucide-react";
-import { CURRENCIES } from "@/lib/currencies";
+import { CURRENCIES, fmtMoneyCompact, fmtMoney, getSettingsCurrencySymbol } from "@/lib/currencies";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
-function fmtCurrency(n: number, sym = "£") {
-  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${sym}${(n / 1_000).toFixed(1)}k`;
-  return `${sym}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-function fmtGBP(n: number) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(n);
-}
+const fmtCurrency = fmtMoneyCompact;
 function relativeDate(iso: string) {
   const d = new Date(iso);
   if (isToday(d))     return formatDistanceToNow(d, { addSuffix: true });
@@ -129,7 +122,7 @@ function MiniBarChart({ data }: { data: number[] }) {
           <div
             className={`rounded-t ${i === data.length - 1 ? "bg-blue-500" : "bg-blue-200 dark:bg-blue-800"}`}
             style={{ height: `${Math.max(4, (v / max) * 100)}%` }}
-            title={`£${v.toFixed(0)}`}
+            title={`${getSettingsCurrencySymbol()}${v.toFixed(0)}`}
           />
         </div>
       ))}
@@ -732,7 +725,7 @@ export default function Dashboard() {
                         <p className="text-[11px] text-muted-foreground truncate">{sale.customer || "Walk-in"}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className="text-[13px] font-bold text-gray-700 dark:text-foreground tabular-nums">£{total.toFixed(2)}</span>
+                        <span className="text-[13px] font-bold text-gray-700 dark:text-foreground tabular-nums">{fmtMoney(total)}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${SALE_STATUS_COLOR[sale.status] || "bg-muted text-muted-foreground"}`}>{sale.status}</span>
                       </div>
                     </li>

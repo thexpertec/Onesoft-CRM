@@ -1,3 +1,5 @@
+import { getSettings } from "@/lib/store";
+
 export const CURRENCIES = [
   { code: "GBP", symbol: "£",   label: "GBP — British Pound (£)" },
   { code: "USD", symbol: "$",   label: "USD — US Dollar ($)" },
@@ -34,4 +36,24 @@ export function formatCurrencyString(str?: string, currencyCode: string = "GBP")
   const n = parseFloat(str.replace(/[^0-9.]/g, ""));
   if (isNaN(n)) return str;
   return formatAmount(n, currencyCode);
+}
+
+export function getSettingsCurrencyCode(): string {
+  try { return getSettings().currency || "GBP"; }
+  catch { return "GBP"; }
+}
+
+export function getSettingsCurrencySymbol(): string {
+  return getCurrency(getSettingsCurrencyCode()).symbol;
+}
+
+export function fmtMoney(n: number): string {
+  return formatAmount(n, getSettingsCurrencyCode());
+}
+
+export function fmtMoneyCompact(n: number): string {
+  const sym = getSettingsCurrencySymbol();
+  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${sym}${(n / 1_000).toFixed(1)}k`;
+  return `${sym}${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }

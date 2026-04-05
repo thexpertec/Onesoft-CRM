@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
+import { getSettingsCurrencySymbol, fmtMoney } from "@/lib/currencies";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_BG: Record<SaleStatus, string> = {
@@ -136,11 +137,12 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, on
   const remaining = total - paid;
   const overPaid  = paid > total;
 
-  const fmt = (n: number) => `£${n.toFixed(2)}`;
+  const sym = getSettingsCurrencySymbol();
+  const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
 
   const presets = [
     { label: "Exact", value: total.toFixed(2) },
-    ...([5, 10, 20, 50, 100, 200].filter(v => v >= Math.ceil(paid)).slice(0, 4).map(v => ({ label: `£${v}`, value: String(Math.min(v, total)) }))),
+    ...([5, 10, 20, 50, 100, 200].filter(v => v >= Math.ceil(paid)).slice(0, 4).map(v => ({ label: `${sym}${v}`, value: String(Math.min(v, total)) }))),
   ];
 
   return (
@@ -237,7 +239,7 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, on
 
             {/* Large £ input */}
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[28px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">£</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[28px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">{sym}</span>
               <input
                 type="number" min="0" step="0.01"
                 value={payAmount}
@@ -346,6 +348,7 @@ function POSView({
 
   const grandTotal   = localItems.reduce((s, i) => s + lineTotal(i), 0);
   const discountAmt  = discountTotal(localItems);
+  const sym          = getSettingsCurrencySymbol();
   const isDraft      = sale.status === "Draft";
   const isCompleted  = sale.status === "Completed";
   const isOnCredit   = sale.status === "On Credit";
@@ -594,7 +597,7 @@ function POSView({
 
                       {/* Unit price */}
                       <div className="shrink-0 w-[88px]">
-                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Unit £</div>
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Unit {sym}</div>
                         <input
                           type="number" min="0" step="0.01"
                           value={item.unitPrice}
@@ -621,11 +624,11 @@ function POSView({
                       {/* Subtotal */}
                       <div className="shrink-0 w-[88px] text-right">
                         <div className="text-[18px] font-extrabold font-mono tabular-nums text-gray-900 dark:text-gray-100 leading-tight">
-                          £{lineTotal(item).toFixed(2)}
+                          {sym}{lineTotal(item).toFixed(2)}
                         </div>
                         {parseFloat(item.discount) > 0 && (
                           <div className="text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 font-mono">
-                            −£{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
+                            −{sym}{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
                           </div>
                         )}
                       </div>
@@ -650,18 +653,18 @@ function POSView({
             <div className="px-5 pt-3.5 pb-2 space-y-1.5">
               <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
                 <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
-                <span className="font-mono font-semibold">£{subTotal(localItems).toFixed(2)}</span>
+                <span className="font-mono font-semibold">{sym}{subTotal(localItems).toFixed(2)}</span>
               </div>
               {discountAmt > 0 && (
                 <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
                   <span>Discount savings</span>
-                  <span className="font-mono font-semibold">−£{discountAmt.toFixed(2)}</span>
+                  <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-zinc-800">
                 <span className="text-[14px] font-bold text-gray-600 dark:text-gray-300">Total to Pay</span>
                 <span className="text-[26px] font-black font-mono tabular-nums text-blue-600 dark:text-blue-400 leading-none">
-                  £{grandTotal.toFixed(2)}
+                  {sym}{grandTotal.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -888,7 +891,7 @@ function POSView({
                         </div>
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                            £{parseFloat(product.price || "0").toFixed(2)}
+                            {getSettingsCurrencySymbol()}{parseFloat(product.price || "0").toFixed(2)}
                           </span>
                           {product.category && (
                             <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[44px] ${catColor}`}>
@@ -940,6 +943,7 @@ export default function SalesPage() {
   const products          = useMemo(() => getProducts(), []);
   const customerComboOpts = useMemo<ComboOption[]>(() => getCustomers().map(c => ({ value: c.name, label: c.name, sub: c.email || c.phone })), []);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── List state ──
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -968,13 +972,13 @@ export default function SalesPage() {
     { field: "customer",      label: "Customer",        minW: 200, type: "text"     },
     { field: "status",        label: "Status",          minW: 130, type: "select",  options: [...SALE_STATUSES] },
     { field: "itemCount",     label: "Items",           minW: 60,  type: "readonly" },
-    { field: "total",         label: "Total (£)",       minW: 110, type: "readonly" },
-    { field: "amountPaid",    label: "Paid (£)",        minW: 110, type: "readonly" },
-    { field: "balance",       label: "Balance (£)",     minW: 110, type: "readonly" },
+    { field: "total",         label: `Total (${sym})`,   minW: 110, type: "readonly" },
+    { field: "amountPaid",    label: `Paid (${sym})`,   minW: 110, type: "readonly" },
+    { field: "balance",       label: `Balance (${sym})`,minW: 110, type: "readonly" },
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
     { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
-  ], []);
+  ], [sym]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const cellValue = (sale: Sale, field: string): string => {
@@ -1127,7 +1131,7 @@ export default function SalesPage() {
       stockDeducted: true,
     });
 
-    toast({ title: "Sale completed!", description: `£${parseFloat(amountPaid || "0").toFixed(2)} received` });
+    toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
 
     // Open print invoice window
     try { printSaleInvoice(completedSale, getSettings()); } catch { /* ignore popup blockers */ }
@@ -1292,7 +1296,7 @@ export default function SalesPage() {
         })}
         {revenue > 0 && (
           <span className="ml-2 text-[12px] text-emerald-700 dark:text-emerald-400 font-semibold">
-            Revenue: £{revenue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+            Revenue: {sym}{revenue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
           </span>
         )}
       </div>
@@ -1415,7 +1419,7 @@ export default function SalesPage() {
                               ? "text-emerald-600 dark:text-emerald-400"
                               : "text-gray-700 dark:text-foreground"
                         }`}>
-                          £{parseFloat(rawVal || "0").toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                          {sym}{parseFloat(rawVal || "0").toLocaleString("en-GB", { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     ) : c.field === "payStatus" ? (
@@ -1478,15 +1482,15 @@ export default function SalesPage() {
                     </span>
                   ) : c.field === "total" ? (
                     <span className="text-[13px] font-mono font-bold text-gray-900 dark:text-foreground tabular-nums">
-                      £{filteredSums.total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                      {sym}{filteredSums.total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
                     </span>
                   ) : c.field === "amountPaid" ? (
                     <span className="text-[13px] font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                      £{filteredSums.paid.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                      {sym}{filteredSums.paid.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
                     </span>
                   ) : c.field === "balance" ? (
                     <span className={`text-[13px] font-mono font-bold tabular-nums ${filteredSums.balance > 0.005 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-muted-foreground"}`}>
-                      £{filteredSums.balance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                      {sym}{filteredSums.balance.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
                     </span>
                   ) : null}
                 </td>

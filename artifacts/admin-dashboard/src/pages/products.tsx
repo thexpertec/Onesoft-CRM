@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
+import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
 type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "price" | "status" | "description";
 
@@ -42,20 +43,21 @@ export default function ProductsPage() {
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), [products]);
   const categoryOptions = useMemo(() => getProductCategories().map(c => c.name), [products]);
   const unitOptions     = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
+  const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
 
   const COLS: ColDef[] = useMemo(() => [
-    { field: "name",        label: "Product Name", minW: 220, type: "text"                                                                   },
-    { field: "sku",         label: "SKU",          minW: 120, type: "text"                                                                   },
-    { field: "brand",       label: "Brand",        minW: 150, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
-    { field: "category",    label: "Category",     minW: 160, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
-    { field: "unit",        label: "Unit",         minW: 140, type: "select", options: unitOptions.length     ? unitOptions     : undefined   },
-    { field: "price",       label: "Price (£)",    minW: 110, type: "text"                                                                   },
-    { field: "status",      label: "Status",       minW: 120, type: "select",
+    { field: "name",        label: "Product Name",  minW: 220, type: "text"                                                                   },
+    { field: "sku",         label: "SKU",           minW: 120, type: "text"                                                                   },
+    { field: "brand",       label: "Brand",         minW: 150, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
+    { field: "category",    label: "Category",      minW: 160, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
+    { field: "unit",        label: "Unit",          minW: 140, type: "select", options: unitOptions.length     ? unitOptions     : undefined   },
+    { field: "price",       label: `Price (${sym})`,minW: 110, type: "text"                                                                   },
+    { field: "status",      label: "Status",        minW: 120, type: "select",
       options: ["Active", "Inactive", "Draft"],
       optionColors: STATUS_COLORS,
     },
-    { field: "description", label: "Description",  minW: 260, type: "text"                                                                   },
-  ], [brandOptions, categoryOptions, unitOptions]);
+    { field: "description", label: "Description",   minW: 260, type: "text"                                                                   },
+  ], [brandOptions, categoryOptions, unitOptions, sym]);
 
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 

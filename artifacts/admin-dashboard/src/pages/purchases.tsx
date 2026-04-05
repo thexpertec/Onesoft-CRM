@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
+import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
 // ─── Status styles ────────────────────────────────────────────────────────────
 const STATUS_OPTS: PurchaseOrderStatus[] = ["Draft", "Sent", "Confirmed", "Received", "Cancelled"];
@@ -52,6 +53,7 @@ export default function PurchasesPage() {
   const supplierComboOpts = useMemo<ComboOption[]>(() => getSuppliers().filter(s => s.status !== "Blacklisted").map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
   const noSuppliers = supplierComboOpts.length === 0;
+  const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── COLS (inside component to pick up dynamic supplier options) ──
   const COLS: ColDef[] = useMemo(() => [
@@ -61,9 +63,9 @@ export default function PurchasesPage() {
     { field: "deliveryDate", label: "Expected Delivery", minW: 140, type: "date"     },
     { field: "status",       label: "Status",            minW: 130, type: "select",  options: STATUS_OPTS as unknown as string[] },
     { field: "itemCount",    label: "Items",             minW: 65,  type: "readonly" },
-    { field: "total",        label: "Total (£)",         minW: 115, type: "readonly" },
+    { field: "total",        label: `Total (${sym})`,   minW: 115, type: "readonly" },
     { field: "notes",        label: "Notes",             minW: 240, type: "text"     },
-  ], []);
+  ], [sym]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   // ── grid state ──
@@ -437,7 +439,7 @@ export default function PurchasesPage() {
                         </div>
                       ) : c.field === "total" && !isA ? (
                         <div className="w-full h-full flex items-center px-3 font-mono tabular-nums text-[12px]">
-                          {parseFloat(rawVal) > 0 ? `£${rawVal}` : "—"}
+                          {parseFloat(rawVal) > 0 ? `${sym}${rawVal}` : "—"}
                         </div>
                       ) : (
                         <EditableCell
@@ -520,7 +522,7 @@ export default function PurchasesPage() {
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-                    {["#", "Product / Service", "Qty", "Unit", "Unit Price (£)", "Notes", "Total (£)", ""].map((h, i) => (
+                    {["#", "Product / Service", "Qty", "Unit", `Unit Price (${sym})`, "Notes", `Total (${sym})`, ""].map((h, i) => (
                       <th key={i} className={`text-left text-[11px] font-semibold text-zinc-500 py-2 px-3 border border-zinc-200 dark:border-zinc-700 ${i === 0 ? "w-7" : i === 7 ? "w-8" : i === 2 ? "w-20" : i === 3 ? "w-24" : i === 4 ? "w-28" : i === 6 ? "w-24 text-right" : ""}`}>{h}</th>
                     ))}
                   </tr>
@@ -558,7 +560,7 @@ export default function PurchasesPage() {
                         </td>
                       ))}
                       <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums">
-                        £{lineTotal(item).toFixed(2)}
+                        {sym}{lineTotal(item).toFixed(2)}
                       </td>
                       <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700 text-center">
                         <button onClick={() => handleDeleteItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors" title="Remove item">
@@ -610,7 +612,7 @@ export default function PurchasesPage() {
                           onChange={e => setNewItem(p => p ? { ...p, notes: e.target.value } : p)} />
                       </td>
                       <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-right font-mono tabular-nums text-zinc-400">
-                        £{(parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0")).toFixed(2)}
+                        {sym}{(parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0")).toFixed(2)}
                       </td>
                       <td className="py-1 px-1 border border-amber-300 dark:border-amber-700 text-center">
                         <button onClick={() => { setNewItem(null); setAddingItem(false); }} className="text-zinc-400 hover:text-zinc-600"><X size={13} /></button>
@@ -624,7 +626,7 @@ export default function PurchasesPage() {
                     <tr className="bg-zinc-50 dark:bg-zinc-800/60 font-semibold">
                       <td colSpan={6} className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-[11px] text-zinc-500">Grand Total</td>
                       <td className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums text-sm">
-                        £{(grandTotal + (addingItem && newItem ? parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0") : 0)).toFixed(2)}
+                        {sym}{(grandTotal + (addingItem && newItem ? parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0") : 0)).toFixed(2)}
                       </td>
                       <td className="border border-zinc-200 dark:border-zinc-700" />
                     </tr>
