@@ -1295,6 +1295,8 @@ export const HEAD_SUB_TYPES: Record<AccountHead, string[]> = {
   "Equity":           ["Owner's Equity", "Retained Earnings"],
 };
 
+export type AccountKind = "Group" | "Ledger";
+
 export type Account = {
   id: string;
   code: string;
@@ -1303,6 +1305,8 @@ export type Account = {
   subType: string;
   description: string;
   parentId: string | null;
+  accountType: AccountKind;
+  openingBalance: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1312,52 +1316,57 @@ const COA_KEY = "admin-chart-of-accounts";
 
 const SEED_ACCOUNTS: Account[] = [
   // Assets ─────────────────────────────────────────────────────────────────────
-  { id: "coa-1001", code: "1001", name: "Cash in Hand",            head: "Assets", subType: "Current Asset",       description: "Physical cash held at office",                  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1002", code: "1002", name: "Bank Account – HSBC",     head: "Assets", subType: "Current Asset",       description: "Primary business current account",              isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1003", code: "1003", name: "Petty Cash",              head: "Assets", subType: "Current Asset",       description: "Small day-to-day cash float",                   isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1010", code: "1010", name: "Accounts Receivable",     head: "Assets", subType: "Current Asset",       description: "Amounts owed by customers",                     isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1020", code: "1020", name: "Inventory",               head: "Assets", subType: "Current Asset",       description: "Stock of goods held for resale",                isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1030", code: "1030", name: "Prepaid Expenses",        head: "Assets", subType: "Current Asset",       description: "Payments made in advance (insurance, rent)",    isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1100", code: "1100", name: "Office Equipment",        head: "Assets", subType: "Fixed Asset",         description: "Desks, chairs, printers, and office furniture", isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1101", code: "1101", name: "Computer Equipment",      head: "Assets", subType: "Fixed Asset",         description: "Computers, monitors, and peripherals",          isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-1102", code: "1102", name: "Accumulated Depreciation",head: "Assets", subType: "Fixed Asset",         description: "Contra asset — total accumulated depreciation", isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1001", code: "1001", name: "Cash in Hand",            head: "Assets", subType: "Current Asset",       description: "Physical cash held at office", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1002", code: "1002", name: "Bank Account – HSBC",     head: "Assets", subType: "Current Asset",       description: "Primary business current account", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1003", code: "1003", name: "Petty Cash",              head: "Assets", subType: "Current Asset",       description: "Small day-to-day cash float", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1010", code: "1010", name: "Accounts Receivable",     head: "Assets", subType: "Current Asset",       description: "Amounts owed by customers", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1020", code: "1020", name: "Inventory",               head: "Assets", subType: "Current Asset",       description: "Stock of goods held for resale", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1030", code: "1030", name: "Prepaid Expenses",        head: "Assets", subType: "Current Asset",       description: "Payments made in advance (insurance, rent)", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1100", code: "1100", name: "Office Equipment",        head: "Assets", subType: "Fixed Asset",         description: "Desks, chairs, printers, and office furniture", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1101", code: "1101", name: "Computer Equipment",      head: "Assets", subType: "Fixed Asset",         description: "Computers, monitors, and peripherals", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-1102", code: "1102", name: "Accumulated Depreciation",head: "Assets", subType: "Fixed Asset",         description: "Contra asset — total accumulated depreciation", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
   // Liabilities ─────────────────────────────────────────────────────────────────
-  { id: "coa-2001", code: "2001", name: "Accounts Payable",        head: "Liabilities", subType: "Current Liability",      description: "Amounts owed to suppliers",               isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-2010", code: "2010", name: "Accrued Expenses",        head: "Liabilities", subType: "Current Liability",      description: "Expenses incurred but not yet paid",      isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-2020", code: "2020", name: "VAT / Tax Payable",       head: "Liabilities", subType: "Current Liability",      description: "VAT collected and owed to HMRC",          isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-2030", code: "2030", name: "Salaries Payable",        head: "Liabilities", subType: "Current Liability",      description: "Employee wages due but not yet paid",     isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-2100", code: "2100", name: "Bank Loan",               head: "Liabilities", subType: "Long-term Liability",    description: "Term loan from bank",                     isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-2101", code: "2101", name: "Director's Loan",         head: "Liabilities", subType: "Long-term Liability",    description: "Loan from company director",              isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2001", code: "2001", name: "Accounts Payable",        head: "Liabilities", subType: "Current Liability",      description: "Amounts owed to suppliers", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2010", code: "2010", name: "Accrued Expenses",        head: "Liabilities", subType: "Current Liability",      description: "Expenses incurred but not yet paid", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2020", code: "2020", name: "VAT / Tax Payable",       head: "Liabilities", subType: "Current Liability",      description: "VAT collected and owed to HMRC", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2030", code: "2030", name: "Salaries Payable",        head: "Liabilities", subType: "Current Liability",      description: "Employee wages due but not yet paid", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2100", code: "2100", name: "Bank Loan",               head: "Liabilities", subType: "Long-term Liability",    description: "Term loan from bank", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-2101", code: "2101", name: "Director's Loan",         head: "Liabilities", subType: "Long-term Liability",    description: "Loan from company director", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
   // Revenue / Income ─────────────────────────────────────────────────────────────
-  { id: "coa-3001", code: "3001", name: "Sales Revenue",           head: "Revenue / Income", subType: "Operating Revenue", description: "Income from product sales",            isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-3002", code: "3002", name: "Service Revenue",         head: "Revenue / Income", subType: "Operating Revenue", description: "Income from services rendered",        isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-3010", code: "3010", name: "Interest Income",         head: "Revenue / Income", subType: "Other Income",      description: "Interest earned on bank deposits",    isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-3020", code: "3020", name: "Other Income",            head: "Revenue / Income", subType: "Other Income",      description: "Miscellaneous non-operating income",  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-3001", code: "3001", name: "Sales Revenue",           head: "Revenue / Income", subType: "Operating Revenue", description: "Income from product sales", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-3002", code: "3002", name: "Service Revenue",         head: "Revenue / Income", subType: "Operating Revenue", description: "Income from services rendered", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-3010", code: "3010", name: "Interest Income",         head: "Revenue / Income", subType: "Other Income",      description: "Interest earned on bank deposits", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-3020", code: "3020", name: "Other Income",            head: "Revenue / Income", subType: "Other Income",      description: "Miscellaneous non-operating income", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
   // Expense ──────────────────────────────────────────────────────────────────────
-  { id: "coa-4001", code: "4001", name: "Cost of Goods Sold",      head: "Expense", subType: "Cost of Goods Sold", description: "Direct cost of goods sold",                  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4010", code: "4010", name: "Salaries & Wages",        head: "Expense", subType: "Operating Expense",  description: "Employee salaries and wages",               isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4020", code: "4020", name: "Rent Expense",            head: "Expense", subType: "Operating Expense",  description: "Office and premises rent",                  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4030", code: "4030", name: "Utilities",               head: "Expense", subType: "Operating Expense",  description: "Electricity, gas, water, internet",         isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4040", code: "4040", name: "Office Supplies",         head: "Expense", subType: "Operating Expense",  description: "Stationery and office consumables",         isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4050", code: "4050", name: "Marketing & Advertising", head: "Expense", subType: "Operating Expense",  description: "Marketing, ads, and promotional costs",     isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4060", code: "4060", name: "Travel & Entertainment",  head: "Expense", subType: "Operating Expense",  description: "Business travel and client entertainment",  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4070", code: "4070", name: "Depreciation",            head: "Expense", subType: "Operating Expense",  description: "Annual depreciation of fixed assets",       isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4080", code: "4080", name: "Bank Charges",            head: "Expense", subType: "Operating Expense",  description: "Bank fees and transaction charges",         isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4090", code: "4090", name: "Insurance",               head: "Expense", subType: "Operating Expense",  description: "Business insurance premiums",               isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-4100", code: "4100", name: "Professional Fees",       head: "Expense", subType: "Operating Expense",  description: "Legal, accounting, and consulting fees",    isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4001", code: "4001", name: "Cost of Goods Sold",      head: "Expense", subType: "Cost of Goods Sold", description: "Direct cost of goods sold", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4010", code: "4010", name: "Salaries & Wages",        head: "Expense", subType: "Operating Expense",  description: "Employee salaries and wages", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4020", code: "4020", name: "Rent Expense",            head: "Expense", subType: "Operating Expense",  description: "Office and premises rent", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4030", code: "4030", name: "Utilities",               head: "Expense", subType: "Operating Expense",  description: "Electricity, gas, water, internet", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4040", code: "4040", name: "Office Supplies",         head: "Expense", subType: "Operating Expense",  description: "Stationery and office consumables", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4050", code: "4050", name: "Marketing & Advertising", head: "Expense", subType: "Operating Expense",  description: "Marketing, ads, and promotional costs", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4060", code: "4060", name: "Travel & Entertainment",  head: "Expense", subType: "Operating Expense",  description: "Business travel and client entertainment", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4070", code: "4070", name: "Depreciation",            head: "Expense", subType: "Operating Expense",  description: "Annual depreciation of fixed assets", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4080", code: "4080", name: "Bank Charges",            head: "Expense", subType: "Operating Expense",  description: "Bank fees and transaction charges", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4090", code: "4090", name: "Insurance",               head: "Expense", subType: "Operating Expense",  description: "Business insurance premiums", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-4100", code: "4100", name: "Professional Fees",       head: "Expense", subType: "Operating Expense",  description: "Legal, accounting, and consulting fees", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
   // Equity ───────────────────────────────────────────────────────────────────────
-  { id: "coa-5001", code: "5001", name: "Share Capital",           head: "Equity", subType: "Owner's Equity",    description: "Initial and additional paid-up share capital", isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-5002", code: "5002", name: "Retained Earnings",       head: "Equity", subType: "Retained Earnings", description: "Cumulative net earnings retained in business",  isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
-  { id: "coa-5003", code: "5003", name: "Owner's Drawings",        head: "Equity", subType: "Owner's Equity",    description: "Cash or assets withdrawn by the owner",        isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-5001", code: "5001", name: "Share Capital",           head: "Equity", subType: "Owner's Equity",    description: "Initial and additional paid-up share capital", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-5002", code: "5002", name: "Retained Earnings",       head: "Equity", subType: "Retained Earnings", description: "Cumulative net earnings retained in business", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
+  { id: "coa-5003", code: "5003", name: "Owner's Drawings",        head: "Equity", subType: "Owner's Equity",    description: "Cash or assets withdrawn by the owner", accountType: "Group", openingBalance: 0, isActive: true, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z" },
 ];
 
 export function getAccounts(): Account[] {
   try {
     const raw = localStorage.getItem(tenantKey(COA_KEY));
     if (raw) {
-      // Normalise: add parentId: null for accounts stored before parent-child was introduced
+      // Normalise: fill in fields added after initial release
       const parsed: Account[] = JSON.parse(raw);
-      return parsed.map(a => ({ ...a, parentId: a.parentId ?? null }));
+      return parsed.map(a => ({
+        ...a,
+        parentId: a.parentId ?? null,
+        accountType: a.accountType ?? "Group",
+        openingBalance: a.openingBalance ?? 0,
+      }));
     }
   } catch { /* ignore */ }
   localStorage.setItem(tenantKey(COA_KEY), JSON.stringify(SEED_ACCOUNTS));
