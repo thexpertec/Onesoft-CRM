@@ -43,9 +43,9 @@ const FEATURES = [
     color: "bg-cyan-50 text-cyan-600",
   },
   {
-    icon: Layers,
-    title: "Multi-Tenant",
-    desc: "Manage multiple businesses from one platform with fully isolated data per client.",
+    icon: BookOpen,
+    title: "Double-Entry Accounting",
+    desc: "Full chart of accounts with double-entry bookkeeping — debits, credits, and financial accuracy built in.",
     color: "bg-indigo-50 text-indigo-600",
   },
   {
@@ -160,7 +160,7 @@ export default function LandingPage() {
               <ul className="space-y-3">
                 {[
                   "Single login for your entire operation",
-                  "Fully isolated data per business tenant",
+                  "Double-entry accounting built right in",
                   "Works in any browser — no app install needed",
                   "Built by Onesoft, Hull UK & Islamabad Pakistan",
                 ].map(pt => (
