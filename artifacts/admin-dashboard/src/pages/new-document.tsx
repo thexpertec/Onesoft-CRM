@@ -959,8 +959,9 @@ export default function NewDocument() {
             </div>
 
             {/* Table header */}
-            <div className="hidden sm:grid grid-cols-[2fr_2fr_60px_90px_90px_90px_32px] gap-2 mb-1.5 px-1">
-              {["Item / Service","Short Description","Qty","Per Unit","Discount","Sub Total",""].map(h => (
+            {/* col: Item/Service | Short Desc | Qty | Per Unit | Total Cost | Discount | Sub Total | × */}
+            <div className="hidden sm:grid grid-cols-[2fr_2fr_55px_80px_90px_80px_90px_32px] gap-2 mb-1.5 px-1">
+              {["Item / Service","Short Description","Qty","Per Unit","Total Cost","Discount","Sub Total",""].map(h => (
                 <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
               ))}
             </div>
@@ -969,7 +970,7 @@ export default function NewDocument() {
               {lineItems.map((row, idx) => {
                 const { totalCost, subTotal } = lineItemTotals[idx];
                 return (
-                  <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_60px_90px_90px_90px_32px] gap-2 items-center bg-muted/30 rounded-lg p-2 sm:p-1.5 sm:bg-transparent sm:rounded-none sm:border-b sm:border-border/40">
+                  <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_55px_80px_90px_80px_90px_32px] gap-2 items-center bg-muted/30 rounded-lg p-2 sm:p-1.5 sm:bg-transparent sm:rounded-none sm:border-b sm:border-border/40">
                     <input
                       value={row.item}
                       onChange={e => updateLineItem(row.id, "item", e.target.value)}
@@ -999,6 +1000,10 @@ export default function NewDocument() {
                       placeholder="0.00"
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
                     />
+                    {/* Total Cost = Qty × Per Unit (read-only) */}
+                    <div className="h-8 flex items-center justify-end px-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-sm font-medium text-blue-700 dark:text-blue-300 tabular-nums">
+                      {totalCost > 0 ? formatCurrency(totalCost) : <span className="text-muted-foreground/50">—</span>}
+                    </div>
                     <input
                       type="number"
                       min="0"
@@ -1008,8 +1013,9 @@ export default function NewDocument() {
                       placeholder="0.00"
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
                     />
+                    {/* Sub Total = Total Cost − Discount (read-only) */}
                     <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
-                      {formatCurrency(subTotal)}
+                      {subTotal > 0 ? formatCurrency(subTotal) : <span className="text-muted-foreground/50">—</span>}
                     </div>
                     <button
                       type="button"
@@ -1045,6 +1051,29 @@ export default function NewDocument() {
               <span className="text-xs font-semibold uppercase tracking-wide text-primary">Budget Breakdown</span>
               <span className="ml-auto text-xs text-muted-foreground">Linked to milestone payments below</span>
             </div>
+
+            {/* Alignment row: Items Grand Total vs Milestone Total vs Remaining */}
+            {lineItemsGrandTotal > 0 && (
+              <div className="grid grid-cols-3 gap-3 pb-3 border-b border-primary/15">
+                <div className="text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Items Grand Total</p>
+                  <p className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</p>
+                </div>
+                <div className="text-center border-x border-primary/15">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Milestones Total</p>
+                  <p className={`text-base font-bold tabular-nums ${milestonesTotal > lineItemsGrandTotal ? "text-destructive" : "text-foreground"}`}>
+                    {formatCurrency(milestonesTotal)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Remaining</p>
+                  <p className={`text-base font-bold tabular-nums ${lineItemsGrandTotal - milestonesTotal < 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
+                    {formatCurrency(Math.max(0, lineItemsGrandTotal - milestonesTotal))}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {milestones.some((m) => m.payment.trim() !== "") ? (
               <div className="space-y-1.5">
                 {milestones.filter((m) => m.payment.trim() !== "").map((m, i) => {
@@ -1122,10 +1151,28 @@ export default function NewDocument() {
                           className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
                       </div>
                       <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment</p>
-                        <input type="text" value={m.payment} onChange={(e) => updateMilestone(m.id, "payment", e.target.value)}
-                          placeholder="e.g. £500"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">
+                          Payment
+                          {lineItemsGrandTotal > 0 && (
+                            <span className="ml-1 text-muted-foreground/60 normal-case">
+                              (max {formatCurrency(Math.max(0, lineItemsGrandTotal - milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0)))})
+                            </span>
+                          )}
+                        </p>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={m.payment}
+                          onChange={(e) => {
+                            const otherTotal = milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0);
+                            const maxVal = lineItemsGrandTotal > 0 ? Math.max(0, lineItemsGrandTotal - otherTotal) : Infinity;
+                            const raw = parseFloat(e.target.value) || 0;
+                            updateMilestone(m.id, "payment", String(Math.min(raw, maxVal)));
+                          }}
+                          placeholder="0.00"
+                          className={`w-full px-3 py-2 rounded-lg border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${milestonesTotal > lineItemsGrandTotal && lineItemsGrandTotal > 0 ? "border-destructive" : "border-border"}`}
+                        />
                       </div>
                       <div>
                         <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment Status</p>
