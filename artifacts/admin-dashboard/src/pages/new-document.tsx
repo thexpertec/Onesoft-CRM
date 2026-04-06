@@ -415,7 +415,7 @@ export default function NewDocument() {
   const updateCustomSection = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
 
-  // Template picker
+  // Template picker (page-level)
   const [templateOpen, setTemplateOpen] = useState(false);
   const templateRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -423,6 +423,22 @@ export default function NewDocument() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Notes section template picker
+  const [notesTemplateOpen, setNotesTemplateOpen] = useState(false);
+  const notesTemplateRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (notesTemplateRef.current && !notesTemplateRef.current.contains(e.target as Node)) setNotesTemplateOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const loadNotesFromTemplate = (doc: RequirementDoc) => {
+    const s35 = ((doc.sections ?? {}) as Record<string, unknown>).s35 as Record<string, unknown> | undefined ?? {};
+    if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
+    if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
+    if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
+    setNotesTemplateOpen(false);
+  };
 
   const client = leads.find((l) => l.name === selectedClient);
 
@@ -882,13 +898,63 @@ export default function NewDocument() {
 
       {/* Section 3.5: Detailed Requirements Notes (editable header) */}
       <section>
-        <EditableSectionHeader
-          icon={PenLine}
-          title={detailedNotesTitle}
-          onTitleChange={setDetailedNotesTitle}
-          subtitle={detailedNotesSubtitle}
-          onSubtitleChange={setDetailedNotesSubtitle}
-        />
+        <div className="flex items-start justify-between gap-3 mb-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+                <PenLine className="text-primary" size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <input
+                  value={detailedNotesTitle}
+                  onChange={e => setDetailedNotesTitle(e.target.value)}
+                  placeholder="Section title…"
+                  className="block w-full text-base font-semibold text-foreground bg-transparent border-b border-transparent hover:border-border focus:border-primary/50 focus:outline-none pb-0.5 transition-colors"
+                />
+                <input
+                  value={detailedNotesSubtitle}
+                  onChange={e => setDetailedNotesSubtitle(e.target.value)}
+                  placeholder="Section description…"
+                  className="block w-full text-xs text-muted-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary/30 focus:outline-none mt-1 pb-0.5 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Per-section template loader */}
+          {docs.length > 0 && (
+            <div className="relative flex-shrink-0" ref={notesTemplateRef}>
+              <button
+                type="button"
+                onClick={() => setNotesTemplateOpen(o => !o)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md px-2.5 py-1.5 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
+              >
+                <LayoutTemplate size={12} />
+                Load template
+                <ChevronDown size={12} className={`transition-transform ${notesTemplateOpen ? "rotate-180" : ""}`} />
+              </button>
+              {notesTemplateOpen && (
+                <div className="absolute z-50 top-full mt-1 right-0 min-w-[240px] max-h-56 overflow-y-auto bg-background border border-border rounded-lg shadow-lg">
+                  <div className="px-3 py-2 border-b border-border/60">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Load notes from document</p>
+                  </div>
+                  {docs.map(doc => (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => loadNotesFromTemplate(doc)}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0 flex flex-col gap-0.5"
+                    >
+                      <span className="font-medium truncate">{doc.title || "Untitled"}</span>
+                      {doc.clientName && <span className="text-xs text-muted-foreground truncate">{doc.clientName}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <RichTextEditor
           value={detailedNotes}
           onChange={setDetailedNotes}
