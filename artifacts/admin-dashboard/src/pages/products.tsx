@@ -171,7 +171,7 @@ export default function ProductsPage() {
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
   const filtered = products
-    .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase()))
+    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(p => statusFilter === "All" || p.status === statusFilter)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 

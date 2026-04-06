@@ -1122,10 +1122,10 @@ export default function InvoicesPage() {
     const q = search.toLowerCase();
     return typedInvoices.filter(inv => {
       const matchStatus = statusFilter === "All" || inv.status === statusFilter;
-      const matchSearch = !q ||
-        inv.invoiceNumber.toLowerCase().includes(q) ||
-        inv.customer.toLowerCase().includes(q) ||
-        (inv.notes ?? "").toLowerCase().includes(q);
+      const matchSearch = !q || [
+        inv.invoiceNumber, inv.customer, inv.status, inv.invoiceTitle,
+        inv.paymentMethod, inv.paymentTerms, inv.notes ?? "",
+      ].some(v => v?.toLowerCase().includes(q));
       return matchStatus && matchSearch;
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [typedInvoices, statusFilter, search]);

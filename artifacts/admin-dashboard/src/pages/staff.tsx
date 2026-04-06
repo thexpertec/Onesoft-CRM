@@ -83,11 +83,7 @@ export default function StaffPage() {
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(s =>
-        s.name.toLowerCase().includes(q) ||
-        s.email.toLowerCase().includes(q) ||
-        s.department.toLowerCase().includes(q) ||
-        s.designation.toLowerCase().includes(q) ||
-        s.role.toLowerCase().includes(q),
+        [s.name, s.email, s.phone, s.department, s.designation, s.role, s.status].some(v => v?.toLowerCase().includes(q)),
       );
     }
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

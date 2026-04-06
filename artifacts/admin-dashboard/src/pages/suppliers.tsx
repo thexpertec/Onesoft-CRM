@@ -273,7 +273,7 @@ export default function SuppliersPage() {
   const filtered = useMemo(() =>
     suppliers.filter(s => {
       const q = search.toLowerCase();
-      const mQ = !q || [s.company, s.contactPerson, s.category, s.city, s.country].some(v => v?.toLowerCase().includes(q));
+      const mQ = !q || [s.company, s.contactPerson, s.email, s.phone, s.category, s.city, s.country, s.status, s.notes, ...(s.tags ?? [])].some(v => v?.toLowerCase().includes(q));
       const mS = statusFilter === "All" || s.status === statusFilter;
       const mC = catFilter === "All" || s.category === catFilter;
       return mQ && mS && mC;

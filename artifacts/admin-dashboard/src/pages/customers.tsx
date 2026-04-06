@@ -257,7 +257,7 @@ export default function CustomersPage() {
   const filtered = useMemo(() =>
     customers.filter(c => {
       const q = search.toLowerCase();
-      const mQ = !q || [c.name, c.company, c.industry, c.city].some(v => v?.toLowerCase().includes(q));
+      const mQ = !q || [c.name, c.company, c.email, c.phone, c.industry, c.city, c.status, c.notes, ...(c.tags ?? [])].some(v => v?.toLowerCase().includes(q));
       const mS = statusFilter === "All" || c.status === statusFilter;
       return mQ && mS;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),

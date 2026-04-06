@@ -340,7 +340,7 @@ export default function Leads() {
   const filtered = useMemo(() =>
     leads.filter(l => {
       const q = search.toLowerCase();
-      const mQ = !q || [l.name, l.company, l.email, l.industry, l.city, l.source]
+      const mQ = !q || [l.name, l.company, l.email, l.phone, l.industry, l.city, l.status, l.source, l.notes]
         .some(v => v?.toLowerCase().includes(q));
       const mS = statusFilter === "All" || l.status === statusFilter;
       return mQ && mS;
