@@ -341,10 +341,10 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
 
     /* ── Print ── */
     @media print {
-      @page { margin: 0; size: A4; }
+      @page { margin: 16mm 14mm; size: A4; }
       html, body { background: #fff !important; }
       .toolbar { display: none !important; }
-      .wrap { margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+      .wrap { margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; max-width: 100% !important; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     }
   </style>
