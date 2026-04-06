@@ -1435,6 +1435,24 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           localStorage.setItem(key, JSON.stringify(value));
         }
       }
+
+      // ── One-time migration: push any global localStorage keys that are
+      //    missing from the DB (created before PostgreSQL integration was added).
+      for (let i = 0; i < localStorage.length; i++) {
+        const lsKey = localStorage.key(i);
+        if (!lsKey) continue;
+        // Only global keys (no tenant prefix, starts with "admin-")
+        if (lsKey.startsWith("t:") || !lsKey.startsWith("admin-")) continue;
+        if (lsKey in globalData) continue; // already in DB, skip
+        try {
+          const raw = localStorage.getItem(lsKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            // Fire-and-forget migration write to DB
+            kvPut("global", lsKey, parsed).catch(() => {});
+          }
+        } catch { /* ignore malformed entries */ }
+      }
     }
 
     // Sync tenant-scoped data when a tenant is active

@@ -187,9 +187,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // When superadmin is in their own context (no tenant), full access always.
   const isModuleAllowed = (moduleId: ModuleId): boolean => {
     if (isSuperAdmin && !currentTenantId) return true; // superadmin in own context
-    if (!currentTenant?.moduleGroupId) return true;    // tenant has no group → full access
+    if (!currentTenant?.moduleGroupId) return true;    // no restriction group assigned → full access
     const group = getModuleGroupById(currentTenant.moduleGroupId);
-    if (!group) return true;
+    if (!group) return false; // group assigned but not found → deny (safer default)
     return group.modules.includes(moduleId);
   };
 

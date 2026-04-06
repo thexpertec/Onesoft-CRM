@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
@@ -74,15 +74,16 @@ function TenantModal({
   const [slugLocked, setSlugLocked] = useState(!!editing);
   const [moduleGroups, setModuleGroups] = useState<ModuleGroup[]>(() => getModuleGroups());
 
-  // Reset form when modal opens
-  useState(() => {
+  // Reset form when modal opens or editing target changes
+  useEffect(() => {
     if (open) {
       setForm(editing ? { ...editing } : blankForm());
       setSlugLocked(!!editing);
       setShowPwd(false);
       setModuleGroups(getModuleGroups());
     }
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing]);
 
   function patch<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm(f => {
