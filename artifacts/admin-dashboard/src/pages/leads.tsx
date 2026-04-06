@@ -147,7 +147,7 @@ function mapRow(row: ParsedRow): Record<EditableField, string> {
 type ImportRow = {
   mapped:  Record<EditableField, string>;
   error?:  string;   // null = valid
-  isDupe?: boolean;  // email matches existing
+  isDupe?: boolean;  // email or phone matches existing
 };
 
 // ─── EditableCell ──────────────────────────────────────────────────────────────
@@ -267,6 +267,7 @@ export default function Leads() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const existingEmails = useMemo(() => new Set(leads.map(l => l.email?.toLowerCase()).filter(Boolean)), [leads]);
+  const existingPhones = useMemo(() => new Set(leads.map(l => l.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [leads]);
 
   function processFile(file: File) {
     if (!file.name.match(/\.(csv|txt)$/i)) {
@@ -285,7 +286,11 @@ export default function Leads() {
         const mapped = mapRow(raw);
         let error: string | undefined;
         if (!mapped.name.trim()) error = "Name is required";
-        const isDupe = !!(mapped.email && existingEmails.has(mapped.email.toLowerCase()));
+        const normPhone = mapped.phone?.replace(/\D/g, "");
+        const isDupe = !!(
+          (mapped.email && existingEmails.has(mapped.email.toLowerCase())) ||
+          (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone))
+        );
         return { mapped, error, isDupe };
       });
       setImportRows(parsed);
@@ -423,6 +428,16 @@ export default function Leads() {
     if (!newRow || !newRow.name.trim()) {
       toast({ title: "Name is required", variant: "destructive" });
       setNewRowActive(0);
+      return;
+    }
+    const emailLower = newRow.email?.toLowerCase();
+    const normPhone = newRow.phone?.replace(/\D/g, "");
+    if (emailLower && existingEmails.has(emailLower)) {
+      toast({ title: "Duplicate lead", description: `Email "${newRow.email}" already exists.`, variant: "destructive" });
+      return;
+    }
+    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
+      toast({ title: "Duplicate lead", description: `Phone "${newRow.phone}" already exists.`, variant: "destructive" });
       return;
     }
     addLead({

@@ -229,29 +229,38 @@ export default function SuppliersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
 
+  const existingEmails = useMemo(() => new Set(suppliers.map(s => s.email?.toLowerCase()).filter(Boolean)), [suppliers]);
+  const existingPhones = useMemo(() => new Set(suppliers.map(s => s.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [suppliers]);
+
   const handleImportSuppliers = useCallback((rows: SupplierCsvRow[]) => {
-    let count = 0;
+    let count = 0; let skipped = 0;
+    const snapEmails = new Set(existingEmails);
+    const snapPhones = new Set(existingPhones);
     rows.forEach(r => {
       try {
+        const emailLower = r.email?.toLowerCase();
+        const normPhone = r.phone?.replace(/\D/g, "");
+        if ((emailLower && snapEmails.has(emailLower)) || (normPhone && normPhone.length >= 7 && snapPhones.has(normPhone))) {
+          skipped++; return;
+        }
         addSupplier({
-          company: r.company.trim(),
-          contactPerson: r.contactPerson.trim(),
-          email: r.email.trim(),
-          phone: r.phone.trim(),
+          company: r.company.trim(), contactPerson: r.contactPerson.trim(),
+          email: r.email.trim(), phone: r.phone.trim(),
           category: r.category.trim() || SUPPLIER_CATEGORIES[0],
-          city: r.city.trim(),
-          country: r.country.trim(),
+          city: r.city.trim(), country: r.country.trim(),
           status: (SUPPLIER_STATUSES.includes(r.status as SupplierStatus) ? r.status : "Active") as SupplierStatus,
           rating: Math.min(5, Math.max(0, parseInt(r.rating) || 0)),
-          currency: r.currency.trim() || "GBP",
-          notes: r.notes.trim(),
+          currency: r.currency.trim() || "GBP", notes: r.notes.trim(),
           tags: r.tags ? r.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
         });
+        if (emailLower) snapEmails.add(emailLower);
+        if (normPhone && normPhone.length >= 7) snapPhones.add(normPhone);
         count++;
       } catch { /* skip bad rows */ }
     });
-    toast({ title: `${count} supplier${count !== 1 ? "s" : ""} imported`, description: "Successfully added to your suppliers list." });
-  }, [addSupplier, toast]);
+    const desc = skipped > 0 ? `${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped.` : "Successfully added to your suppliers list.";
+    toast({ title: `${count} supplier${count !== 1 ? "s" : ""} imported`, description: desc });
+  }, [addSupplier, existingEmails, existingPhones, toast]);
 
   // KPIs
   const activeCount  = suppliers.filter(s => s.status === "Active").length;
@@ -324,6 +333,14 @@ export default function SuppliersPage() {
 
   const commitNewRow = () => {
     if (!newRow?.company.trim()) { toast({ title: "Company is required", variant: "destructive" }); setNewRowActive(0); return; }
+    const emailLower = newRow.email?.toLowerCase();
+    const normPhone = newRow.phone?.replace(/\D/g, "");
+    if (emailLower && existingEmails.has(emailLower)) {
+      toast({ title: "Duplicate supplier", description: `Email "${newRow.email}" already exists.`, variant: "destructive" }); return;
+    }
+    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
+      toast({ title: "Duplicate supplier", description: `Phone "${newRow.phone}" already exists.`, variant: "destructive" }); return;
+    }
     addSupplier({
       company: newRow.company, contactPerson: newRow.contactPerson, email: newRow.email,
       phone: newRow.phone, category: newRow.category || SUPPLIER_CATEGORIES[0],

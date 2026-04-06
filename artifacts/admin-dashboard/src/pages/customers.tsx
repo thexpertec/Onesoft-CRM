@@ -213,31 +213,37 @@ export default function CustomersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
 
+  const existingEmails = useMemo(() => new Set(customers.map(c => c.email?.toLowerCase()).filter(Boolean)), [customers]);
+  const existingPhones = useMemo(() => new Set(customers.map(c => c.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [customers]);
+
   const handleImportCustomers = useCallback((rows: CustomerCsvRow[]) => {
-    let count = 0;
+    let count = 0; let skipped = 0;
+    const snapEmails = new Set(existingEmails);
+    const snapPhones = new Set(existingPhones);
     rows.forEach(r => {
       try {
+        const emailLower = r.email?.toLowerCase();
+        const normPhone = r.phone?.replace(/\D/g, "");
+        if ((emailLower && snapEmails.has(emailLower)) || (normPhone && normPhone.length >= 7 && snapPhones.has(normPhone))) {
+          skipped++; return;
+        }
         addCustomer({
-          name: r.name.trim(),
-          company: r.company.trim(),
-          email: r.email.trim(),
-          phone: r.phone.trim(),
-          industry: r.industry.trim(),
-          city: r.city.trim(),
+          name: r.name.trim(), company: r.company.trim(), email: r.email.trim(), phone: r.phone.trim(),
+          industry: r.industry.trim(), city: r.city.trim(),
           status: (CUSTOMER_STATUSES.includes(r.status as CustomerStatus) ? r.status : "Active") as CustomerStatus,
-          source: "direct",
-          customerSince: r.customerSince || new Date().toISOString().split("T")[0],
-          totalValue: r.totalValue.trim(),
-          currency: r.currency.trim() || "GBP",
-          notes: r.notes.trim(),
+          source: "direct", customerSince: r.customerSince || new Date().toISOString().split("T")[0],
+          totalValue: r.totalValue.trim(), currency: r.currency.trim() || "GBP", notes: r.notes.trim(),
           tags: r.tags ? r.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
         });
+        if (emailLower) snapEmails.add(emailLower);
+        if (normPhone && normPhone.length >= 7) snapPhones.add(normPhone);
         count++;
       } catch { /* skip bad rows */ }
     });
-    toast({ title: `${count} customer${count !== 1 ? "s" : ""} imported`, description: "Successfully added to your customers list." });
+    const desc = skipped > 0 ? `${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped.` : "Successfully added to your customers list.";
+    toast({ title: `${count} customer${count !== 1 ? "s" : ""} imported`, description: desc });
     refresh?.();
-  }, [addCustomer, refresh, toast]);
+  }, [addCustomer, existingEmails, existingPhones, refresh, toast]);
 
   // KPIs
   const totalRevenue = useMemo(() => customers.reduce((a, c) => {
@@ -306,6 +312,14 @@ export default function CustomersPage() {
 
   const commitNewRow = () => {
     if (!newRow?.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); setNewRowActive(0); return; }
+    const emailLower = newRow.email?.toLowerCase();
+    const normPhone = newRow.phone?.replace(/\D/g, "");
+    if (emailLower && existingEmails.has(emailLower)) {
+      toast({ title: "Duplicate customer", description: `Email "${newRow.email}" already exists.`, variant: "destructive" }); return;
+    }
+    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
+      toast({ title: "Duplicate customer", description: `Phone "${newRow.phone}" already exists.`, variant: "destructive" }); return;
+    }
     addCustomer({
       name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
       industry: newRow.industry, city: newRow.city, status: newRow.status as CustomerStatus,
