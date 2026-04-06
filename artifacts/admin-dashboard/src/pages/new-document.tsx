@@ -6,9 +6,9 @@ import {
   ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
-import { useDocs, useLeads } from "@/hooks/use-data";
+import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getTeamMembers, addTeamMember, getDoc, RequirementDoc } from "@/lib/store";
+import { getTeamMembers, addTeamMember, getDoc, RequirementDoc, Lead, Customer } from "@/lib/store";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
@@ -280,6 +280,116 @@ function FieldTplPicker({ docs, extract, onSelect }: {
   );
 }
 
+// Custom searchable dropdown showing leads + customers with colored tags
+function ClientPicker({ leads, customers, value, onChange }: {
+  leads: Lead[];
+  customers: Customer[];
+  value: string;
+  onChange: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  type Entry = { name: string; kind: "lead" | "customer"; sub: string };
+  const all: Entry[] = [
+    ...leads.map(l => ({ name: l.name, kind: "lead" as const, sub: l.company || l.status })),
+    ...customers.map(c => ({ name: c.name, kind: "customer" as const, sub: c.company || c.status })),
+  ];
+  const filtered = search
+    ? all.filter(o => o.name.toLowerCase().includes(search.toLowerCase()) || o.sub.toLowerCase().includes(search.toLowerCase()))
+    : all;
+
+  const isEmpty = leads.length === 0 && customers.length === 0;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => { if (!isEmpty) setOpen(o => !o); }}
+        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary ${
+          isEmpty ? "border-dashed border-border bg-muted/30 text-muted-foreground cursor-not-allowed" :
+          "border-border bg-background text-foreground hover:border-primary/40 cursor-pointer"
+        } ${open ? "border-primary ring-2 ring-primary/20" : ""}`}
+        disabled={isEmpty}
+      >
+        <span className={value ? "text-foreground font-medium" : "text-muted-foreground/60"}>
+          {value || (isEmpty ? "No leads or clients yet — add them first" : "Select client or lead…")}
+        </span>
+        <ChevronDown size={16} className={`text-muted-foreground transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-xl overflow-hidden">
+          {/* Search */}
+          <div className="p-2 border-b border-border">
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name or company…"
+              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
+          {/* Legend */}
+          <div className="px-3 py-1.5 bg-muted/30 border-b border-border flex items-center gap-3">
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" /> Lead
+            </span>
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" /> Client
+            </span>
+          </div>
+          {/* List */}
+          <div className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">No matches found</div>
+            ) : (
+              filtered.map(entry => (
+                <button
+                  key={`${entry.kind}-${entry.name}`}
+                  type="button"
+                  onClick={() => { onChange(entry.name); setOpen(false); setSearch(""); }}
+                  className={`w-full text-left px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0 ${value === entry.name ? "bg-primary/5" : ""}`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{entry.name}</p>
+                    {entry.sub && <p className="text-xs text-muted-foreground truncate">{entry.sub}</p>}
+                  </div>
+                  <span className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                    entry.kind === "lead"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                  }`}>
+                    {entry.kind === "lead" ? "Lead" : "Client"}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          {/* Clear selection */}
+          {value && (
+            <div className="border-t border-border p-2">
+              <button
+                type="button"
+                onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+                className="w-full text-xs text-muted-foreground hover:text-destructive text-center py-1 transition-colors"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SaveButton({ sectionKey, saved, onSave }: { sectionKey: string; saved: boolean; onSave: () => void }) {
   return (
     <div className="flex justify-end mt-6 pt-4 border-t border-border">
@@ -380,6 +490,7 @@ export default function NewDocument() {
 
   const { docs, addDoc, editDoc } = useDocs();
   const { leads } = useLeads();
+  const { customers } = useCustomers();
   const { isAuthenticated } = useAuth();
 
   const today = new Date().toISOString().split("T")[0];
@@ -476,7 +587,11 @@ export default function NewDocument() {
     setNotesTemplateOpen(false);
   };
 
-  const client = leads.find((l) => l.name === selectedClient);
+  // Unified lookup — works for both leads and customers
+  const clientEntry = selectedClient
+    ? (leads.find(l => l.name === selectedClient) ?? customers.find(c => c.name === selectedClient) ?? null)
+    : null;
+  const client = clientEntry; // kept for backward-compat references below
 
   // Per-section save (draft)
   const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
@@ -788,19 +903,21 @@ export default function NewDocument() {
             <PreparedByField value={preparedBy} onChange={setPreparedBy} />
           </FormField>
           <div className="sm:col-span-2">
-            <FormField label="Client Name" required hint={leads.length === 0 ? "Add leads first to select a client" : "Select from your existing leads"}>
-              {leads.length === 0 ? (
-                <div className="w-full px-3 py-2.5 rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground italic">
-                  No leads yet — add leads first to link a client
-                </div>
-              ) : (
-                <SelectInput
-                  options={leads.map((l) => l.name)}
-                  value={selectedClient}
-                  onChange={handleSelectClient}
-                  placeholder="Select client from leads"
-                />
-              )}
+            <FormField
+              label="Client Name"
+              required
+              hint={
+                leads.length === 0 && customers.length === 0
+                  ? "Add leads or clients first to link them here"
+                  : `${leads.length} lead${leads.length !== 1 ? "s" : ""} · ${customers.length} client${customers.length !== 1 ? "s" : ""} available`
+              }
+            >
+              <ClientPicker
+                leads={leads}
+                customers={customers}
+                value={selectedClient}
+                onChange={handleSelectClient}
+              />
             </FormField>
           </div>
 
@@ -812,7 +929,13 @@ export default function NewDocument() {
                 className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wide hover:text-primary/80 transition-colors mb-3"
               >
                 <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${clientInfoOpen ? "rotate-180" : ""}`} />
-                {clientInfoOpen ? "Hide" : "Show"} Client Details
+                {clientInfoOpen ? "Hide" : "Show"} Details
+                {/* Type badge */}
+                {'notes' in client ? (
+                  <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Lead</span>
+                ) : (
+                  <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Client</span>
+                )}
               </button>
               {clientInfoOpen && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
@@ -822,9 +945,9 @@ export default function NewDocument() {
                   <FormField label="Industry"><ReadOnlyField value={client.industry} placeholder="—" /></FormField>
                   <FormField label="City"><ReadOnlyField value={client.city} placeholder="—" /></FormField>
                   <FormField label="Status"><ReadOnlyField value={client.status} placeholder="—" /></FormField>
-                  {client.notes && (
+                  {'notes' in client && (client as Lead).notes && (
                     <div className="sm:col-span-2">
-                      <FormField label="Lead Notes"><ReadOnlyField value={client.notes} placeholder="—" /></FormField>
+                      <FormField label="Notes"><ReadOnlyField value={(client as Lead).notes} placeholder="—" /></FormField>
                     </div>
                   )}
                 </div>
