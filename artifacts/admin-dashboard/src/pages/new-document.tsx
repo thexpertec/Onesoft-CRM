@@ -463,7 +463,6 @@ export default function NewDocument() {
       const s35 = (d.s35 ?? {}) as Record<string, unknown>;
       const s5 = (d.s5 ?? {}) as Record<string, unknown>;
       const s6 = (d.s6 ?? {}) as Record<string, unknown>;
-      const s7 = (d.s7 ?? {}) as Record<string, unknown>;
       if (s1.docTitle)       setDocTitle(s1.docTitle as string);
       if (s1.docDate)        setDocDate(s1.docDate as string);
       if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
@@ -488,8 +487,6 @@ export default function NewDocument() {
       if (s6.startDate)      setStartDate(s6.startDate as string);
       if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
       if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
-      if (s7.postLaunch)     setPostLaunch(s7.postLaunch as string);
-      if (s7.maintenance)    setMaintenance(s7.maintenance as string);
     };
 
     try {
@@ -527,7 +524,6 @@ export default function NewDocument() {
     const sCustom2 = (d.sCustom2 ?? {}) as Record<string, unknown>;
     const s5 = (d.s5 ?? {}) as Record<string, unknown>;
     const s6 = (d.s6 ?? {}) as Record<string, unknown>;
-    const s7 = (d.s7 ?? {}) as Record<string, unknown>;
     if (s1.docDate)        setDocDate(s1.docDate as string);
     if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
     if (s2.businessType)   setBusinessType(s2.businessType as string);
@@ -548,8 +544,6 @@ export default function NewDocument() {
     if (s6.startDate)      setStartDate(s6.startDate as string);
     if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
     if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
-    if (s7.postLaunch)     setPostLaunch(s7.postLaunch as string);
-    if (s7.maintenance)    setMaintenance(s7.maintenance as string);
   };
 
   // Save Document → addDoc → navigate to /documents
@@ -572,7 +566,6 @@ export default function NewDocument() {
       sCustom:  { sections: customSections },
       s5:  { paymentStructure, additionalCosts, currency, lineItems },
       s6:  { startDate, deliveryDate, milestones },
-      s7:  { postLaunch, maintenance },
       sCustom2: { sections: customSections2 },
     };
 
@@ -1245,24 +1238,6 @@ export default function NewDocument() {
           </div>
         </div>
         <SaveButton sectionKey="s6" saved={!!savedSections.s6} onSave={saveS6} />
-      </section>
-
-      <SectionDivider />
-
-      {/* Section 7: Support & Maintenance */}
-      <section>
-        <SectionHeader icon={Target} title="7. Support & Maintenance" subtitle="Post-launch support and ongoing maintenance plans" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div className="sm:col-span-2">
-            <FormField label="Post-Launch Support" hint="Bug fixes, updates, improvements after go-live">
-              <TextInput value={postLaunch} onChange={setPostLaunch} rows={3} placeholder="e.g. 30-day bug fix warranty, monthly feature updates, dedicated support channel..." />
-            </FormField>
-          </div>
-          <FormField label="Maintenance Duration" required>
-            <SelectInput options={MAINTENANCE_OPTIONS} value={maintenance} onChange={setMaintenance} placeholder="Select duration" />
-          </FormField>
-        </div>
-        <SaveButton sectionKey="s7" saved={!!savedSections.s7} onSave={saveS7} />
       </section>
 
       <SectionDivider />
