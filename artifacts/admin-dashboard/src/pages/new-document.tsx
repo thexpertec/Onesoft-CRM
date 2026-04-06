@@ -666,7 +666,7 @@ export default function NewDocument() {
           <FormField label="Business Type" required hint="Selecting a type refines the Key Products / Services list below">
             <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={handleBusinessTypeChange} placeholder="Select business type" />
           </FormField>
-          <FormField label="Target Audience" required hint="Age group, profession, and geographical location">
+          <FormField label="Target Audience" hint="Age group, profession, and geographical location">
             <TextInput value={targetAudience} onChange={setTargetAudience} placeholder="e.g. Professionals aged 25-45 in North America..." />
           </FormField>
           <div className="sm:col-span-2">
@@ -684,7 +684,7 @@ export default function NewDocument() {
             </FormField>
           </div>
           <div className="sm:col-span-2">
-            <FormField label="Business Goals" required hint="Primary goals the client aims to achieve">
+            <FormField label="Business Goals" hint="Primary goals the client aims to achieve">
               <TextInput value={businessGoals} onChange={setBusinessGoals} rows={3} placeholder="e.g. Increase monthly active users by 30%, streamline operations..." />
             </FormField>
           </div>
