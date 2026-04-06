@@ -1,11 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { useInvoices } from "@/hooks/use-data";
 import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  getProducts, getCustomers, getSettings,
+  getProducts, getCustomers, getSuppliers, getSettings,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -59,10 +59,11 @@ const blankItem = (): SaleItem => ({
   itemStatus: "Reserved",
 });
 
-const blankInvoice = (): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => {
+const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => {
   const s = getSettings();
   return {
-    invoiceTitle:   "Tax Invoice",
+    invoiceType:    type,
+    invoiceTitle:   type === "purchase" ? "Purchase Invoice" : "Tax Invoice",
     invoiceDate:    today(),
     dueDate:        in30(),
     customer:       "",
@@ -282,13 +283,15 @@ interface PanelProps {
   onSave: (data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: InvoiceStatus, amountPaid?: string) => void;
+  defaultType?: "sale" | "purchase";
 }
 
-function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: PanelProps) {
+function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, defaultType = "sale" }: PanelProps) {
   const isNew = !invoice;
+  const invoiceType: "sale" | "purchase" = (invoice?.invoiceType ?? defaultType) as "sale" | "purchase";
 
   const [form, setForm]         = useState<ReturnType<typeof blankInvoice>>(
-    () => invoice ? { ...invoice } : blankInvoice()
+    () => invoice ? { ...invoice } : blankInvoice(defaultType)
   );
   const [items, setItems]       = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
@@ -321,6 +324,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 
   const products    = useMemo(() => getProducts(), []);
   const customers   = useMemo(() => getCustomers(), []);
+  const suppliers   = useMemo(() => getSuppliers(), []);
   const settings    = useMemo(() => getSettings(), []);
   const legalDocs   = useMemo(() => settings.legalDocuments ?? [], [settings]);
   const productOpts = useMemo<ComboOption[]>(() =>
@@ -338,6 +342,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
       sub:   [c.company, c.email, c.phone].filter(Boolean).join(" · "),
     })),
   [customers]);
+  const supplierOpts = useMemo<ComboOption[]>(() =>
+    suppliers.map(s => ({
+      value: s.company,
+      label: s.company,
+      sub:   [s.contactPerson, s.email, s.phone].filter(Boolean).join(" · "),
+    })),
+  [suppliers]);
 
   const handleCustomerSelect = useCallback((name: string) => {
     const c = customers.find(x => x.name === name);
@@ -350,6 +361,18 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
       buyerAddress: c ? [c.company, c.city].filter(Boolean).join(", ") : f.buyerAddress,
     }));
   }, [customers]);
+
+  const handleSupplierSelect = useCallback((name: string) => {
+    const s = suppliers.find(x => x.company === name);
+    setForm(f => ({
+      ...f,
+      customer:    name,
+      customerId:  s ? s.id.slice(-8).toUpperCase() : f.customerId,
+      buyerPhone:  s?.phone  || f.buyerPhone,
+      buyerEmail:  s?.email  || f.buyerEmail,
+      buyerAddress: s ? [s.contactPerson, s.city, s.country].filter(Boolean).join(", ") : f.buyerAddress,
+    }));
+  }, [suppliers]);
 
   const setF = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -476,7 +499,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <FileText size={14} className="text-white"/>
             </div>
             <span className="text-base font-bold text-gray-900 dark:text-gray-100">
-              {isNew ? "New Invoice" : invoice.invoiceNumber}
+              {isNew
+                ? invoiceType === "purchase" ? "New Purchase Invoice" : "New Sale Invoice"
+                : invoice.invoiceNumber}
             </span>
           </div>
           {!isNew && <StatusBadge status={invoice.status}/>}
@@ -510,22 +535,52 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800">
             <div className="px-6 py-5 space-y-5">
 
-            {/* Customer + ID */}
+            {/* Type badge */}
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                invoiceType === "purchase"
+                  ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300"
+                  : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+              }`}>
+                {invoiceType === "purchase" ? "Purchase Invoice" : "Sale Invoice"}
+              </span>
+            </div>
+
+            {/* Customer / Supplier + ID */}
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Customer</label>
-                <Combobox
-                  value={form.customer}
-                  onChange={v => setF("customer", v)}
-                  onSelect={opt => handleCustomerSelect(opt.value)}
-                  options={customerOpts}
-                  placeholder="Search or type customer name…"
-                  className="w-full"
-                  inputClassName="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                {invoiceType === "purchase" ? (
+                  <>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Supplier</label>
+                    <Combobox
+                      value={form.customer}
+                      onChange={v => setF("customer", v)}
+                      onSelect={opt => handleSupplierSelect(opt.value)}
+                      options={supplierOpts}
+                      placeholder="Search or type supplier name…"
+                      className="w-full"
+                      inputClassName="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Customer</label>
+                    <Combobox
+                      value={form.customer}
+                      onChange={v => setF("customer", v)}
+                      onSelect={opt => handleCustomerSelect(opt.value)}
+                      options={customerOpts}
+                      placeholder="Search or type customer name…"
+                      className="w-full"
+                      inputClassName="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </>
+                )}
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Customer ID</label>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                  {invoiceType === "purchase" ? "Supplier ID" : "Customer ID"}
+                </label>
                 <input
                   value={form.customerId}
                   onChange={e => setF("customerId", e.target.value)}
@@ -977,6 +1032,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
 // ─── Invoice Form Page (route wrapper) ────────────────────────────────────────
 export function InvoiceFormPage() {
   const params = useParams<{ id?: string }>();
+  const search = useSearch();
   const [, navigate] = useLocation();
   const { invoices, addInvoice, editInvoice, removeInvoice } = useInvoices();
   const { toast } = useToast();
@@ -984,6 +1040,11 @@ export function InvoiceFormPage() {
   const invoiceId = params.id;
   const isNewRoute = !invoiceId || invoiceId === "new";
   const invoice = isNewRoute ? null : invoices.find(i => i.id === invoiceId) ?? null;
+
+  // Read ?type=purchase from URL for new invoices
+  const searchParams = new URLSearchParams(search);
+  const defaultType: "sale" | "purchase" =
+    searchParams.get("type") === "purchase" ? "purchase" : "sale";
 
   const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
     if (id) {
@@ -1032,6 +1093,7 @@ export function InvoiceFormPage() {
       onSave={handleSave}
       onDelete={handleDelete}
       onStatusChange={handleStatusChange}
+      defaultType={defaultType}
     />
   );
 }
@@ -1041,26 +1103,38 @@ export default function InvoicesPage() {
   const { invoices } = useInvoices();
   const [, navigate] = useLocation();
 
+  const [typeFilter,   setTypeFilter]   = useState<"sale" | "purchase">("sale");
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
   const [search,       setSearch]       = useState("");
 
+  // Invoice type colour palette
+  const isPurchase = typeFilter === "purchase";
+  const accentCls  = isPurchase
+    ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
+    : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none";
+
+  // Invoices of the current type
+  const typedInvoices = useMemo(() =>
+    invoices.filter(inv => (inv.invoiceType ?? "sale") === typeFilter),
+  [invoices, typeFilter]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return invoices.filter(inv => {
+    return typedInvoices.filter(inv => {
       const matchStatus = statusFilter === "All" || inv.status === statusFilter;
       const matchSearch = !q ||
         inv.invoiceNumber.toLowerCase().includes(q) ||
         inv.customer.toLowerCase().includes(q) ||
-        inv.notes.toLowerCase().includes(q);
+        (inv.notes ?? "").toLowerCase().includes(q);
       return matchStatus && matchSearch;
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [invoices, statusFilter, search]);
+  }, [typedInvoices, statusFilter, search]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { All: invoices.length };
-    INVOICE_STATUSES.forEach(s => { c[s] = invoices.filter(i => i.status === s).length; });
+    const c: Record<string, number> = { All: typedInvoices.length };
+    INVOICE_STATUSES.forEach(s => { c[s] = typedInvoices.filter(i => i.status === s).length; });
     return c;
-  }, [invoices]);
+  }, [typedInvoices]);
 
   const TAB_DEFS: Array<{ label: string; value: "All" | InvoiceStatus }> = [
     { label: "All",       value: "All"       },
@@ -1072,30 +1146,68 @@ export default function InvoicesPage() {
     { label: "Cancelled", value: "Cancelled" },
   ];
 
+  const saleCount     = useMemo(() => invoices.filter(i => (i.invoiceType ?? "sale") === "sale").length,     [invoices]);
+  const purchaseCount = useMemo(() => invoices.filter(i => (i.invoiceType ?? "sale") === "purchase").length, [invoices]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
 
       {/* ── Page Header ── */}
       <div className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-md shadow-blue-200 dark:shadow-none">
-              <FileText size={18} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-[18px] font-bold text-gray-900 dark:text-gray-100">Invoices</h1>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">{invoices.length} invoice{invoices.length !== 1 ? "s" : ""} total</p>
-            </div>
-          </div>
+
+        {/* ── Type Tabs (top level) ── */}
+        <div className="flex items-center gap-2 mb-4">
           <button
-            onClick={() => navigate("/invoices/new")}
-            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-bold shadow-md shadow-blue-200 dark:shadow-none transition-colors"
+            onClick={() => { setTypeFilter("sale"); setStatusFilter("All"); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border-2 ${
+              typeFilter === "sale"
+                ? "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-none"
+                : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800"
+            }`}
           >
-            <Plus size={15} /> New Invoice
+            <FileText size={15} />
+            Sale Invoices
+            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+              typeFilter === "sale" ? "bg-white/25 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-400"
+            }`}>{saleCount}</span>
+          </button>
+          <button
+            onClick={() => { setTypeFilter("purchase"); setStatusFilter("All"); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border-2 ${
+              typeFilter === "purchase"
+                ? "border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200 dark:shadow-none"
+                : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <FileText size={15} />
+            Purchase Invoices
+            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+              typeFilter === "purchase" ? "bg-white/25 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-400"
+            }`}>{purchaseCount}</span>
           </button>
         </div>
 
-        {/* ── Filter Tabs ── */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md ${isPurchase ? "bg-purple-600 shadow-purple-200 dark:shadow-none" : "bg-blue-600 shadow-blue-200 dark:shadow-none"}`}>
+              <FileText size={18} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-[18px] font-bold text-gray-900 dark:text-gray-100">
+                {isPurchase ? "Purchase Invoices" : "Sale Invoices"}
+              </h1>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">{typedInvoices.length} invoice{typedInvoices.length !== 1 ? "s" : ""}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(isPurchase ? "/invoices/new?type=purchase" : "/invoices/new")}
+            className={`flex items-center gap-2 h-9 px-4 rounded-xl text-white text-[13px] font-bold shadow-md transition-colors ${accentCls}`}
+          >
+            <Plus size={15} /> {isPurchase ? "New Purchase Invoice" : "New Sale Invoice"}
+          </button>
+        </div>
+
+        {/* ── Status Filter Tabs ── */}
         <div className="flex items-center gap-1 mt-4 overflow-x-auto">
           {TAB_DEFS.map(tab => (
             <button
@@ -1103,7 +1215,7 @@ export default function InvoicesPage() {
               onClick={() => setStatusFilter(tab.value)}
               className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
                 statusFilter === tab.value
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? isPurchase ? "bg-purple-600 text-white shadow-sm" : "bg-blue-600 text-white shadow-sm"
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
               }`}
             >
@@ -1127,7 +1239,7 @@ export default function InvoicesPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by invoice #, customer, notes…"
+            placeholder={isPurchase ? "Search by invoice #, supplier, notes…" : "Search by invoice #, customer, notes…"}
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
           />
           {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={13} /></button>}
@@ -1142,11 +1254,16 @@ export default function InvoicesPage() {
               <FileText size={24} className="text-gray-400" />
             </div>
             <p className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">
-              {invoices.length === 0 ? "No invoices yet" : "No invoices match your filters"}
+              {typedInvoices.length === 0
+                ? `No ${isPurchase ? "purchase" : "sale"} invoices yet`
+                : "No invoices match your filters"}
             </p>
-            {invoices.length === 0 && (
-              <button onClick={() => navigate("/invoices/new")} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-bold mx-auto hover:bg-blue-700 transition-colors">
-                <Plus size={14} /> Create First Invoice
+            {typedInvoices.length === 0 && (
+              <button
+                onClick={() => navigate(isPurchase ? "/invoices/new?type=purchase" : "/invoices/new")}
+                className={`mt-4 flex items-center gap-2 px-4 py-2 rounded-xl text-white text-[13px] font-bold mx-auto transition-colors ${accentCls}`}
+              >
+                <Plus size={14} /> {isPurchase ? "Create First Purchase Invoice" : "Create First Sale Invoice"}
               </button>
             )}
           </div>
@@ -1155,7 +1272,7 @@ export default function InvoicesPage() {
             {/* Table Header */}
             <div className="grid grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto] gap-0 px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               <div>Invoice #</div>
-              <div>Customer</div>
+              <div>{isPurchase ? "Supplier" : "Customer"}</div>
               <div>Date</div>
               <div>Due Date</div>
               <div className="text-right">Items</div>
@@ -1180,9 +1297,9 @@ export default function InvoicesPage() {
                     {inv.invoiceNumber}
                   </div>
 
-                  {/* Customer */}
+                  {/* Customer / Supplier */}
                   <div className="text-[12px] text-gray-700 dark:text-gray-300 truncate pr-2">
-                    {inv.customer || <span className="text-gray-400 italic">Walk-in</span>}
+                    {inv.customer || <span className="text-gray-400 italic">{isPurchase ? "—" : "Walk-in"}</span>}
                   </div>
 
                   {/* Date */}

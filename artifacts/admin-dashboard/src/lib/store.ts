@@ -1109,9 +1109,10 @@ export type Invoice = {
   id:                string;
   invoiceNumber:     string;
   invoiceTitle:      string;    // "Invoice" | "Tax Invoice" | etc.
+  invoiceType?:      "sale" | "purchase";  // "sale" (default) | "purchase"
   invoiceDate:       string;    // YYYY-MM-DD
   dueDate:           string;    // YYYY-MM-DD
-  // Buyer info
+  // Party info (customer for sale invoices, supplier for purchase invoices)
   customer:          string;
   customerId:        string;
   buyerAddress:      string;
@@ -1143,10 +1144,11 @@ export type Invoice = {
 
 const INVOICES_KEY = "admin-invoices";
 
-const nextInvoiceNumber = (): string => {
+const nextInvoiceNumber = (type: "sale" | "purchase" = "sale"): string => {
   const existing = getStored<Invoice>(INVOICES_KEY);
   const d = new Date();
-  const prefix = `INV-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const base = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const prefix = type === "purchase" ? `PINV-${base}` : `INV-${base}`;
   const max = existing
     .filter(inv => inv.invoiceNumber.startsWith(prefix))
     .map(inv => parseInt(inv.invoiceNumber.split("-").pop() ?? "0") || 0)
@@ -1160,7 +1162,7 @@ export const createInvoice = (data: Omit<Invoice, "id" | "invoiceNumber" | "crea
   const inv: Invoice = {
     ...data,
     id: crypto.randomUUID(),
-    invoiceNumber: nextInvoiceNumber(),
+    invoiceNumber: nextInvoiceNumber(data.invoiceType),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
