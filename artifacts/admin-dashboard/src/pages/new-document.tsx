@@ -1244,26 +1244,34 @@ export default function NewDocument() {
 
       {/* Custom sections after financial sections */}
       {customSections2.map(sec => (
-        <React.Fragment key={sec.id}>
-          <section>
-            <EditableSectionHeader
-              title={sec.title}
-              subtitle={sec.subtitle}
-              onTitleChange={v => updateCustomSection2(sec.id, "title", v)}
-              onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
-              onRemove={() => removeCustomSection2(sec.id)}
-            />
-            <RichTextEditor
-              value={sec.content}
-              onChange={v => updateCustomSection2(sec.id, "content", v)}
-              placeholder="Start typing..."
-            />
-            <div className="flex justify-end mt-3">
-              <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
+        <section key={sec.id}>
+          <div className="flex items-start gap-2 mb-0">
+            <div className="flex-1">
+              <EditableSectionHeader
+                icon={FileText}
+                title={sec.title}
+                onTitleChange={v => updateCustomSection2(sec.id, "title", v)}
+                subtitle={sec.subtitle}
+                onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
+              />
             </div>
-          </section>
+            <button
+              type="button"
+              onClick={() => removeCustomSection2(sec.id)}
+              className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+              title="Remove this section"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+          <RichTextEditor
+            value={sec.content}
+            onChange={v => updateCustomSection2(sec.id, "content", v)}
+            placeholder="Write the content for this section…"
+          />
+          <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
           <SectionDivider />
-        </React.Fragment>
+        </section>
       ))}
 
       {/* Add custom section button (post-financial) */}
