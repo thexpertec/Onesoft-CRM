@@ -408,8 +408,9 @@ function POSView({
               onSelect={opt => { onMetaChange({ customer: opt.value }); onSaveMeta(); }}
               options={customerComboOpts}
               placeholder="Walk-in…"
-              className="w-36"
-              inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-36 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
+              maxResults={50}
+              className="w-52"
+              inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-52 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
             />
           </div>
 
@@ -941,7 +942,13 @@ export default function SalesPage() {
   const { toast } = useToast();
 
   const products          = useMemo(() => getProducts(), []);
-  const customerComboOpts = useMemo<ComboOption[]>(() => getCustomers().map(c => ({ value: c.name, label: c.name, sub: c.email || c.phone })), []);
+  const customerComboOpts = useMemo<ComboOption[]>(() =>
+    getCustomers().map(c => ({
+      value: c.name,
+      label: c.name,
+      sub: [c.phone, c.email].filter(Boolean).join("  ·  "),
+    })),
+  []);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
   const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 

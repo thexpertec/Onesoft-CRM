@@ -134,7 +134,7 @@ export function Combobox({
             >
               <span className="flex-1 truncate font-medium text-[13px]">{opt.label}</span>
               {opt.sub && (
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0 truncate max-w-[120px]">{opt.sub}</span>
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0 truncate max-w-[200px]">{opt.sub}</span>
               )}
               {opt.tag && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 shrink-0 whitespace-nowrap">{opt.tag}</span>
