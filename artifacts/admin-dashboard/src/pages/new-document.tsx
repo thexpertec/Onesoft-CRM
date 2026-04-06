@@ -3,12 +3,12 @@ import { useLocation, useParams } from "wouter";
 import {
   FileText, Briefcase, Layers, Wrench, DollarSign, Clock, Target,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
-  ArrowLeft, Lock, Plus, X,
+  ArrowLeft, Lock, Plus, X, FileDown, Trash2, LayoutTemplate,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getTeamMembers, addTeamMember, getDoc } from "@/lib/store";
+import { getTeamMembers, addTeamMember, getDoc, RequirementDoc } from "@/lib/store";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
@@ -91,6 +91,35 @@ function SectionHeader({ icon: Icon, title, subtitle }: { icon: React.ElementTyp
       <div>
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+function EditableSectionHeader({
+  icon: Icon, title, onTitleChange, subtitle, onSubtitleChange,
+}: {
+  icon: React.ElementType; title: string; onTitleChange: (v: string) => void;
+  subtitle: string; onSubtitleChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-start gap-3 mb-6">
+      <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+        <Icon className="text-primary" size={18} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <input
+          value={title}
+          onChange={e => onTitleChange(e.target.value)}
+          placeholder="Section title…"
+          className="block w-full text-base font-semibold text-foreground bg-transparent border-b border-transparent hover:border-border focus:border-primary/50 focus:outline-none pb-0.5 transition-colors"
+        />
+        <input
+          value={subtitle}
+          onChange={e => onSubtitleChange(e.target.value)}
+          placeholder="Section description…"
+          className="block w-full text-xs text-muted-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary/30 focus:outline-none mt-1 pb-0.5 transition-colors"
+        />
       </div>
     </div>
   );
@@ -327,7 +356,7 @@ export default function NewDocument() {
   const isEditMode = !!params.id;
   const DRAFT_KEY = isEditMode ? `admin-edit-doc-draft-${params.id}` : "admin-new-doc-draft";
 
-  const { addDoc, editDoc } = useDocs();
+  const { docs, addDoc, editDoc } = useDocs();
   const { leads } = useLeads();
   const { isAuthenticated } = useAuth();
 
@@ -374,6 +403,27 @@ export default function NewDocument() {
   const [versionHistory, setVersionHistory] = useState("");
   const [detailedNotes, setDetailedNotes] = useState("");
 
+  // Editable s35 header
+  const [detailedNotesTitle, setDetailedNotesTitle] = useState("Detailed Requirements Notes");
+  const [detailedNotesSubtitle, setDetailedNotesSubtitle] = useState("Use this space to document any additional client requirements, discussions, or specifications in detail");
+
+  // Custom sections
+  type CustomSection = { id: string; title: string; subtitle: string; content: string };
+  const [customSections, setCustomSections] = useState<CustomSection[]>([]);
+  const addCustomSection = () => setCustomSections(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "" }]);
+  const removeCustomSection = (id: string) => setCustomSections(prev => prev.filter(s => s.id !== id));
+  const updateCustomSection = (id: string, field: keyof CustomSection, value: string) =>
+    setCustomSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+
+  // Template picker
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const templateRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (templateRef.current && !templateRef.current.contains(e.target as Node)) setTemplateOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const client = leads.find((l) => l.name === selectedClient);
 
   // Per-section save (draft)
@@ -391,7 +441,17 @@ export default function NewDocument() {
   const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient }); markSaved("s1"); };
   const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2"); };
   const saveS3  = () => { persist("s3",  { purpose, keyFeatures }); markSaved("s3"); };
-  const saveS35 = () => { persist("s35", { detailedNotes }); markSaved("s35"); };
+  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); };
+  const saveCustomSection = (id: string) => {
+    const sec = customSections.find(s => s.id === id);
+    if (!sec) return;
+    const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+    const currentCustom: CustomSection[] = existing.sCustom?.sections ?? [];
+    const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
+    if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
+    markSaved(`sc_${id}`);
+  };
   const saveS4  = () => { persist("s4",  { integrations, techStack, hosting, security }); markSaved("s4"); };
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
@@ -420,7 +480,11 @@ export default function NewDocument() {
       if (s2.currentSystems) setCurrentSystems(s2.currentSystems as string);
       if (s3.purpose)        setPurpose(s3.purpose as string);
       if (s3.keyFeatures)    setKeyFeatures(s3.keyFeatures as string[]);
-      if (s35.detailedNotes) setDetailedNotes(s35.detailedNotes as string);
+      if (s35.detailedNotes)        setDetailedNotes(s35.detailedNotes as string);
+      if (s35.detailedNotesTitle)   setDetailedNotesTitle(s35.detailedNotesTitle as string);
+      if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
+      const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
+      if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
       if (s4.integrations)   setIntegrations(s4.integrations as string[]);
       if (s4.techStack)      setTechStack(s4.techStack as string[]);
       if (s4.hosting)        setHosting(s4.hosting as string);
@@ -459,6 +523,47 @@ export default function NewDocument() {
   const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment.replace(/[^0-9.]/g, "")) || 0), 0);
   const formatCurrency = (n: number) => formatAmount(n, currency);
 
+  // Template loader — copies all sections from a saved document into the current form
+  const loadTemplate = (doc: RequirementDoc) => {
+    setTemplateOpen(false);
+    const d = (doc.sections ?? {}) as Record<string, unknown>;
+    const s1 = (d.s1 ?? {}) as Record<string, unknown>;
+    const s2 = (d.s2 ?? {}) as Record<string, unknown>;
+    const s3 = (d.s3 ?? {}) as Record<string, unknown>;
+    const s35 = (d.s35 ?? {}) as Record<string, unknown>;
+    const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
+    const s4 = (d.s4 ?? {}) as Record<string, unknown>;
+    const s5 = (d.s5 ?? {}) as Record<string, unknown>;
+    const s6 = (d.s6 ?? {}) as Record<string, unknown>;
+    const s7 = (d.s7 ?? {}) as Record<string, unknown>;
+    if (s1.docDate)        setDocDate(s1.docDate as string);
+    if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
+    if (s2.businessType)   setBusinessType(s2.businessType as string);
+    if (s2.targetAudience) setTargetAudience(s2.targetAudience as string);
+    if (s2.keyProducts)    setKeyProducts(s2.keyProducts as string[]);
+    if (s2.businessGoals)  setBusinessGoals(s2.businessGoals as string);
+    if (s2.keyChallenges)  setKeyChallenges(s2.keyChallenges as string);
+    if (s2.currentSystems) setCurrentSystems(s2.currentSystems as string);
+    if (s3.purpose)        setPurpose(s3.purpose as string);
+    if (s3.keyFeatures)    setKeyFeatures(s3.keyFeatures as string[]);
+    if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
+    if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
+    if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
+    if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
+    if (s4.integrations)   setIntegrations(s4.integrations as string[]);
+    if (s4.techStack)      setTechStack(s4.techStack as string[]);
+    if (s4.hosting)        setHosting(s4.hosting as string);
+    if (s4.security)       setSecurity(s4.security as string);
+    if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
+    if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
+    if (s5.currency)         setCurrency(s5.currency as string);
+    if (s6.startDate)      setStartDate(s6.startDate as string);
+    if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
+    if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
+    if (s7.postLaunch)     setPostLaunch(s7.postLaunch as string);
+    if (s7.maintenance)    setMaintenance(s7.maintenance as string);
+  };
+
   // Save Document → addDoc → navigate to /documents
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -476,7 +581,8 @@ export default function NewDocument() {
       s1:  { docTitle, docDate, preparedBy, selectedClient },
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
       s3:  { purpose, keyFeatures },
-      s35: { detailedNotes },
+      s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
+      sCustom: { sections: customSections },
       s4:  { integrations, techStack, hosting, security },
       s5:  { paymentStructure, additionalCosts, currency },
       s6:  { startDate, deliveryDate, milestones },
@@ -571,6 +677,35 @@ export default function NewDocument() {
         <p className="text-sm text-muted-foreground">
           Fill in the sections below and click <strong>Save Document</strong> when ready. Use the <strong>Update</strong> buttons per section to save draft progress.
         </p>
+
+        {/* Template loader */}
+        {!isEditMode && docs.length > 0 && (
+          <div className="relative mt-3" ref={templateRef}>
+            <button
+              type="button"
+              onClick={() => setTemplateOpen(o => !o)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/5 transition-colors"
+            >
+              <LayoutTemplate size={13} />
+              Load from template
+              <ChevronDown size={13} className={`transition-transform ${templateOpen ? "rotate-180" : ""}`} />
+            </button>
+            {templateOpen && (
+              <div className="absolute z-50 top-full mt-1 left-0 min-w-[260px] max-h-60 overflow-y-auto bg-background border border-border rounded-lg shadow-lg">
+                {docs.map(doc => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => loadTemplate(doc)}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b border-border/40 last:border-0 truncate"
+                  >
+                    {doc.title || doc.clientName || "Untitled Document"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Save / Cancel actions */}
         <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -745,12 +880,14 @@ export default function NewDocument() {
 
       <SectionDivider />
 
-      {/* Section 3.5: Detailed Requirements Notes */}
+      {/* Section 3.5: Detailed Requirements Notes (editable header) */}
       <section>
-        <SectionHeader
+        <EditableSectionHeader
           icon={PenLine}
-          title="Detailed Requirements Notes"
-          subtitle="Use this space to document any additional client requirements, discussions, or specifications in detail"
+          title={detailedNotesTitle}
+          onTitleChange={setDetailedNotesTitle}
+          subtitle={detailedNotesSubtitle}
+          onSubtitleChange={setDetailedNotesSubtitle}
         />
         <RichTextEditor
           value={detailedNotes}
@@ -759,6 +896,52 @@ export default function NewDocument() {
         />
         <SaveButton sectionKey="s35" saved={!!savedSections.s35} onSave={saveS35} />
       </section>
+
+      <SectionDivider />
+
+      {/* Custom sections */}
+      {customSections.map(sec => (
+        <section key={sec.id}>
+          <div className="flex items-start gap-2 mb-0">
+            <div className="flex-1">
+              <EditableSectionHeader
+                icon={FileText}
+                title={sec.title}
+                onTitleChange={v => updateCustomSection(sec.id, "title", v)}
+                subtitle={sec.subtitle}
+                onSubtitleChange={v => updateCustomSection(sec.id, "subtitle", v)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeCustomSection(sec.id)}
+              className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+              title="Remove this section"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+          <RichTextEditor
+            value={sec.content}
+            onChange={v => updateCustomSection(sec.id, "content", v)}
+            placeholder="Write the content for this section…"
+          />
+          <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
+          <SectionDivider />
+        </section>
+      ))}
+
+      {/* Add custom section button */}
+      <div className="flex items-center gap-3 py-2">
+        <button
+          type="button"
+          onClick={addCustomSection}
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary border border-dashed border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 transition-colors w-full justify-center"
+        >
+          <Plus size={15} />
+          Add custom section
+        </button>
+      </div>
 
       <SectionDivider />
 
