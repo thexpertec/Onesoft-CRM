@@ -7,7 +7,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## Artifacts
 
 - **requirement-doc** (`artifacts/requirement-doc/`): Customer Requirement Collection Document — a beautiful, view-only single-page React + Vite frontend. No backend. Served at `/`.
-- **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. All data stored in localStorage. Auth via sessionStorage. Served at `/admin-dashboard/`.
+- **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. Data uses **write-through cache**: every save goes to both localStorage (fast sync read) AND PostgreSQL (persistent backup via API server). On login, all data is hydrated from PostgreSQL into localStorage. Auth via sessionStorage. Served at `/admin-dashboard/`.
+- **api-server** (`artifacts/api-server/`): Express 5 API server. Provides `/api/kv/:namespace/:key` REST endpoints (GET/PUT/DELETE) backed by PostgreSQL `kv_store` table. Served at `/api`. No auth on API — it is internal only.
 
 ### Admin Dashboard — Routes & Data
 

@@ -22,12 +22,12 @@ export default function Login() {
     return null;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      const ok = login(username.trim(), password);
+    try {
+      const ok = await login(username.trim(), password);
       if (ok) {
         const params = new URLSearchParams(window.location.search);
         const from = params.get("from") || "/";
@@ -35,8 +35,9 @@ export default function Login() {
       } else {
         setError("Invalid username or password.");
       }
+    } finally {
       setLoading(false);
-    }, 300);
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import {
   AdminUser,
   Tenant,
@@ -9,6 +9,7 @@ import {
   tenantToAdminUser,
   setActiveTenant,
   getActiveTenantId,
+  syncAllFromServer,
 } from "@/lib/store";
 
 const AUTH_KEY     = "onesoft-admin-auth";
@@ -21,7 +22,8 @@ type AuthContextType = {
   isSuperAdmin:     boolean;
   currentTenantId:  string | null;
   currentTenant:    Tenant | null;
-  login:            (username: string, password: string) => boolean;
+  isSyncing:        boolean;
+  login:            (username: string, password: string) => Promise<boolean>;
   logout:           () => void;
   refreshCurrentUser: () => void;
   switchTenant:     (tenantId: string | null) => void;
@@ -33,7 +35,8 @@ const AuthContext = createContext<AuthContextType>({
   isSuperAdmin:       false,
   currentTenantId:    null,
   currentTenant:      null,
-  login:              () => false,
+  isSyncing:          false,
+  login:              async () => false,
   logout:             () => {},
   refreshCurrentUser: () => {},
   switchTenant:       () => {},
@@ -69,12 +72,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => getActiveTenantId()
   );
 
+  // True while we're fetching latest data from the database after login/refresh
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const isAuthenticated = currentUser !== null;
   const isSuperAdmin    = currentUser?.role === "superadmin";
   const currentTenant   = currentTenantId ? (getTenantById(currentTenantId) ?? null) : null;
 
+  // ── On app load: if already authenticated, sync from DB ────────────────────
+  useEffect(() => {
+    const isAuth = sessionStorage.getItem(AUTH_KEY) === "true";
+    const userId  = sessionStorage.getItem(AUTH_USER_ID);
+    if (!isAuth || !userId) return;
+
+    const tenantId = sessionStorage.getItem(TENANT_KEY);
+    const resolvedTenantId = tenantId === "" ? null : (tenantId ?? null);
+
+    setIsSyncing(true);
+    syncAllFromServer(resolvedTenantId).finally(() => {
+      // After sync, re-read the user in case their record was updated in DB
+      const refreshed = getAdminUserById(userId);
+      if (refreshed) setCurrentUser(refreshed);
+      setIsSyncing(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Login ──────────────────────────────────────────────────────────────────
-  const login = (username: string, password: string): boolean => {
+  const login = async (username: string, password: string): Promise<boolean> => {
+    // First sync global data from the DB so we have the latest users/tenants
+    setIsSyncing(true);
+    try {
+      await syncAllFromServer(null);
+    } finally {
+      setIsSyncing(false);
+    }
+
     // 1. Check platform users first (superadmin + any platform staff)
     const users  = getAdminUsers();
     const user   = users.find(
@@ -94,6 +127,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tenant = getTenantByCredentials(username, password);
     if (tenant) {
       if (tenant.status === "suspended") return false;
+
+      // Sync tenant-specific data from DB
+      setIsSyncing(true);
+      try {
+        await syncAllFromServer(tenant.id);
+      } finally {
+        setIsSyncing(false);
+      }
+
       const tenantUser = tenantToAdminUser(tenant);
       setActiveTenant(tenant.id);
       sessionStorage.setItem(AUTH_KEY,     "true");
@@ -127,15 +169,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchTenant = (tenantId: string | null) => {
     setActiveTenant(tenantId);
     setCurrentTenantId(tenantId);
-    // Don't change the user — superadmin stays logged in as superadmin
-    // but store the view context in session so refresh restores it
     sessionStorage.setItem(TENANT_KEY, tenantId ?? "");
+
+    // Sync that tenant's data from DB
+    if (tenantId) {
+      setIsSyncing(true);
+      syncAllFromServer(tenantId).finally(() => setIsSyncing(false));
+    }
   };
 
   return (
     <AuthContext.Provider value={{
       isAuthenticated, currentUser, isSuperAdmin,
       currentTenantId, currentTenant,
+      isSyncing,
       login, logout, refreshCurrentUser, switchTenant,
     }}>
       {children}

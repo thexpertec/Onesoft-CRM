@@ -1,3 +1,5 @@
+import { kvPut, kvGetAll } from "./api";
+
 export type LeadStatus = "New" | "Contacted" | "Qualified" | "Proposal Sent" | "Won" | "Lost";
 
 export type Lead = {
@@ -80,6 +82,24 @@ function tenantKey(baseKey: string): string {
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Fire-and-forget write to the PostgreSQL KV store.
+ * storageKey is the raw localStorage key (may include "t:{id}:" prefix).
+ */
+function _apiWrite(storageKey: string, value: unknown): void {
+  let ns: string;
+  let key: string;
+  const tenantMatch = storageKey.match(/^t:([^:]+):(.+)$/);
+  if (tenantMatch) {
+    ns = `t:${tenantMatch[1]}`;
+    key = tenantMatch[2];
+  } else {
+    ns = "global";
+    key = storageKey;
+  }
+  kvPut(ns, key, value).catch(() => {/* silently ignore network errors */});
+}
+
 /** Tenant-namespaced read (all business data). */
 function getStored<T>(key: string): T[] {
   try {
@@ -94,9 +114,11 @@ function getStored<T>(key: string): T[] {
   return [];
 }
 
-/** Tenant-namespaced write. */
+/** Tenant-namespaced write — also persists to PostgreSQL. */
 function setStored<T>(key: string, data: T[]) {
-  localStorage.setItem(tenantKey(key), JSON.stringify(data));
+  const sk = tenantKey(key);
+  localStorage.setItem(sk, JSON.stringify(data));
+  _apiWrite(sk, data);
 }
 
 /** Platform-level read (always unprefixed — for users & tenants registry). */
@@ -111,9 +133,10 @@ function getGlobal<T>(key: string): T[] {
   return [];
 }
 
-/** Platform-level write. */
+/** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data));
+  _apiWrite(key, data);
 }
 
 // ─── Leads API ────────────────────────────────────────────────────────────────
@@ -395,7 +418,9 @@ export const createModuleGroup = (
 ): ModuleGroup => {
   const now = new Date().toISOString();
   const group: ModuleGroup = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
-  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify([...getModuleGroups(), group]));
+  const updated = [...getModuleGroups(), group];
+  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(updated));
+  _apiWrite(MODULE_GROUPS_KEY, updated);
   return group;
 };
 
@@ -408,11 +433,14 @@ export const updateModuleGroup = (
   if (idx === -1) throw new Error("Module group not found");
   groups[idx] = { ...groups[idx], ...updates, updatedAt: new Date().toISOString() };
   localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(groups));
+  _apiWrite(MODULE_GROUPS_KEY, groups);
   return groups[idx];
 };
 
 export const deleteModuleGroup = (id: string): void => {
-  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(getModuleGroups().filter(g => g.id !== id)));
+  const updated = getModuleGroups().filter(g => g.id !== id);
+  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(updated));
+  _apiWrite(MODULE_GROUPS_KEY, updated);
 };
 
 // ─── Tenants API (platform-level, always global/unprefixed) ───────────────────
@@ -587,7 +615,9 @@ export const getTeamMembers = (): string[] => {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch { /* ignore */ }
-  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(DEFAULT_TEAM));
+  const sk = tenantKey(TEAM_KEY);
+  localStorage.setItem(sk, JSON.stringify(DEFAULT_TEAM));
+  _apiWrite(sk, DEFAULT_TEAM);
   return DEFAULT_TEAM;
 };
 
@@ -1251,7 +1281,9 @@ export function getSettings(): AppSettings {
 }
 
 export function saveSettings(s: AppSettings): void {
-  localStorage.setItem(tenantKey(SETTINGS_KEY), JSON.stringify(s));
+  const sk = tenantKey(SETTINGS_KEY);
+  localStorage.setItem(sk, JSON.stringify(s));
+  _apiWrite(sk, s);
 }
 
 // All localStorage keys for export/import/reset
@@ -1280,13 +1312,17 @@ export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
   if (current.includes(name)) return current;
   const updated = [...current, name];
-  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(updated));
+  const sk = tenantKey(TEAM_KEY);
+  localStorage.setItem(sk, JSON.stringify(updated));
+  _apiWrite(sk, updated);
   return updated;
 };
 
 export const removeTeamMember = (name: string): string[] => {
   const updated = getTeamMembers().filter(m => m !== name);
-  localStorage.setItem(tenantKey(TEAM_KEY), JSON.stringify(updated));
+  const sk = tenantKey(TEAM_KEY);
+  localStorage.setItem(sk, JSON.stringify(updated));
+  _apiWrite(sk, updated);
   return updated;
 };
 
@@ -1353,12 +1389,16 @@ export function getAccounts(): Account[] {
     }
   } catch { /* ignore */ }
   // Fresh install — start with empty chart
-  localStorage.setItem(tenantKey(COA_KEY), JSON.stringify([]));
+  const sk = tenantKey(COA_KEY);
+  localStorage.setItem(sk, JSON.stringify([]));
+  _apiWrite(sk, []);
   return [];
 }
 
 function _saveAccounts(accounts: Account[]): void {
-  localStorage.setItem(tenantKey(COA_KEY), JSON.stringify(accounts));
+  const sk = tenantKey(COA_KEY);
+  localStorage.setItem(sk, JSON.stringify(accounts));
+  _apiWrite(sk, accounts);
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -1375,4 +1415,41 @@ export function updateAccount(id: string, updates: Partial<Omit<Account, "id" | 
 
 export function deleteAccount(id: string): void {
   _saveAccounts(getAccounts().filter(a => a.id !== id));
+}
+
+// ─── Server sync ──────────────────────────────────────────────────────────────
+
+/**
+ * On login, fetch all stored data for the given namespace from PostgreSQL
+ * and hydrate localStorage so the rest of the app works as normal.
+ *
+ * Called by auth-context after a successful login.
+ */
+export async function syncAllFromServer(tenantId: string | null): Promise<void> {
+  try {
+    // Always sync global data (users, tenants, module groups)
+    const globalData = await kvGetAll("global");
+    if (globalData) {
+      for (const [key, value] of Object.entries(globalData)) {
+        if (value !== undefined && value !== null) {
+          localStorage.setItem(key, JSON.stringify(value));
+        }
+      }
+    }
+
+    // Sync tenant-scoped data when a tenant is active
+    if (tenantId) {
+      const ns = `t:${tenantId}`;
+      const tenantData = await kvGetAll(ns);
+      if (tenantData) {
+        for (const [key, value] of Object.entries(tenantData)) {
+          if (value !== undefined && value !== null) {
+            localStorage.setItem(`t:${tenantId}:${key}`, JSON.stringify(value));
+          }
+        }
+      }
+    }
+  } catch {
+    // Network unavailable — localStorage data (if any) will be used as fallback
+  }
 }
