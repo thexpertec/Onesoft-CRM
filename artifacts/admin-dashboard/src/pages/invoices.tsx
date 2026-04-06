@@ -722,16 +722,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange }: Pa
               <div className="flex justify-between text-base font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
                 <span>Total</span><span className="font-mono">{fmtCcy(total)}</span>
               </div>
-              <div className="flex items-center gap-3 pt-1">
-                <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">Amount Paid</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={payInput}
-                  onChange={e => setPayInput(e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
               {balance > 0.005 && (
                 <div className="flex justify-between text-[15px] font-bold text-red-600 dark:text-red-400">
                   <span>Balance Due</span><span className="font-mono">{fmtCcy(balance)}</span>
