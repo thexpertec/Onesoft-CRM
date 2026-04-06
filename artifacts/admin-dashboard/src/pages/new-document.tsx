@@ -209,12 +209,67 @@ function MultiSelectFeatures({
   );
 }
 
-function FormField({ children, label, required, hint }: { children: React.ReactNode; label: string; required?: boolean; hint?: React.ReactNode }) {
+function FormField({ children, label, required, hint, templateAction }: { children: React.ReactNode; label: string; required?: boolean; hint?: React.ReactNode; templateAction?: React.ReactNode }) {
   return (
     <div>
-      <FieldLabel label={label} required={required} />
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {label}{required && <span className="text-primary ml-1">*</span>}
+        </label>
+        {templateAction}
+      </div>
       {children}
       {hint && <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{hint}</p>}
+    </div>
+  );
+}
+
+// Self-contained per-field template picker — filters to docs that have a value for this field
+function FieldTplPicker({ docs, extract, onSelect }: {
+  docs: RequirementDoc[];
+  extract: (d: RequirementDoc) => string | undefined;
+  onSelect: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const available = docs.filter(d => { const v = extract(d); return v && v.trim() && v !== "<p></p>"; });
+  if (available.length === 0) return null;
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20 transition-colors"
+        title="Load from a saved document"
+      >
+        <LayoutTemplate size={10} /> Templates
+        <ChevronDown size={9} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-popover border border-border rounded-lg shadow-xl overflow-hidden">
+          <div className="px-3 py-2 bg-muted/40 border-b border-border">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Load from saved document</p>
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {available.map(d => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => { onSelect(extract(d)!); setOpen(false); }}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors flex items-center gap-2 border-b border-border/30 last:border-0"
+              >
+                <FileText size={11} className="text-muted-foreground flex-shrink-0" />
+                <span className="truncate text-foreground">{d.title || d.clientName || "Untitled"}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -429,7 +484,7 @@ export default function NewDocument() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data }));
   };
 
-  const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient }); markSaved("s1"); };
+  const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1"); };
   const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2"); };
   const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); };
   const saveCustomSection = (id: string) => {
@@ -467,6 +522,7 @@ export default function NewDocument() {
       if (s1.docDate)        setDocDate(s1.docDate as string);
       if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
       if (s1.selectedClient) setSelectedClient(s1.selectedClient as string);
+      if (s1.versionHistory) setVersionHistory(s1.versionHistory as string);
       if (s2.businessType)   setBusinessType(s2.businessType as string);
       if (s2.targetAudience) setTargetAudience(s2.targetAudience as string);
       if (s2.keyProducts)    setKeyProducts(s2.keyProducts as string[]);
@@ -526,6 +582,7 @@ export default function NewDocument() {
     const s6 = (d.s6 ?? {}) as Record<string, unknown>;
     if (s1.docDate)        setDocDate(s1.docDate as string);
     if (s1.preparedBy)     setPreparedBy(s1.preparedBy as string);
+    if (s1.versionHistory) setVersionHistory(s1.versionHistory as string);
     if (s2.businessType)   setBusinessType(s2.businessType as string);
     if (s2.targetAudience) setTargetAudience(s2.targetAudience as string);
     if (s2.keyProducts)    setKeyProducts(s2.keyProducts as string[]);
@@ -560,7 +617,7 @@ export default function NewDocument() {
 
     // Always build sections from current in-memory state (reflects user's latest input)
     const sections = {
-      s1:  { docTitle, docDate, preparedBy, selectedClient },
+      s1:  { docTitle, docDate, preparedBy, selectedClient, versionHistory },
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
       s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
       sCustom:  { sections: customSections },
@@ -781,7 +838,8 @@ export default function NewDocument() {
           <FormField label="Business Type" required hint="Selecting a type refines the Key Products / Services list below">
             <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={handleBusinessTypeChange} placeholder="Select business type" />
           </FormField>
-          <FormField label="Target Audience" hint="Age group, profession, and geographical location">
+          <FormField label="Target Audience" hint="Age group, profession, and geographical location"
+            templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.targetAudience as string)} onSelect={setTargetAudience} />}>
             <TextInput value={targetAudience} onChange={setTargetAudience} placeholder="e.g. Professionals aged 25-45 in North America..." />
           </FormField>
           <div className="sm:col-span-2">
@@ -799,17 +857,20 @@ export default function NewDocument() {
             </FormField>
           </div>
           <div className="sm:col-span-2">
-            <FormField label="Business Goals" hint="Primary goals the client aims to achieve">
+            <FormField label="Business Goals" hint="Primary goals the client aims to achieve"
+              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.businessGoals as string)} onSelect={setBusinessGoals} />}>
               <TextInput value={businessGoals} onChange={setBusinessGoals} rows={3} placeholder="e.g. Increase monthly active users by 30%, streamline operations..." />
             </FormField>
           </div>
           <div className="sm:col-span-2">
-            <FormField label="Key Challenges" hint="Major problems or challenges the client currently faces">
+            <FormField label="Key Challenges" hint="Major problems or challenges the client currently faces"
+              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.keyChallenges as string)} onSelect={setKeyChallenges} />}>
               <TextInput value={keyChallenges} onChange={setKeyChallenges} rows={3} placeholder="e.g. Manual processes, customer acquisition, data silos..." />
             </FormField>
           </div>
           <div className="sm:col-span-2">
-            <FormField label="Current Software or Systems Used" hint="CRM, ERP, inventory tools, or other existing platforms">
+            <FormField label="Current Software or Systems Used" hint="CRM, ERP, inventory tools, or other existing platforms"
+              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.currentSystems as string)} onSelect={setCurrentSystems} />}>
               <TextInput value={currentSystems} onChange={setCurrentSystems} placeholder="e.g. Salesforce CRM, QuickBooks, legacy inventory system..." />
             </FormField>
           </div>
@@ -952,7 +1013,8 @@ export default function NewDocument() {
           <FormField label="Payment Structure" required>
             <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
           </FormField>
-          <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically">
+          <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically"
+            templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s5?.additionalCosts as string)} onSelect={setAdditionalCosts} />}>
             <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 90000" />
           </FormField>
 
@@ -1296,7 +1358,8 @@ export default function NewDocument() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="sm:col-span-2">
-              <FormField label="Version History" hint="e.g. Version 1.0 – Apr 04, 2026 – Initial Draft">
+              <FormField label="Version History" hint="e.g. Version 1.0 – Apr 04, 2026 – Initial Draft"
+                templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s1?.versionHistory as string)} onSelect={setVersionHistory} />}>
                 <TextInput value={versionHistory} onChange={setVersionHistory} placeholder="Version 1.0 – [Date] – Initial Draft" />
               </FormField>
             </div>
