@@ -339,22 +339,99 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     .ft-contact { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: #64748b; }
     .ft-copy { font-size: 10px; color: #94a3b8; }
 
+    /* ── Print-only elements: hidden on screen ── */
+    .print-pg-header, .print-pg-footer { display: none; }
+
     /* ── Print ── */
     @media print {
-      @page { margin: 16mm 14mm; size: A4; }
+      @page { margin: 0; size: A4; }
       html, body { background: #fff !important; }
       .toolbar { display: none !important; }
-      .wrap { margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; overflow: visible !important; max-width: 100% !important; }
+      .wrap {
+        margin: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+        max-width: 100% !important;
+        /* leave room for fixed header (13mm) + side margins (13mm each) + fixed footer (11mm) */
+        padding: 14mm 13mm 13mm !important;
+      }
+      /* Running page header — repeats on every page */
+      .print-pg-header {
+        display: flex !important;
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        height: 13mm;
+        background: #fff;
+        border-bottom: 1.5px solid #cbd5e1;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 13mm;
+        z-index: 9999;
+      }
+      .print-pg-header-title {
+        font-size: 9.5pt;
+        font-weight: 700;
+        color: #1e40af;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 70%;
+      }
+      .print-pg-header-brand {
+        font-size: 8pt;
+        color: #94a3b8;
+        white-space: nowrap;
+      }
+      /* Running page footer — repeats on every page */
+      .print-pg-footer {
+        display: flex !important;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        height: 11mm;
+        background: #fff;
+        border-top: 1.5px solid #cbd5e1;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 13mm;
+        z-index: 9999;
+      }
+      .print-pg-footer-left {
+        font-size: 8pt;
+        color: #64748b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 70%;
+      }
+      .print-pg-footer-right {
+        font-size: 8pt;
+        color: #334155;
+        font-weight: 600;
+        white-space: nowrap;
+      }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     }
   </style>
 </head>
 <body>
 
+  <!-- Running page header (print only) -->
+  <div class="print-pg-header">
+    <span class="print-pg-header-title">${escHtml(doc.title)}</span>
+    <span class="print-pg-header-brand">Onesoft</span>
+  </div>
+
+  <!-- Running page footer (print only) -->
+  <div class="print-pg-footer">
+    <span class="print-pg-footer-left">Onesoft &nbsp;·&nbsp; +44 7984 273482 (UK) &nbsp;·&nbsp; +92 333 4199233 (PK) &nbsp;·&nbsp; info@onesoft.org.uk &nbsp;·&nbsp; www.onesoft.org.uk</span>
+    <span class="print-pg-footer-right" id="pg-counter"></span>
+  </div>
+
   <div class="toolbar">
     <span class="toolbar-title">📄 ${escHtml(doc.title)}</span>
     <button class="toolbar-btn btn-close" onclick="window.close()">✕ Close</button>
-    <button class="toolbar-btn btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+    <button class="toolbar-btn btn-print" onclick="doPrint()">🖨 Print / Save PDF</button>
   </div>
 
   <div class="wrap">
@@ -427,6 +504,32 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     </div>
 
   </div>
+
+  <script>
+    // Compute approximate total A4 pages from content height
+    function calcTotalPages() {
+      var wrap = document.querySelector('.wrap');
+      if (!wrap) return 1;
+      // A4 at 96 dpi = 297mm * (96/25.4) ≈ 1122.5 px
+      var a4h = 297 * (96 / 25.4);
+      return Math.max(1, Math.ceil(wrap.scrollHeight / a4h));
+    }
+
+    function updateCounter() {
+      var total = calcTotalPages();
+      var pad = function(n) { return String(n).padStart(2, '0'); };
+      var el = document.getElementById('pg-counter');
+      if (el) el.textContent = 'Page 01 of ' + pad(total);
+    }
+
+    function doPrint() {
+      updateCounter();
+      window.print();
+    }
+
+    // Also fires when user presses Ctrl+P / Cmd+P
+    window.addEventListener('beforeprint', updateCounter);
+  </script>
 
 </body>
 </html>`;
