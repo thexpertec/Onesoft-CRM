@@ -460,12 +460,22 @@ function RichTextTplPicker({ onChange }: { onChange: (html: string) => void }) {
   );
 }
 
-function SaveButton({ sectionKey, saved, onSave }: { sectionKey: string; saved: boolean; onSave: () => void }) {
+function SaveButton({ sectionKey, saved, dirty, onSave }: { sectionKey: string; saved: boolean; dirty?: boolean; onSave: () => void }) {
   return (
-    <div className="flex justify-end mt-6 pt-4 border-t border-border">
+    <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+      {dirty && !saved ? (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <span className="inline-flex w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          Unsaved changes
+        </span>
+      ) : <span />}
       <button type="button" onClick={onSave}
         className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-          saved ? "bg-green-50 text-green-700 border border-green-200 shadow-none" : "bg-primary text-white hover:bg-primary/90 shadow-sm"
+          saved
+            ? "bg-green-50 text-green-700 border border-green-200 shadow-none"
+            : dirty
+              ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm"
+              : "bg-primary text-white hover:bg-primary/90 shadow-sm"
         }`}>
         {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         {saved ? "Saved!" : "Update"}
@@ -654,14 +664,26 @@ export default function NewDocument() {
     setTimeout(() => setSavedSections((prev) => ({ ...prev, [key]: false })), 2000);
   }, []);
 
+  // Dirty (unsaved) section tracking
+  const initRef = useRef(false); // flips true after initial data load settles
+  const [dirtySections, setDirtySections] = useState<Record<string, boolean>>({});
+  const markDirty = useCallback((key: string) => {
+    if (!initRef.current) return;
+    setDirtySections(prev => ({ ...prev, [key]: true }));
+  }, []);
+  const markClean = useCallback((key: string) => {
+    setDirtySections(prev => ({ ...prev, [key]: false }));
+  }, []);
+  const dirtyCount = Object.values(dirtySections).filter(Boolean).length;
+
   const persist = (key: string, data: object) => {
     const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data }));
   };
 
-  const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1"); };
-  const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2"); };
-  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); };
+  const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1");  markClean("s1"); };
+  const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2");  markClean("s2"); };
+  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); markClean("s35"); };
   const saveCustomSection = (id: string) => {
     const sec = customSections.find(s => s.id === id);
     if (!sec) return;
@@ -670,7 +692,7 @@ export default function NewDocument() {
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
-    markSaved(`sc_${id}`);
+    markSaved(`sc_${id}`); markClean(`sc_${id}`);
   };
   const saveCustomSection2 = (id: string) => {
     const sec = customSections2.find(s => s.id === id);
@@ -680,10 +702,10 @@ export default function NewDocument() {
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } }));
-    markSaved(`sc2_${id}`);
+    markSaved(`sc2_${id}`); markClean(`sc2_${id}`);
   };
-  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); };
-  const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
+  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); markClean("s5"); };
+  const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); markClean("s6"); };
 
   // Load data on mount — edit mode loads from the saved document, new mode from draft
   useEffect(() => {
@@ -738,8 +760,22 @@ export default function NewDocument() {
         loadSections(JSON.parse(raw));
       }
     } catch { /* ignore */ }
+    // Let React flush all the state setters above before we start tracking edits
+    setTimeout(() => { initRef.current = true; }, 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Track which sections have unsaved edits
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { markDirty("s1");  }, [docTitle, docDate, preparedBy, selectedClient, versionHistory]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { markDirty("s2");  }, [businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { markDirty("s35"); }, [detailedNotes, detailedNotesTitle, detailedNotesSubtitle]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { markDirty("s5");  }, [paymentStructure, additionalCosts, currency, lineItems]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { markDirty("s6");  }, [startDate, deliveryDate, milestones]);
 
   const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment.replace(/[^0-9.]/g, "")) || 0), 0);
   const formatCurrency = (n: number) => formatAmount(n, currency);
@@ -855,7 +891,7 @@ export default function NewDocument() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-2 sm:px-4">
+    <div className="max-w-4xl mx-auto py-6 px-2 sm:px-4 pb-28">
 
       {/* Page header */}
       <div className="mb-8 pb-6 border-b border-border">
@@ -919,26 +955,6 @@ export default function NewDocument() {
           </div>
         )}
 
-        {/* Save / Cancel actions */}
-        <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSaveDocument}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:opacity-60"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Saving…" : isEditMode ? "Update Document" : "Save Document"}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/documents")}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all duration-200"
-          >
-            Cancel
-          </button>
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-        </div>
       </div>
 
       {/* Section 1: Document Information */}
@@ -1009,7 +1025,7 @@ export default function NewDocument() {
             </div>
           )}
         </div>
-        <SaveButton sectionKey="s1" saved={!!savedSections.s1} onSave={saveS1} />
+        <SaveButton sectionKey="s1" saved={!!savedSections.s1} dirty={!!dirtySections.s1} onSave={saveS1} />
       </section>
 
       <SectionDivider />
@@ -1058,7 +1074,7 @@ export default function NewDocument() {
             </FormField>
           </div>
         </div>
-        <SaveButton sectionKey="s2" saved={!!savedSections.s2} onSave={saveS2} />
+        <SaveButton sectionKey="s2" saved={!!savedSections.s2} dirty={!!dirtySections.s2} onSave={saveS2} />
       </section>
 
       <SectionDivider />
@@ -1097,7 +1113,7 @@ export default function NewDocument() {
           onChange={setDetailedNotes}
           placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
         />
-        <SaveButton sectionKey="s35" saved={!!savedSections.s35} onSave={saveS35} />
+        <SaveButton sectionKey="s35" saved={!!savedSections.s35} dirty={!!dirtySections.s35} onSave={saveS35} />
       </section>
 
       <SectionDivider />
@@ -1130,7 +1146,7 @@ export default function NewDocument() {
             onChange={v => updateCustomSection(sec.id, "content", v)}
             placeholder="Write the content for this section…"
           />
-          <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
+          <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} dirty={!!dirtySections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
           <SectionDivider />
         </section>
       ))}
@@ -1330,7 +1346,7 @@ export default function NewDocument() {
             )}
           </div>
         </div>
-        <SaveButton sectionKey="s5" saved={!!savedSections.s5} onSave={saveS5} />
+        <SaveButton sectionKey="s5" saved={!!savedSections.s5} dirty={!!dirtySections.s5} onSave={saveS5} />
       </section>
 
       <SectionDivider />
@@ -1453,7 +1469,7 @@ export default function NewDocument() {
             </div>
           </div>
         </div>
-        <SaveButton sectionKey="s6" saved={!!savedSections.s6} onSave={saveS6} />
+        <SaveButton sectionKey="s6" saved={!!savedSections.s6} dirty={!!dirtySections.s6} onSave={saveS6} />
       </section>
 
       <SectionDivider />
@@ -1486,7 +1502,7 @@ export default function NewDocument() {
             onChange={v => updateCustomSection2(sec.id, "content", v)}
             placeholder="Write the content for this section…"
           />
-          <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
+          <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} dirty={!!dirtySections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
           <SectionDivider />
         </section>
       ))}
@@ -1528,28 +1544,46 @@ export default function NewDocument() {
         </div>
       </section>
 
-      {/* Bottom CTA */}
-      <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSaveDocument}
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:opacity-60"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? "Saving…" : isEditMode ? "Update Document" : "Save Document"}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/documents")}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all duration-200"
-        >
-          Cancel
-        </button>
-        {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-      </div>
+      {/* Sticky footer */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="max-w-[1600px] mx-auto px-5 md:px-8 py-3 flex items-center justify-between gap-4">
+          {/* Left: unsaved sections indicator */}
+          <div className="flex items-center gap-3">
+            {dirtyCount > 0 ? (
+              <span className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-400">
+                <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                </span>
+                {dirtyCount} section{dirtyCount !== 1 ? "s" : ""} with unsaved changes
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground/60">All sections up to date</span>
+            )}
+          </div>
 
-      <div className="h-10" />
+          {/* Right: action buttons */}
+          <div className="flex items-center gap-2.5">
+            {saveError && <p className="text-sm text-destructive hidden sm:block">{saveError}</p>}
+            <button
+              type="button"
+              onClick={() => navigate("/documents")}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all duration-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDocument}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:opacity-60"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? "Saving…" : isEditMode ? "Update Document" : "Save Document"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
