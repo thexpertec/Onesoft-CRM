@@ -65,7 +65,7 @@ function PasswordInput({ field }: { field: React.InputHTMLAttributes<HTMLInputEl
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const [, navigate]  = useLocation();
-  const { isSuperAdmin, currentUser, refreshCurrentUser } = useAuth();
+  const { isSuperAdmin, currentUser, currentTenantId, refreshCurrentUser } = useAuth();
   const { toast } = useToast();
 
   const [users,      setUsers]      = useState<AdminUser[]>([]);
@@ -80,12 +80,14 @@ export default function UsersPage() {
 
   const filteredUsers = roleFilter === "All" ? users : users.filter(u => u.role === roleFilter);
 
-  if (!isSuperAdmin) {
+  if (!isSuperAdmin || currentTenantId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
         <Shield className="w-14 h-14 text-muted-foreground/30" />
         <h2 className="text-xl font-semibold">Access Restricted</h2>
-        <p className="text-muted-foreground text-sm max-w-xs">Only Super Admins can manage users.</p>
+        <p className="text-muted-foreground text-sm max-w-xs">
+          Platform user management is only accessible from the Super Admin account outside of tenant view.
+        </p>
         <Button onClick={() => navigate("/")} variant="outline">Go to Dashboard</Button>
       </div>
     );

@@ -202,12 +202,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const hrmItems: SubItem[] = [
     ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff", href: "/staff", icon: Users2,   desc: "Employees by dept & designation" }] : []),
     ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles", href: "/roles", icon: KeyRound, desc: "Permission roles"                }] : []),
-    ...(isSuperAdmin ? [
-      { label: "Admin Accounts", href: "/users",        icon: Shield, desc: "System users" },
-    ] : []),
     ...(isSuperAdmin && !currentTenantId ? [
-      { label: "Tenants",       href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
-      { label: "Module Groups", href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
+      { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System users"          },
+      { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
+      { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
     ] : []),
   ];
 
