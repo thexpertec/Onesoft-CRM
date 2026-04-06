@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import {
-  FileText, Briefcase, DollarSign, Clock, Target,
+  FileText, Briefcase, DollarSign, Clock,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
   ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate,
 } from "lucide-react";
@@ -38,7 +38,6 @@ const KEY_FEATURES_OPTIONS = [
   "Mobile App", "Multi-language Support", "Audit Logs", "Custom Dashboards", "Real-time Chat", "Workflow Automation",
 ];
 
-const MAINTENANCE_OPTIONS = ["3 months", "6 months", "1 year", "2 years", "Ongoing"];
 const PAYMENT_STRUCTURES = ["Fixed Price", "Hourly Rate", "Payment Milestones", "Retainer", "Time & Material"];
 
 
@@ -369,8 +368,6 @@ export default function NewDocument() {
   });
   const lineItemsGrandTotal = lineItemTotals.reduce((s, r) => s + r.subTotal, 0);
   const [currency, setCurrency] = useState("GBP");
-  const [postLaunch, setPostLaunch] = useState("");
-  const [maintenance, setMaintenance] = useState("");
   const [versionHistory, setVersionHistory] = useState("");
   const [detailedNotes, setDetailedNotes] = useState("");
 
@@ -457,7 +454,6 @@ export default function NewDocument() {
   };
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
-  const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
 
   // Load data on mount — edit mode loads from the saved document, new mode from draft
   useEffect(() => {
