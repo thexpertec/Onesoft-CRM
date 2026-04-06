@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useSales } from "@/hooks/use-data";
+import { useSales, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
@@ -21,6 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
 import { getSettingsCurrencySymbol, fmtMoney } from "@/lib/currencies";
@@ -313,16 +314,42 @@ interface POSViewProps {
   onAddProduct: (product: Product) => void;
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, taxRate: string) => void;
+  onAddCustomer: (name: string, phone: string, email: string) => void;
 }
 
 function POSView({
   sale, localItems, localMeta, customerComboOpts, productComboOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
-  onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete,
+  onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete, onAddCustomer,
 }: POSViewProps) {
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
+
+  // ── Quick-add customer dialog ────────────────────────────────────────────
+  const [qaOpen,  setQaOpen]  = useState(false);
+  const [qaName,  setQaName]  = useState("");
+  const [qaPhone, setQaPhone] = useState("");
+  const [qaEmail, setQaEmail] = useState("");
+
+  const customerExists = customerComboOpts.some(
+    o => o.value.toLowerCase() === localMeta.customer.toLowerCase().trim()
+  );
+  const showAddBtn = localMeta.customer.trim().length > 0 && !customerExists;
+
+  const openQuickAdd = () => {
+    setQaName(localMeta.customer.trim());
+    setQaPhone(""); setQaEmail("");
+    setQaOpen(true);
+  };
+
+  const confirmQuickAdd = () => {
+    if (!qaName.trim()) return;
+    onAddCustomer(qaName.trim(), qaPhone.trim(), qaEmail.trim());
+    onMetaChange({ customer: qaName.trim() });
+    onSaveMeta();
+    setQaOpen(false);
+  };
 
   const allProducts  = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
   const allCats      = useMemo(() => {
@@ -399,54 +426,81 @@ function POSView({
         </div>
 
         {/* Centre: meta fields */}
-        <div className="flex items-center gap-5 px-5 py-2 flex-1 min-w-0 flex-wrap">
-          <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-4 px-4 py-2 flex-1 min-w-0 overflow-x-auto">
+
+          {/* CUSTOMER */}
+          <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Customer</span>
-            <Combobox
-              value={localMeta.customer}
-              onChange={v => onMetaChange({ customer: v })}
-              onSelect={opt => { onMetaChange({ customer: opt.value }); onSaveMeta(); }}
-              options={customerComboOpts}
-              placeholder="Walk-in…"
-              maxResults={50}
-              className="w-52"
-              inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-52 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
-            />
+            <div className="flex items-center gap-1">
+              <Combobox
+                value={localMeta.customer}
+                onChange={v => onMetaChange({ customer: v })}
+                onSelect={opt => { onMetaChange({ customer: opt.value }); onSaveMeta(); }}
+                options={customerComboOpts}
+                placeholder="Walk-in…"
+                maxResults={50}
+                className="w-48"
+                inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-48 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
+              />
+              {showAddBtn && (
+                <button
+                  onClick={openQuickAdd}
+                  title="Add this customer"
+                  className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors mb-0.5"
+                >
+                  <Plus size={11} />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col gap-0.5">
+          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+          {/* DATE */}
+          <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Date</span>
             <input type="date"
               value={localMeta.saleDate}
               onChange={e => onMetaChange({ saleDate: e.target.value })}
               onBlur={onSaveMeta}
-              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
+              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors w-36"
             />
           </div>
 
-          <div className="flex flex-col gap-0.5">
+          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+          {/* PAYMENT METHOD + AMOUNT */}
+          <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Payment</span>
-            <div className="relative flex items-center gap-1.5">
-              <span className="text-gray-400 shrink-0">{PAYMENT_ICON[localMeta.paymentMethod]}</span>
-              <select
-                value={localMeta.paymentMethod}
-                onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); onSaveMeta(); }}
-                className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pl-0 pr-5 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 shrink-0 text-base leading-none">{PAYMENT_ICON[localMeta.paymentMethod]}</span>
+              <div className="relative flex items-center">
+                <select
+                  value={localMeta.paymentMethod}
+                  onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); onSaveMeta(); }}
+                  className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pl-0 pr-5 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
+              </div>
+              <span className="text-[13px] font-bold text-blue-600 dark:text-blue-400 pl-2 border-l border-gray-200 dark:border-zinc-700">
+                {sym}{grandTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-0.5 flex-1 min-w-[110px] max-w-[200px]">
+          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+          {/* NOTES — flex-1 takes remaining space */}
+          <div className="flex flex-col gap-0.5 flex-1 min-w-[140px]">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Notes</span>
             <input
               value={localMeta.notes}
               onChange={e => onMetaChange({ notes: e.target.value })}
               onBlur={onSaveMeta}
               placeholder="Optional…"
-              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300 dark:placeholder:text-zinc-600"
+              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300 dark:placeholder:text-zinc-600 w-full"
             />
           </div>
         </div>
@@ -929,6 +983,37 @@ function POSView({
         onCancel={() => setPayModalOpen(false)}
       />
     )}
+
+    {/* ── Quick-add Customer Dialog ─────────────────────────────────────── */}
+    <Dialog open={qaOpen} onOpenChange={v => !v && setQaOpen(false)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus size={16} className="text-blue-600" /> Add New Customer
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Name *</label>
+            <Input value={qaName} onChange={e => setQaName(e.target.value)} placeholder="Full name" autoFocus className="h-9 text-[13px]" />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Phone</label>
+            <Input value={qaPhone} onChange={e => setQaPhone(e.target.value)} placeholder="+44 7xxx xxxxxx" className="h-9 text-[13px]" />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Email</label>
+            <Input value={qaEmail} onChange={e => setQaEmail(e.target.value)} placeholder="email@example.com" className="h-9 text-[13px]" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setQaOpen(false)}>Cancel</Button>
+          <Button size="sm" disabled={!qaName.trim()} onClick={confirmQuickAdd} className="gap-1.5">
+            <Plus size={13} /> Add Customer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
@@ -938,17 +1023,18 @@ export default function SalesPage() {
   const [location, navigate] = useLocation();
   const isNewSale = location.includes("/new");
   const { sales, addSale, editSale, removeSale } = useSales();
+  const { customers, addCustomer } = useCustomers();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
   const products          = useMemo(() => getProducts(), []);
   const customerComboOpts = useMemo<ComboOption[]>(() =>
-    getCustomers().map(c => ({
+    customers.map(c => ({
       value: c.name,
       label: c.name,
       sub: [c.phone, c.email].filter(Boolean).join("  ·  "),
     })),
-  []);
+  [customers]);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
   const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 
@@ -1257,6 +1343,15 @@ export default function SalesPage() {
         onAddProduct={handleAddProductFromCatalogue}
         onSetStatus={setStatus}
         onComplete={handleComplete}
+        onAddCustomer={(name, phone, email) => {
+          addCustomer({
+            name, phone, email,
+            company: "", industry: "", city: "", status: "Active",
+            source: "direct", customerSince: new Date().toISOString().slice(0, 10),
+            totalValue: "0", currency: "GBP", notes: "", tags: [],
+          });
+          toast({ title: "Customer added", description: `"${name}" added to Customers.` });
+        }}
       />
     );
   }
