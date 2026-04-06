@@ -386,6 +386,13 @@ export default function NewDocument() {
   const updateCustomSection = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
 
+  // Second set of custom sections — after financial sections
+  const [customSections2, setCustomSections2] = useState<CustomSection[]>([]);
+  const addCustomSection2 = () => setCustomSections2(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "" }]);
+  const removeCustomSection2 = (id: string) => setCustomSections2(prev => prev.filter(s => s.id !== id));
+  const updateCustomSection2 = (id: string, field: keyof CustomSection, value: string) =>
+    setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+
   // Template picker (page-level)
   const [templateOpen, setTemplateOpen] = useState(false);
   const templateRef = useRef<HTMLDivElement>(null);
@@ -438,6 +445,16 @@ export default function NewDocument() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
     markSaved(`sc_${id}`);
   };
+  const saveCustomSection2 = (id: string) => {
+    const sec = customSections2.find(s => s.id === id);
+    if (!sec) return;
+    const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+    const currentCustom: CustomSection[] = existing.sCustom2?.sections ?? [];
+    const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
+    if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } }));
+    markSaved(`sc2_${id}`);
+  };
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
@@ -466,6 +483,8 @@ export default function NewDocument() {
       if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
       const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
       if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
+      const sCustom2 = (d.sCustom2 ?? {}) as Record<string, unknown>;
+      if (Array.isArray(sCustom2.sections)) setCustomSections2(sCustom2.sections as CustomSection[]);
       if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
       if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
       if (s5.currency)         setCurrency(s5.currency as string);
@@ -509,6 +528,7 @@ export default function NewDocument() {
     const s2 = (d.s2 ?? {}) as Record<string, unknown>;
     const s35 = (d.s35 ?? {}) as Record<string, unknown>;
     const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
+    const sCustom2 = (d.sCustom2 ?? {}) as Record<string, unknown>;
     const s5 = (d.s5 ?? {}) as Record<string, unknown>;
     const s6 = (d.s6 ?? {}) as Record<string, unknown>;
     const s7 = (d.s7 ?? {}) as Record<string, unknown>;
@@ -523,7 +543,8 @@ export default function NewDocument() {
     if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
     if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
     if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
-    if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
+    if (Array.isArray(sCustom.sections))  setCustomSections(sCustom.sections as CustomSection[]);
+    if (Array.isArray(sCustom2.sections)) setCustomSections2(sCustom2.sections as CustomSection[]);
     if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
     if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
     if (s5.currency)         setCurrency(s5.currency as string);
@@ -552,10 +573,11 @@ export default function NewDocument() {
       s1:  { docTitle, docDate, preparedBy, selectedClient },
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
       s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
-      sCustom: { sections: customSections },
+      sCustom:  { sections: customSections },
       s5:  { paymentStructure, additionalCosts, currency, lineItems },
       s6:  { startDate, deliveryDate, milestones },
       s7:  { postLaunch, maintenance },
+      sCustom2: { sections: customSections2 },
     };
 
     const docPayload = {
@@ -1246,6 +1268,41 @@ export default function NewDocument() {
         </div>
         <SaveButton sectionKey="s7" saved={!!savedSections.s7} onSave={saveS7} />
       </section>
+
+      <SectionDivider />
+
+      {/* Custom sections after financial sections */}
+      {customSections2.map(sec => (
+        <React.Fragment key={sec.id}>
+          <section>
+            <EditableSectionHeader
+              title={sec.title}
+              subtitle={sec.subtitle}
+              onTitleChange={v => updateCustomSection2(sec.id, "title", v)}
+              onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
+              onRemove={() => removeCustomSection2(sec.id)}
+            />
+            <RichTextEditor
+              value={sec.content}
+              onChange={v => updateCustomSection2(sec.id, "content", v)}
+              placeholder="Start typing..."
+            />
+            <div className="flex justify-end mt-3">
+              <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
+            </div>
+          </section>
+          <SectionDivider />
+        </React.Fragment>
+      ))}
+
+      {/* Add custom section button (post-financial) */}
+      <button
+        type="button"
+        onClick={addCustomSection2}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-primary/30 text-primary/70 hover:text-primary hover:border-primary/60 hover:bg-primary/5 transition-all text-sm font-medium"
+      >
+        <Plus size={14} /> Add custom section
+      </button>
 
       <SectionDivider />
 
