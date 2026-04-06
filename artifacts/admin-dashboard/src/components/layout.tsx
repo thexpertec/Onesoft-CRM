@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Moon, Sun, Menu, X,
@@ -7,11 +7,15 @@ import {
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
+  PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Command, CommandInput, CommandList, CommandEmpty,
   CommandGroup, CommandItem,
@@ -19,8 +23,100 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
-import { getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff, getPurchaseOrders, getSales, getModuleGroupById, ModuleId } from "@/lib/store";
+import {
+  getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff,
+  getPurchaseOrders, getSales, getModuleGroupById, ModuleId,
+  getActivities, clearActivities, ActivityEntry, ActivityAction,
+} from "@/lib/store";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
+
+// ─── Activity Log helpers ─────────────────────────────────────────────────────
+const LAST_SEEN_KEY = "onesoft-activity-last-seen";
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60)  return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+const ACTION_META: Record<ActivityAction, { icon: React.ReactNode; color: string; label: string }> = {
+  created:        { icon: <PlusCircle    size={13} />, color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/50 dark:text-emerald-400", label: "Created"  },
+  updated:        { icon: <Pencil        size={13} />, color: "text-blue-600    bg-blue-50     dark:bg-blue-950/50    dark:text-blue-400",    label: "Updated"  },
+  deleted:        { icon: <Trash2        size={13} />, color: "text-red-600     bg-red-50      dark:bg-red-950/50     dark:text-red-400",     label: "Deleted"  },
+  converted:      { icon: <ArrowLeftRight size={13}/>, color: "text-violet-600  bg-violet-50   dark:bg-violet-950/50  dark:text-violet-400",  label: "Converted"},
+  completed:      { icon: <CheckCircle2  size={13} />, color: "text-teal-600    bg-teal-50     dark:bg-teal-950/50    dark:text-teal-400",    label: "Completed"},
+  status_changed: { icon: <RefreshCw     size={13} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/50  dark:text-orange-400",  label: "Status"   },
+};
+
+function ActivityLogPanel({ onClose }: { onClose: () => void }) {
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+
+  useEffect(() => {
+    setEntries(getActivities());
+  }, []);
+
+  const handleClear = () => {
+    clearActivities();
+    setEntries([]);
+  };
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400 dark:text-zinc-500">
+        <Bell size={32} strokeWidth={1.5} />
+        <p className="text-[13px] font-medium">No activity yet</p>
+        <p className="text-[11px]">Actions you take will appear here</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] text-gray-400 dark:text-zinc-500">{entries.length} entries</span>
+        <button
+          onClick={handleClear}
+          className="flex items-center gap-1 text-[11px] text-red-500 hover:text-red-600 font-medium transition-colors"
+        >
+          <Trash size={11} /> Clear all
+        </button>
+      </div>
+      <div className="space-y-1.5 overflow-y-auto max-h-[420px] pr-1 -mr-1">
+        {entries.map(entry => {
+          const meta = ACTION_META[entry.action];
+          return (
+            <div key={entry.id} className="flex items-start gap-2.5 rounded-xl p-2.5 hover:bg-gray-50 dark:hover:bg-zinc-800/60 transition-colors group">
+              <span className={`mt-0.5 flex-shrink-0 w-[26px] h-[26px] rounded-lg flex items-center justify-center ${meta.color}`}>
+                {meta.icon}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-1 flex-wrap">
+                  <span className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 leading-snug">{entry.entityName}</span>
+                  <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">{entry.entity}</span>
+                </div>
+                <div className="text-[11px] text-gray-500 dark:text-zinc-400 mt-0.5 leading-snug">
+                  <span className="font-medium">{meta.label}</span>
+                  {entry.detail && <span className="text-gray-400 dark:text-zinc-500"> · {entry.detail}</span>}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-[10px] text-gray-400 dark:text-zinc-500">{entry.user}</span>
+                  <span className="text-[9px] text-gray-300 dark:text-zinc-600">·</span>
+                  <span className="text-[10px] text-gray-400 dark:text-zinc-500">{relativeTime(entry.timestamp)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SubItem = { label: string; href: string; icon: React.ElementType; desc?: string };
@@ -147,10 +243,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const { isSuperAdmin, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
 
-  const [mobileOpen,  setMobileOpen]  = useState(false);
-  const [searchOpen,  setSearchOpen]  = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [crmOpen,     setCrmOpen]     = useState(false);
+  const [mobileOpen,       setMobileOpen]       = useState(false);
+  const [searchOpen,       setSearchOpen]       = useState(false);
+  const [searchQuery,      setSearchQuery]      = useState("");
+  const [crmOpen,          setCrmOpen]          = useState(false);
+  const [activityOpen,     setActivityOpen]     = useState(false);
+  const [unreadCount,      setUnreadCount]      = useState(0);
+
+  // Compute unread count (entries newer than last-seen timestamp)
+  const refreshUnread = useCallback(() => {
+    const lastSeen = parseInt(localStorage.getItem(LAST_SEEN_KEY) || "0", 10);
+    const count = getActivities().filter(e => new Date(e.timestamp).getTime() > lastSeen).length;
+    setUnreadCount(count);
+  }, []);
+
+  useEffect(() => { refreshUnread(); }, [refreshUnread]);
+
+  // Poll every 5 seconds so badge updates after actions
+  useEffect(() => {
+    const id = setInterval(refreshUnread, 5000);
+    return () => clearInterval(id);
+  }, [refreshUnread]);
+
+  const handleActivityOpen = (open: boolean) => {
+    setActivityOpen(open);
+    if (open) {
+      localStorage.setItem(LAST_SEEN_KEY, String(Date.now()));
+      setUnreadCount(0);
+    }
+  };
 
   const crmRef = useRef<HTMLDivElement>(null);
 
@@ -306,12 +427,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
-            {/* Notifications */}
-            <button title="Notifications"
-              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors relative">
-              <Bell size={16} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-card" />
-            </button>
+            {/* Activity Log */}
+            <Popover open={activityOpen} onOpenChange={handleActivityOpen}>
+              <PopoverTrigger asChild>
+                <button title="Activity Log"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors relative">
+                  <Bell size={16} />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-blue-500 ring-2 ring-white dark:ring-card flex items-center justify-center text-[9px] font-bold text-white leading-none">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[340px] p-4" sideOffset={8}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-[14px] font-bold text-gray-900 dark:text-gray-100">Activity Log</h3>
+                    <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">All actions across CRM & modules</p>
+                  </div>
+                </div>
+                <ActivityLogPanel onClose={() => setActivityOpen(false)} />
+              </PopoverContent>
+            </Popover>
 
             {/* Quick Add */}
             <DropdownMenu>

@@ -10,6 +10,7 @@ import {
   setActiveTenant,
   getActiveTenantId,
   syncAllFromServer,
+  setActivityUser,
 } from "@/lib/store";
 
 const AUTH_KEY     = "onesoft-admin-auth";
@@ -115,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     if (user) {
       setActiveTenant(null);
+      setActivityUser(user.fullName || user.username);
       sessionStorage.setItem(AUTH_KEY,     "true");
       sessionStorage.setItem(AUTH_USER_ID, user.id);
       sessionStorage.setItem(TENANT_KEY,   "");
@@ -138,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const tenantUser = tenantToAdminUser(tenant);
       setActiveTenant(tenant.id);
+      setActivityUser(tenantUser.fullName || tenantUser.username);
       sessionStorage.setItem(AUTH_KEY,     "true");
       sessionStorage.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
       sessionStorage.setItem(TENANT_KEY,   tenant.id);
@@ -152,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = () => {
     setActiveTenant(null);
+    setActivityUser("System");
     sessionStorage.removeItem(AUTH_KEY);
     sessionStorage.removeItem(AUTH_USER_ID);
     sessionStorage.removeItem(TENANT_KEY);

@@ -80,6 +80,54 @@ function tenantKey(baseKey: string): string {
   return `t:${_activeTenantId}:${baseKey}`;
 }
 
+// ─── Activity Log ─────────────────────────────────────────────────────────────
+export type ActivityAction =
+  | "created" | "updated" | "deleted"
+  | "converted" | "completed" | "status_changed";
+
+export type ActivityEntry = {
+  id: string;
+  action: ActivityAction;
+  entity: string;       // e.g. "Lead", "Customer", "Sale"
+  entityName: string;   // e.g. lead.name, sale.saleNumber
+  detail?: string;      // optional extra info
+  user: string;
+  timestamp: string;
+};
+
+const ACTIVITY_KEY = "admin-activity-log";
+const MAX_ACTIVITY = 300;
+let _activityUser = "System";
+
+export function setActivityUser(name: string): void {
+  _activityUser = name || "System";
+}
+
+export function addActivity(entry: Omit<ActivityEntry, "id" | "user" | "timestamp">): void {
+  try {
+    const key = tenantKey(ACTIVITY_KEY);
+    let existing: ActivityEntry[] = [];
+    try { existing = JSON.parse(localStorage.getItem(key) || "[]"); } catch { existing = []; }
+    const newEntry: ActivityEntry = {
+      ...entry,
+      id: crypto.randomUUID(),
+      user: _activityUser,
+      timestamp: new Date().toISOString(),
+    };
+    localStorage.setItem(key, JSON.stringify([newEntry, ...existing].slice(0, MAX_ACTIVITY)));
+  } catch { /* ignore */ }
+}
+
+export function getActivities(): ActivityEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(tenantKey(ACTIVITY_KEY)) || "[]");
+  } catch { return []; }
+}
+
+export function clearActivities(): void {
+  try { localStorage.removeItem(tenantKey(ACTIVITY_KEY)); } catch { /* ignore */ }
+}
+
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -150,6 +198,7 @@ export const createLead = (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">): 
     updatedAt: new Date().toISOString(),
   };
   setStored(LEADS_KEY, [...getLeads(), newLead]);
+  addActivity({ action: "created", entity: "Lead", entityName: newLead.name, detail: newLead.company || undefined });
   return newLead;
 };
 export const updateLead = (id: string, updates: Partial<Omit<Lead, "id" | "createdAt" | "updatedAt">>): Lead => {
@@ -159,10 +208,14 @@ export const updateLead = (id: string, updates: Partial<Omit<Lead, "id" | "creat
   const updatedLead = { ...leads[index], ...updates, updatedAt: new Date().toISOString() };
   leads[index] = updatedLead;
   setStored(LEADS_KEY, leads);
+  const detail = updates.status ? `Status → ${updates.status}` : undefined;
+  addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Lead", entityName: updatedLead.name, detail });
   return updatedLead;
 };
 export const deleteLead = (id: string): void => {
+  const lead = getLeads().find(l => l.id === id);
   setStored(LEADS_KEY, getLeads().filter(l => l.id !== id));
+  addActivity({ action: "deleted", entity: "Lead", entityName: lead?.name || id });
 };
 
 // ─── Docs API ─────────────────────────────────────────────────────────────────
@@ -227,6 +280,7 @@ export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "update
     updatedAt: new Date().toISOString(),
   };
   setStored(CUSTOMERS_KEY, [...getCustomers(), newCustomer]);
+  addActivity({ action: "created", entity: "Customer", entityName: newCustomer.name, detail: newCustomer.company || undefined });
   return newCustomer;
 };
 
@@ -236,15 +290,19 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
   if (index === -1) throw new Error("Customer not found");
   customers[index] = { ...customers[index], ...updates, updatedAt: new Date().toISOString() };
   setStored(CUSTOMERS_KEY, customers);
+  const detail = updates.status ? `Status → ${updates.status}` : undefined;
+  addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Customer", entityName: customers[index].name, detail });
   return customers[index];
 };
 
 export const deleteCustomer = (id: string): void => {
+  const customer = getCustomers().find(c => c.id === id);
   setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
+  addActivity({ action: "deleted", entity: "Customer", entityName: customer?.name || id });
 };
 
 export const convertLeadToCustomer = (lead: Lead): Customer => {
-  return createCustomer({
+  const customer = createCustomer({
     name: lead.name,
     company: lead.company,
     email: lead.email,
@@ -260,6 +318,8 @@ export const convertLeadToCustomer = (lead: Lead): Customer => {
     notes: lead.notes || "",
     tags: [],
   });
+  addActivity({ action: "converted", entity: "Lead", entityName: lead.name, detail: "Converted to Customer" });
+  return customer;
 };
 
 // ─── Suppliers API ────────────────────────────────────────────────────────────
@@ -295,6 +355,7 @@ export const createSupplier = (data: Omit<Supplier, "id" | "createdAt" | "update
     updatedAt: new Date().toISOString(),
   };
   setStored(SUPPLIERS_KEY, [...getSuppliers(), item]);
+  addActivity({ action: "created", entity: "Supplier", entityName: item.company, detail: item.contactPerson || undefined });
   return item;
 };
 
@@ -304,11 +365,14 @@ export const updateSupplier = (id: string, updates: Partial<Omit<Supplier, "id" 
   if (i === -1) throw new Error("Supplier not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(SUPPLIERS_KEY, items);
+  addActivity({ action: "updated", entity: "Supplier", entityName: items[i].company });
   return items[i];
 };
 
 export const deleteSupplier = (id: string): void => {
+  const item = getSuppliers().find(s => s.id === id);
   setStored(SUPPLIERS_KEY, getSuppliers().filter(s => s.id !== id));
+  addActivity({ action: "deleted", entity: "Supplier", entityName: item?.company || id });
 };
 
 // ─── Product Categories API ───────────────────────────────────────────────────
@@ -652,6 +716,7 @@ export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedA
     updatedAt: new Date().toISOString(),
   };
   setStored(PRODUCTS_KEY, [...getProducts(), item]);
+  addActivity({ action: "created", entity: "Product", entityName: item.name, detail: item.sku ? `SKU: ${item.sku}` : undefined });
   return item;
 };
 
@@ -661,11 +726,14 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   if (i === -1) throw new Error("Product not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PRODUCTS_KEY, items);
+  addActivity({ action: "updated", entity: "Product", entityName: items[i].name });
   return items[i];
 };
 
 export const deleteProduct = (id: string): void => {
+  const item = getProducts().find(p => p.id === id);
   setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
+  addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
 };
 
 // ─── Brands API ───────────────────────────────────────────────────────────────
@@ -837,6 +905,7 @@ export const createPurchaseOrder = (
     updatedAt: new Date().toISOString(),
   };
   setStored(PURCHASE_ORDERS_KEY, [...getPurchaseOrders(), item]);
+  addActivity({ action: "created", entity: "Purchase Order", entityName: item.poNumber, detail: item.supplier || undefined });
   return item;
 };
 
@@ -849,11 +918,15 @@ export const updatePurchaseOrder = (
   if (i === -1) throw new Error("Purchase order not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PURCHASE_ORDERS_KEY, items);
+  const detail = (updates as Record<string, unknown>).status ? `Status → ${(updates as Record<string, unknown>).status}` : undefined;
+  addActivity({ action: detail ? "status_changed" : "updated", entity: "Purchase Order", entityName: items[i].poNumber, detail });
   return items[i];
 };
 
 export const deletePurchaseOrder = (id: string): void => {
+  const item = getPurchaseOrders().find(p => p.id === id);
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
+  addActivity({ action: "deleted", entity: "Purchase Order", entityName: item?.poNumber || id });
 };
 
 // ─── Sales / POS ─────────────────────────────────────────────────────────────
@@ -913,6 +986,7 @@ export const getSales = (): Sale[] => getStored<Sale>(SALES_KEY);
 export const createSale = (data: Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt">): Sale => {
   const sale: Sale = { ...data, id: crypto.randomUUID(), saleNumber: nextSaleNumber(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(SALES_KEY, [...getSales(), sale]);
+  addActivity({ action: "created", entity: "Sale", entityName: sale.saleNumber, detail: sale.customer ? `Customer: ${sale.customer}` : undefined });
   return sale;
 };
 
@@ -922,11 +996,19 @@ export const updateSale = (id: string, updates: Partial<Omit<Sale, "id" | "saleN
   if (i === -1) throw new Error("Sale not found");
   all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(SALES_KEY, all);
+  const detail = updates.status
+    ? updates.status === "Completed"
+      ? `Completed · ${updates.paymentMethod || all[i].paymentMethod}`
+      : `Status → ${updates.status}`
+    : undefined;
+  addActivity({ action: updates.status === "Completed" ? "completed" : updates.status ? "status_changed" : "updated", entity: "Sale", entityName: all[i].saleNumber, detail });
   return all[i];
 };
 
 export const deleteSale = (id: string): void => {
+  const sale = getSales().find(s => s.id === id);
   setStored(SALES_KEY, getSales().filter(s => s.id !== id));
+  addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
 };
 
 // ─── Stock Tracking ───────────────────────────────────────────────────────────
