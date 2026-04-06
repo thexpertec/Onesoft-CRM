@@ -365,7 +365,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
         <img src="${logo}" class="doc-logo" alt="Onesoft" />
         <span class="doc-status">${escHtml(doc.status)}</span>
       </div>
-      <div class="doc-label">Customer Requirement Document</div>
+      <div class="doc-label">Client Requirement Document</div>
       <div class="doc-title">${escHtml(doc.title)}</div>
       <div class="doc-meta">
         ${s1.preparedBy ? `<span class="doc-meta-item">👤 Prepared by: <strong>${escHtml(s1.preparedBy)}</strong></span>` : ""}
@@ -377,7 +377,7 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     <!-- Stats row -->
     <div class="stats">
       <div class="stat"><div class="stat-lbl">Industry</div><div class="stat-val">${escHtml(doc.industry || "—")}</div></div>
-      <div class="stat"><div class="stat-lbl">Software Type</div><div class="stat-val">${escHtml(doc.softwareType || "—")}</div></div>
+      <div class="stat"><div class="stat-lbl">Service Type</div><div class="stat-val">${escHtml(doc.softwareType || "—")}</div></div>
       <div class="stat"><div class="stat-lbl">Start Date</div><div class="stat-val">${formatDate(doc.startDate)}</div></div>
       <div class="stat"><div class="stat-lbl">Delivery Date</div><div class="stat-val">${formatDate(doc.deliveryDate)}</div></div>
     </div>
@@ -603,7 +603,7 @@ export default function ShareDocument() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-primary">Customer Requirement Document</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-primary">Client Requirement Document</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-3">
                 {doc.title}
@@ -639,7 +639,7 @@ export default function ShareDocument() {
               <p className="text-sm font-medium text-foreground">{doc.industry || "—"}</p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Software Type</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Service Type</p>
               <p className="text-sm font-medium text-foreground">{doc.softwareType || "—"}</p>
             </div>
             <div>
