@@ -5,13 +5,165 @@ import { Customer, CustomerStatus, Lead, convertLeadToCustomer } from "@/lib/sto
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight } from "lucide-react";
+import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight, Upload, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+
+// ─── CSV Import helpers ────────────────────────────────────────────────────────
+const CUSTOMER_CSV_HEADERS = ["name","company","email","phone","industry","city","status","customerSince","totalValue","currency","notes","tags"] as const;
+type CustomerCsvRow = Record<typeof CUSTOMER_CSV_HEADERS[number], string>;
+
+function downloadCustomerTemplate() {
+  const sample: CustomerCsvRow = {
+    name: "Jane Smith", company: "Acme Ltd", email: "jane@acme.com",
+    phone: "+44 7700 900000", industry: "Technology", city: "London",
+    status: "Active", customerSince: new Date().toISOString().split("T")[0],
+    totalValue: "5000", currency: "GBP", notes: "Key account", tags: "VIP;Retail",
+  };
+  const lines = [CUSTOMER_CSV_HEADERS.join(","), Object.values(sample).map(v => `"${v}"`).join(",")];
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "customers_import_template.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseCustomerCsv(text: string): { rows: CustomerCsvRow[]; errors: string[] } {
+  const errors: string[] = [];
+  const allLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim());
+  if (allLines.length < 2) { errors.push("File is empty or has no data rows."); return { rows: [], errors }; }
+  const headerLine = allLines[0].toLowerCase().replace(/"/g, "");
+  const headers = headerLine.split(",").map(h => h.trim());
+  const missing = CUSTOMER_CSV_HEADERS.filter(h => !headers.includes(h));
+  if (missing.length) { errors.push(`Missing columns: ${missing.join(", ")}`); return { rows: [], errors }; }
+  const rows: CustomerCsvRow[] = [];
+  for (let i = 1; i < allLines.length; i++) {
+    const vals = allLines[i].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ""));
+    if (vals.length < headers.length) { errors.push(`Row ${i + 1}: not enough columns`); continue; }
+    const row = {} as CustomerCsvRow;
+    CUSTOMER_CSV_HEADERS.forEach(h => { row[h] = vals[headers.indexOf(h)] ?? ""; });
+    if (!row.name) { errors.push(`Row ${i + 1}: name is required`); continue; }
+    rows.push(row);
+  }
+  return { rows, errors };
+}
+
+function CustomerImportModal({ open, onClose, onImport }: { open: boolean; onClose: () => void; onImport: (rows: CustomerCsvRow[]) => void; }) {
+  const [rows, setRows] = useState<CustomerCsvRow[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [step, setStep] = useState<"upload" | "preview">("upload");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function reset() { setRows([]); setErrors([]); setStep("upload"); }
+  function handleClose() { reset(); onClose(); }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const { rows: r, errors: errs } = parseCustomerCsv(text);
+      setRows(r); setErrors(errs);
+      if (r.length > 0) setStep("preview");
+    };
+    reader.readAsText(file);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => { if (e.target === e.currentTarget) handleClose(); }}>
+      <div className="bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h2 className="text-base font-semibold">Import Customers</h2>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Upload a CSV file to bulk-import customers</p>
+          </div>
+          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-6 space-y-5">
+          {step === "upload" && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={downloadCustomerTemplate}>
+                  <FileDown size={14} /> Download Template
+                </Button>
+                <span className="text-[12px] text-muted-foreground">Download the CSV template, fill it in, then upload it below</span>
+              </div>
+              <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-xl p-10 cursor-pointer hover:border-primary/50 hover:bg-muted/40 transition-colors">
+                <Upload size={32} className="text-muted-foreground" />
+                <span className="text-sm font-medium">Click to select a CSV file</span>
+                <span className="text-[12px] text-muted-foreground">Supports .csv files only</span>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+              </label>
+              {errors.length > 0 && (
+                <div className="rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 p-3 space-y-1">
+                  {errors.map((e, i) => <p key={i} className="text-[12px] text-red-600 dark:text-red-400">{e}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === "preview" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{rows.length} row{rows.length !== 1 ? "s" : ""} ready to import</p>
+                <Button variant="ghost" size="sm" className="h-7 text-[12px] gap-1" onClick={() => { reset(); }}>
+                  <X size={12} /> Clear
+                </Button>
+              </div>
+              {errors.length > 0 && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-3 space-y-1">
+                  {errors.map((e, i) => <p key={i} className="text-[12px] text-amber-700 dark:text-amber-400">{e}</p>)}
+                </div>
+              )}
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-muted/50">
+                    <tr>{["Name","Company","Email","Phone","City","Status","Currency"].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 20).map((r, i) => (
+                      <tr key={i} className="border-t border-border hover:bg-muted/30">
+                        <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.company}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.email}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.phone}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.city}</td>
+                        <td className="px-3 py-1.5"><span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${STATUS_COLORS[r.status] ?? "bg-gray-100 text-gray-600"}`}>{r.status || "Active"}</span></td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.currency || "GBP"}</td>
+                      </tr>
+                    ))}
+                    {rows.length > 20 && (
+                      <tr className="border-t border-border">
+                        <td colSpan={7} className="px-3 py-2 text-center text-muted-foreground text-[11px]">…and {rows.length - 20} more rows</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
+          <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
+          {step === "preview" && rows.length > 0 && (
+            <Button size="sm" className="gap-1.5" onClick={() => { onImport(rows); handleClose(); }}>
+              <Upload size={13} /> Import {rows.length} Customer{rows.length !== 1 ? "s" : ""}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 const CUSTOMER_STATUSES: CustomerStatus[] = ["Active", "Inactive", "Churned"];
@@ -59,6 +211,33 @@ export default function CustomersPage() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
+  const [showImport,   setShowImport]   = useState(false);
+
+  const handleImportCustomers = useCallback((rows: CustomerCsvRow[]) => {
+    let count = 0;
+    rows.forEach(r => {
+      try {
+        addCustomer({
+          name: r.name.trim(),
+          company: r.company.trim(),
+          email: r.email.trim(),
+          phone: r.phone.trim(),
+          industry: r.industry.trim(),
+          city: r.city.trim(),
+          status: (CUSTOMER_STATUSES.includes(r.status as CustomerStatus) ? r.status : "Active") as CustomerStatus,
+          source: "direct",
+          customerSince: r.customerSince || new Date().toISOString().split("T")[0],
+          totalValue: r.totalValue.trim(),
+          currency: r.currency.trim() || "GBP",
+          notes: r.notes.trim(),
+          tags: r.tags ? r.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
+        });
+        count++;
+      } catch { /* skip bad rows */ }
+    });
+    toast({ title: `${count} customer${count !== 1 ? "s" : ""} imported`, description: "Successfully added to your customers list." });
+    refresh?.();
+  }, [addCustomer, refresh, toast]);
 
   // KPIs
   const totalRevenue = useMemo(() => customers.reduce((a, c) => {
@@ -169,6 +348,9 @@ export default function CustomersPage() {
                 <RefreshCw size={13} />{eligibleLeads.length} to convert
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="gap-1.5">
+              <Upload size={13} /> Import
+            </Button>
             <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-customer">
               <Plus size={14} /> Add Customer
             </Button>
@@ -440,6 +622,12 @@ export default function CustomersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CustomerImportModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImport={handleImportCustomers}
+      />
     </div>
   );
 }
