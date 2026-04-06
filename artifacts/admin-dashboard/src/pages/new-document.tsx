@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import {
-  FileText, Briefcase, Layers, Wrench, DollarSign, Clock, Target,
+  FileText, Briefcase, DollarSign, Clock, Target,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
-  ArrowLeft, Lock, Plus, X, FileDown, Trash2, LayoutTemplate,
+  ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads } from "@/hooks/use-data";
@@ -38,47 +38,9 @@ const KEY_FEATURES_OPTIONS = [
   "Mobile App", "Multi-language Support", "Audit Logs", "Custom Dashboards", "Real-time Chat", "Workflow Automation",
 ];
 
-const HOSTING_OPTIONS = ["Cloud (AWS / Azure / GCP)", "On-premise", "Hybrid", "Managed Hosting", "Not Decided"];
 const MAINTENANCE_OPTIONS = ["3 months", "6 months", "1 year", "2 years", "Ongoing"];
 const PAYMENT_STRUCTURES = ["Fixed Price", "Hourly Rate", "Payment Milestones", "Retainer", "Time & Material"];
 
-const INTEGRATIONS_OPTIONS = [
-  "Stripe", "PayPal", "GoCardless", "Worldpay", "Sage Pay", "Square", "Braintree", "Klarna", "Xero", "QuickBooks", "Sage Accounting", "FreeAgent",
-  "Salesforce", "HubSpot", "Pipedrive", "Zoho CRM", "Microsoft Dynamics 365", "Freshsales", "Monday CRM",
-  "Mailchimp", "Klaviyo", "SendGrid", "Campaign Monitor", "ActiveCampaign", "Brevo (Sendinblue)", "Constant Contact", "Dotdigital",
-  "Twilio (SMS)", "Twilio (Voice)", "WhatsApp Business API", "Intercom", "Zendesk", "Freshdesk", "LiveChat", "Tawk.to",
-  "AWS S3", "Google Cloud Storage", "Azure Blob Storage", "Cloudinary", "Dropbox", "Google Drive", "OneDrive", "Box",
-  "Google OAuth", "Facebook Login", "Apple Sign-In", "Auth0", "Firebase Auth", "Okta", "Microsoft Azure AD",
-  "Google Analytics 4", "Google Tag Manager", "Hotjar", "Mixpanel", "Amplitude", "Segment", "Heap", "Microsoft Clarity",
-  "Shopify", "WooCommerce", "Magento", "BigCommerce", "Etsy API", "Amazon Seller API", "eBay API",
-  "Royal Mail API", "DPD API", "Evri API", "DHL API", "FedEx API", "UPS API", "ShipStation", "EasyPost",
-  "Google Maps", "Mapbox", "What3Words", "Postcode Anywhere (PCA Predict)",
-  "Facebook / Meta API", "Instagram API", "Twitter / X API", "LinkedIn API", "TikTok API", "YouTube API",
-  "SAP", "Oracle ERP", "Microsoft Dynamics NAV", "NetSuite",
-  "BambooHR", "Workday", "ADP Payroll", "Sage HR", "Breathe HR",
-  "Slack", "Microsoft Teams", "Zoom", "Google Workspace", "Microsoft 365",
-  "NHS Login", "EMIS Health", "SystmOne", "NHS Spine",
-  "Zapier", "Make (Integromat)", "n8n", "Webhooks / REST API", "GraphQL API",
-];
-
-const TECH_STACK_OPTIONS = [
-  "React", "Next.js", "Vue.js", "Nuxt.js", "Angular", "Svelte", "SvelteKit", "Remix",
-  "React Native", "Expo", "Flutter", "Swift (iOS)", "Kotlin (Android)", "Ionic",
-  "Node.js", "Express.js", "NestJS", "Django", "FastAPI", "Flask", "Ruby on Rails", "Laravel (PHP)", "Spring Boot (Java)", "ASP.NET Core (C#)", "Go (Golang)", "Rust",
-  "PostgreSQL", "MySQL", "MariaDB", "SQLite", "Microsoft SQL Server", "Oracle Database",
-  "MongoDB", "Firebase Firestore", "DynamoDB", "Redis", "Cassandra",
-  "AWS (Amazon Web Services)", "Google Cloud Platform (GCP)", "Microsoft Azure", "DigitalOcean", "Heroku", "Vercel", "Netlify", "Fly.io", "Railway",
-  "Docker", "Kubernetes", "GitHub Actions", "GitLab CI/CD", "Bitbucket Pipelines", "CircleCI", "Jenkins", "Terraform",
-  "WordPress", "Strapi", "Contentful", "Sanity", "Prismic", "Directus", "Payload CMS",
-  "REST API", "GraphQL", "gRPC", "WebSockets", "MQTT (IoT)",
-  "OpenAI API (ChatGPT)", "Anthropic Claude API", "Google Gemini API", "Hugging Face", "LangChain", "TensorFlow", "PyTorch",
-  "Elasticsearch", "Algolia", "MeiliSearch", "Typesense",
-  "Jest", "Cypress", "Playwright", "Vitest", "Selenium",
-  "Tailwind CSS", "Bootstrap", "Material UI (MUI)", "Chakra UI", "shadcn/ui", "Ant Design", "SASS / SCSS",
-  "Redux", "Zustand", "Jotai", "React Query (TanStack Query)", "SWR",
-  "JWT (JSON Web Tokens)", "OAuth 2.0 / OpenID Connect", "Clerk", "NextAuth.js", "Passport.js",
-  "Git / GitHub", "GitLab", "Bitbucket",
-];
 
 // ─── UI Components ───────────────────────────────────────────────────────────
 
@@ -379,12 +341,6 @@ export default function NewDocument() {
   const [businessGoals, setBusinessGoals] = useState("");
   const [keyChallenges, setKeyChallenges] = useState("");
   const [currentSystems, setCurrentSystems] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [keyFeatures, setKeyFeatures] = useState<string[]>([]);
-  const [integrations, setIntegrations] = useState<string[]>([]);
-  const [techStack, setTechStack] = useState<string[]>([]);
-  const [hosting, setHosting] = useState("");
-  const [security, setSecurity] = useState("");
   const [startDate, setStartDate] = useState("");
   const [milestones, setMilestones] = useState<{ id: string; title: string; date: string; payment: string; paymentStatus: string; taskStatus: string; }[]>([
     { id: "1", title: "", date: "", payment: "", paymentStatus: "", taskStatus: "" },
@@ -456,7 +412,6 @@ export default function NewDocument() {
 
   const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient }); markSaved("s1"); };
   const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2"); };
-  const saveS3  = () => { persist("s3",  { purpose, keyFeatures }); markSaved("s3"); };
   const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); };
   const saveCustomSection = (id: string) => {
     const sec = customSections.find(s => s.id === id);
@@ -468,7 +423,6 @@ export default function NewDocument() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
     markSaved(`sc_${id}`);
   };
-  const saveS4  = () => { persist("s4",  { integrations, techStack, hosting, security }); markSaved("s4"); };
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
@@ -478,9 +432,7 @@ export default function NewDocument() {
     const loadSections = (d: Record<string, unknown>) => {
       const s1 = (d.s1 ?? {}) as Record<string, unknown>;
       const s2 = (d.s2 ?? {}) as Record<string, unknown>;
-      const s3 = (d.s3 ?? {}) as Record<string, unknown>;
       const s35 = (d.s35 ?? {}) as Record<string, unknown>;
-      const s4 = (d.s4 ?? {}) as Record<string, unknown>;
       const s5 = (d.s5 ?? {}) as Record<string, unknown>;
       const s6 = (d.s6 ?? {}) as Record<string, unknown>;
       const s7 = (d.s7 ?? {}) as Record<string, unknown>;
@@ -494,17 +446,11 @@ export default function NewDocument() {
       if (s2.businessGoals)  setBusinessGoals(s2.businessGoals as string);
       if (s2.keyChallenges)  setKeyChallenges(s2.keyChallenges as string);
       if (s2.currentSystems) setCurrentSystems(s2.currentSystems as string);
-      if (s3.purpose)        setPurpose(s3.purpose as string);
-      if (s3.keyFeatures)    setKeyFeatures(s3.keyFeatures as string[]);
       if (s35.detailedNotes)        setDetailedNotes(s35.detailedNotes as string);
       if (s35.detailedNotesTitle)   setDetailedNotesTitle(s35.detailedNotesTitle as string);
       if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
       const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
       if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
-      if (s4.integrations)   setIntegrations(s4.integrations as string[]);
-      if (s4.techStack)      setTechStack(s4.techStack as string[]);
-      if (s4.hosting)        setHosting(s4.hosting as string);
-      if (s4.security)       setSecurity(s4.security as string);
       if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
       if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
       if (s5.currency)         setCurrency(s5.currency as string);
@@ -545,10 +491,8 @@ export default function NewDocument() {
     const d = (doc.sections ?? {}) as Record<string, unknown>;
     const s1 = (d.s1 ?? {}) as Record<string, unknown>;
     const s2 = (d.s2 ?? {}) as Record<string, unknown>;
-    const s3 = (d.s3 ?? {}) as Record<string, unknown>;
     const s35 = (d.s35 ?? {}) as Record<string, unknown>;
     const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
-    const s4 = (d.s4 ?? {}) as Record<string, unknown>;
     const s5 = (d.s5 ?? {}) as Record<string, unknown>;
     const s6 = (d.s6 ?? {}) as Record<string, unknown>;
     const s7 = (d.s7 ?? {}) as Record<string, unknown>;
@@ -560,16 +504,10 @@ export default function NewDocument() {
     if (s2.businessGoals)  setBusinessGoals(s2.businessGoals as string);
     if (s2.keyChallenges)  setKeyChallenges(s2.keyChallenges as string);
     if (s2.currentSystems) setCurrentSystems(s2.currentSystems as string);
-    if (s3.purpose)        setPurpose(s3.purpose as string);
-    if (s3.keyFeatures)    setKeyFeatures(s3.keyFeatures as string[]);
     if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
     if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
     if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
     if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
-    if (s4.integrations)   setIntegrations(s4.integrations as string[]);
-    if (s4.techStack)      setTechStack(s4.techStack as string[]);
-    if (s4.hosting)        setHosting(s4.hosting as string);
-    if (s4.security)       setSecurity(s4.security as string);
     if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
     if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
     if (s5.currency)         setCurrency(s5.currency as string);
@@ -596,10 +534,8 @@ export default function NewDocument() {
     const sections = {
       s1:  { docTitle, docDate, preparedBy, selectedClient },
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
-      s3:  { purpose, keyFeatures },
       s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
       sCustom: { sections: customSections },
-      s4:  { integrations, techStack, hosting, security },
       s5:  { paymentStructure, additionalCosts, currency },
       s6:  { startDate, deliveryDate, milestones },
       s7:  { postLaunch, maintenance },
@@ -613,7 +549,7 @@ export default function NewDocument() {
       phone: client?.phone || "",
       industry: client?.industry || "",
       city: client?.city || "",
-      softwareType: keyProducts[0] || purpose || "",
+      softwareType: keyProducts[0] || "",
       budget: paymentStructure || "",
       startDate: startDate || "",
       deliveryDate: deliveryDate || "",
