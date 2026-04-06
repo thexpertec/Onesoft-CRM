@@ -610,7 +610,7 @@ export default function NewDocument() {
     { id: "1", item: "", description: "", qty: "1", perUnit: "", discount: "0" },
   ]);
   const addLineItem = () => setLineItems(prev => [...prev, { id: Date.now().toString(), item: "", description: "", qty: "1", perUnit: "", discount: "0" }]);
-  const removeLineItem = (id: string) => setLineItems(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
+  const removeLineItem = (id: string) => setLineItems(prev => prev.filter(r => r.id !== id));
   const updateLineItem = (id: string, field: keyof LineItem, value: string) =>
     setLineItems(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   const lineItemTotals = lineItems.map(r => {
@@ -1258,8 +1258,7 @@ export default function NewDocument() {
                       <button
                         type="button"
                         onClick={() => removeLineItem(row.id)}
-                        disabled={lineItems.length === 1}
-                        className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       >
                         <Trash2 size={14} />
                       </button>
