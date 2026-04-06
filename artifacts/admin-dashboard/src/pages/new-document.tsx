@@ -958,73 +958,78 @@ export default function NewDocument() {
               </button>
             </div>
 
-            {/* Table header */}
-            {/* col: Item/Service | Short Desc | Qty | Per Unit | Total Cost | Discount | Sub Total | × */}
-            <div className="hidden sm:grid grid-cols-[2fr_2fr_55px_80px_90px_80px_90px_32px] gap-2 mb-1.5 px-1">
-              {["Item / Service","Short Description","Qty","Per Unit","Total Cost","Discount","Sub Total",""].map(h => (
+            {/* Table header — Row 1 columns only */}
+            <div className="hidden sm:grid grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 mb-1 px-1">
+              {["Item / Service","Qty","Per Unit","Total","Discount","Sub Total",""].map(h => (
                 <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
               ))}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {lineItems.map((row, idx) => {
                 const { totalCost, subTotal } = lineItemTotals[idx];
                 return (
-                  <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_55px_80px_90px_80px_90px_32px] gap-2 items-center bg-muted/30 rounded-lg p-2 sm:p-1.5 sm:bg-transparent sm:rounded-none sm:border-b sm:border-border/40">
-                    <input
-                      value={row.item}
-                      onChange={e => updateLineItem(row.id, "item", e.target.value)}
-                      placeholder="e.g. Web Design"
-                      className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <input
-                      value={row.description}
-                      onChange={e => updateLineItem(row.id, "description", e.target.value)}
-                      placeholder="Brief description…"
-                      className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      value={row.qty}
-                      onChange={e => updateLineItem(row.id, "qty", e.target.value)}
-                      placeholder="1"
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={row.perUnit}
-                      onChange={e => updateLineItem(row.id, "perUnit", e.target.value)}
-                      placeholder="0.00"
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    {/* Total Cost = Qty × Per Unit (read-only) */}
-                    <div className="h-8 flex items-center justify-end px-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-sm font-medium text-blue-700 dark:text-blue-300 tabular-nums">
-                      {totalCost > 0 ? formatCurrency(totalCost) : <span className="text-muted-foreground/50">—</span>}
+                  <div key={row.id} className="border border-border/50 rounded-lg overflow-hidden bg-background">
+                    {/* Row 1: pricing */}
+                    <div className="grid grid-cols-1 sm:grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 items-center px-2 py-1.5">
+                      <input
+                        value={row.item}
+                        onChange={e => updateLineItem(row.id, "item", e.target.value)}
+                        placeholder="e.g. Web Design"
+                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={row.qty}
+                        onChange={e => updateLineItem(row.id, "qty", e.target.value)}
+                        placeholder="1"
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.perUnit}
+                        onChange={e => updateLineItem(row.id, "perUnit", e.target.value)}
+                        placeholder="0.00"
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      {/* Total = Qty × Per Unit (read-only) */}
+                      <div className="h-8 flex items-center justify-end px-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-sm font-medium text-blue-700 dark:text-blue-300 tabular-nums">
+                        {totalCost > 0 ? formatCurrency(totalCost) : <span className="text-muted-foreground/40">—</span>}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.discount}
+                        onChange={e => updateLineItem(row.id, "discount", e.target.value)}
+                        placeholder="0.00"
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      {/* Sub Total = Total − Discount (read-only) */}
+                      <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
+                        {subTotal > 0 ? formatCurrency(subTotal) : <span className="text-muted-foreground/40">—</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(row.id)}
+                        disabled={lineItems.length === 1}
+                        className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={row.discount}
-                      onChange={e => updateLineItem(row.id, "discount", e.target.value)}
-                      placeholder="0.00"
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    {/* Sub Total = Total Cost − Discount (read-only) */}
-                    <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
-                      {subTotal > 0 ? formatCurrency(subTotal) : <span className="text-muted-foreground/50">—</span>}
+                    {/* Row 2: description */}
+                    <div className="px-2 pb-2 border-t border-border/30 pt-1.5 bg-muted/20">
+                      <input
+                        value={row.description}
+                        onChange={e => updateLineItem(row.id, "description", e.target.value)}
+                        placeholder="Description…"
+                        className="h-7 w-full rounded-md border border-input bg-background px-2.5 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeLineItem(row.id)}
-                      disabled={lineItems.length === 1}
-                      className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 );
               })}
