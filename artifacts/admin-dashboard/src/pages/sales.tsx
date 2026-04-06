@@ -120,16 +120,26 @@ function ProductThumbnail({ product, size = "full" }: { product: Product; size?:
 // ─── Payment Modal ────────────────────────────────────────────────────────────
 interface PaymentModalProps {
   saleNumber: string;
-  billedAmount: number;   // raw subtotal (qty × price, no discounts)
+  billedAmount: number;
   discountAmt: number;
-  afterDiscount: number;  // billedAmount – discountAmt
-  onConfirm: (amountPaid: string, taxRate: string) => void;
+  afterDiscount: number;
+  defaultPaymentMethod?: SalePayment;
+  onConfirm: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
   onCancel: () => void;
 }
 
-function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, onConfirm, onCancel }: PaymentModalProps) {
+const PAY_METHOD_META: { method: SalePayment; icon: React.ReactNode; color: string; ring: string }[] = [
+  { method: "Cash",            icon: <Banknote  size={26} />, color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700", ring: "ring-emerald-500" },
+  { method: "Card",            icon: <CreditCard size={26} />, color: "text-blue-600    bg-blue-50     dark:bg-blue-950/40    border-blue-200    dark:border-blue-700",    ring: "ring-blue-500"    },
+  { method: "Bank Transfer",   icon: <CreditCard size={26} />, color: "text-violet-600  bg-violet-50   dark:bg-violet-950/40  border-violet-200  dark:border-violet-700",  ring: "ring-violet-500"  },
+  { method: "Cheque",          icon: <Receipt    size={26} />, color: "text-gray-600    bg-gray-50     dark:bg-zinc-800       border-gray-200    dark:border-zinc-700",     ring: "ring-gray-400"    },
+  { method: "Credit",          icon: <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
+];
+
+function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, defaultPaymentMethod = "Cash", onConfirm, onCancel }: PaymentModalProps) {
   const [taxRate,    setTaxRate]    = useState("0");
   const [payAmount,  setPayAmount]  = useState("0");
+  const [payMethod,  setPayMethod]  = useState<SalePayment>(defaultPaymentMethod);
 
   const taxPct   = Math.max(0, parseFloat(taxRate) || 0);
   const taxAmt   = afterDiscount * taxPct / 100;
@@ -231,12 +241,30 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, on
 
           {/* Section header */}
           <div className="px-8 pt-8 pb-5 border-b border-gray-100 dark:border-zinc-700/60">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Amount Received</div>
-            <div className="text-[13px] text-gray-400 dark:text-gray-500">Enter cash / payment received</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Payment Method</div>
+            {/* Large payment method tiles */}
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              {PAY_METHOD_META.map(m => {
+                const isSelected = payMethod === m.method;
+                return (
+                  <button
+                    key={m.method}
+                    onClick={() => setPayMethod(m.method)}
+                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all
+                      ${m.color}
+                      ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.04]` : "opacity-70 hover:opacity-100 hover:scale-[1.02]"}`}
+                  >
+                    {m.icon}
+                    <span className="leading-tight text-center">{m.method}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Input area */}
-          <div className="px-8 py-7 flex-1 space-y-5">
+          <div className="px-8 py-5 flex-1 space-y-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Amount Received</div>
 
             {/* Large £ input */}
             <div className="relative">
@@ -284,7 +312,7 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, on
           {/* Confirm button — bottom of right panel */}
           <div className="px-8 pb-8 pt-2">
             <button
-              onClick={() => onConfirm(payAmount, taxRate)}
+              onClick={() => onConfirm(payAmount, taxRate, payMethod)}
               disabled={overPaid}
               className="w-full h-14 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[16px] flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none"
             >
@@ -313,7 +341,7 @@ interface POSViewProps {
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
   onSetStatus: (status: SaleStatus) => void;
-  onComplete: (amountPaid: string, taxRate: string) => void;
+  onComplete: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
   onAddCustomer: (name: string, phone: string, email: string) => void;
 }
 
@@ -976,9 +1004,10 @@ function POSView({
         billedAmount={subTotal(localItems)}
         discountAmt={discountAmt}
         afterDiscount={grandTotal}
-        onConfirm={(amountPaid, taxRate) => {
+        defaultPaymentMethod={localMeta.paymentMethod}
+        onConfirm={(amountPaid, taxRate, paymentMethod) => {
           setPayModalOpen(false);
-          onComplete(amountPaid, taxRate);
+          onComplete(amountPaid, taxRate, paymentMethod);
         }}
         onCancel={() => setPayModalOpen(false)}
       />
@@ -1206,7 +1235,7 @@ export default function SalesPage() {
     setLocalItems([]);
   };
 
-  const handleComplete = (amountPaid: string, taxRate: string) => {
+  const handleComplete = (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => {
     if (!detailId || !localMeta) return;
 
     // Deduct stock only if not already done (avoids double-deduction on re-payment)
@@ -1216,6 +1245,7 @@ export default function SalesPage() {
 
     const completedSale = editSale(detailId, {
       ...localMeta,
+      paymentMethod,
       status: "Completed",
       items: localItems,
       amountPaid,
