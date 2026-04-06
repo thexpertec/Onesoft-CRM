@@ -353,6 +353,21 @@ export default function NewDocument() {
 
   const [paymentStructure, setPaymentStructure] = useState("");
   const [additionalCosts, setAdditionalCosts] = useState("");
+
+  type LineItem = { id: string; item: string; description: string; qty: string; perUnit: string; discount: string };
+  const [lineItems, setLineItems] = useState<LineItem[]>([
+    { id: "1", item: "", description: "", qty: "1", perUnit: "", discount: "0" },
+  ]);
+  const addLineItem = () => setLineItems(prev => [...prev, { id: Date.now().toString(), item: "", description: "", qty: "1", perUnit: "", discount: "0" }]);
+  const removeLineItem = (id: string) => setLineItems(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
+  const updateLineItem = (id: string, field: keyof LineItem, value: string) =>
+    setLineItems(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const lineItemTotals = lineItems.map(r => {
+    const totalCost = (parseFloat(r.qty) || 0) * (parseFloat(r.perUnit) || 0);
+    const discount  = parseFloat(r.discount) || 0;
+    return { totalCost, subTotal: Math.max(0, totalCost - discount) };
+  });
+  const lineItemsGrandTotal = lineItemTotals.reduce((s, r) => s + r.subTotal, 0);
   const [currency, setCurrency] = useState("GBP");
   const [postLaunch, setPostLaunch] = useState("");
   const [maintenance, setMaintenance] = useState("");
@@ -423,7 +438,7 @@ export default function NewDocument() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
     markSaved(`sc_${id}`);
   };
-  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency }); markSaved("s5"); };
+  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); };
   const saveS7  = () => { persist("s7",  { postLaunch, maintenance }); markSaved("s7"); };
 
@@ -454,6 +469,7 @@ export default function NewDocument() {
       if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
       if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
       if (s5.currency)         setCurrency(s5.currency as string);
+      if (Array.isArray(s5.lineItems)) setLineItems(s5.lineItems as LineItem[]);
       if (s6.startDate)      setStartDate(s6.startDate as string);
       if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
       if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
@@ -511,6 +527,7 @@ export default function NewDocument() {
     if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
     if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
     if (s5.currency)         setCurrency(s5.currency as string);
+    if (Array.isArray(s5.lineItems)) setLineItems(s5.lineItems as LineItem[]);
     if (s6.startDate)      setStartDate(s6.startDate as string);
     if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
     if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
@@ -536,7 +553,7 @@ export default function NewDocument() {
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
       s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
       sCustom: { sections: customSections },
-      s5:  { paymentStructure, additionalCosts, currency },
+      s5:  { paymentStructure, additionalCosts, currency, lineItems },
       s6:  { startDate, deliveryDate, milestones },
       s7:  { postLaunch, maintenance },
     };
@@ -927,6 +944,100 @@ export default function NewDocument() {
           <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically">
             <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 90000" />
           </FormField>
+
+          {/* Line Items Table */}
+          <div className="sm:col-span-3">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Items / Services</span>
+              <button
+                type="button"
+                onClick={addLineItem}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/5 transition-colors"
+              >
+                <Plus size={12} /> Add Item
+              </button>
+            </div>
+
+            {/* Table header */}
+            <div className="hidden sm:grid grid-cols-[2fr_2fr_60px_90px_90px_90px_32px] gap-2 mb-1.5 px-1">
+              {["Item / Service","Short Description","Qty","Per Unit","Discount","Sub Total",""].map(h => (
+                <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              {lineItems.map((row, idx) => {
+                const { totalCost, subTotal } = lineItemTotals[idx];
+                return (
+                  <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[2fr_2fr_60px_90px_90px_90px_32px] gap-2 items-center bg-muted/30 rounded-lg p-2 sm:p-1.5 sm:bg-transparent sm:rounded-none sm:border-b sm:border-border/40">
+                    <input
+                      value={row.item}
+                      onChange={e => updateLineItem(row.id, "item", e.target.value)}
+                      placeholder="e.g. Web Design"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <input
+                      value={row.description}
+                      onChange={e => updateLineItem(row.id, "description", e.target.value)}
+                      placeholder="Brief description…"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={row.qty}
+                      onChange={e => updateLineItem(row.id, "qty", e.target.value)}
+                      placeholder="1"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={row.perUnit}
+                      onChange={e => updateLineItem(row.id, "perUnit", e.target.value)}
+                      placeholder="0.00"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={row.discount}
+                      onChange={e => updateLineItem(row.id, "discount", e.target.value)}
+                      placeholder="0.00"
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
+                      {formatCurrency(subTotal)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeLineItem(row.id)}
+                      disabled={lineItems.length === 1}
+                      className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Totals row */}
+            <div className="mt-3 flex flex-col sm:flex-row sm:justify-end gap-1.5 px-1">
+              {lineItems.some(r => parseFloat(r.perUnit) > 0) && (
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-muted-foreground">Total (ex. discount):</span>
+                  <span className="font-medium tabular-nums">{formatCurrency(lineItemTotals.reduce((s, r) => s + r.totalCost, 0))}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-sm sm:ml-6 border-t sm:border-t-0 sm:border-l border-border/60 pt-1.5 sm:pt-0 sm:pl-6">
+                <span className="font-semibold text-foreground">Grand Total:</span>
+                <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</span>
+              </div>
+            </div>
+          </div>
 
           <div className="sm:col-span-3 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
             <div className="flex items-center gap-2">
