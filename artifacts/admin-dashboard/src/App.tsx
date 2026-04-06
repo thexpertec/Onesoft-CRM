@@ -1,5 +1,6 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,6 +38,36 @@ import ChartOfAccountsPage from "@/pages/chart-of-accounts";
 
 const queryClient = new QueryClient();
 
+// Error boundary — prevents any page crash from showing a blank screen
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("Page error:", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+            <span className="text-destructive text-2xl">!</span>
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground max-w-md">{this.state.error.message}</p>
+          <button
+            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
+            onClick={() => this.setState({ error: null })}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [location, navigate] = useLocation();
@@ -59,6 +90,7 @@ function Router() {
       <Route>
         <RequireAuth>
           <Layout>
+            <PageErrorBoundary>
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/leads" component={Leads} />
@@ -91,6 +123,7 @@ function Router() {
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>
+            </PageErrorBoundary>
           </Layout>
         </RequireAuth>
       </Route>

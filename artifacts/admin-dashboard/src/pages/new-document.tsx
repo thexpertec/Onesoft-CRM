@@ -224,7 +224,7 @@ function FormField({ children, label, required, hint, templateAction }: { childr
   );
 }
 
-// Self-contained per-field template picker — filters to docs that have a value for this field
+// Self-contained per-field template picker — always visible, shows all docs that have content for this field
 function FieldTplPicker({ docs, extract, onSelect }: {
   docs: RequirementDoc[];
   extract: (d: RequirementDoc) => string | undefined;
@@ -238,36 +238,42 @@ function FieldTplPicker({ docs, extract, onSelect }: {
     return () => document.removeEventListener("mousedown", h);
   }, []);
   const available = docs.filter(d => { const v = extract(d); return v && v.trim() && v !== "<p></p>"; });
-  if (available.length === 0) return null;
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20 transition-colors"
-        title="Load from a saved document"
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-primary/70 hover:text-primary bg-primary/5 hover:bg-primary/10 border border-primary/15 hover:border-primary/30 transition-colors"
+        title="Load this field from a saved document"
       >
         <LayoutTemplate size={10} /> Templates
         <ChevronDown size={9} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-popover border border-border rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 z-50 w-60 bg-popover border border-border rounded-lg shadow-xl overflow-hidden">
           <div className="px-3 py-2 bg-muted/40 border-b border-border">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Load from saved document</p>
           </div>
-          <div className="max-h-52 overflow-y-auto">
-            {available.map(d => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => { onSelect(extract(d)!); setOpen(false); }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors flex items-center gap-2 border-b border-border/30 last:border-0"
-              >
-                <FileText size={11} className="text-muted-foreground flex-shrink-0" />
-                <span className="truncate text-foreground">{d.title || d.clientName || "Untitled"}</span>
-              </button>
-            ))}
-          </div>
+          {available.length === 0 ? (
+            <div className="px-3 py-4 text-center">
+              <p className="text-xs text-muted-foreground">No saved documents have content for this field yet.</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">Save a document first to use it as a template here.</p>
+            </div>
+          ) : (
+            <div className="max-h-52 overflow-y-auto">
+              {available.map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => { onSelect(extract(d)!); setOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors flex items-center gap-2 border-b border-border/30 last:border-0"
+                >
+                  <FileText size={11} className="text-muted-foreground flex-shrink-0" />
+                  <span className="truncate text-foreground">{d.title || d.clientName || "Untitled"}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
