@@ -8,7 +8,7 @@ import {
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getTeamMembers, addTeamMember, getDoc, RequirementDoc, Lead, Customer } from "@/lib/store";
+import { getTeamMembers, addTeamMember, getDoc, RequirementDoc, Lead, Customer, LegalDocument, getSettings } from "@/lib/store";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
@@ -390,6 +390,76 @@ function ClientPicker({ leads, customers, value, onChange }: {
   );
 }
 
+// "Load template" button for RichTextEditor sections — sources from Settings → Legal Documents (marked isTemplate)
+function RichTextTplPicker({ onChange }: { onChange: (html: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [templates, setTemplates] = useState<LegalDocument[]>([]);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Refresh templates every time the dropdown is opened
+  useEffect(() => {
+    if (open) {
+      const settings = getSettings();
+      setTemplates((settings.legalDocuments ?? []).filter((d: LegalDocument) => d.isTemplate));
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  // Strip HTML tags to produce a plain-text preview snippet
+  const plainText = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+
+  return (
+    <div className="relative flex-shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md px-2.5 py-1.5 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
+      >
+        <LayoutTemplate size={12} />
+        Load template
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-1 right-0 min-w-[260px] max-h-64 overflow-hidden bg-background border border-border rounded-lg shadow-lg flex flex-col">
+          <div className="px-3 py-2 border-b border-border/60 flex-shrink-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Load from saved templates</p>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {templates.length === 0 ? (
+              <div className="px-4 py-5 text-center">
+                <LayoutTemplate size={18} className="mx-auto text-muted-foreground/40 mb-2" />
+                <p className="text-xs text-muted-foreground">No templates yet</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">Go to Settings → Legal Documents and mark a document as a template</p>
+              </div>
+            ) : (
+              templates.map(tpl => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => { onChange(tpl.content); setOpen(false); }}
+                  className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0 flex flex-col gap-0.5"
+                >
+                  <span className="text-sm font-medium text-foreground truncate">{tpl.title || "Untitled"}</span>
+                  {tpl.content && (
+                    <span className="text-xs text-muted-foreground truncate">
+                      {plainText(tpl.content).slice(0, 70)}{plainText(tpl.content).length > 70 ? "…" : ""}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SaveButton({ sectionKey, saved, onSave }: { sectionKey: string; saved: boolean; onSave: () => void }) {
   return (
     <div className="flex justify-end mt-6 pt-4 border-t border-border">
@@ -570,22 +640,6 @@ export default function NewDocument() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  // Notes section template picker
-  const [notesTemplateOpen, setNotesTemplateOpen] = useState(false);
-  const notesTemplateRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (notesTemplateRef.current && !notesTemplateRef.current.contains(e.target as Node)) setNotesTemplateOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-  const loadNotesFromTemplate = (doc: RequirementDoc) => {
-    const s35 = ((doc.sections ?? {}) as Record<string, unknown>).s35 as Record<string, unknown> | undefined ?? {};
-    if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
-    if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
-    if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
-    setNotesTemplateOpen(false);
-  };
 
   // Unified lookup — works for both leads and customers
   const clientEntry = selectedClient
@@ -1034,38 +1088,8 @@ export default function NewDocument() {
             </div>
           </div>
 
-          {/* Per-section template loader */}
-          {docs.length > 0 && (
-            <div className="relative flex-shrink-0" ref={notesTemplateRef}>
-              <button
-                type="button"
-                onClick={() => setNotesTemplateOpen(o => !o)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md px-2.5 py-1.5 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
-              >
-                <LayoutTemplate size={12} />
-                Load template
-                <ChevronDown size={12} className={`transition-transform ${notesTemplateOpen ? "rotate-180" : ""}`} />
-              </button>
-              {notesTemplateOpen && (
-                <div className="absolute z-50 top-full mt-1 right-0 min-w-[240px] max-h-56 overflow-y-auto bg-background border border-border rounded-lg shadow-lg">
-                  <div className="px-3 py-2 border-b border-border/60">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Load notes from document</p>
-                  </div>
-                  {docs.map(doc => (
-                    <button
-                      key={doc.id}
-                      type="button"
-                      onClick={() => loadNotesFromTemplate(doc)}
-                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0 flex flex-col gap-0.5"
-                    >
-                      <span className="font-medium truncate">{doc.title || "Untitled"}</span>
-                      {doc.clientName && <span className="text-xs text-muted-foreground truncate">{doc.clientName}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Per-section template loader — sources from Settings → Legal Documents */}
+          <RichTextTplPicker onChange={setDetailedNotes} />
         </div>
 
         <RichTextEditor
@@ -1091,6 +1115,7 @@ export default function NewDocument() {
                 onSubtitleChange={v => updateCustomSection(sec.id, "subtitle", v)}
               />
             </div>
+            <RichTextTplPicker onChange={v => updateCustomSection(sec.id, "content", v)} />
             <button
               type="button"
               onClick={() => removeCustomSection(sec.id)}
@@ -1446,6 +1471,7 @@ export default function NewDocument() {
                 onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
               />
             </div>
+            <RichTextTplPicker onChange={v => updateCustomSection2(sec.id, "content", v)} />
             <button
               type="button"
               onClick={() => removeCustomSection2(sec.id)}
