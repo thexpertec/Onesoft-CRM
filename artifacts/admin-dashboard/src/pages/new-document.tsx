@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import {
   FileText, Briefcase, DollarSign, Clock,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
-  ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate,
+  ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate, Image as ImageIcon,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
@@ -460,6 +460,70 @@ function RichTextTplPicker({ onChange }: { onChange: (html: string) => void }) {
   );
 }
 
+// ─── Image attachment strip for RichTextEditor sections ─────────────────────
+function ImageAttachment({ images, onAdd, onRemove }: {
+  images: string[];
+  onAdd: (dataUrl: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        if (ev.target?.result) onAdd(ev.target.result as string);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  };
+
+  return (
+    <div className="mt-3 space-y-3">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {images.map((src, i) => (
+            <div key={i} className="relative" style={{ width: "50%" }}>
+              <img
+                src={src}
+                alt={`Attachment ${i + 1}`}
+                className="w-full h-auto rounded-lg border border-border block"
+                style={{ display: "block" }}
+              />
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                title="Remove image"
+                className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-500 transition-colors shadow"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFile}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-md px-3 py-1.5 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-colors"
+      >
+        <ImageIcon size={13} />
+        Attach Image
+      </button>
+    </div>
+  );
+}
+
 function SaveButton({ sectionKey, saved, dirty, onSave }: { sectionKey: string; saved: boolean; dirty?: boolean; onSave: () => void }) {
   return (
     <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
@@ -627,20 +691,33 @@ export default function NewDocument() {
   const [detailedNotesTitle, setDetailedNotesTitle] = useState("Detailed Requirements Notes");
   const [detailedNotesSubtitle, setDetailedNotesSubtitle] = useState("Use this space to document any additional client requirements, discussions, or specifications in detail");
 
+  // Detailed notes images (s35 section)
+  const [detailedNotesImages, setDetailedNotesImages] = useState<string[]>([]);
+  const addDetailedNotesImage    = (url: string) => setDetailedNotesImages(prev => [...prev, url]);
+  const removeDetailedNotesImage = (i: number)   => setDetailedNotesImages(prev => prev.filter((_, idx) => idx !== i));
+
   // Custom sections
-  type CustomSection = { id: string; title: string; subtitle: string; content: string };
+  type CustomSection = { id: string; title: string; subtitle: string; content: string; images?: string[] };
   const [customSections, setCustomSections] = useState<CustomSection[]>([]);
-  const addCustomSection = () => setCustomSections(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "" }]);
+  const addCustomSection = () => setCustomSections(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "", images: [] }]);
   const removeCustomSection = (id: string) => setCustomSections(prev => prev.filter(s => s.id !== id));
   const updateCustomSection = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  const addCustomSectionImage = (id: string, url: string) =>
+    setCustomSections(prev => prev.map(s => s.id === id ? { ...s, images: [...(s.images ?? []), url] } : s));
+  const removeCustomSectionImage = (id: string, i: number) =>
+    setCustomSections(prev => prev.map(s => s.id === id ? { ...s, images: (s.images ?? []).filter((_, idx) => idx !== i) } : s));
 
   // Second set of custom sections — after financial sections
   const [customSections2, setCustomSections2] = useState<CustomSection[]>([]);
-  const addCustomSection2 = () => setCustomSections2(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "" }]);
+  const addCustomSection2 = () => setCustomSections2(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "", images: [] }]);
   const removeCustomSection2 = (id: string) => setCustomSections2(prev => prev.filter(s => s.id !== id));
   const updateCustomSection2 = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  const addCustomSection2Image = (id: string, url: string) =>
+    setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, images: [...(s.images ?? []), url] } : s));
+  const removeCustomSection2Image = (id: string, i: number) =>
+    setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, images: (s.images ?? []).filter((_, idx) => idx !== i) } : s));
 
   // Template picker (page-level)
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -683,7 +760,7 @@ export default function NewDocument() {
 
   const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1");  markClean("s1"); };
   const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2");  markClean("s2"); };
-  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle }); markSaved("s35"); markClean("s35"); };
+  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages }); markSaved("s35"); markClean("s35"); };
   const saveCustomSection = (id: string) => {
     const sec = customSections.find(s => s.id === id);
     if (!sec) return;
@@ -729,6 +806,7 @@ export default function NewDocument() {
       if (s35.detailedNotes)        setDetailedNotes(s35.detailedNotes as string);
       if (s35.detailedNotesTitle)   setDetailedNotesTitle(s35.detailedNotesTitle as string);
       if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
+      if (Array.isArray(s35.detailedNotesImages)) setDetailedNotesImages(s35.detailedNotesImages as string[]);
       const sCustom = (d.sCustom ?? {}) as Record<string, unknown>;
       if (Array.isArray(sCustom.sections)) setCustomSections(sCustom.sections as CustomSection[]);
       const sCustom2 = (d.sCustom2 ?? {}) as Record<string, unknown>;
@@ -771,7 +849,7 @@ export default function NewDocument() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { markDirty("s2");  }, [businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { markDirty("s35"); }, [detailedNotes, detailedNotesTitle, detailedNotesSubtitle]);
+  useEffect(() => { markDirty("s35"); }, [detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { markDirty("s5");  }, [paymentStructure, additionalCosts, currency, lineItems]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -803,6 +881,7 @@ export default function NewDocument() {
     if (s35.detailedNotes)         setDetailedNotes(s35.detailedNotes as string);
     if (s35.detailedNotesTitle)    setDetailedNotesTitle(s35.detailedNotesTitle as string);
     if (s35.detailedNotesSubtitle) setDetailedNotesSubtitle(s35.detailedNotesSubtitle as string);
+    if (Array.isArray(s35.detailedNotesImages)) setDetailedNotesImages(s35.detailedNotesImages as string[]);
     if (Array.isArray(sCustom.sections))  setCustomSections(sCustom.sections as CustomSection[]);
     if (Array.isArray(sCustom2.sections)) setCustomSections2(sCustom2.sections as CustomSection[]);
     if (s5.paymentStructure) setPaymentStructure(s5.paymentStructure as string);
@@ -830,7 +909,7 @@ export default function NewDocument() {
     const sections = {
       s1:  { docTitle, docDate, preparedBy, selectedClient, versionHistory },
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
-      s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle },
+      s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages },
       sCustom:  { sections: customSections },
       s5:  { paymentStructure, additionalCosts, currency, lineItems },
       s6:  { startDate, deliveryDate, milestones },
@@ -1113,6 +1192,11 @@ export default function NewDocument() {
           onChange={setDetailedNotes}
           placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
         />
+        <ImageAttachment
+          images={detailedNotesImages}
+          onAdd={addDetailedNotesImage}
+          onRemove={removeDetailedNotesImage}
+        />
         <SaveButton sectionKey="s35" saved={!!savedSections.s35} dirty={!!dirtySections.s35} onSave={saveS35} />
       </section>
 
@@ -1145,6 +1229,11 @@ export default function NewDocument() {
             value={sec.content}
             onChange={v => updateCustomSection(sec.id, "content", v)}
             placeholder="Write the content for this section…"
+          />
+          <ImageAttachment
+            images={sec.images ?? []}
+            onAdd={url => addCustomSectionImage(sec.id, url)}
+            onRemove={i => removeCustomSectionImage(sec.id, i)}
           />
           <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} dirty={!!dirtySections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
           <SectionDivider />
@@ -1500,6 +1589,11 @@ export default function NewDocument() {
             value={sec.content}
             onChange={v => updateCustomSection2(sec.id, "content", v)}
             placeholder="Write the content for this section…"
+          />
+          <ImageAttachment
+            images={sec.images ?? []}
+            onAdd={url => addCustomSection2Image(sec.id, url)}
+            onRemove={i => removeCustomSection2Image(sec.id, i)}
           />
           <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} dirty={!!dirtySections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
           <SectionDivider />
