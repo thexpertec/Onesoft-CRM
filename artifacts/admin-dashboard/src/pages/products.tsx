@@ -1,14 +1,15 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -25,6 +26,65 @@ const BLANK = (): Record<EditableField, string> => ({
   name: "", sku: "", brand: "", category: "", unit: "", price: "", status: "Active", description: "",
 });
 
+// ── CSV helpers ─────────────────────────────────────────────────────────────
+const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "price", "status", "description"];
+const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "price", "status", "description"];
+
+function downloadTemplate() {
+  const sample = [
+    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "999.00", "Active", "Cloud-based CRM solution",
+  ];
+  const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
+  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "products_import_template.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+type ImportRow = Record<EditableField, string> & { _rowNum: number; _error?: string };
+
+function parseCSV(text: string): ImportRow[] {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  // Parse a single CSV line respecting quoted fields
+  const parseLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let cur = "", inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (ch === ',' && !inQ) { fields.push(cur.trim()); cur = ""; }
+      else cur += ch;
+    }
+    fields.push(cur.trim());
+    return fields;
+  };
+
+  const headerRow = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z]/g, ""));
+  const colMap: Record<EditableField, number> = {} as Record<EditableField, number>;
+  CSV_HEADERS.forEach(f => {
+    const idx = headerRow.findIndex(h => h === f.toLowerCase());
+    colMap[f] = idx;
+  });
+
+  return lines.slice(1).map((line, i) => {
+    const cells = parseLine(line);
+    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", price: "", status: "Active", description: "" };
+    CSV_HEADERS.forEach(f => {
+      const ci = colMap[f];
+      row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci] : "";
+    });
+    if (!row.name.trim()) row._error = "Name is required";
+    const validStatuses = ["Active", "Inactive", "Draft"];
+    if (row.status && !validStatuses.includes(row.status)) row.status = "Active";
+    return row;
+  });
+}
+
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct } = useProducts();
   const { isAuthenticated } = useAuth();
@@ -38,6 +98,55 @@ export default function ProductsPage() {
   const [newRow,         setNewRow]         = useState<Record<EditableField, string> | null>(null);
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
+
+  // ── Import state ──────────────────────────────────────────────────────────
+  const [importOpen,    setImportOpen]    = useState(false);
+  const [importRows,    setImportRows]    = useState<ImportRow[]>([]);
+  const [importing,     setImporting]     = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const rows = parseCSV(text);
+      setImportRows(rows);
+      setImportOpen(true);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.name.endsWith(".csv")) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const rows = parseCSV(text);
+      setImportRows(rows);
+      setImportOpen(true);
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmImport = () => {
+    setImporting(true);
+    const valid = importRows.filter(r => !r._error);
+    valid.forEach(r => addProduct({
+      name: r.name, sku: r.sku, brand: r.brand, category: r.category,
+      unit: r.unit, price: r.price,
+      status: (r.status as Product["status"]) || "Active",
+      description: r.description,
+    }));
+    toast({ title: `${valid.length} product${valid.length !== 1 ? "s" : ""} imported`, description: importRows.length > valid.length ? `${importRows.length - valid.length} row(s) skipped due to errors.` : undefined });
+    setImportOpen(false);
+    setImportRows([]);
+    setImporting(false);
+  };
 
   // Load reference data from other stores
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), [products]);
@@ -143,16 +252,27 @@ export default function ProductsPage() {
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
 
+      {/* Hidden file input for CSV import */}
+      <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
         {isAuthenticated && (
-          <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-product">
-            <Plus size={14} /> Add Product
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={downloadTemplate} className="gap-1.5 h-8 text-[13px]" title="Download CSV template">
+              <Download size={13} /> Template
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8 text-[13px]" data-testid="btn-import-products">
+              <Upload size={13} /> Import CSV
+            </Button>
+            <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5 h-8 text-[13px]" data-testid="btn-add-product">
+              <Plus size={14} /> Add Product
+            </Button>
+          </div>
         )}
       </div>
 
@@ -353,6 +473,114 @@ export default function ProductsPage() {
           />
         );
       })()}
+
+      {/* ── Import Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={importOpen} onOpenChange={v => { if (!v) { setImportOpen(false); setImportRows([]); } }}>
+        <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileSpreadsheet size={16} className="text-blue-600" />
+              Import Products from CSV
+            </DialogTitle>
+          </DialogHeader>
+
+          {importRows.length === 0 ? (
+            /* Drop zone — shown before a file is loaded */
+            <div className="flex-1 flex flex-col items-center justify-center p-10 gap-4"
+              onDragOver={e => e.preventDefault()} onDrop={handleFileDrop}>
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center">
+                <Upload size={28} className="text-blue-500" />
+              </div>
+              <div className="text-center">
+                <p className="font-semibold text-sm">Drop your CSV file here</p>
+                <p className="text-xs text-muted-foreground mt-1">or click the button below to browse</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
+                  <Upload size={13} /> Choose CSV file
+                </Button>
+                <Button size="sm" variant="ghost" onClick={downloadTemplate} className="gap-1.5 text-muted-foreground">
+                  <Download size={13} /> Download template
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground border border-dashed rounded-lg px-4 py-2.5 bg-muted/30 leading-relaxed">
+                Expected columns (in any order):<br />
+                <code className="font-mono text-[11px]">name, sku, brand, category, unit, price, status, description</code>
+              </p>
+            </div>
+          ) : (
+            /* Preview table */
+            <Fragment>
+              <div className="px-6 py-3 border-b bg-muted/30 flex items-center gap-3 flex-wrap text-[12px]">
+                <span className="font-medium">{importRows.length} row{importRows.length !== 1 ? "s" : ""} detected</span>
+                {importRows.filter(r => !r._error).length !== importRows.length && (
+                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                    <AlertCircle size={12} />
+                    {importRows.filter(r => !!r._error).length} with errors (will be skipped)
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium ml-auto">
+                  <CheckCircle2 size={12} />
+                  {importRows.filter(r => !r._error).length} ready to import
+                </span>
+              </div>
+
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-[12px] border-collapse">
+                  <thead>
+                    <tr className="bg-muted/60 sticky top-0 z-10">
+                      <th className="border-b border-r px-3 py-2 text-left font-semibold text-muted-foreground w-10">#</th>
+                      {CSV_HEADERS.map(h => (
+                        <th key={h} className="border-b border-r px-3 py-2 text-left font-semibold text-muted-foreground capitalize">{h}</th>
+                      ))}
+                      <th className="border-b px-3 py-2 text-left font-semibold text-muted-foreground w-28">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.map(row => (
+                      <tr key={row._rowNum} className={`border-b transition-colors ${row._error ? "bg-red-50/60 dark:bg-red-950/20" : "hover:bg-muted/20"}`}>
+                        <td className="border-r px-3 py-1.5 text-muted-foreground font-mono">{row._rowNum}</td>
+                        {CSV_HEADERS.map(h => (
+                          <td key={h} className="border-r px-3 py-1.5 max-w-[180px] truncate" title={row[h]}>
+                            {row[h] || <span className="text-muted-foreground/40">—</span>}
+                          </td>
+                        ))}
+                        <td className="px-3 py-1.5">
+                          {row._error ? (
+                            <span className="flex items-center gap-1 text-red-600 dark:text-red-400"><AlertCircle size={11} />{row._error}</span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={11} />OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Fragment>
+          )}
+
+          <DialogFooter className="px-6 py-4 border-t bg-muted/20 flex items-center gap-2 justify-between sm:justify-between">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={downloadTemplate}>
+              <Download size={13} /> Download Template
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setImportOpen(false); setImportRows([]); }}>Cancel</Button>
+              {importRows.length > 0 && (
+                <Button size="sm" className="gap-1.5" disabled={importing || importRows.filter(r => !r._error).length === 0} onClick={confirmImport}>
+                  <Upload size={13} />
+                  Import {importRows.filter(r => !r._error).length} Product{importRows.filter(r => !r._error).length !== 1 ? "s" : ""}
+                </Button>
+              )}
+              {importRows.length === 0 && (
+                <Button size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                  <Upload size={13} /> Choose file…
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
