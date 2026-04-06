@@ -855,47 +855,6 @@ export default function NewDocument() {
 
       <SectionDivider />
 
-      {/* Section 3: Software Requirements */}
-      <section>
-        <SectionHeader icon={Layers} title="3. Software Requirements" subtitle="Core functionality and feature specifications" />
-        <div className="space-y-5">
-          <FormField label="Purpose" required hint="The main problem this software will solve or functionality it will provide">
-            <TextInput value={purpose} onChange={setPurpose} rows={3} placeholder="Describe the primary purpose of the software solution..." />
-          </FormField>
-          <FormField label="Key Features" required hint="Select all features required. You can search and add custom features.">
-            <MultiSelectFeatures selected={keyFeatures} onChange={setKeyFeatures} />
-          </FormField>
-
-          {(purpose || keyFeatures.length > 0) && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Tag className="w-4 h-4 text-primary" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-primary">Client Requirements Summary</span>
-              </div>
-              {purpose && (
-                <div className="mb-3">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Purpose</span>
-                  <p className="text-sm text-foreground mt-1">{purpose}</p>
-                </div>
-              )}
-              {keyFeatures.length > 0 && (
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Selected Features ({keyFeatures.length})</span>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {keyFeatures.map((f) => (
-                      <span key={f} className="px-2 py-0.5 rounded-md bg-primary/15 text-primary text-xs font-medium">{f}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <SaveButton sectionKey="s3" saved={!!savedSections.s3} onSave={saveS3} />
-      </section>
-
-      <SectionDivider />
-
       {/* Section 3.5: Detailed Requirements Notes (editable header) */}
       <section>
         <div className="flex items-start justify-between gap-3 mb-6">
@@ -1008,32 +967,6 @@ export default function NewDocument() {
           Add custom section
         </button>
       </div>
-
-      <SectionDivider />
-
-      {/* Section 4: Technical Requirements */}
-      <section>
-        <SectionHeader icon={Wrench} title="4. Technical Requirements" subtitle="Technology stack, integrations, and infrastructure" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div className="sm:col-span-2">
-            <FormField label="Third-Party Integrations" hint="Search and select payment gateways, CRMs, marketing tools, shipping APIs, and more">
-              <MultiSelectFeatures selected={integrations} onChange={setIntegrations} options={INTEGRATIONS_OPTIONS} placeholder="Search integrations — e.g. Stripe, Mailchimp, Salesforce..." />
-            </FormField>
-          </div>
-          <div className="sm:col-span-2">
-            <FormField label="Technology Stack" hint="Search and select frontend frameworks, backend, databases, cloud providers, and tools">
-              <MultiSelectFeatures selected={techStack} onChange={setTechStack} options={TECH_STACK_OPTIONS} placeholder="Search tech — e.g. React, Node.js, PostgreSQL, AWS..." />
-            </FormField>
-          </div>
-          <FormField label="Hosting Requirements" required>
-            <SelectInput options={HOSTING_OPTIONS} value={hosting} onChange={setHosting} placeholder="Select hosting type" />
-          </FormField>
-          <FormField label="Security Requirements" hint="Data encryption, MFA, access controls, compliance needs">
-            <TextInput value={security} onChange={setSecurity} placeholder="e.g. AES-256 encryption, MFA, GDPR compliance..." />
-          </FormField>
-        </div>
-        <SaveButton sectionKey="s4" saved={!!savedSections.s4} onSave={saveS4} />
-      </section>
 
       <SectionDivider />
 
