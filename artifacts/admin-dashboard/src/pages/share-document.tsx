@@ -21,15 +21,33 @@ interface Milestone {
   taskStatus: string;
 }
 
+interface LineItem {
+  id: string;
+  item: string;
+  description: string;
+  qty: string;
+  perUnit: string;
+  discount: string;
+}
+
+interface CustomSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  content: string;
+}
+
 type Sections = {
   s1?: { docTitle?: string; docDate?: string; preparedBy?: string; selectedClient?: string };
   s2?: { businessType?: string; targetAudience?: string; keyProducts?: string[]; businessGoals?: string; keyChallenges?: string; currentSystems?: string };
   s3?: { purpose?: string; keyFeatures?: string[] };
-  s35?: { detailedNotes?: string };
+  s35?: { detailedNotes?: string; detailedNotesTitle?: string; detailedNotesSubtitle?: string };
   s4?: { integrations?: string[]; techStack?: string[]; hosting?: string; security?: string };
-  s5?: { paymentStructure?: string; additionalCosts?: string; currency?: string };
+  s5?: { paymentStructure?: string; additionalCosts?: string; currency?: string; lineItems?: LineItem[] };
   s6?: { startDate?: string; deliveryDate?: string; milestones?: Milestone[] };
   s7?: { postLaunch?: string; maintenance?: string };
+  sCustom?: { sections?: CustomSection[] };
+  sCustom2?: { sections?: CustomSection[] };
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -60,8 +78,19 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
   const s6 = s.s6 ?? {};
   const s7 = s.s7 ?? {};
   const milestones: Milestone[] = s6.milestones ?? [];
+  const lineItems: LineItem[] = (s5.lineItems ?? []) as LineItem[];
   const htmlCurrencyCode = (s5.currency as string) || "GBP";
   const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[^0-9.]/g, "") ?? "") || 0), 0);
+  const lineItemTotals = lineItems.map(r => {
+    const qty = parseFloat(r.qty) || 0;
+    const perUnit = parseFloat(r.perUnit) || 0;
+    const discount = parseFloat(r.discount) || 0;
+    const total = qty * perUnit;
+    return { total, subTotal: Math.max(0, total - discount) };
+  });
+  const lineItemsGrandTotal = lineItemTotals.reduce((s, r) => s + r.subTotal, 0);
+  const customSecs: CustomSection[] = (s.sCustom?.sections ?? []) as CustomSection[];
+  const customSecs2: CustomSection[] = (s.sCustom2?.sections ?? []) as CustomSection[];
 
   const tags = (items?: string[]) =>
     items && items.length > 0
@@ -106,6 +135,48 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     </tr>`;
   }).join("");
 
+  // Line items table
+  const hasLineItems = lineItems.some(r => r.item || parseFloat(r.perUnit) > 0);
+  const lineItemsSection = hasLineItems ? section("Items / Services", `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="border-bottom:2px solid #e2e8f0;">
+        <th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;">Item / Service</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:50px;">Qty</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:80px;">Per Unit</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:80px;">Total</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:70px;">Discount</th>
+        <th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;width:85px;">Sub Total</th>
+      </tr></thead>
+      <tbody>
+        ${lineItems.filter(r => r.item || parseFloat(r.perUnit) > 0).map((r, i) => {
+          const { total, subTotal } = lineItemTotals[i];
+          return `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:9px 10px;">
+              <div style="font-weight:600;color:#0f172a;">${escHtml(r.item || "—")}</div>
+              ${r.description ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">${escHtml(r.description)}</div>` : ""}
+            </td>
+            <td style="padding:9px 10px;text-align:right;color:#64748b;">${escHtml(r.qty || "1")}</td>
+            <td style="padding:9px 10px;text-align:right;color:#64748b;">${total > 0 ? escHtml(formatAmount(parseFloat(r.perUnit) || 0, htmlCurrencyCode)) : "—"}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:600;color:#1d4ed8;">${total > 0 ? escHtml(formatAmount(total, htmlCurrencyCode)) : "—"}</td>
+            <td style="padding:9px 10px;text-align:right;color:#64748b;">${parseFloat(r.discount) > 0 ? escHtml(formatAmount(parseFloat(r.discount), htmlCurrencyCode)) : "—"}</td>
+            <td style="padding:9px 10px;text-align:right;font-weight:700;color:#0f172a;">${subTotal > 0 ? escHtml(formatAmount(subTotal, htmlCurrencyCode)) : "—"}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+      ${lineItemsGrandTotal > 0 ? `<tfoot><tr style="border-top:2px solid #bfdbfe;">
+        <td colspan="5" style="padding:10px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Grand Total</td>
+        <td style="padding:10px 10px;text-align:right;font-size:15px;font-weight:800;color:#1d4ed8;">${escHtml(formatAmount(lineItemsGrandTotal, htmlCurrencyCode))}</td>
+      </tr></tfoot>` : ""}
+    </table>`) : "";
+
+  // Custom section HTML builder
+  const buildCustomSections = (secs: CustomSection[]) =>
+    secs.filter(sec => sec.content && sec.content !== "<p></p>")
+      .map(sec => section(sec.title || "Custom Section",
+        `${sec.subtitle ? `<div style="font-size:11px;color:#64748b;margin-bottom:10px;">${escHtml(sec.subtitle)}</div>` : ""}
+         <div style="font-size:13px;line-height:1.7;color:#0f172a;">${sec.content}</div>`))
+      .join("");
+
   const milestonesSection = milestones.some(m => m.title || m.date || m.payment) ? section("Project Milestones", `
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr style="border-bottom:2px solid #e2e8f0;">
@@ -125,13 +196,14 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     </table>`) : "";
 
   const budgetTimelineHtml = (() => {
-    const budgetContent = (s5.paymentStructure || s5.additionalCosts || milestonesTotal > 0)
+    const budgetTotal = lineItemsGrandTotal > 0 ? lineItemsGrandTotal : milestonesTotal;
+    const budgetContent = (s5.paymentStructure || s5.additionalCosts || budgetTotal > 0)
       ? `<div style="flex:1;padding:20px 24px;border:1px solid #e2e8f0;border-radius:8px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#1e40af;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #eff6ff;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:#2563eb;display:inline-block;"></span>Budget &amp; Costing</div>
           <div style="display:flex;flex-direction:column;gap:12px;">
             ${field("Payment Structure", s5.paymentStructure)}
             ${s5.additionalCosts ? field("Actual Cost", s5.additionalCosts) : ""}
-            ${milestonesTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Total Budget</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">${escHtml(formatAmount(milestonesTotal, htmlCurrencyCode))}</span></div>` : ""}
+            ${budgetTotal > 0 ? `<div style="border-top:1px solid #e2e8f0;padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;">Grand Total</span><span style="font-size:17px;font-weight:800;color:#1d4ed8;">${escHtml(formatAmount(budgetTotal, htmlCurrencyCode))}</span></div>` : ""}
           </div>
         </div>` : "";
 
@@ -315,10 +387,13 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
     ${businessHtml}
     ${softwareHtml}
     ${richTextHtml}
+    ${buildCustomSections(customSecs)}
     ${techHtml}
+    ${lineItemsSection}
     ${budgetTimelineHtml}
     ${milestonesSection}
     ${supportHtml}
+    ${buildCustomSections(customSecs2)}
 
     <!-- Signature -->
     <div style="padding-top:24px;">
@@ -471,8 +546,20 @@ export default function ShareDocument() {
   const s7 = s.s7 ?? {};
 
   const milestones: Milestone[] = s6.milestones ?? [];
+  const lineItemsView: LineItem[] = (s5.lineItems ?? []) as LineItem[];
   const currencyCode = (s5.currency as string) || "GBP";
   const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment?.replace(/[^0-9.]/g, "") ?? "") || 0), 0);
+  const lineItemTotalsView = lineItemsView.map(r => {
+    const qty = parseFloat(r.qty) || 0;
+    const perUnit = parseFloat(r.perUnit) || 0;
+    const discount = parseFloat(r.discount) || 0;
+    const total = qty * perUnit;
+    return { total, subTotal: Math.max(0, total - discount) };
+  });
+  const lineItemsGrandTotalView = lineItemTotalsView.reduce((s, r) => s + r.subTotal, 0);
+  const hasLineItemsView = lineItemsView.some(r => r.item || parseFloat(r.perUnit) > 0);
+  const customSecsView: CustomSection[] = (s.sCustom?.sections ?? []) as CustomSection[];
+  const customSecs2View: CustomSection[] = (s.sCustom2?.sections ?? []) as CustomSection[];
 
   const statusClass = STATUS_COLORS[doc.status] ?? STATUS_COLORS.Draft;
 
@@ -623,9 +710,20 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
+        {/* Custom sections (block 1) */}
+        {customSecsView.filter(sec => sec.content && sec.content !== "<p></p>").map(sec => (
+          <SectionBlock key={sec.id} icon={FileText} title={sec.title || "Custom Section"}>
+            {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
+            <div
+              className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
+              dangerouslySetInnerHTML={{ __html: sec.content }}
+            />
+          </SectionBlock>
+        ))}
+
         {/* Section 3.5: Detailed Requirements Notes (rich text) */}
         {s35.detailedNotes && s35.detailedNotes !== "<p></p>" && (
-          <SectionBlock icon={FileText} title="Detailed Requirements Notes">
+          <SectionBlock icon={FileText} title={s35.detailedNotesTitle || "Detailed Requirements Notes"}>
             <div
               className="prose prose-sm max-w-none text-foreground
                 prose-headings:font-semibold prose-headings:text-foreground
@@ -666,22 +764,83 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
+        {/* Line items table */}
+        {hasLineItemsView && (
+          <SectionBlock icon={DollarSign} title="Items / Services">
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Item / Service</th>
+                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-12">Qty</th>
+                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Per Unit</th>
+                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Total</th>
+                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden md:table-cell">Discount</th>
+                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-24">Sub Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItemsView.filter(r => r.item || parseFloat(r.perUnit) > 0).map((r, i) => {
+                    const { total, subTotal } = lineItemTotalsView[i];
+                    return (
+                      <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-2">
+                          <div className="font-medium text-foreground">{r.item || "—"}</div>
+                          {r.description && <div className="text-xs text-muted-foreground mt-0.5">{r.description}</div>}
+                        </td>
+                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums">{r.qty || "1"}</td>
+                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                          {total > 0 ? formatAmount(parseFloat(r.perUnit) || 0, currencyCode) : "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-medium text-primary tabular-nums hidden sm:table-cell">
+                          {total > 0 ? formatAmount(total, currencyCode) : "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden md:table-cell">
+                          {parseFloat(r.discount) > 0 ? formatAmount(parseFloat(r.discount), currencyCode) : "—"}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
+                          {subTotal > 0 ? formatAmount(subTotal, currencyCode) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {lineItemsGrandTotalView > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-primary/20">
+                      <td colSpan={4} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Grand Total</td>
+                      <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide sm:hidden">Grand Total</td>
+                      <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums hidden md:table-cell">
+                        {formatAmount(lineItemsGrandTotalView, currencyCode)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums md:hidden">
+                        {formatAmount(lineItemsGrandTotalView, currencyCode)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </SectionBlock>
+        )}
+
         {/* Section 5 + 6: Budget & Timeline */}
+        {(s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0 || s6.startDate || s6.deliveryDate) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
           {/* Budget */}
-          {(s5.paymentStructure || s5.additionalCosts || milestonesTotal > 0) && (
+          {(s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
             <SectionBlock icon={DollarSign} title="Budget & Costing">
               <div className="space-y-3">
                 <Field label="Payment Structure" value={s5.paymentStructure} />
                 {s5.additionalCosts && (
                   <Field label="Actual Cost" value={formatCurrencyString(s5.additionalCosts, currencyCode) ?? s5.additionalCosts} />
                 )}
-                {milestonesTotal > 0 && (
+                {(lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
                   <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Budget</span>
+                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Grand Total</span>
                     <span className="text-base font-bold text-primary">
-                      {formatAmount(milestonesTotal, currencyCode)}
+                      {formatAmount(lineItemsGrandTotalView > 0 ? lineItemsGrandTotalView : milestonesTotal, currencyCode)}
                     </span>
                   </div>
                 )}
@@ -706,6 +865,7 @@ export default function ShareDocument() {
             </SectionBlock>
           )}
         </div>
+        )}
 
         {/* Milestones table */}
         {milestones.length > 0 && milestones.some((m) => m.title || m.date || m.payment) && (
@@ -770,7 +930,7 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
-        {/* Section 7: Support & Maintenance */}
+        {/* Section 7: Support & Maintenance (legacy) */}
         {(s7.postLaunch || s7.maintenance) && (
           <SectionBlock icon={Target} title="Support & Maintenance">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -779,6 +939,17 @@ export default function ShareDocument() {
             </div>
           </SectionBlock>
         )}
+
+        {/* Custom sections (block 2 — after financial) */}
+        {customSecs2View.filter(sec => sec.content && sec.content !== "<p></p>").map(sec => (
+          <SectionBlock key={sec.id} icon={FileText} title={sec.title || "Custom Section"}>
+            {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
+            <div
+              className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
+              dangerouslySetInnerHTML={{ __html: sec.content }}
+            />
+          </SectionBlock>
+        ))}
 
         {/* Confirmation / signature strip */}
         <div className="rounded-xl border-2 border-primary/20 bg-primary/5 px-6 py-6">
