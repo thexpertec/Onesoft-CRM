@@ -161,25 +161,25 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
 
-      {/* Card — wide two-column layout */}
-      <div className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex">
+      {/* Card — extra-wide, compact height */}
+      <div className="relative w-full max-w-5xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex">
 
         {/* ── LEFT PANEL — Order summary ───────────────────────────────── */}
-        <div className="flex-1 flex flex-col border-r border-gray-100 dark:border-zinc-800">
+        <div className="w-[340px] flex-shrink-0 flex flex-col border-r border-gray-100 dark:border-zinc-800">
 
           {/* Header */}
-          <div className="px-8 pt-8 pb-5 border-b border-gray-100 dark:border-zinc-800">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Payment</div>
-            <div className="text-[16px] font-bold text-gray-900 dark:text-gray-100 font-mono tracking-wide">{saleNumber}</div>
+          <div className="px-6 pt-5 pb-3 border-b border-gray-100 dark:border-zinc-800">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Payment</div>
+            <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100 font-mono tracking-wide">{saleNumber}</div>
           </div>
 
           {/* Breakdown rows */}
-          <div className="px-8 py-7 space-y-5 flex-1">
+          <div className="px-6 py-4 space-y-3 flex-1">
 
             {/* Billed Amount */}
             <div className="flex justify-between items-baseline">
-              <span className="text-[14px] text-gray-500 dark:text-gray-400">Billed Amount</span>
-              <span className="text-[22px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
+              <span className="text-[13px] text-gray-500 dark:text-gray-400">Billed Amount</span>
+              <span className="text-[18px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
                 {fmt(billedAmount)}
               </span>
             </div>
@@ -187,8 +187,8 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
             {/* Discount */}
             {discountAmt > 0 && (
               <div className="flex justify-between items-baseline">
-                <span className="text-[14px] text-gray-500 dark:text-gray-400">Discount</span>
-                <span className="text-[22px] font-bold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
+                <span className="text-[13px] text-gray-500 dark:text-gray-400">Discount</span>
+                <span className="text-[18px] font-bold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
                   −{fmt(discountAmt)}
                 </span>
               </div>
@@ -197,18 +197,18 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
             {/* Tax */}
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <span className="text-[14px] text-gray-500 dark:text-gray-400">Tax</span>
+                <span className="text-[13px] text-gray-500 dark:text-gray-400">Tax</span>
                 <div className="flex items-center border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
                   <input
                     type="number" min="0" max="100" step="0.5"
                     value={taxRate}
                     onChange={e => setTaxRate(e.target.value)}
-                    className="w-14 text-center text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none py-1.5 px-1"
+                    className="w-12 text-center text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none py-1 px-1"
                   />
-                  <span className="px-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-zinc-700 border-l border-gray-200 dark:border-zinc-700 py-1.5 select-none">%</span>
+                  <span className="px-1.5 text-[11px] text-gray-400 bg-gray-50 dark:bg-zinc-700 border-l border-gray-200 dark:border-zinc-700 py-1 select-none">%</span>
                 </div>
               </div>
-              <span className="text-[22px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
+              <span className="text-[18px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
                 {fmt(taxAmt)}
               </span>
             </div>
@@ -217,106 +217,109 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
             <div className="border-t-2 border-dashed border-gray-200 dark:border-zinc-700" />
 
             {/* Total to Pay */}
-            <div className="space-y-1">
-              <div className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total to Pay</div>
-              <div className="text-[52px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums leading-none">
+            <div className="space-y-0.5">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total to Pay</div>
+              <div className="text-[38px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums leading-none">
                 {fmt(total)}
               </div>
             </div>
           </div>
 
           {/* Cancel button — bottom of left panel */}
-          <div className="px-8 pb-8 pt-2">
+          <div className="px-6 pb-5 pt-2">
             <button
               onClick={onCancel}
-              className="w-full h-12 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[14px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+              className="w-full h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancel
             </button>
           </div>
         </div>
 
-        {/* ── RIGHT PANEL — Payment input ──────────────────────────────── */}
+        {/* ── RIGHT PANEL — Payment method + input ─────────────────────── */}
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-800/60">
 
-          {/* Section header */}
-          <div className="px-8 pt-8 pb-5 border-b border-gray-100 dark:border-zinc-700/60">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Payment Method</div>
-            {/* Large payment method tiles */}
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              {PAY_METHOD_META.map(m => {
-                const isSelected = payMethod === m.method;
-                return (
+          {/* Payment method tiles + amount input side by side */}
+          <div className="flex flex-1 divide-x divide-gray-100 dark:divide-zinc-700/60">
+
+            {/* Payment method section */}
+            <div className="flex-1 px-5 pt-5 pb-4">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
+              <div className="grid grid-cols-3 gap-2">
+                {PAY_METHOD_META.map(m => {
+                  const isSelected = payMethod === m.method;
+                  return (
+                    <button
+                      key={m.method}
+                      onClick={() => setPayMethod(m.method)}
+                      className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all
+                        ${m.color}
+                        ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}
+                    >
+                      {m.icon}
+                      <span className="leading-tight text-center">{m.method}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Amount received section */}
+            <div className="flex-1 px-5 pt-5 pb-4 flex flex-col gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Amount Received</div>
+
+              {/* Amount input */}
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[22px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">{sym}</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={payAmount}
+                  onChange={e => setPayAmount(e.target.value)}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value) || 0;
+                    setPayAmount(Math.min(v, total).toFixed(2));
+                  }}
+                  onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
+                  className="w-full pl-10 pr-3 py-3 text-[32px] font-black text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-xl outline-none focus:border-blue-400 dark:focus:border-blue-500 font-mono tabular-nums transition-colors"
+                />
+              </div>
+
+              {/* Quick-amount presets */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {presets.map(p => (
                   <button
-                    key={m.method}
-                    onClick={() => setPayMethod(m.method)}
-                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all
-                      ${m.color}
-                      ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.04]` : "opacity-70 hover:opacity-100 hover:scale-[1.02]"}`}
+                    key={p.label}
+                    onClick={() => setPayAmount(p.value)}
+                    className="py-2 text-[12px] font-bold rounded-lg bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 text-gray-700 dark:text-gray-200 transition-all"
                   >
-                    {m.icon}
-                    <span className="leading-tight text-center">{m.method}</span>
+                    {p.label}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+
+              {/* Remaining / fully paid */}
+              {remaining > 0.005 ? (
+                <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-xl px-4 py-2.5">
+                  <span className="text-[12px] font-semibold text-orange-600 dark:text-orange-400">Remaining</span>
+                  <span className="text-[22px] font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums leading-none">{fmt(remaining)}</span>
+                </div>
+              ) : paid > 0 ? (
+                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl px-4 py-2.5">
+                  <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Fully paid</span>
+                  <span className="text-[22px] font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums leading-none">{fmt(paid)}</span>
+                </div>
+              ) : null}
             </div>
           </div>
 
-          {/* Input area */}
-          <div className="px-8 py-5 flex-1 space-y-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Amount Received</div>
-
-            {/* Large £ input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[28px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">{sym}</span>
-              <input
-                type="number" min="0" step="0.01"
-                value={payAmount}
-                onChange={e => setPayAmount(e.target.value)}
-                onBlur={e => {
-                  const v = parseFloat(e.target.value) || 0;
-                  setPayAmount(Math.min(v, total).toFixed(2));
-                }}
-                onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
-                className="w-full pl-12 pr-4 py-4 text-[40px] font-black text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-2xl outline-none focus:border-blue-400 dark:focus:border-blue-500 font-mono tabular-nums transition-colors"
-              />
-            </div>
-
-            {/* Quick-amount presets */}
-            <div className="grid grid-cols-3 gap-2">
-              {presets.map(p => (
-                <button
-                  key={p.label}
-                  onClick={() => setPayAmount(p.value)}
-                  className="py-2.5 text-[13px] font-bold rounded-xl bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 text-gray-700 dark:text-gray-200 transition-all"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Remaining / fully paid */}
-            {remaining > 0.005 ? (
-              <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-xl px-5 py-4">
-                <span className="text-[13px] font-semibold text-orange-600 dark:text-orange-400">Remaining balance</span>
-                <span className="text-[28px] font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums leading-none">{fmt(remaining)}</span>
-              </div>
-            ) : paid > 0 ? (
-              <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl px-5 py-4">
-                <span className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">Fully paid</span>
-                <span className="text-[28px] font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums leading-none">{fmt(paid)}</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Confirm button — bottom of right panel */}
-          <div className="px-8 pb-8 pt-2">
+          {/* Confirm button — full width at bottom */}
+          <div className="px-5 pb-5 pt-0">
             <button
               onClick={() => onConfirm(payAmount, taxRate, payMethod)}
               disabled={overPaid}
-              className="w-full h-14 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[16px] flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none"
+              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none"
             >
-              <Check size={18} /> Confirm Payment
+              <Check size={16} /> Confirm Payment
             </button>
           </div>
         </div>
