@@ -488,7 +488,7 @@ export default function ChartOfAccountsPage() {
       description: acc.description, parentId: acc.parentId ?? null,
       accountType: acc.accountType ?? "Group",
       openingBalance: acc.openingBalance ?? 0,
-      paymentType: acc.paymentType ?? null,
+      paymentType: acc.paymentType ?? (acc.accountType === "Ledger" ? "Debit" : null),
       isActive: acc.isActive,
     });
     setShowEdit(true);
@@ -785,22 +785,23 @@ export default function ChartOfAccountsPage() {
 
         {/* Opening balance + Dr/Cr (ledgers only) */}
         <div className="w-36 flex-shrink-0 pr-2 flex items-center justify-end gap-1.5">
-          {isLedger && (
-            <>
-              <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
-                {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
-              </span>
-              {acc.paymentType && (
+          {isLedger && (() => {
+            const pt = acc.paymentType ?? "Debit";
+            return (
+              <>
+                <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
+                  {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
+                </span>
                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
-                  acc.paymentType === "Debit"
+                  pt === "Debit"
                     ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                     : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
                 }`}>
-                  {acc.paymentType === "Debit" ? "Dr" : "Cr"}
+                  {pt === "Debit" ? "Dr" : "Cr"}
                 </span>
-              )}
-            </>
-          )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Parent account */}
@@ -1079,22 +1080,23 @@ export default function ChartOfAccountsPage() {
                         <div className={`truncate ${isLedger ? "text-[12px] italic text-gray-600 dark:text-gray-400" : "text-[13px] font-semibold text-gray-900 dark:text-gray-100"}`}>{acc.name}</div>
                       </div>
                       <div className="w-36 flex-shrink-0 pr-2 flex items-center justify-end gap-1.5">
-                        {isLedger && (
-                          <>
-                            <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
-                              {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
-                            </span>
-                            {acc.paymentType && (
+                        {isLedger && (() => {
+                          const pt = acc.paymentType ?? "Debit";
+                          return (
+                            <>
+                              <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
+                                {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
+                              </span>
                               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
-                                acc.paymentType === "Debit"
+                                pt === "Debit"
                                   ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                                   : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
                               }`}>
-                                {acc.paymentType === "Debit" ? "Dr" : "Cr"}
+                                {pt === "Debit" ? "Dr" : "Cr"}
                               </span>
-                            )}
-                          </>
-                        )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="w-52 flex-shrink-0 pr-2">
                         {(() => {
