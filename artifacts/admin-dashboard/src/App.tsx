@@ -38,6 +38,7 @@ import TenantsPage from "@/pages/tenants";
 import ModuleGroupsPage from "@/pages/module-groups";
 import ChartOfAccountsPage from "@/pages/chart-of-accounts";
 import JournalEntryPage from "@/pages/journal-entry";
+import BalanceSheetPage from "@/pages/balance-sheet";
 
 const queryClient = new QueryClient();
 
@@ -126,6 +127,7 @@ function Router() {
               <Route path="/module-groups" component={ModuleGroupsPage} />
               <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
               <Route path="/journal-entry" component={JournalEntryPage} />
+              <Route path="/balance-sheet" component={BalanceSheetPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>
