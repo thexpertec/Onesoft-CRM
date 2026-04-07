@@ -119,6 +119,7 @@ function suggestCode(
 
 // ─── Modal types ──────────────────────────────────────────────────────────────
 type LedgerEntry = { _key: string; code: string; name: string; openingBalance: string; subType: string };
+type GroupEntry  = { _key: string; code: string; name: string; subType: string };
 
 type ModalState = {
   open: boolean;
@@ -126,9 +127,7 @@ type ModalState = {
   headLocked: boolean;       // true when triggered from a specific head/account
   parentId: string | null;   // selected parent account id (may change)
   accountType: AccountKind;
-  groupCode: string;
-  groupName: string;
-  groupSubType: string;
+  groupEntries: GroupEntry[];
   ledgerEntries: LedgerEntry[];
 };
 
@@ -146,9 +145,12 @@ const defaultModal = (
     headLocked,
     parentId,
     accountType: "Group",
-    groupCode: code0,
-    groupName: "",
-    groupSubType: HEAD_SUB_TYPES[head][0],
+    groupEntries: [{
+      _key: crypto.randomUUID(),
+      code: code0,
+      name: "",
+      subType: HEAD_SUB_TYPES[head][0],
+    }],
     ledgerEntries: [{
       _key: crypto.randomUUID(),
       code: code0,
@@ -441,13 +443,15 @@ export default function ChartOfAccountsPage() {
   // Change head inside modal (unlocked mode only) – resets parent & re-suggests code
   const handleModalHeadChange = useCallback((h: AccountHead) => {
     if (!modal) return;
-    const code0 = suggestCode(null, h, accounts);
     setModal(m => m ? {
       ...m,
       head: h,
       parentId: null,
-      groupSubType: HEAD_SUB_TYPES[h][0],
-      groupCode: code0,
+      groupEntries: m.groupEntries.map((e, i) => ({
+        ...e,
+        code: suggestCode(null, h, accounts, i),
+        subType: HEAD_SUB_TYPES[h][0],
+      })),
       ledgerEntries: m.ledgerEntries.map((e, i) => ({
         ...e,
         code: suggestCode(null, h, accounts, i),
@@ -460,11 +464,13 @@ export default function ChartOfAccountsPage() {
   const handleModalParentChange = useCallback((parentId: string | null) => {
     if (!modal) return;
     const parent = parentId ? (accounts.find(a => a.id === parentId) ?? null) : null;
-    const code0 = suggestCode(parent, modal.head, accounts);
     setModal(m => m ? {
       ...m,
       parentId,
-      groupCode: code0,
+      groupEntries: m.groupEntries.map((e, i) => ({
+        ...e,
+        code: suggestCode(parent, modal.head, accounts, i),
+      })),
       ledgerEntries: m.ledgerEntries.map((e, i) => ({
         ...e,
         code: suggestCode(parent, modal.head, accounts, i),
@@ -526,13 +532,42 @@ export default function ChartOfAccountsPage() {
       setModal(m => m ? {
         ...m,
         accountType: "Group",
-        groupCode: suggestCode(parent, head, accounts),
-        groupName: "",
-        groupSubType: HEAD_SUB_TYPES[head][0],
+        groupEntries: [{
+          _key: crypto.randomUUID(),
+          code: suggestCode(parent, head, accounts),
+          name: "",
+          subType: HEAD_SUB_TYPES[head][0],
+        }],
       } : m);
     }
   };
 
+  // ── Group entry helpers ──────────────────────────────────────────────────────
+  const addGroupEntry = () => {
+    if (!modal) return;
+    const idx = modal.groupEntries.length;
+    const parent = modal.parentId ? (accounts.find(a => a.id === modal.parentId) ?? null) : null;
+    setModal(m => m ? {
+      ...m,
+      groupEntries: [...m.groupEntries, {
+        _key: crypto.randomUUID(),
+        code: suggestCode(parent, modal.head, accounts, idx),
+        name: "",
+        subType: HEAD_SUB_TYPES[modal.head][0],
+      }],
+    } : m);
+  };
+
+  const removeGroupEntry = (key: string) =>
+    setModal(m => m ? { ...m, groupEntries: m.groupEntries.filter(e => e._key !== key) } : m);
+
+  const updateGroupEntry = (key: string, field: keyof Omit<GroupEntry, "_key">, value: string) =>
+    setModal(m => m ? {
+      ...m,
+      groupEntries: m.groupEntries.map(e => e._key === key ? { ...e, [field]: value } : e),
+    } : m);
+
+  // ── Ledger entry helpers ─────────────────────────────────────────────────────
   const addLedgerEntry = () => {
     if (!modal) return;
     const idx = modal.ledgerEntries.length;
@@ -563,16 +598,23 @@ export default function ChartOfAccountsPage() {
     const { parentId, head, accountType } = modal;
 
     if (accountType === "Group") {
-      const code = modal.groupCode.trim();
-      const name = modal.groupName.trim();
-      if (!code || !name) { toast({ title: "Code and Name are required", variant: "destructive" }); return; }
-      const dup = accounts.find(a => a.code === code);
-      if (dup) { toast({ title: `Code "${code}" already in use`, variant: "destructive" }); return; }
-      addAccount({
-        code, name, head, subType: modal.groupSubType,
-        description: "", parentId, accountType: "Group", openingBalance: 0, isActive: true,
+      const entries = modal.groupEntries;
+      if (entries.some(e => !e.name.trim() || !e.code.trim())) {
+        toast({ title: "Each entry needs a Code and Name", variant: "destructive" }); return;
+      }
+      const codes = entries.map(e => e.code.trim());
+      const allCodes = accounts.map(a => a.code);
+      const dupCode = codes.find(c => allCodes.includes(c));
+      if (dupCode) { toast({ title: `Code "${dupCode}" already in use`, variant: "destructive" }); return; }
+      const dupWithin = codes.find((c, i) => codes.indexOf(c) !== i);
+      if (dupWithin) { toast({ title: `Duplicate code "${dupWithin}" within entries`, variant: "destructive" }); return; }
+      entries.forEach(e => {
+        addAccount({
+          code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
+          description: "", parentId, accountType: "Group", openingBalance: 0, isActive: true,
+        });
       });
-      toast({ title: "Group account created" });
+      toast({ title: `${entries.length} group${entries.length > 1 ? "s" : ""} created` });
       if (parentId) setNodeCollapsed(p => ({ ...p, [parentId]: false }));
     } else {
       // Ledger – can be multiple entries
@@ -1152,26 +1194,59 @@ export default function ChartOfAccountsPage() {
                 );
               })()}
 
-              {/* GROUP: single code+name */}
+              {/* GROUP: multiple rows (like ledger entries) */}
               {modal.accountType === "Group" && (
-                <div className="grid grid-cols-[110px_1fr] gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Code <span className="text-red-500">*</span></label>
-                    <input
-                      value={modal.groupCode}
-                      onChange={e => setModal(m => m ? { ...m, groupCode: e.target.value } : m)}
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Group Name <span className="text-red-500">*</span></label>
-                    <input
-                      value={modal.groupName}
-                      onChange={e => setModal(m => m ? { ...m, groupName: e.target.value } : m)}
-                      placeholder="e.g. Fixed Assets"
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    Group Entries <span className="text-red-500">*</span>
+                  </label>
+                  {modal.groupEntries.map((entry, idx) => (
+                    <div key={entry._key} className="grid grid-cols-[100px_1fr_1fr] gap-2 items-end">
+                      <div>
+                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Code</label>}
+                        <input
+                          value={entry.code}
+                          onChange={e => updateGroupEntry(entry._key, "code", e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Group Name *</label>}
+                        <input
+                          value={entry.name}
+                          onChange={e => updateGroupEntry(entry._key, "name", e.target.value)}
+                          placeholder="e.g. Fixed Assets"
+                          className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="flex gap-1.5">
+                        <div className="flex-1">
+                          {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Group Type</label>}
+                          <select
+                            value={entry.subType}
+                            onChange={e => updateGroupEntry(entry._key, "subType", e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                          >
+                            {HEAD_SUB_TYPES[modal.head].map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        {modal.groupEntries.length > 1 && (
+                          <button
+                            onClick={() => removeGroupEntry(entry._key)}
+                            className={`${idx === 0 ? "mt-5" : ""} p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex-shrink-0`}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addGroupEntry}
+                    className="flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
+                  >
+                    <Plus size={14} /> Add Row
+                  </button>
                 </div>
               )}
 
