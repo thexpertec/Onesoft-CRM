@@ -420,6 +420,58 @@ export const deleteShareholder = (id: string): void => {
   addActivity({ action: "deleted", entity: "Shareholder", entityName: item?.name || id });
 };
 
+// ─── Investment Plans API ─────────────────────────────────────────────────────
+export type InvestmentType = "Product" | "Business" | "Product Groups";
+
+export type InvestmentPlan = {
+  id: string;
+  title: string;
+  investmentOn: InvestmentType;
+  product: string;
+  business: string;
+  specificProductGroups: string;
+  timeDuration: string;
+  lockForSpecificTime: "Yes" | "No";
+  profitMarginWithLoss: string;
+  profitMarginWithoutLoss: string;
+  maxProfit: string;
+  maxLoss: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const INVESTMENT_PLANS_KEY = "admin-investment-plans";
+
+export const getInvestmentPlans = (): InvestmentPlan[] => getStored<InvestmentPlan>(INVESTMENT_PLANS_KEY);
+
+export const createInvestmentPlan = (data: Omit<InvestmentPlan, "id" | "createdAt" | "updatedAt">): InvestmentPlan => {
+  const item: InvestmentPlan = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(INVESTMENT_PLANS_KEY, [...getInvestmentPlans(), item]);
+  addActivity({ action: "created", entity: "InvestmentPlan", entityName: item.title, detail: item.investmentOn });
+  return item;
+};
+
+export const updateInvestmentPlan = (id: string, updates: Partial<Omit<InvestmentPlan, "id" | "createdAt">>): InvestmentPlan => {
+  const items = getInvestmentPlans();
+  const i = items.findIndex(p => p.id === id);
+  if (i === -1) throw new Error("Investment plan not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(INVESTMENT_PLANS_KEY, items);
+  addActivity({ action: "updated", entity: "InvestmentPlan", entityName: items[i].title });
+  return items[i];
+};
+
+export const deleteInvestmentPlan = (id: string): void => {
+  const item = getInvestmentPlans().find(p => p.id === id);
+  setStored(INVESTMENT_PLANS_KEY, getInvestmentPlans().filter(p => p.id !== id));
+  addActivity({ action: "deleted", entity: "InvestmentPlan", entityName: item?.title || id });
+};
+
 // ─── Product Categories API ───────────────────────────────────────────────────
 export type ProductCategory = {
   id: string;

@@ -5,6 +5,7 @@ import {
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getShareholders, createShareholder, updateShareholder, deleteShareholder,
+  getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,
   getProducts, createProduct, updateProduct, deleteProduct,
   getBrands, createBrand, updateBrand, deleteBrand,
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
