@@ -604,8 +604,28 @@ export default function ShareDocument() {
 
   useEffect(() => {
     if (!id) return;
-    const found = getDoc(id);
-    setDoc(found ?? "notfound");
+    let cancelled = false;
+
+    (async () => {
+      // 1. Try the public API first — works for any visitor (no localStorage needed)
+      try {
+        const res = await fetch(`/api/public/doc/${encodeURIComponent(id)}`);
+        if (!cancelled) {
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.doc) { setDoc(data.doc as RequirementDoc); return; }
+          }
+        }
+      } catch { /* network error — fall through */ }
+
+      // 2. Fallback: try localStorage (same-browser admin preview)
+      if (!cancelled) {
+        const found = getDoc(id);
+        setDoc(found ?? "notfound");
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [id]);
 
   if (doc === null) {

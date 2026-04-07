@@ -243,6 +243,11 @@ export const updateDoc = (id: string, updates: Partial<Omit<RequirementDoc, "id"
 export const deleteDoc = (id: string): void => {
   setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
 };
+/** Force-push all localStorage docs to the API server (rescue docs created before sync existed). */
+export const syncDocsToApi = (): void => {
+  const docs = getDocs();
+  if (docs.length > 0) _apiWrite(tenantKey(DOCS_KEY), docs);
+};
 
 // ─── Customers API ────────────────────────────────────────────────────────────
 export type CustomerStatus = "Active" | "Inactive" | "Churned";

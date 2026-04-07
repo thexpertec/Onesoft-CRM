@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useDocs } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { RequirementDoc, DocStatus } from "@/lib/store";
+import { RequirementDoc, DocStatus, syncDocsToApi } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,6 +34,9 @@ export default function Documents() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  // Sync any localStorage-only docs to the API server on mount (rescues pre-sync documents)
+  useEffect(() => { syncDocsToApi(); }, []);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
