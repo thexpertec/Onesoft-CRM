@@ -193,6 +193,8 @@ function BalanceRow({
 
 export default function BalanceSheetPage() {
   const { accounts } = useAccounts();
+  const { entries }  = useJournalEntries();
+
   const [collapsed, setCollapsed]       = useState<Record<string, boolean>>({});
   const [headCollapsed, setHeadCollapsed] = useState<Record<string, boolean>>({});
 
@@ -214,16 +216,30 @@ export default function BalanceSheetPage() {
     setHeadCollapsed(heads);
   }, [accounts]);
 
-  // Head-level subtotals
+  /** Pre-compute: for every ledger, sum posted JE debits & credits */
+  const jeMap = useMemo<JeMap>(() => {
+    const map: JeMap = {};
+    for (const entry of entries) {
+      if (entry.status !== "posted") continue;
+      for (const line of entry.lines) {
+        if (!map[line.ledgerId]) map[line.ledgerId] = { dr: 0, cr: 0 };
+        map[line.ledgerId].dr += line.debit  ?? 0;
+        map[line.ledgerId].cr += line.credit ?? 0;
+      }
+    }
+    return map;
+  }, [entries]);
+
+  // Head-level subtotals (includes JE movements)
   const headTotals = useMemo(() => {
     const result: Record<string, number> = {};
     for (const head of BS_HEADS) {
       const headAccounts = accounts.filter(a => a.head === head);
       const roots = headAccounts.filter(a => !a.parentId);
-      result[head] = roots.reduce((s, r) => s + subtreeBalance(accounts, r.id), 0);
+      result[head] = roots.reduce((s, r) => s + subtreeBalance(accounts, r.id, jeMap), 0);
     }
     return result;
-  }, [accounts]);
+  }, [accounts, jeMap]);
 
   const totalAssets      = headTotals["Assets"]      ?? 0;
   const totalLiabilities = headTotals["Liabilities"] ?? 0;
@@ -321,7 +337,7 @@ export default function BalanceSheetPage() {
             const headAccounts = accounts
               .filter(a => a.head === head)
               .map(a => ({ ...a, parentId: a.parentId ?? null }));
-            const rows = buildTree(accounts, headAccounts, null, 0, collapsed);
+            const rows = buildTree(accounts, headAccounts, null, 0, collapsed, jeMap);
             const headTotal = headTotals[head] ?? 0;
             const isHCollapsed = headCollapsed[head];
 
