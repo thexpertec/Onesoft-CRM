@@ -58,11 +58,13 @@ function LedgerDropdown({
   value,
   onChange,
   onClose,
+  openUp,
 }: {
   accounts: Account[];
   value: string;
   onChange: (id: string) => void;
   onClose: () => void;
+  openUp: boolean;
 }) {
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +85,7 @@ function LedgerDropdown({
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   return (
-    <div className="absolute z-50 top-full left-0 mt-1 w-80 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xl overflow-hidden">
+    <div className={`absolute z-50 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} left-0 w-80 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xl overflow-hidden`}>
       <div className="p-2 border-b border-gray-100 dark:border-zinc-800">
         <div className="relative">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -143,7 +145,8 @@ export default function JournalEntryPage() {
   const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow()]);
 
   // ── Active cell & ledger dropdown ─────────────────────────────────────────
-  const [openLedger, setOpenLedger] = useState<string | null>(null); // rowId
+  const [openLedger, setOpenLedger]   = useState<string | null>(null); // rowId
+  const [ledgerOpenUp, setOpenUp]     = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // ── Saved entries panel ───────────────────────────────────────────────────
@@ -323,7 +326,12 @@ export default function JournalEntryPage() {
                       {/* Ledger */}
                       <td className="px-2 py-1 align-top relative" ref={isOpen ? dropdownRef : undefined}>
                         <button
-                          onClick={() => setOpenLedger(isOpen ? null : row.id)}
+                          onClick={(e) => {
+                            if (isOpen) { setOpenLedger(null); return; }
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setOpenUp(window.innerHeight - rect.bottom < 300);
+                            setOpenLedger(row.id);
+                          }}
                           className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors ${
                             isOpen
                               ? "border-blue-400 bg-blue-50/50 dark:bg-blue-950/20"
@@ -356,6 +364,7 @@ export default function JournalEntryPage() {
                             value={row.ledgerId}
                             onChange={id => setRow(row.id, "ledgerId", id)}
                             onClose={() => setOpenLedger(null)}
+                            openUp={ledgerOpenUp}
                           />
                         )}
                       </td>
