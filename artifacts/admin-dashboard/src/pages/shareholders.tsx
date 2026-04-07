@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, Plus, Trash2, X, Save, Upload, Download, FileSpreadsheet,
   CheckCircle2, AlertCircle, TrendingUp, Lock, ArrowUpCircle, ArrowDownCircle,
-  ClipboardList,
+  ClipboardList, Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,6 +125,203 @@ const BLANK_PLAN = (): PlanForm => ({
   investmentAmount: "", unitsInvested: "", description: "",
 });
 
+// ─── Print / PDF helper ───────────────────────────────────────────────────────
+function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]): string {
+  const fmt = (n: string | undefined) => n ? Number(n).toLocaleString() : "—";
+  const fmtP = (n: string | undefined) => n ? `£${Number(n).toLocaleString()}` : "—";
+  const date = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+
+  const planCards = plans.map(plan => {
+    const hasItems  = plan.productItems && plan.productItems.length > 0;
+    const totalU    = hasItems ? plan.productItems!.reduce((s, r) => s + (parseFloat(r.units) || 0), 0) : null;
+    const totalA    = hasItems ? plan.productItems!.reduce((s, r) => s + (parseFloat(r.investedAmount) || 0), 0) : null;
+
+    const productSection = hasItems
+      ? `<table class="prod-table">
+          <thead><tr><th class="left">Product</th><th class="right">Units</th><th class="right">Invested (£)</th></tr></thead>
+          <tbody>
+            ${plan.productItems!.map(item => `
+              <tr>
+                <td>${item.productName}</td>
+                <td class="right">${fmt(item.units)}</td>
+                <td class="right">${item.investedAmount ? fmtP(item.investedAmount) : "—"}</td>
+              </tr>`).join("")}
+            ${plan.productItems!.length > 1 ? `
+              <tr class="total-row">
+                <td><strong>Total</strong></td>
+                <td class="right blue"><strong>${totalU?.toLocaleString()}</strong></td>
+                <td class="right green"><strong>£${totalA?.toLocaleString()}</strong></td>
+              </tr>` : ""}
+          </tbody>
+        </table>`
+      : (plan.product || plan.business || plan.specificProductGroups
+          ? `<p class="detail">${plan.product || plan.business || plan.specificProductGroups}</p>`
+          : "");
+
+    const metrics = [
+      plan.timeDuration        ? `<span class="chip">Duration: ${plan.timeDuration}</span>` : "",
+      plan.lockForSpecificTime === "Yes" ? `<span class="chip locked">🔒 Locked</span>` : "",
+      plan.maxProfit           ? `<span class="chip profit">Max Profit: £${fmt(plan.maxProfit)}</span>` : "",
+      plan.maxLoss             ? `<span class="chip loss">Max Loss: £${fmt(plan.maxLoss)}</span>` : "",
+      plan.profitMarginWithLoss    ? `<span class="chip">Margin w/ Loss: ${plan.profitMarginWithLoss}%</span>` : "",
+      plan.profitMarginWithoutLoss ? `<span class="chip">Margin w/o Loss: ${plan.profitMarginWithoutLoss}%</span>` : "",
+    ].filter(Boolean).join(" ");
+
+    const extraAmounts = !hasItems && (plan.investmentAmount || plan.unitsInvested)
+      ? `<div class="extra-row">
+          ${plan.unitsInvested ? `<span class="chip blue">${fmt(plan.unitsInvested)} units</span>` : ""}
+          ${plan.investmentAmount ? `<span class="chip blue">Invested: ${fmtP(plan.investmentAmount)}</span>` : ""}
+        </div>` : "";
+
+    const descSection = plan.description
+      ? `<p class="desc">${plan.description}</p>` : `<p class="desc muted">No Description</p>`;
+
+    return `
+      <div class="plan-card">
+        <div class="plan-header">
+          <span class="plan-title">${plan.title}</span>
+          <span class="badge type-${plan.investmentOn.replace(" ", "-").toLowerCase()}">${plan.investmentOn}</span>
+          ${plan.lockForSpecificTime === "Yes" ? `<span class="badge locked-badge">🔒 Locked</span>` : ""}
+        </div>
+        ${productSection}
+        ${extraAmounts}
+        ${metrics ? `<div class="chips">${metrics}</div>` : ""}
+        ${descSection}
+      </div>`;
+  }).join("");
+
+  const emptyMsg = plans.length === 0
+    ? `<p style="color:#9ca3af;text-align:center;padding:32px 0;">No share plans linked to this shareholder.</p>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Share Plans – ${shareholder.name}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; color: #111; background: #fff; padding: 32px 40px; max-width: 800px; margin: 0 auto; }
+
+    /* Header */
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; }
+    .brand { font-size: 20px; font-weight: 700; color: #10b981; letter-spacing: -0.5px; }
+    .brand-sub { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .doc-meta { text-align: right; font-size: 11px; color: #6b7280; line-height: 1.6; }
+
+    /* Shareholder */
+    .sh-block { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; }
+    .sh-name { font-size: 17px; font-weight: 700; color: #111; }
+    .sh-meta { display: flex; gap: 20px; margin-top: 6px; flex-wrap: wrap; }
+    .sh-meta span { font-size: 12px; color: #6b7280; }
+    .sh-meta strong { color: #374151; }
+
+    /* Section heading */
+    .section-heading { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 12px; }
+
+    /* Plan card */
+    .plan-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; page-break-inside: avoid; }
+    .plan-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .plan-title { font-size: 14px; font-weight: 700; color: #111; }
+
+    /* Badges */
+    .badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .type-product { background: #dbeafe; color: #1d4ed8; }
+    .type-business { background: #d1fae5; color: #065f46; }
+    .type-product-groups { background: #ede9fe; color: #5b21b6; }
+    .locked-badge { background: #fef3c7; color: #92400e; }
+
+    /* Product table */
+    .prod-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+    .prod-table thead tr { background: #f3f4f6; }
+    .prod-table th, .prod-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .prod-table .right { text-align: right; }
+    .prod-table .left { text-align: left; }
+    .total-row { background: #f9fafb; border-top: 2px solid #d1d5db !important; }
+    .total-row td { border-bottom: none; }
+    .blue { color: #2563eb; }
+    .green { color: #059669; }
+
+    /* Chips */
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .chip.locked { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .chip.profit { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .chip.loss { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .chip.blue { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+
+    /* Extra row */
+    .extra-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+
+    /* Description */
+    .detail { font-size: 12px; color: #6b7280; margin: 4px 0 8px; }
+    .desc { font-size: 12px; color: #6b7280; font-style: italic; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f3f4f6; }
+    .desc.muted { color: #9ca3af; }
+
+    /* Footer */
+    .doc-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
+
+    @media print {
+      body { padding: 20px 24px; }
+      .no-print { display: none !important; }
+      .plan-card { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Print button (hidden in print) -->
+  <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:16px;gap:8px;">
+    <button onclick="window.print()" style="cursor:pointer;padding:7px 18px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;">🖨 Print / Save PDF</button>
+    <button onclick="window.close()" style="cursor:pointer;padding:7px 14px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">Close</button>
+  </div>
+
+  <!-- Document header -->
+  <div class="doc-header">
+    <div>
+      <div class="brand">Onesoft</div>
+      <div class="brand-sub">Hull, UK &amp; Islamabad, Pakistan</div>
+    </div>
+    <div class="doc-meta">
+      <div><strong>Share Plan Report</strong></div>
+      <div>Generated: ${date}</div>
+      <div>${plans.length} Plan${plans.length !== 1 ? "s" : ""} Linked</div>
+    </div>
+  </div>
+
+  <!-- Shareholder info -->
+  <div class="sh-block">
+    <div class="sh-name">${shareholder.name}</div>
+    <div class="sh-meta">
+      ${shareholder.shareholderId ? `<span>ID: <strong>${shareholder.shareholderId}</strong></span>` : ""}
+      ${shareholder.email ? `<span>Email: <strong>${shareholder.email}</strong></span>` : ""}
+      ${shareholder.phone ? `<span>Phone: <strong>${shareholder.phone}</strong></span>` : ""}
+      ${shareholder.city  ? `<span>City: <strong>${shareholder.city}</strong></span>` : ""}
+    </div>
+  </div>
+
+  <!-- Plans -->
+  <div class="section-heading">${plans.length} Linked Plan${plans.length !== 1 ? "s" : ""}</div>
+  ${planCards}
+  ${emptyMsg}
+
+  <!-- Footer -->
+  <div class="doc-footer">
+    <span>Onesoft Admin Dashboard</span>
+    <span>Confidential – For Internal Use Only</span>
+  </div>
+
+  <script>
+    // Auto-open print dialog after a short delay so the page renders first
+    window.addEventListener("load", function() {
+      setTimeout(function() { window.print(); }, 600);
+    });
+  </script>
+</body>
+</html>`;
+}
+
 // ─── Share Plans Dialog ───────────────────────────────────────────────────────
 function SharePlansDialog({
   shareholder, open, onClose,
@@ -145,6 +342,16 @@ function SharePlansDialog({
   const [delId,   setDelId]   = useState<string | null>(null);
 
   useEffect(() => { if (open) { setForm(BLANK_PLAN()); setAdding(false); } }, [open, shareholder?.id]);
+
+  const handlePrint = () => {
+    if (!shareholder) return;
+    const myPlans = plans.filter(p => p.shareholderId === shareholder.id);
+    const html    = generateSharePlanHTML(shareholder, myPlans);
+    const win     = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+  };
 
   if (!shareholder) return null;
 
@@ -539,7 +746,10 @@ function SharePlansDialog({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-3 border-t flex justify-end">
+          <div className="px-6 py-3 border-t flex items-center justify-between">
+            <Button size="sm" variant="outline" onClick={handlePrint} className="h-8 gap-1.5 text-[13px] text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+              <Printer size={13} /> Preview &amp; Print
+            </Button>
             <Button size="sm" variant="outline" onClick={onClose} className="h-8 text-[13px]">Close</Button>
           </div>
         </DialogContent>
