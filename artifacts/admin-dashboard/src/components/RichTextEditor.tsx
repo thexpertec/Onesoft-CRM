@@ -8,6 +8,7 @@ import { Color } from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import {
   Bold,
   Italic,
@@ -31,7 +32,18 @@ import {
   Link2,
   Link2Off,
   RemoveFormatting,
+  Table as TableIcon,
+  Rows3,
+  Columns3,
+  Trash2,
+  Merge,
+  Split,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { useState } from "react";
 
 function ToolbarButton({
   onClick,
@@ -83,6 +95,8 @@ export default function RichTextEditor({
   placeholder = "Type your detailed notes here...",
   minHeight = "320px",
 }: RichTextEditorProps) {
+  const [showTableMenu, setShowTableMenu] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -98,6 +112,10 @@ export default function RichTextEditor({
         HTMLAttributes: { class: "text-primary underline cursor-pointer" },
       }),
       Placeholder.configure({ placeholder }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: value || "",
     onUpdate({ editor }) {
@@ -111,7 +129,6 @@ export default function RichTextEditor({
     },
   });
 
-  // Sync externally-loaded value into the editor (e.g. when editing an existing document)
   const lastSyncedValue = useRef(value || "");
   useEffect(() => {
     if (!editor) return;
@@ -136,9 +153,16 @@ export default function RichTextEditor({
     }
   };
 
+  const insertTable = () => {
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    setShowTableMenu(false);
+  };
+
+  const inTable = editor.isActive("table");
+
   return (
     <div className="rounded-xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
-      {/* Toolbar — sticky so it stays visible while scrolling the document */}
+      {/* Toolbar */}
       <div className="sticky top-0 z-20 flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-border bg-background/95 backdrop-blur-sm rounded-t-xl">
         {/* Undo / Redo */}
         <ToolbarButton
@@ -336,10 +360,123 @@ export default function RichTextEditor({
         >
           <RemoveFormatting size={14} />
         </ToolbarButton>
+
+        <ToolbarDivider />
+
+        {/* Table controls */}
+        <div className="relative">
+          <ToolbarButton
+            title="Table"
+            active={inTable || showTableMenu}
+            onClick={() => setShowTableMenu((v) => !v)}
+          >
+            <TableIcon size={14} />
+          </ToolbarButton>
+          {showTableMenu && (
+            <div
+              className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[190px]"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <button
+                type="button"
+                onClick={insertTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full"
+              >
+                <TableIcon size={12} /> Insert 3×3 table
+              </button>
+              <div className="h-px bg-border my-0.5" />
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().addRowBefore().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <ChevronUp size={12} /> Add row above
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().addRowAfter().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <ChevronDown size={12} /> Add row below
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().deleteRow().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <Rows3 size={12} /> Delete row
+              </button>
+              <div className="h-px bg-border my-0.5" />
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().addColumnBefore().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <ChevronLeft size={12} /> Add column left
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().addColumnAfter().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <ChevronRight size={12} /> Add column right
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().deleteColumn().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <Columns3 size={12} /> Delete column
+              </button>
+              <div className="h-px bg-border my-0.5" />
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().mergeCells().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <Merge size={12} /> Merge cells
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().splitCell().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <Split size={12} /> Split cell
+              </button>
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().toggleHeaderRow().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full disabled:opacity-40"
+              >
+                <Rows3 size={12} /> Toggle header row
+              </button>
+              <div className="h-px bg-border my-0.5" />
+              <button
+                type="button"
+                onClick={() => { editor.chain().focus().deleteTable().run(); setShowTableMenu(false); }}
+                disabled={!inTable}
+                className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-muted text-left w-full text-destructive disabled:opacity-40"
+              >
+                <Trash2 size={12} /> Delete table
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Editor area */}
-      <EditorContent editor={editor} />
+      <div onClick={() => setShowTableMenu(false)}>
+        <EditorContent editor={editor} />
+      </div>
 
       {/* Status bar */}
       <div className="flex items-center justify-end px-4 py-1.5 border-t border-border/60 bg-muted/20 rounded-b-xl">
