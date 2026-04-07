@@ -38,19 +38,32 @@ function fmt(n: number): string {
 type JeMap = Record<string, { dr: number; cr: number }>;
 
 /**
- * Compute a ledger account's running balance, incorporating:
- *   1. openingBalance (from COA)
- *   2. All POSTED journal-entry movements
+ * Each account head's NORMAL balance side — determines the direction
+ * of the accounting equation regardless of the ledger's individual
+ * `paymentType` field (which may not be set correctly for older accounts).
  *
- * Sign convention follows the account's normal balance:
- *   Debit-normal  (Assets, Expenses):  balance = opening + JE_dr − JE_cr
- *   Credit-normal (Liabilities, Equity, Revenue): balance = opening + JE_cr − JE_dr
+ * Assets / Expense   → Debit-normal  (Dr increases, Cr decreases)
+ * Liabilities / Revenue / Equity → Credit-normal (Cr increases, Dr decreases)
+ *
+ * Using head (not paymentType) guarantees Assets = Liabilities + Equity
+ * because every balanced JE has ΣDr = ΣCr.
+ */
+const HEAD_NORMAL: Record<AccountHead, "Debit" | "Credit"> = {
+  "Assets":           "Debit",
+  "Liabilities":      "Credit",
+  "Revenue / Income": "Credit",
+  "Expense":          "Debit",
+  "Equity":           "Credit",
+};
+
+/**
+ * Compute a ledger account's running balance:
+ *   openingBalance  +  JE movements in the head's normal direction
  */
 function ledgerBalance(account: Account, jeMap: JeMap): number {
   const opening = account.openingBalance ?? 0;
   const je = jeMap[account.id] ?? { dr: 0, cr: 0 };
-  const isDebitNormal = (account.paymentType ?? "Debit") === "Debit";
-  return isDebitNormal
+  return HEAD_NORMAL[account.head] === "Debit"
     ? opening + je.dr - je.cr
     : opening + je.cr - je.dr;
 }

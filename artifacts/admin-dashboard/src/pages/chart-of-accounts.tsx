@@ -25,6 +25,11 @@ const HEAD_BASE_CODE: Record<AccountHead, string> = {
   "Equity":           "5",
 };
 
+/** Default payment-type (normal balance side) for each account head. */
+function headDefaultPaymentType(head: AccountHead): "Debit" | "Credit" {
+  return (head === "Assets" || head === "Expense") ? "Debit" : "Credit";
+}
+
 // ─── Head visual config ───────────────────────────────────────────────────────
 const HEAD_STYLE: Record<AccountHead, {
   bg: string; text: string; border: string; badgeBg: string; dot: string;
@@ -156,7 +161,7 @@ const defaultModal = (
       code: code0,
       name: "",
       openingBalance: "0",
-      paymentType: "Debit" as const,
+      paymentType: headDefaultPaymentType(head),
       subType: HEAD_SUB_TYPES[head][0],
     }],
   };
@@ -444,6 +449,7 @@ export default function ChartOfAccountsPage() {
   // Change head inside modal (unlocked mode only) – resets parent & re-suggests code
   const handleModalHeadChange = useCallback((h: AccountHead) => {
     if (!modal) return;
+    const pt = headDefaultPaymentType(h);
     setModal(m => m ? {
       ...m,
       head: h,
@@ -457,6 +463,7 @@ export default function ChartOfAccountsPage() {
         ...e,
         code: suggestCode(null, h, accounts, i),
         subType: HEAD_SUB_TYPES[h][0],
+        paymentType: pt,
       })),
     } : m);
   }, [modal, accounts]);
@@ -527,7 +534,7 @@ export default function ChartOfAccountsPage() {
           code: suggestCode(parent, head, accounts),
           name: "",
           openingBalance: "0",
-          paymentType: "Debit" as const,
+          paymentType: headDefaultPaymentType(head),
           subType: HEAD_SUB_TYPES[head][0],
         }],
       } : m);
@@ -582,7 +589,7 @@ export default function ChartOfAccountsPage() {
         code: suggestCode(parent, modal.head, accounts, idx),
         name: "",
         openingBalance: "0",
-        paymentType: "Debit" as const,
+        paymentType: headDefaultPaymentType(modal.head),
         subType: HEAD_SUB_TYPES[modal.head][0],
       }],
     } : m);
