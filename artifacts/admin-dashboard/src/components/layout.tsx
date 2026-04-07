@@ -193,17 +193,13 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
-    key: "purchases", label: "Purchases", icon: ShoppingCart,
+    key: "sales", label: "Sales & Purchases", icon: Receipt,
     items: [
+      { label: "All Sales",  href: "/sales",     icon: Receipt,      desc: "Sales & POS terminal" },
+      { label: "New Sale",   href: "/sales/new", icon: Plus,         desc: "Open POS terminal"    },
+      { label: "Invoices",   href: "/invoices",  icon: FileText,     desc: "Invoice management"   },
+      { label: "Purchases",  divider: true },
       { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
-    ],
-  },
-  {
-    key: "sales", label: "Sales", icon: Receipt,
-    items: [
-      { label: "All Sales", href: "/sales",     icon: Receipt,  desc: "Sales & POS terminal" },
-      { label: "New Sale",  href: "/sales/new", icon: Plus,     desc: "Open POS terminal"    },
-      { label: "Invoices",  href: "/invoices",  icon: FileText, desc: "Invoice management"   },
     ],
   },
   {
@@ -226,8 +222,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media", "/stock"];
-const PURCHASES_ROUTES = ["/purchases"];
-const SALES_ROUTES     = ["/sales", "/invoices"];
+const SALES_ROUTES     = ["/sales", "/invoices", "/purchases"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
 const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
 
@@ -361,7 +356,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isCrmActive         = CRM_ROUTES.some(r         => location === r || location.startsWith(r));
   const isProductsActive    = PRODUCTS_ROUTES.some(r    => location === r || location.startsWith(r));
-  const isPurchasesActive   = PURCHASES_ROUTES.some(r   => location === r || location.startsWith(r));
   const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
   const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
   const isInvestmentsActive = INVESTMENTS_ROUTES.some(r => location === r || location.startsWith(r));
@@ -545,7 +539,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               const isActive =
                 item.key === "crm"         ? isCrmActive :
                 item.key === "products"    ? isProductsActive :
-                item.key === "purchases"   ? isPurchasesActive :
                 item.key === "sales"       ? isSalesActive :
                 item.key === "hrm"         ? isHrmActive :
                 item.key === "investments" ? isInvestmentsActive :
@@ -728,12 +721,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </div>}
 
-              {/* Purchases */}
-              {isModuleAllowed("purchases") && <Link href="/purchases"
-                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  location.startsWith("/purchases") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                <ShoppingCart size={16} /> Purchases
-              </Link>}
+              {/* Sales & Purchases group */}
+              {(isModuleAllowed("sales") || isModuleAllowed("purchases")) && <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Sales & Purchases</p>
+                {[
+                  ...(isModuleAllowed("sales") ? [
+                    { href: "/sales",     label: "All Sales",  icon: Receipt      },
+                    { href: "/sales/new", label: "New Sale",   icon: Plus         },
+                    { href: "/invoices",  label: "Invoices",   icon: FileText     },
+                  ] : []),
+                  ...(isModuleAllowed("purchases") ? [
+                    { href: "/purchases", label: "Purchases",  icon: ShoppingCart },
+                  ] : []),
+                ].map(item => (
+                  <Link key={item.href} href={item.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+                    <item.icon size={16} /> {item.label}
+                  </Link>
+                ))}
+              </div>}
 
               {/* Documents */}
               {isModuleAllowed("documents") && <Link href="/documents"
