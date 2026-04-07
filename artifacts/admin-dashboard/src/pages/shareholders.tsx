@@ -382,8 +382,25 @@ function SharePlansDialog({
   const [delId,          setDelId]          = useState<string | null>(null);
   const [editingPlanId,  setEditingPlanId]  = useState<string | null>(null);
 
+  // Track previous open & shareholder so we only reset when the modal first opens
+  // (not on every re-render that updates shareholder reference or plans)
+  const prevOpenRef        = useRef(false);
+  const prevShareholderRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (open) { setForm(BLANK_PLAN()); setAdding(false); setEditingPlanId(null); }
+    const wasOpen       = prevOpenRef.current;
+    const prevSharId    = prevShareholderRef.current;
+    prevOpenRef.current        = open;
+    prevShareholderRef.current = shareholder?.id;
+
+    // Reset form only when modal transitions open→true OR when a different shareholder is shown
+    const justOpened      = open && !wasOpen;
+    const shareholderSwap = open && shareholder?.id !== prevSharId && prevSharId !== undefined;
+    if (justOpened || shareholderSwap) {
+      setForm(BLANK_PLAN());
+      setAdding(false);
+      setEditingPlanId(null);
+    }
   }, [open, shareholder?.id]);
 
   const startEdit = (plan: InvestmentPlan) => {
@@ -1051,8 +1068,13 @@ export default function ShareholdersPage() {
   };
 
   const handleUpdatePlan = (id: string, data: Partial<InvestmentPlan>) => {
-    editPlan(id, data);
-    toast({ title: "Plan updated", description: `"${data.title}" saved.` });
+    try {
+      editPlan(id, data);
+      toast({ title: "Plan updated", description: `"${data.title}" saved.` });
+    } catch (err) {
+      console.error("[handleUpdatePlan] failed:", err);
+      toast({ title: "Update failed", description: String(err), variant: "destructive" });
+    }
   };
 
   const planModalShareholder = shareholders.find(s => s.id === planModalId) ?? null;
