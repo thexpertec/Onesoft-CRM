@@ -2,6 +2,17 @@ import { kvPut, kvGetAll } from "./api";
 
 export type LeadStatus = "New" | "Contacted" | "Qualified" | "Proposal Sent" | "Won" | "Lost";
 
+export type CallOutcome = "Answered" | "No Answer" | "Voicemail" | "Busy" | "Scheduled Callback";
+
+export type CallLog = {
+  id: string;
+  date: string;
+  duration?: string;
+  outcome: CallOutcome;
+  notes: string;
+  createdAt: string;
+};
+
 export type Lead = {
   id: string;
   name: string;
@@ -10,9 +21,17 @@ export type Lead = {
   phone: string;
   industry: string;
   city: string;
+  country?: string;
+  website?: string;
   status: LeadStatus;
   source: string;
   notes: string;
+  isRelevant?: boolean;
+  nextReminder?: string;
+  reminderNote?: string;
+  dealValue?: number;
+  assignedTo?: string;
+  callLogs?: CallLog[];
   createdAt: string;
   updatedAt: string;
 };
@@ -192,6 +211,8 @@ export const getLeads = (): Lead[] => getStored<Lead>(LEADS_KEY);
 export const getLead = (id: string): Lead | undefined => getLeads().find(l => l.id === id);
 export const createLead = (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">): Lead => {
   const newLead: Lead = {
+    isRelevant: true,
+    callLogs: [],
     ...lead,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
