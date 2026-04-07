@@ -25,7 +25,7 @@ const BLANK = (): Record<EditableField, string> => ({
 });
 
 const COLS: ColDef[] = [
-  { field: "shareholderId", label: "Shareholder ID", minW: 150, type: "text"  },
+  { field: "shareholderId", label: "Shareholder ID (Auto)", minW: 160, type: "text"  },
   { field: "name",          label: "Full Name",       minW: 200, type: "text"  },
   { field: "email",         label: "Email",           minW: 200, type: "email" },
   { field: "phone",         label: "Phone",           minW: 150, type: "tel"   },
@@ -35,6 +35,15 @@ const COLS: ColDef[] = [
 
 const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 const CSV_HEADERS = ["shareholderId", "name", "email", "phone", "city", "address"] as const;
+
+function nextShareholderAutoId(existing: { shareholderId?: string }[]): string {
+  let max = 0;
+  for (const s of existing) {
+    const m = s.shareholderId?.match(/^SH-(\d+)$/i);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `SH-${String(max + 1).padStart(3, "0")}`;
+}
 
 function downloadTemplate() {
   const sample = [
@@ -1016,7 +1025,7 @@ export default function ShareholdersPage() {
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8 text-[13px]">
               <Upload size={13} /> Import CSV
             </Button>
-            <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5 h-8 text-[13px]" data-testid="btn-add-shareholder">
+            <Button size="sm" onClick={() => { setNewRow({ ...BLANK(), shareholderId: nextShareholderAutoId(shareholders) }); setNewRowActive(0); }} className="gap-1.5 h-8 text-[13px]" data-testid="btn-add-shareholder">
               <Plus size={14} /> Add Shareholder
             </Button>
           </div>
