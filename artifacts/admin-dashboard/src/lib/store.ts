@@ -375,6 +375,51 @@ export const deleteSupplier = (id: string): void => {
   addActivity({ action: "deleted", entity: "Supplier", entityName: item?.company || id });
 };
 
+// ─── Shareholders API ─────────────────────────────────────────────────────────
+export type Shareholder = {
+  id: string;
+  shareholderId: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  address: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const SHAREHOLDERS_KEY = "admin-shareholders";
+
+export const getShareholders = (): Shareholder[] => getStored<Shareholder>(SHAREHOLDERS_KEY);
+
+export const createShareholder = (data: Omit<Shareholder, "id" | "createdAt" | "updatedAt">): Shareholder => {
+  const item: Shareholder = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(SHAREHOLDERS_KEY, [...getShareholders(), item]);
+  addActivity({ action: "created", entity: "Shareholder", entityName: item.name, detail: item.shareholderId || undefined });
+  return item;
+};
+
+export const updateShareholder = (id: string, updates: Partial<Omit<Shareholder, "id" | "createdAt">>): Shareholder => {
+  const items = getShareholders();
+  const i = items.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Shareholder not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SHAREHOLDERS_KEY, items);
+  addActivity({ action: "updated", entity: "Shareholder", entityName: items[i].name });
+  return items[i];
+};
+
+export const deleteShareholder = (id: string): void => {
+  const item = getShareholders().find(s => s.id === id);
+  setStored(SHAREHOLDERS_KEY, getShareholders().filter(s => s.id !== id));
+  addActivity({ action: "deleted", entity: "Shareholder", entityName: item?.name || id });
+};
+
 // ─── Product Categories API ───────────────────────────────────────────────────
 export type ProductCategory = {
   id: string;

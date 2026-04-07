@@ -8,6 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
+  Landmark,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -168,6 +169,18 @@ const CRM_COLUMNS = [
       { label: "Add Supplier",  href: "/suppliers", icon: UserPlus },
     ],
   },
+  {
+    href:  "/shareholders",
+    label: "Shareholders",
+    icon:  Landmark,
+    color: "text-amber-500",
+    bg:    "bg-amber-50 dark:bg-amber-950/40",
+    desc:  "Equity & ownership",
+    links: [
+      { label: "All Shareholders", href: "/shareholders", icon: Landmark },
+      { label: "Add Shareholder",  href: "/shareholders", icon: UserPlus },
+    ],
+  },
 ];
 
 // ─── Other nav items ──────────────────────────────────────────────────────────
@@ -220,7 +233,7 @@ const OTHER_NAV: NavItem[] = [
   { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
 ];
 
-const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
+const CRM_ROUTES       = ["/leads", "/customers", "/suppliers", "/shareholders"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];

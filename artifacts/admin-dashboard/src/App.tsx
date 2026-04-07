@@ -29,6 +29,7 @@ import BrandsPage from "@/pages/brands";
 import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
 import SuppliersPage from "@/pages/suppliers";
+import ShareholdersPage from "@/pages/shareholders";
 import PurchasesPage from "@/pages/purchases";
 import MediaLibraryPage from "@/pages/media";
 import SettingsPage from "@/pages/settings";
@@ -105,6 +106,7 @@ function Router() {
               <Route path="/attributes" component={AttributesPage} />
               <Route path="/units" component={UnitsPage} />
               <Route path="/suppliers" component={SuppliersPage} />
+              <Route path="/shareholders" component={ShareholdersPage} />
               <Route path="/purchases" component={PurchasesPage} />
               <Route path="/media" component={MediaLibraryPage} />
               <Route path="/invoices/new" component={InvoiceFormPage} />

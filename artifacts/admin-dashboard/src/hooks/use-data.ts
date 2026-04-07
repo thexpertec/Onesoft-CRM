@@ -4,6 +4,7 @@ import {
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
+  getShareholders, createShareholder, updateShareholder, deleteShareholder,
   getProducts, createProduct, updateProduct, deleteProduct,
   getBrands, createBrand, updateBrand, deleteBrand,
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
@@ -15,7 +16,7 @@ import {
   getSales, createSale, updateSale, deleteSale,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
-  Lead, RequirementDoc, Customer, ProductCategory, Supplier,
+  Lead, RequirementDoc, Customer, ProductCategory, Supplier, Shareholder,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
 } from "@/lib/store";
 
@@ -347,4 +348,14 @@ export function useStaffRoles() {
   const editRole   = (id: string, u: Parameters<typeof updateStaffRole>[1])       => { const r = updateStaffRole(id, u); fetch(); return r; };
   const removeRole = (id: string)                                                  => { deleteStaffRole(id);              fetch(); };
   return { roles, addRole, editRole, removeRole, refresh: fetch };
+}
+
+export function useShareholders() {
+  const [shareholders, setShareholders] = useState<Shareholder[]>([]);
+  const fetch = useCallback(() => setShareholders(getShareholders()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addShareholder    = (d: Parameters<typeof createShareholder>[0])                => { const s = createShareholder(d);    fetch(); return s; };
+  const editShareholder   = (id: string, u: Parameters<typeof updateShareholder>[1])    => { const s = updateShareholder(id, u); fetch(); return s; };
+  const removeShareholder = (id: string)                                                 => { deleteShareholder(id);              fetch(); };
+  return { shareholders, addShareholder, editShareholder, removeShareholder, refresh: fetch };
 }
