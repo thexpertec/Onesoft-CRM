@@ -6,7 +6,7 @@ import {
 import { useAccounts } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { Account } from "@/lib/store";
+import { Account, JournalEntry } from "@/lib/store";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ function LedgerDropdown({
 
 export default function JournalEntryPage() {
   const { accounts } = useAccounts();
-  const { entries, addEntry, removeEntry } = useJournalEntries();
+  const { entries, addEntry, editEntry, removeEntry } = useJournalEntries();
   const { toast } = useToast();
 
   const ledgers = useMemo(() => accounts.filter(a => a.accountType === "Ledger" && a.isActive), [accounts]);
@@ -148,6 +148,28 @@ export default function JournalEntryPage() {
   const [openLedger, setOpenLedger]   = useState<string | null>(null); // rowId
   const [ledgerOpenUp, setOpenUp]     = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Editing existing entry ────────────────────────────────────────────────
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+  const loadEntryForEdit = useCallback((entry: JournalEntry) => {
+    setEditingEntryId(entry.id);
+    setDate(entry.date);
+    setRef(entry.reference);
+    setDesc(entry.description);
+    setRows(
+      entry.lines.length > 0
+        ? entry.lines.map(l => ({
+            id: crypto.randomUUID(),
+            ledgerId: l.ledgerId,
+            narration: l.narration,
+            debit:  l.debit  > 0 ? String(l.debit)  : "",
+            credit: l.credit > 0 ? String(l.credit) : "",
+          }))
+        : [emptyRow(), emptyRow()],
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   // ── Saved entries panel ───────────────────────────────────────────────────
   const [showSaved, setShowSaved] = useState(true);
@@ -193,6 +215,7 @@ export default function JournalEntryPage() {
   };
 
   const clearAll = () => {
+    setEditingEntryId(null);
     setDate(today());
     setRef(nextRef(entries));
     setDesc("");
@@ -222,14 +245,16 @@ export default function JournalEntryPage() {
       debit:  parseFloat(r.debit)  || 0,
       credit: parseFloat(r.credit) || 0,
     }));
-    addEntry({
-      date, reference, description, lines, status,
-      totalDebit: totalDr, totalCredit: totalCr,
-      isBalanced: balanced,
-    });
-    toast({ title: status === "posted" ? "Journal entry posted" : "Saved as draft" });
+    const payload = { date, reference, description, lines, status, totalDebit: totalDr, totalCredit: totalCr, isBalanced: balanced };
+    if (editingEntryId) {
+      editEntry(editingEntryId, payload);
+      toast({ title: status === "posted" ? "Entry updated & posted" : "Draft updated" });
+    } else {
+      addEntry(payload);
+      toast({ title: status === "posted" ? "Journal entry posted" : "Saved as draft" });
+    }
     clearAll();
-  }, [rows, date, reference, description, balanced, totalDr, totalCr, addEntry, toast, diff]);
+  }, [rows, date, reference, description, balanced, totalDr, totalCr, addEntry, editEntry, editingEntryId, toast, diff]);
 
   // ── Ledger lookup ─────────────────────────────────────────────────────────
   const ledgerById = useCallback((id: string) => accounts.find(a => a.id === id), [accounts]);
@@ -447,53 +472,64 @@ export default function JournalEntryPage() {
                   <td />
                 </tr>
 
-                {/* Balance status row */}
-                <tr className={`border-t ${balanced ? "border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20" : hasLines ? "border-red-200 bg-red-50/60 dark:bg-red-950/20" : "border-gray-100 bg-gray-50/30"}`}>
-                  <td colSpan={3} className="px-4 py-2">
-                    {balanced ? (
-                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                        <CheckCircle size={13} />
-                        <span className="text-[11px] font-bold">Entry is balanced — Dr equals Cr</span>
-                      </div>
-                    ) : hasLines ? (
-                      <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                        <AlertTriangle size={13} />
-                        <span className="text-[11px] font-bold">Unbalanced — difference: {fmt(diff)}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <FileText size={13} />
-                        <span className="text-[11px]">Enter amounts above to start</span>
-                      </div>
-                    )}
-                  </td>
-                  <td colSpan={3} className="px-4 py-2">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={clearAll}
-                        className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 dark:border-zinc-700 text-[12px] text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        <RotateCcw size={11} /> Reset
-                      </button>
-                      <button
-                        onClick={() => handleSave("draft")}
-                        disabled={!hasLines}
-                        className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-300 dark:border-zinc-600 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Save size={11} /> Save Draft
-                      </button>
-                      <button
-                        onClick={() => handleSave("posted")}
-                        disabled={!balanced}
-                        className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[12px] font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <CheckCircle size={11} /> Post Entry
-                      </button>
-                    </div>
-                  </td>
-                </tr>
               </tfoot>
             </table>
+          </div>
+
+          {/* ── Action bar (full-width, outside the scroll area) ──────────── */}
+          <div className={`flex items-center justify-between px-4 py-2.5 border-t ${
+            balanced
+              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20"
+              : hasLines
+              ? "border-red-200 dark:border-red-900 bg-red-50/60 dark:bg-red-950/20"
+              : "border-gray-100 dark:border-zinc-800 bg-gray-50/30 dark:bg-zinc-800/20"
+          }`}>
+            {/* Status indicator */}
+            <div>
+              {balanced ? (
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle size={13} />
+                  <span className="text-[11px] font-bold">Entry is balanced — Dr equals Cr</span>
+                </div>
+              ) : hasLines ? (
+                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <AlertTriangle size={13} />
+                  <span className="text-[11px] font-bold">Unbalanced — difference: {fmt(diff)}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-gray-400 dark:text-zinc-500">
+                  <FileText size={13} />
+                  <span className="text-[11px]">Enter amounts above to start</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearAll}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 dark:border-zinc-700 text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-zinc-800 hover:border-gray-300 transition-colors whitespace-nowrap"
+              >
+                <RotateCcw size={11} />
+                {editingEntryId ? "Cancel Edit" : "Reset"}
+              </button>
+              <button
+                onClick={() => handleSave("draft")}
+                disabled={!hasLines}
+                className="flex items-center gap-1.5 h-8 px-4 rounded-lg border border-gray-300 dark:border-zinc-600 text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                <Save size={11} />
+                {editingEntryId ? "Update Draft" : "Save Draft"}
+              </button>
+              <button
+                onClick={() => handleSave("posted")}
+                disabled={!balanced}
+                className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-[12px] font-bold transition-colors disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
+              >
+                <CheckCircle size={11} />
+                {editingEntryId ? "Update & Post" : "Post Entry"}
+              </button>
+            </div>
           </div>
         </div>
 
