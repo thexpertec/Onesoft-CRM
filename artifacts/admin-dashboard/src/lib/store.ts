@@ -423,6 +423,12 @@ export const deleteShareholder = (id: string): void => {
 // ─── Investment Plans API ─────────────────────────────────────────────────────
 export type InvestmentType = "Product" | "Business" | "Product Groups";
 
+export type ProductItem = {
+  productName: string;
+  units: string;
+  investedAmount: string;
+};
+
 export type InvestmentPlan = {
   id: string;
   title: string;
@@ -437,6 +443,7 @@ export type InvestmentPlan = {
   profitMarginWithoutLoss: string;
   maxProfit: string;
   maxLoss: string;
+  productItems?: ProductItem[];
   investmentAmount?: string;
   unitsInvested?: string;
   description?: string;

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useShareholders, useInvestmentPlans, useProducts, useProductCategories } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Shareholder, InvestmentPlan, InvestmentType } from "@/lib/store";
+import { Shareholder, InvestmentPlan, InvestmentType, ProductItem } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Plus, Trash2, X, Save, Upload, Download, FileSpreadsheet,
@@ -106,11 +106,14 @@ function activeContextField(investmentOn: string): string {
   return "";
 }
 
+const BLANK_PRODUCT_ITEM = (): ProductItem => ({ productName: "", units: "", investedAmount: "" });
+
 type PlanForm = {
   title: string; investmentOn: string; product: string; business: string;
   specificProductGroups: string; timeDuration: string; lockForSpecificTime: string;
   profitMarginWithLoss: string; profitMarginWithoutLoss: string;
   maxProfit: string; maxLoss: string;
+  productItems: ProductItem[];
   investmentAmount: string; unitsInvested: string; description: string;
 };
 
@@ -118,6 +121,7 @@ const BLANK_PLAN = (): PlanForm => ({
   title: "", investmentOn: "Product", product: "", business: "",
   specificProductGroups: "", timeDuration: "", lockForSpecificTime: "No",
   profitMarginWithLoss: "", profitMarginWithoutLoss: "", maxProfit: "", maxLoss: "",
+  productItems: [BLANK_PRODUCT_ITEM()],
   investmentAmount: "", unitsInvested: "", description: "",
 });
 
@@ -147,8 +151,29 @@ function SharePlansDialog({
   const myPlans = plans.filter(p => p.shareholderId === shareholder.id);
 
   const handleInvestOnChange = (v: string) => {
-    setForm(f => ({ ...f, investmentOn: v, product: "", business: "", specificProductGroups: "" }));
+    setForm(f => ({
+      ...f, investmentOn: v, product: "", business: "", specificProductGroups: "",
+      productItems: [BLANK_PRODUCT_ITEM()],
+    }));
   };
+
+  const updateProductItem = (idx: number, field: keyof ProductItem, value: string) => {
+    setForm(f => {
+      const items = f.productItems.map((r, i) => i === idx ? { ...r, [field]: value } : r);
+      return { ...f, productItems: items };
+    });
+  };
+
+  const addProductRow = () => setForm(f => ({ ...f, productItems: [...f.productItems, BLANK_PRODUCT_ITEM()] }));
+
+  const removeProductRow = (idx: number) => setForm(f => ({
+    ...f, productItems: f.productItems.length > 1 ? f.productItems.filter((_, i) => i !== idx) : [BLANK_PRODUCT_ITEM()],
+  }));
+
+  const isProductMode = form.investmentOn === "Product";
+  const filledItems   = form.productItems.filter(r => r.productName);
+  const totalUnits    = form.productItems.reduce((s, r) => s + (parseFloat(r.units) || 0), 0);
+  const totalAmount   = form.productItems.reduce((s, r) => s + (parseFloat(r.investedAmount) || 0), 0);
 
   const handleSubmit = () => {
     if (!form.title.trim()) return;
@@ -156,7 +181,7 @@ function SharePlansDialog({
       title: form.title,
       shareholderId: shareholder.id,
       investmentOn:            form.investmentOn as InvestmentType,
-      product:                 form.product,
+      product:                 isProductMode ? filledItems.map(r => r.productName).join(", ") : form.product,
       business:                form.business,
       specificProductGroups:   form.specificProductGroups,
       timeDuration:            form.timeDuration,
@@ -165,17 +190,15 @@ function SharePlansDialog({
       profitMarginWithoutLoss: form.profitMarginWithoutLoss,
       maxProfit:               form.maxProfit,
       maxLoss:                 form.maxLoss,
-      investmentAmount:        form.investmentAmount || undefined,
-      unitsInvested:           form.unitsInvested    || undefined,
-      description:             form.description      || undefined,
+      productItems:            isProductMode && filledItems.length > 0 ? filledItems : undefined,
+      investmentAmount:        isProductMode ? (totalAmount > 0 ? String(totalAmount) : undefined) : (form.investmentAmount || undefined),
+      unitsInvested:           isProductMode ? (totalUnits  > 0 ? String(totalUnits)  : undefined) : (form.unitsInvested    || undefined),
+      description:             form.description || undefined,
     });
     setForm(BLANK_PLAN());
     setAdding(false);
   };
 
-  const contextField = activeContextField(form.investmentOn);
-  const productOpts  = form.investmentOn === "Product"        ? productOptions  : null;
-  const groupOpts    = form.investmentOn === "Product Groups" ? categoryOptions : null;
 
   return (
     <>
@@ -216,22 +239,61 @@ function SharePlansDialog({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-4 mt-1.5 flex-wrap">
-                          {(plan.product || plan.business || plan.specificProductGroups) && (
-                            <span className="text-[12px] text-muted-foreground truncate">
-                              {plan.product || plan.business || plan.specificProductGroups}
-                            </span>
-                          )}
-                          {plan.unitsInvested && (
-                            <span className="text-[12px] text-muted-foreground font-medium">
-                              {Number(plan.unitsInvested).toLocaleString()} units
-                            </span>
-                          )}
-                          {plan.investmentAmount && (
-                            <span className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 font-medium">
-                              £{Number(plan.investmentAmount).toLocaleString()}
-                            </span>
-                          )}
+                        {/* Product items breakdown */}
+                        {plan.productItems && plan.productItems.length > 0 ? (
+                          <div className="mt-2 rounded-md border border-gray-100 dark:border-border overflow-hidden">
+                            <table className="w-full text-[12px]">
+                              <thead>
+                                <tr className="bg-gray-50 dark:bg-muted/30">
+                                  <th className="text-left px-2 py-1 font-medium text-muted-foreground">Product</th>
+                                  <th className="text-right px-2 py-1 font-medium text-muted-foreground">Units</th>
+                                  <th className="text-right px-2 py-1 font-medium text-muted-foreground">Invested (£)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {plan.productItems.map((item, i) => (
+                                  <tr key={i} className="border-t border-gray-100 dark:border-border">
+                                    <td className="px-2 py-1">{item.productName}</td>
+                                    <td className="px-2 py-1 text-right text-muted-foreground">{item.units ? Number(item.units).toLocaleString() : "—"}</td>
+                                    <td className="px-2 py-1 text-right text-muted-foreground">{item.investedAmount ? `£${Number(item.investedAmount).toLocaleString()}` : "—"}</td>
+                                  </tr>
+                                ))}
+                                {/* Totals row */}
+                                {plan.productItems.length > 1 && (
+                                  <tr className="border-t-2 border-gray-200 dark:border-border bg-gray-50/80 dark:bg-muted/20 font-semibold">
+                                    <td className="px-2 py-1 text-[11px] text-muted-foreground uppercase tracking-wide">Total</td>
+                                    <td className="px-2 py-1 text-right text-blue-600 dark:text-blue-400">
+                                      {plan.productItems.reduce((s, r) => s + (parseFloat(r.units) || 0), 0).toLocaleString()}
+                                    </td>
+                                    <td className="px-2 py-1 text-right text-emerald-600 dark:text-emerald-400">
+                                      £{plan.productItems.reduce((s, r) => s + (parseFloat(r.investedAmount) || 0), 0).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+                            {(plan.product || plan.business || plan.specificProductGroups) && (
+                              <span className="text-[12px] text-muted-foreground truncate">
+                                {plan.product || plan.business || plan.specificProductGroups}
+                              </span>
+                            )}
+                            {plan.unitsInvested && (
+                              <span className="text-[12px] text-muted-foreground font-medium">
+                                {Number(plan.unitsInvested).toLocaleString()} units
+                              </span>
+                            )}
+                            {plan.investmentAmount && (
+                              <span className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 font-medium">
+                                £{Number(plan.investmentAmount).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-4 mt-1 flex-wrap">
                           {plan.timeDuration && (
                             <span className="text-[12px] text-muted-foreground">{plan.timeDuration}</span>
                           )}
@@ -299,60 +361,113 @@ function SharePlansDialog({
                   </div>
                 </div>
 
-                {/* Row 2: Contextual field */}
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Product dropdown */}
-                  <div className={`space-y-1 ${contextField !== "product" ? "opacity-40 pointer-events-none" : ""}`}>
-                    <Label className="text-[12px] flex items-center gap-1">
-                      Product
-                      {contextField !== "product" && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                    </Label>
-                    {productOpts ? (
-                      <select value={form.product} onChange={e => setForm(f => ({...f, product: e.target.value}))}
-                        className="w-full h-8 px-3 text-[13px] rounded-md border border-input bg-background dark:text-foreground">
-                        <option value="">Select product…</option>
-                        {productOpts.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <Input value="" disabled placeholder="—" className="h-8 text-[13px] bg-muted/50" />
+                {/* Contextual section — Product mode: multi-row table; others: single field */}
+                {isProductMode ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-[12px]">Products</Label>
+                    {/* Column headers */}
+                    <div className="grid gap-1.5" style={{ gridTemplateColumns: "1fr 90px 110px 28px" }}>
+                      <span className="text-[11px] text-muted-foreground px-1">Product Name</span>
+                      <span className="text-[11px] text-muted-foreground px-1">Units</span>
+                      <span className="text-[11px] text-muted-foreground px-1">Invested (£)</span>
+                      <span />
+                    </div>
+                    {/* Product rows */}
+                    {form.productItems.map((row, idx) => (
+                      <div key={idx} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: "1fr 90px 110px 28px" }}>
+                        <select
+                          value={row.productName}
+                          onChange={e => updateProductItem(idx, "productName", e.target.value)}
+                          className="h-8 px-2 text-[13px] rounded-md border border-input bg-background dark:text-foreground w-full">
+                          <option value="">Select…</option>
+                          {productOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <Input value={row.units}
+                          onChange={e => updateProductItem(idx, "units", e.target.value)}
+                          placeholder="0" type="number" className="h-8 text-[13px]" />
+                        <Input value={row.investedAmount}
+                          onChange={e => updateProductItem(idx, "investedAmount", e.target.value)}
+                          placeholder="0" type="number" className="h-8 text-[13px]" />
+                        <button onClick={() => removeProductRow(idx)}
+                          className="h-8 w-7 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    {/* Totals row */}
+                    {form.productItems.length > 0 && (totalUnits > 0 || totalAmount > 0) && (
+                      <div className="grid gap-1.5 items-center border-t pt-1.5 mt-0.5" style={{ gridTemplateColumns: "1fr 90px 110px 28px" }}>
+                        <span className="text-[11px] font-semibold text-muted-foreground px-1">Total</span>
+                        <span className="text-[12px] font-bold text-blue-600 dark:text-blue-400 px-1">
+                          {totalUnits > 0 ? totalUnits.toLocaleString() : "—"}
+                        </span>
+                        <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 px-1">
+                          {totalAmount > 0 ? `£${totalAmount.toLocaleString()}` : "—"}
+                        </span>
+                        <span />
+                      </div>
                     )}
+                    {/* Add row */}
+                    <button onClick={addProductRow}
+                      className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 hover:underline mt-0.5">
+                      <Plus size={11} /> Add Product
+                    </button>
                   </div>
-
-                  {/* Business text */}
-                  <div className={`space-y-1 ${contextField !== "business" ? "opacity-40 pointer-events-none" : ""}`}>
-                    <Label className="text-[12px] flex items-center gap-1">
-                      Business
-                      {contextField !== "business" && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                    </Label>
-                    <Input value={form.business} onChange={e => setForm(f => ({...f, business: e.target.value}))}
-                      placeholder="Business name" disabled={contextField !== "business"}
-                      className="h-8 text-[13px]" />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Business text */}
+                    <div className={`space-y-1 ${form.investmentOn !== "Business" ? "opacity-40 pointer-events-none" : ""}`}>
+                      <Label className="text-[12px] flex items-center gap-1">
+                        Business
+                        {form.investmentOn !== "Business" && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
+                      </Label>
+                      <Input value={form.business} onChange={e => setForm(f => ({...f, business: e.target.value}))}
+                        placeholder="Business name" disabled={form.investmentOn !== "Business"}
+                        className="h-8 text-[13px]" />
+                    </div>
+                    {/* Product Groups dropdown */}
+                    <div className={`space-y-1 ${form.investmentOn !== "Product Groups" ? "opacity-40 pointer-events-none" : ""}`}>
+                      <Label className="text-[12px] flex items-center gap-1">
+                        Product Groups
+                        {form.investmentOn !== "Product Groups" && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
+                      </Label>
+                      {form.investmentOn === "Product Groups" ? (
+                        <select value={form.specificProductGroups} onChange={e => setForm(f => ({...f, specificProductGroups: e.target.value}))}
+                          className="w-full h-8 px-3 text-[13px] rounded-md border border-input bg-background dark:text-foreground">
+                          <option value="">Select group…</option>
+                          {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <Input value="" disabled placeholder="—" className="h-8 text-[13px] bg-muted/50" />
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Product Groups + Duration */}
+                {/* Duration (always) */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className={`space-y-1 ${contextField !== "specificProductGroups" ? "opacity-40 pointer-events-none" : ""}`}>
-                    <Label className="text-[12px] flex items-center gap-1">
-                      Product Groups
-                      {contextField !== "specificProductGroups" && <span className="text-[10px] text-muted-foreground">(n/a)</span>}
-                    </Label>
-                    {groupOpts ? (
-                      <select value={form.specificProductGroups} onChange={e => setForm(f => ({...f, specificProductGroups: e.target.value}))}
-                        className="w-full h-8 px-3 text-[13px] rounded-md border border-input bg-background dark:text-foreground">
-                        <option value="">Select group…</option>
-                        {groupOpts.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <Input value="" disabled placeholder="—" className="h-8 text-[13px] bg-muted/50" />
-                    )}
-                  </div>
                   <div className="space-y-1">
                     <Label className="text-[12px]">Duration</Label>
                     <Input value={form.timeDuration} onChange={e => setForm(f => ({...f, timeDuration: e.target.value}))}
                       placeholder="e.g. 12 Months" className="h-8 text-[13px]" />
                   </div>
+                  {/* Investment Amount + Units for non-Product modes */}
+                  {!isProductMode && (
+                    <div className="space-y-1">
+                      <Label className="text-[12px]">Investment Amount (£)</Label>
+                      <Input value={form.investmentAmount} onChange={e => setForm(f => ({...f, investmentAmount: e.target.value}))}
+                        placeholder="25000" type="number" className="h-8 text-[13px]" />
+                    </div>
+                  )}
                 </div>
+
+                {!isProductMode && (
+                  <div className="space-y-1">
+                    <Label className="text-[12px]">No. of Units Invested</Label>
+                    <Input value={form.unitsInvested} onChange={e => setForm(f => ({...f, unitsInvested: e.target.value}))}
+                      placeholder="100" type="number" className="h-8 text-[13px]" />
+                  </div>
+                )}
 
                 {/* Locked Period + Margins */}
                 <div className="grid grid-cols-3 gap-3">
@@ -390,20 +505,6 @@ function SharePlansDialog({
                     </Label>
                     <Input value={form.maxLoss} onChange={e => setForm(f => ({...f, maxLoss: e.target.value}))}
                       placeholder="10000" type="number" className="h-8 text-[13px]" />
-                  </div>
-                </div>
-
-                {/* Investment Amount + Units Invested */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-[12px]">Investment Amount (£)</Label>
-                    <Input value={form.investmentAmount} onChange={e => setForm(f => ({...f, investmentAmount: e.target.value}))}
-                      placeholder="25000" type="number" className="h-8 text-[13px]" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[12px]">No. of Units Invested</Label>
-                    <Input value={form.unitsInvested} onChange={e => setForm(f => ({...f, unitsInvested: e.target.value}))}
-                      placeholder="100" type="number" className="h-8 text-[13px]" />
                   </div>
                 </div>
 
