@@ -1266,7 +1266,7 @@ export default function ChartOfAccountsPage() {
                     Group Entries <span className="text-red-500">*</span>
                   </label>
                   {modal.groupEntries.map((entry, idx) => (
-                    <div key={entry._key} className="grid grid-cols-[100px_1fr_1fr] gap-2 items-end">
+                    <div key={entry._key} className="grid grid-cols-[100px_1fr] gap-2 items-end">
                       <div>
                         {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Code</label>}
                         <input
@@ -1275,25 +1275,15 @@ export default function ChartOfAccountsPage() {
                           className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                         />
                       </div>
-                      <div>
-                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Group Name *</label>}
-                        <input
-                          value={entry.name}
-                          onChange={e => updateGroupEntry(entry._key, "name", e.target.value)}
-                          placeholder="e.g. Fixed Assets"
-                          className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
                       <div className="flex gap-1.5">
                         <div className="flex-1">
-                          {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Group Type</label>}
-                          <select
-                            value={entry.subType}
-                            onChange={e => updateGroupEntry(entry._key, "subType", e.target.value)}
+                          {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Group Name *</label>}
+                          <input
+                            value={entry.name}
+                            onChange={e => updateGroupEntry(entry._key, "name", e.target.value)}
+                            placeholder="e.g. Fixed Assets"
                             className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                          >
-                            {HEAD_SUB_TYPES[modal.head].map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
+                          />
                         </div>
                         {modal.groupEntries.length > 1 && (
                           <button
