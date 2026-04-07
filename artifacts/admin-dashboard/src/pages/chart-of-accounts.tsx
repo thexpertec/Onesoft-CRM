@@ -1165,6 +1165,90 @@ export default function ChartOfAccountsPage() {
               })
           )}
         </div>
+
+        {/* ─── Net Opening Balance Summary ────────────────────────────────────── */}
+        {!isSearching && (
+          <div className="mt-4 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-200 dark:border-zinc-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              <div className="flex-1">Net Opening Balance Summary</div>
+              <div className="w-44 text-right text-blue-500">Total Dr.</div>
+              <div className="w-44 text-right text-orange-500">Total Cr.</div>
+            </div>
+
+            {/* Per-head rows */}
+            {ACCOUNT_HEADS.map(head => {
+              const headLedgers = accounts.filter(a => a.head === head && a.accountType === "Ledger");
+              if (headLedgers.length === 0) return null;
+              const drTotal = headLedgers
+                .filter(a => (a.paymentType ?? "Debit") === "Debit")
+                .reduce((s, a) => s + (a.openingBalance ?? 0), 0);
+              const crTotal = headLedgers
+                .filter(a => (a.paymentType ?? "Debit") === "Credit")
+                .reduce((s, a) => s + (a.openingBalance ?? 0), 0);
+              const s = HEAD_STYLE[head];
+              return (
+                <div key={head} className="flex items-center px-4 py-2 border-b border-gray-100 dark:border-zinc-800 last:border-0">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+                    <span className={`font-mono text-[11px] font-extrabold flex-shrink-0 ${s.text} opacity-70`}>{HEAD_BASE_CODE[head]}</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wide ${s.text}`}>{head}</span>
+                    <span className="text-[10px] text-gray-400 ml-1">({headLedgers.length} ledger{headLedgers.length !== 1 ? "s" : ""})</span>
+                  </div>
+                  <div className="w-44 text-right pr-1">
+                    {drTotal > 0 ? (
+                      <span className="text-[12px] font-mono font-semibold text-blue-700 dark:text-blue-400">
+                        {drTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="ml-1.5 text-[9px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md">Dr</span>
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-gray-300 dark:text-zinc-700">—</span>
+                    )}
+                  </div>
+                  <div className="w-44 text-right pr-1">
+                    {crTotal > 0 ? (
+                      <span className="text-[12px] font-mono font-semibold text-orange-600 dark:text-orange-400">
+                        {crTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="ml-1.5 text-[9px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-md">Cr</span>
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-gray-300 dark:text-zinc-700">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Grand total row */}
+            {(() => {
+              const allLedgers = accounts.filter(a => a.accountType === "Ledger");
+              const grandDr = allLedgers
+                .filter(a => (a.paymentType ?? "Debit") === "Debit")
+                .reduce((s, a) => s + (a.openingBalance ?? 0), 0);
+              const grandCr = allLedgers
+                .filter(a => (a.paymentType ?? "Debit") === "Credit")
+                .reduce((s, a) => s + (a.openingBalance ?? 0), 0);
+              const fmt2 = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              return (
+                <div className="flex items-center px-4 py-3 bg-gray-50 dark:bg-zinc-800/40 border-t-2 border-gray-200 dark:border-zinc-700">
+                  <div className="flex-1 text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Grand Total</div>
+                  <div className="w-44 text-right pr-1">
+                    <span className="text-[13px] font-bold font-mono text-blue-700 dark:text-blue-400">
+                      {fmt2(grandDr)}
+                      <span className="ml-1.5 text-[9px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md">Dr</span>
+                    </span>
+                  </div>
+                  <div className="w-44 text-right pr-1">
+                    <span className="text-[13px] font-bold font-mono text-orange-600 dark:text-orange-400">
+                      {fmt2(grandCr)}
+                      <span className="ml-1.5 text-[9px] font-bold bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-md">Cr</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* ─── Create Group / Ledger Modal ─────────────────────────────────────── */}
