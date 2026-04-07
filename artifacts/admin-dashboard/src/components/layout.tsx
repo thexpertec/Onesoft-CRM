@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp,
+  Landmark, TrendingUp, ClipboardList,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -209,7 +209,13 @@ const OTHER_NAV: NavItem[] = [
       { label: "New Document",  href: "/documents/new", icon: FilePlus },
     ],
   },
-  { key: "accounts", href: "/chart-of-accounts", label: "Accounts", icon: BookOpen, items: null },
+  {
+    key: "accounts", label: "Accounts", icon: BookOpen,
+    items: [
+      { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,      desc: "Account hierarchy & ledgers"   },
+      { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList, desc: "Double-entry bookkeeping"       },
+    ],
+  },
   {
     key: "investments", label: "Investments", icon: TrendingUp,
     items: [
@@ -220,11 +226,12 @@ const OTHER_NAV: NavItem[] = [
   { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
 ];
 
-const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media", "/stock"];
-const SALES_ROUTES     = ["/sales", "/invoices", "/purchases"];
+const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
+const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/attributes", "/units", "/media", "/stock"];
+const SALES_ROUTES       = ["/sales", "/invoices", "/purchases"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
 const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
+const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
@@ -359,6 +366,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
   const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
   const isInvestmentsActive = INVESTMENTS_ROUTES.some(r => location === r || location.startsWith(r));
+  const isAccountsActive    = ACCOUNTS_ROUTES.some(r    => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -542,6 +550,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "sales"       ? isSalesActive :
                 item.key === "hrm"         ? isHrmActive :
                 item.key === "investments" ? isInvestmentsActive :
+                item.key === "accounts"    ? isAccountsActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${

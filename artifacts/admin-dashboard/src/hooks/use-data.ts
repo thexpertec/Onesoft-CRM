@@ -17,8 +17,10 @@ import {
   getSales, createSale, updateSale, deleteSale,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
+  getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
   Lead, RequirementDoc, Customer, ProductCategory, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
+  JournalEntry,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -369,4 +371,14 @@ export function useInvestmentPlans() {
   const editPlan   = (id: string, u: Parameters<typeof updateInvestmentPlan>[1])    => { const p = updateInvestmentPlan(id, u); fetch(); return p; };
   const removePlan = (id: string)                                                    => { deleteInvestmentPlan(id);              fetch(); };
   return { plans, addPlan, editPlan, removePlan, refresh: fetch };
+}
+
+export function useJournalEntries() {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const fetch = useCallback(() => setEntries(getJournalEntries()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addEntry    = (d: Parameters<typeof createJournalEntry>[0])                => { const e = createJournalEntry(d);    fetch(); return e; };
+  const editEntry   = (id: string, u: Parameters<typeof updateJournalEntry>[1])    => { const e = updateJournalEntry(id, u); fetch(); return e; };
+  const removeEntry = (id: string)                                                  => { deleteJournalEntry(id);              fetch(); };
+  return { entries, addEntry, editEntry, removeEntry, refresh: fetch };
 }
