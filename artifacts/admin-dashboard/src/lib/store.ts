@@ -447,6 +447,7 @@ export type InvestmentPlan = {
   investmentAmount?: string;
   unitsInvested?: string;
   description?: string;
+  descriptions?: string[];
   createdAt: string;
   updatedAt: string;
 };

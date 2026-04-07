@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
+import RichTextEditor from "@/components/RichTextEditor";
 
 // ─── Shareholders table ───────────────────────────────────────────────────────
 type EditableField = "shareholderId" | "name" | "email" | "phone" | "city" | "address";
@@ -114,7 +115,8 @@ type PlanForm = {
   profitMarginWithLoss: string; profitMarginWithoutLoss: string;
   maxProfit: string; maxLoss: string;
   productItems: ProductItem[];
-  investmentAmount: string; unitsInvested: string; description: string;
+  investmentAmount: string; unitsInvested: string;
+  descriptions: string[];
 };
 
 const BLANK_PLAN = (): PlanForm => ({
@@ -122,7 +124,8 @@ const BLANK_PLAN = (): PlanForm => ({
   specificProductGroups: "", timeDuration: "", lockForSpecificTime: "No",
   profitMarginWithLoss: "", profitMarginWithoutLoss: "", maxProfit: "", maxLoss: "",
   productItems: [BLANK_PRODUCT_ITEM()],
-  investmentAmount: "", unitsInvested: "", description: "",
+  investmentAmount: "", unitsInvested: "",
+  descriptions: [""],
 });
 
 // ─── Print / PDF helper ───────────────────────────────────────────────────────
@@ -173,8 +176,16 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
           ${plan.investmentAmount ? `<span class="chip blue">Invested: ${fmtP(plan.investmentAmount)}</span>` : ""}
         </div>` : "";
 
-    const descSection = plan.description
-      ? `<p class="desc">${plan.description}</p>` : `<p class="desc muted">No Description</p>`;
+    const allDescs = plan.descriptions && plan.descriptions.length > 0
+      ? plan.descriptions
+      : plan.description ? [plan.description] : [];
+    const descSection = allDescs.length > 0
+      ? allDescs.map((d, i) => `
+          <div class="desc-block ${i > 0 ? "desc-extra" : ""}">
+            ${allDescs.length > 1 ? `<p class="desc-label">Note ${i + 1}</p>` : ""}
+            <div class="desc-html">${d}</div>
+          </div>`).join("")
+      : `<p class="desc muted">No Description</p>`;
 
     return `
       <div class="plan-card">
@@ -258,6 +269,21 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
     .detail { font-size: 12px; color: #6b7280; margin: 4px 0 8px; }
     .desc { font-size: 12px; color: #6b7280; font-style: italic; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f3f4f6; }
     .desc.muted { color: #9ca3af; }
+    .desc-block { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f3f4f6; }
+    .desc-extra { margin-top: 6px; }
+    .desc-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #9ca3af; margin-bottom: 4px; }
+    .desc-html { font-size: 12px; color: #374151; line-height: 1.6; }
+    .desc-html p { margin: 0 0 6px; }
+    .desc-html strong { font-weight: 600; }
+    .desc-html em { font-style: italic; }
+    .desc-html ul, .desc-html ol { padding-left: 18px; margin: 4px 0; }
+    .desc-html li { margin: 2px 0; }
+    .desc-html h1 { font-size: 16px; font-weight: 700; margin: 8px 0 4px; }
+    .desc-html h2 { font-size: 14px; font-weight: 700; margin: 6px 0 4px; }
+    .desc-html h3 { font-size: 13px; font-weight: 600; margin: 5px 0 3px; }
+    .desc-html blockquote { border-left: 3px solid #d1d5db; padding-left: 10px; color: #6b7280; margin: 6px 0; }
+    .desc-html code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 11px; font-family: monospace; }
+    .desc-html mark { background: #fef08a; padding: 0 2px; }
 
     /* Footer */
     .doc-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
@@ -295,10 +321,11 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
     <div class="sh-name">${shareholder.name}</div>
     <div class="sh-meta">
       ${shareholder.shareholderId ? `<span>ID: <strong>${shareholder.shareholderId}</strong></span>` : ""}
-      ${shareholder.email ? `<span>Email: <strong>${shareholder.email}</strong></span>` : ""}
-      ${shareholder.phone ? `<span>Phone: <strong>${shareholder.phone}</strong></span>` : ""}
-      ${shareholder.city  ? `<span>City: <strong>${shareholder.city}</strong></span>` : ""}
+      ${shareholder.email   ? `<span>Email: <strong>${shareholder.email}</strong></span>` : ""}
+      ${shareholder.phone   ? `<span>Phone: <strong>${shareholder.phone}</strong></span>` : ""}
+      ${shareholder.city    ? `<span>City: <strong>${shareholder.city}</strong></span>` : ""}
     </div>
+    ${shareholder.address ? `<p style="font-size:12px;color:#6b7280;margin-top:6px;">Address: <strong style="color:#374151;">${shareholder.address}</strong></p>` : ""}
   </div>
 
   <!-- Plans -->
@@ -377,6 +404,13 @@ function SharePlansDialog({
     ...f, productItems: f.productItems.length > 1 ? f.productItems.filter((_, i) => i !== idx) : [BLANK_PRODUCT_ITEM()],
   }));
 
+  const updateDescription = (idx: number, val: string) =>
+    setForm(f => ({ ...f, descriptions: f.descriptions.map((d, i) => i === idx ? val : d) }));
+  const addDescription    = () => setForm(f => ({ ...f, descriptions: [...f.descriptions, ""] }));
+  const removeDescription = (idx: number) => setForm(f => ({
+    ...f, descriptions: f.descriptions.length > 1 ? f.descriptions.filter((_, i) => i !== idx) : [""],
+  }));
+
   const isProductMode = form.investmentOn === "Product";
   const filledItems   = form.productItems.filter(r => r.productName);
   const totalUnits    = form.productItems.reduce((s, r) => s + (parseFloat(r.units) || 0), 0);
@@ -384,6 +418,7 @@ function SharePlansDialog({
 
   const handleSubmit = () => {
     if (!form.title.trim()) return;
+    const filledDescriptions = form.descriptions.filter(d => d && d.replace(/<[^>]*>/g, "").trim());
     onAddPlan({
       title: form.title,
       shareholderId: shareholder.id,
@@ -400,7 +435,8 @@ function SharePlansDialog({
       productItems:            isProductMode && filledItems.length > 0 ? filledItems : undefined,
       investmentAmount:        isProductMode ? (totalAmount > 0 ? String(totalAmount) : undefined) : (form.investmentAmount || undefined),
       unitsInvested:           isProductMode ? (totalUnits  > 0 ? String(totalUnits)  : undefined) : (form.unitsInvested    || undefined),
-      description:             form.description || undefined,
+      descriptions:            filledDescriptions.length > 0 ? filledDescriptions : undefined,
+      description:             filledDescriptions[0] || undefined,
     });
     setForm(BLANK_PLAN());
     setAdding(false);
@@ -521,11 +557,19 @@ function SharePlansDialog({
                             {plan.profitMarginWithoutLoss && <span>Margin w/o Loss: <strong>{plan.profitMarginWithoutLoss}%</strong></span>}
                           </div>
                         )}
-                        {plan.description && (
-                          <p className="mt-1.5 text-[12px] text-muted-foreground italic leading-relaxed border-t pt-1.5">
-                            {plan.description}
-                          </p>
-                        )}
+                        {/* Descriptions (rich text) */}
+                        {(() => {
+                          const descs = plan.descriptions && plan.descriptions.length > 0
+                            ? plan.descriptions
+                            : plan.description ? [plan.description] : [];
+                          if (descs.length === 0) return (
+                            <p className="mt-1.5 text-[12px] text-muted-foreground italic border-t pt-1.5">No Description</p>
+                          );
+                          return descs.map((d, i) => (
+                            <div key={i} className="mt-1.5 text-[12px] text-muted-foreground border-t pt-1.5 leading-relaxed prose prose-sm max-w-none dark:prose-invert"
+                              dangerouslySetInnerHTML={{ __html: d }} />
+                          ));
+                        })()}
                       </div>
                       <button
                         onClick={() => setDelId(plan.id)}
@@ -715,16 +759,34 @@ function SharePlansDialog({
                   </div>
                 </div>
 
-                {/* Description */}
-                <div className="space-y-1">
-                  <Label className="text-[12px]">Description</Label>
-                  <textarea
-                    value={form.description}
-                    onChange={e => setForm(f => ({...f, description: e.target.value}))}
-                    placeholder="Optional notes about this share plan…"
-                    rows={3}
-                    className="w-full px-3 py-2 text-[13px] rounded-md border border-input bg-background dark:text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-                  />
+                {/* Descriptions — multiple rich text editors */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[12px]">Descriptions</Label>
+                    <button onClick={addDescription}
+                      className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 hover:underline">
+                      <Plus size={11} /> Add Note
+                    </button>
+                  </div>
+                  {form.descriptions.map((desc, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {form.descriptions.length > 1 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-muted-foreground font-medium">Note {idx + 1}</span>
+                          <button onClick={() => removeDescription(idx)}
+                            className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-600 hover:underline">
+                            <X size={10} /> Remove
+                          </button>
+                        </div>
+                      )}
+                      <RichTextEditor
+                        value={desc}
+                        onChange={v => updateDescription(idx, v)}
+                        placeholder="Add notes about this share plan…"
+                        minHeight="90px"
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 {/* Form actions */}
