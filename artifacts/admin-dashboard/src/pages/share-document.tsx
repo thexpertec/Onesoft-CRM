@@ -43,8 +43,8 @@ type Sections = {
   s3?: { purpose?: string; keyFeatures?: string[] };
   s35?: { detailedNotes?: string; detailedNotesTitle?: string; detailedNotesSubtitle?: string };
   s4?: { integrations?: string[]; techStack?: string[]; hosting?: string; security?: string };
-  s5?: { paymentStructure?: string; additionalCosts?: string; currency?: string; lineItems?: LineItem[] };
-  s6?: { startDate?: string; deliveryDate?: string; milestones?: Milestone[] };
+  s5?: { paymentStructure?: string; additionalCosts?: string; currency?: string; lineItems?: LineItem[]; publicVisible?: boolean };
+  s6?: { startDate?: string; deliveryDate?: string; milestones?: Milestone[]; publicVisible?: boolean };
   s7?: { postLaunch?: string; maintenance?: string };
   sCustom?: { sections?: CustomSection[] };
   sCustom2?: { sections?: CustomSection[] };
@@ -894,6 +894,7 @@ export default function ShareDocument() {
           }
 
           if (sectionId === "s5") {
+            if (s5.publicVisible === false) return null;
             const hasS5 = s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0 || hasLineItemsView;
             if (!hasS5) return null;
             return (
@@ -979,6 +980,7 @@ export default function ShareDocument() {
           }
 
           if (sectionId === "s6") {
+            if (s6.publicVisible === false) return null;
             const hasS6 = s6.startDate || s6.deliveryDate || (milestones.length > 0 && milestones.some((m) => m.title || m.date || m.payment));
             if (!hasS6) return null;
             return (

@@ -4,6 +4,7 @@ import {
   FileText, Briefcase, DollarSign, Clock,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
   ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate, Image as ImageIcon, GripVertical,
+  Eye, EyeOff,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
@@ -706,6 +707,8 @@ export default function NewDocument() {
   });
   const lineItemsGrandTotal = lineItemTotals.reduce((s, r) => s + r.subTotal, 0);
   const [currency, setCurrency] = useState("GBP");
+  const [s5PublicVisible, setS5PublicVisible] = useState(true);
+  const [s6PublicVisible, setS6PublicVisible] = useState(true);
   const [versionHistory, setVersionHistory] = useState("");
   const [detailedNotes, setDetailedNotes] = useState("");
 
@@ -830,8 +833,8 @@ export default function NewDocument() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } }));
     markSaved(`sc2_${id}`); markClean(`sc2_${id}`);
   };
-  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); markClean("s5"); };
-  const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); markClean("s6"); };
+  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible }); markSaved("s5"); markClean("s5"); };
+  const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones, publicVisible: s6PublicVisible }); markSaved("s6"); markClean("s6"); };
 
   // ─── Drag-and-drop handlers ──────────────────────────────────────────────────
   const handleDragStart = (id: string, e: React.DragEvent) => {
@@ -894,9 +897,11 @@ export default function NewDocument() {
       if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
       if (s5.currency)         setCurrency(s5.currency as string);
       if (Array.isArray(s5.lineItems)) setLineItems(s5.lineItems as LineItem[]);
+      if (s5.publicVisible === false) setS5PublicVisible(false);
       if (s6.startDate)      setStartDate(s6.startDate as string);
       if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
       if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
+      if (s6.publicVisible === false) setS6PublicVisible(false);
       // Restore section order (or reconstruct from custom section IDs for older docs)
       if (Array.isArray(d.sectionOrder)) {
         setSectionOrder(d.sectionOrder as string[]);
@@ -943,9 +948,9 @@ export default function NewDocument() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { markDirty("s35"); }, [detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { markDirty("s5");  }, [paymentStructure, additionalCosts, currency, lineItems]);
+  useEffect(() => { markDirty("s5");  }, [paymentStructure, additionalCosts, currency, lineItems, s5PublicVisible]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { markDirty("s6");  }, [startDate, deliveryDate, milestones]);
+  useEffect(() => { markDirty("s6");  }, [startDate, deliveryDate, milestones, s6PublicVisible]);
 
   const milestonesTotal = milestones.reduce((sum, m) => sum + (parseFloat(m.payment.replace(/[^0-9.]/g, "")) || 0), 0);
   const formatCurrency = (n: number) => formatAmount(n, currency);
@@ -980,9 +985,11 @@ export default function NewDocument() {
     if (s5.additionalCosts)  setAdditionalCosts(s5.additionalCosts as string);
     if (s5.currency)         setCurrency(s5.currency as string);
     if (Array.isArray(s5.lineItems)) setLineItems(s5.lineItems as LineItem[]);
+    if (s5.publicVisible === false) setS5PublicVisible(false); else setS5PublicVisible(true);
     if (s6.startDate)      setStartDate(s6.startDate as string);
     if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
     if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
+    if (s6.publicVisible === false) setS6PublicVisible(false); else setS6PublicVisible(true);
   };
 
   // Save Document → addDoc → navigate to /documents
@@ -1003,8 +1010,8 @@ export default function NewDocument() {
       s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
       s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages },
       sCustom:  { sections: customSections },
-      s5:  { paymentStructure, additionalCosts, currency, lineItems },
-      s6:  { startDate, deliveryDate, milestones },
+      s5:  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible },
+      s6:  { startDate, deliveryDate, milestones, publicVisible: s6PublicVisible },
       sCustom2: { sections: customSections2 },
       sectionOrder,
     };
@@ -1338,7 +1345,30 @@ export default function NewDocument() {
 
         else if (sectionId === "s5") content = (
           <section>
-            <SectionHeader icon={DollarSign} title="5. Budget & Costing" subtitle="Estimated costs and payment arrangements — linked to milestone payments" />
+            <div className="flex items-start justify-between mb-6 gap-3">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+                  <DollarSign className="text-primary" size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">5. Budget &amp; Costing</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Estimated costs and payment arrangements — linked to milestone payments</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setS5PublicVisible(v => !v)}
+                title={s5PublicVisible ? "Visible in public view — click to hide" : "Hidden in public view — click to show"}
+                className={`flex-shrink-0 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors mt-1 ${
+                  s5PublicVisible
+                    ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                {s5PublicVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                {s5PublicVisible ? "Public" : "Hidden"}
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <FormField label="Currency" required>
                 <select
@@ -1501,7 +1531,30 @@ export default function NewDocument() {
 
         else if (sectionId === "s6") content = (
           <section>
-            <SectionHeader icon={Clock} title="6. Project Timeline" subtitle="Milestones, start date, and expected delivery" />
+            <div className="flex items-start justify-between mb-6 gap-3">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+                  <Clock className="text-primary" size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">6. Project Timeline</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Milestones, start date, and expected delivery</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setS6PublicVisible(v => !v)}
+                title={s6PublicVisible ? "Visible in public view — click to hide" : "Hidden in public view — click to show"}
+                className={`flex-shrink-0 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors mt-1 ${
+                  s6PublicVisible
+                    ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                {s6PublicVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                {s6PublicVisible ? "Public" : "Hidden"}
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <FormField label="Start Date" required>
                 <DateInput value={startDate} onChange={setStartDate} />
