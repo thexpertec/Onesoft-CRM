@@ -869,10 +869,10 @@ export default function NewDocument() {
 
   // ─── Section label helper ────────────────────────────────────────────────────
   const getSectionLabel = (id: string): { label: string; icon: React.ElementType } => {
-    if (id === 's2') return { label: 'Business Information', icon: Briefcase };
-    if (id === 's35') return { label: 'Detailed Notes', icon: FileText };
-    if (id === 's5') return { label: 'Budget & Costing', icon: DollarSign };
-    if (id === 's6') return { label: 'Project Timeline', icon: Clock };
+    if (id === 's2')  return { label: 'Business Information', icon: Briefcase };
+    if (id === 's35') return { label: detailedNotesTitle || 'Detailed Notes', icon: FileText };
+    if (id === 's5')  return { label: 'Budget & Costing', icon: DollarSign };
+    if (id === 's6')  return { label: 'Project Timeline', icon: Clock };
     if (id.startsWith('sc:')) {
       const sec = customSections.find((s: CustomSection) => s.id === id.slice(3));
       return { label: sec?.title || 'Custom Section', icon: PenLine };
@@ -1113,7 +1113,7 @@ export default function NewDocument() {
     <div className="flex items-start min-h-full">
 
       {/* ── Section Navigator Sidebar ─────────────────────────────────────── */}
-      <aside className="hidden xl:flex flex-col flex-shrink-0 w-52 sticky top-0 h-screen overflow-y-auto border-r border-border/50 bg-background/95 backdrop-blur-sm z-10">
+      <aside className="hidden xl:flex flex-col flex-shrink-0 w-52 sticky top-0 max-h-screen overflow-y-auto border-r border-border/50 bg-background/95 backdrop-blur-sm z-10">
         <div className="px-3 py-3 border-b border-border/50 flex-shrink-0">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Sections</span>
         </div>
@@ -1125,7 +1125,7 @@ export default function NewDocument() {
             className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors text-left ${activeSection === 's1' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
           >
             <FileText size={12} className="flex-shrink-0" />
-            <span className="truncate">Document Info</span>
+            <span className="truncate">Document Information</span>
           </button>
 
           {/* Reorderable sections */}
