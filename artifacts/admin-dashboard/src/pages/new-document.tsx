@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import {
   FileText, Briefcase, DollarSign, Clock,
   ChevronDown, Calendar, Check, Save, PenLine, Tag, CheckSquare,
-  ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate, Image as ImageIcon,
+  ArrowLeft, Lock, Plus, X, Trash2, LayoutTemplate, Image as ImageIcon, GripVertical,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
@@ -721,8 +721,6 @@ export default function NewDocument() {
   // Custom sections
   type CustomSection = { id: string; title: string; subtitle: string; content: string; images?: string[] };
   const [customSections, setCustomSections] = useState<CustomSection[]>([]);
-  const addCustomSection = () => setCustomSections(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "", images: [] }]);
-  const removeCustomSection = (id: string) => setCustomSections(prev => prev.filter(s => s.id !== id));
   const updateCustomSection = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
   const addCustomSectionImage = (id: string, url: string) =>
@@ -732,14 +730,43 @@ export default function NewDocument() {
 
   // Second set of custom sections — after financial sections
   const [customSections2, setCustomSections2] = useState<CustomSection[]>([]);
-  const addCustomSection2 = () => setCustomSections2(prev => [...prev, { id: Date.now().toString(), title: "Custom Section", subtitle: "", content: "", images: [] }]);
-  const removeCustomSection2 = (id: string) => setCustomSections2(prev => prev.filter(s => s.id !== id));
   const updateCustomSection2 = (id: string, field: keyof CustomSection, value: string) =>
     setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
   const addCustomSection2Image = (id: string, url: string) =>
     setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, images: [...(s.images ?? []), url] } : s));
   const removeCustomSection2Image = (id: string, i: number) =>
     setCustomSections2(prev => prev.map(s => s.id === id ? { ...s, images: (s.images ?? []).filter((_, idx) => idx !== i) } : s));
+
+  // ─── Section order (drag-and-drop) ──────────────────────────────────────────
+  const DEFAULT_SECTION_ORDER = ["s2", "s35", "s5", "s6"];
+  const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTION_ORDER);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const addCustomSection = () => {
+    const newId = Date.now().toString();
+    setCustomSections(prev => [...prev, { id: newId, title: "Custom Section", subtitle: "", content: "", images: [] }]);
+    setSectionOrder(prev => {
+      const s5Idx = prev.indexOf("s5");
+      const key = `sc:${newId}`;
+      if (s5Idx >= 0) { const n = [...prev]; n.splice(s5Idx, 0, key); return n; }
+      return [...prev, key];
+    });
+  };
+  const removeCustomSection = (id: string) => {
+    setCustomSections(prev => prev.filter(s => s.id !== id));
+    setSectionOrder(prev => prev.filter(k => k !== `sc:${id}`));
+  };
+
+  const addCustomSection2 = () => {
+    const newId = Date.now().toString();
+    setCustomSections2(prev => [...prev, { id: newId, title: "Custom Section", subtitle: "", content: "", images: [] }]);
+    setSectionOrder(prev => [...prev, `sc2:${newId}`]);
+  };
+  const removeCustomSection2 = (id: string) => {
+    setCustomSections2(prev => prev.filter(s => s.id !== id));
+    setSectionOrder(prev => prev.filter(k => k !== `sc2:${id}`));
+  };
 
   // Template picker (page-level)
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -806,6 +833,36 @@ export default function NewDocument() {
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems }); markSaved("s5"); markClean("s5"); };
   const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones }); markSaved("s6"); markClean("s6"); };
 
+  // ─── Drag-and-drop handlers ──────────────────────────────────────────────────
+  const handleDragStart = (id: string, e: React.DragEvent) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragOver = (id: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverId !== id) setDragOverId(id);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDragOverId(null);
+  };
+  const handleDrop = (targetId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverId(null);
+    if (!dragId || dragId === targetId) { setDragId(null); return; }
+    setSectionOrder(prev => {
+      const next = [...prev];
+      const from = next.indexOf(dragId!);
+      const to   = next.indexOf(targetId);
+      if (from < 0 || to < 0) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, dragId!);
+      return next;
+    });
+    setDragId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
   // Load data on mount — edit mode loads from the saved document, new mode from draft
   useEffect(() => {
     const loadSections = (d: Record<string, unknown>) => {
@@ -840,6 +897,19 @@ export default function NewDocument() {
       if (s6.startDate)      setStartDate(s6.startDate as string);
       if (s6.deliveryDate)   setDeliveryDate(s6.deliveryDate as string);
       if (s6.milestones)     setMilestones(s6.milestones as typeof milestones);
+      // Restore section order (or reconstruct from custom section IDs for older docs)
+      if (Array.isArray(d.sectionOrder)) {
+        setSectionOrder(d.sectionOrder as string[]);
+      } else {
+        // Older docs: build order from default + any custom sections that exist
+        const sc1Keys = Array.isArray(sCustom.sections)
+          ? (sCustom.sections as CustomSection[]).map((s: CustomSection) => `sc:${s.id}`)
+          : [];
+        const sc2Keys = Array.isArray(sCustom2.sections)
+          ? (sCustom2.sections as CustomSection[]).map((s: CustomSection) => `sc2:${s.id}`)
+          : [];
+        setSectionOrder(["s2", "s35", ...sc1Keys, "s5", "s6", ...sc2Keys]);
+      }
     };
 
     try {
@@ -936,6 +1006,7 @@ export default function NewDocument() {
       s5:  { paymentStructure, additionalCosts, currency, lineItems },
       s6:  { startDate, deliveryDate, milestones },
       sCustom2: { sections: customSections2 },
+      sectionOrder,
     };
 
     const docPayload = {
@@ -1131,509 +1202,512 @@ export default function NewDocument() {
 
       <SectionDivider />
 
-      {/* Section 2: Business Information */}
-      <section>
-        <SectionHeader icon={Briefcase} title="2. Business Information" subtitle="Understanding the client's business context and goals" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <FormField label="Business Type" required hint="Selecting a type refines the Key Products / Services list below">
-            <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={handleBusinessTypeChange} placeholder="Select business type" />
-          </FormField>
-          <FormField label="Target Audience" hint="Age group, profession, and geographical location"
-            templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.targetAudience as string)} onSelect={setTargetAudience} />}>
-            <TextInput value={targetAudience} onChange={setTargetAudience} placeholder="e.g. Professionals aged 25-45 in North America..." />
-          </FormField>
-          <div className="sm:col-span-2">
-            <FormField
-              label="Key Products / Services"
-              required
-              hint={businessType ? `Showing options relevant to "${businessType}" — search or select multiple` : "Select a Business Type above to see relevant options, or search freely"}
-            >
-              <MultiSelectFeatures
-                selected={keyProducts}
-                onChange={setKeyProducts}
-                options={businessType ? getProductOptions(businessType) : COMBINED_OPTIONS}
-                placeholder={businessType ? `Search ${businessType} products / services...` : "Select a business type first, or search all options..."}
-              />
-            </FormField>
-          </div>
-          <div className="sm:col-span-2">
-            <FormField label="Business Goals" hint="Primary goals the client aims to achieve"
-              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.businessGoals as string)} onSelect={setBusinessGoals} />}>
-              <TextInput value={businessGoals} onChange={setBusinessGoals} rows={3} placeholder="e.g. Increase monthly active users by 30%, streamline operations..." />
-            </FormField>
-          </div>
-          <div className="sm:col-span-2">
-            <FormField label="Key Challenges" hint="Major problems or challenges the client currently faces"
-              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.keyChallenges as string)} onSelect={setKeyChallenges} />}>
-              <TextInput value={keyChallenges} onChange={setKeyChallenges} rows={3} placeholder="e.g. Manual processes, customer acquisition, data silos..." />
-            </FormField>
-          </div>
-          <div className="sm:col-span-2">
-            <FormField label="Current Software or Systems Used" hint="CRM, ERP, inventory tools, or other existing platforms"
-              templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.currentSystems as string)} onSelect={setCurrentSystems} />}>
-              <TextInput value={currentSystems} onChange={setCurrentSystems} placeholder="e.g. Salesforce CRM, QuickBooks, legacy inventory system..." />
-            </FormField>
-          </div>
-        </div>
-        <SaveButton sectionKey="s2" saved={!!savedSections.s2} dirty={!!dirtySections.s2} onSave={saveS2} />
-      </section>
+      {/* ── Reorderable sections — grab the handle to drag & reorder ─────────── */}
+      {sectionOrder.map(sectionId => {
+        const isDragging = dragId === sectionId;
+        const isDragOver = dragOverId === sectionId && dragId !== sectionId;
+        let content: React.ReactNode = null;
 
-      <SectionDivider />
-
-      {/* Section 3.5: Detailed Requirements Notes (editable header) */}
-      <section>
-        <div className="flex items-start justify-between gap-3 mb-6">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
-                <PenLine className="text-primary" size={18} />
+        if (sectionId === "s2") content = (
+          <section>
+            <SectionHeader icon={Briefcase} title="2. Business Information" subtitle="Understanding the client's business context and goals" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormField label="Business Type" required hint="Selecting a type refines the Key Products / Services list below">
+                <SelectInput options={BUSINESS_TYPES} value={businessType} onChange={handleBusinessTypeChange} placeholder="Select business type" />
+              </FormField>
+              <FormField label="Target Audience" hint="Age group, profession, and geographical location"
+                templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.targetAudience as string)} onSelect={setTargetAudience} />}>
+                <TextInput value={targetAudience} onChange={setTargetAudience} placeholder="e.g. Professionals aged 25-45 in North America..." />
+              </FormField>
+              <div className="sm:col-span-2">
+                <FormField
+                  label="Key Products / Services"
+                  required
+                  hint={businessType ? `Showing options relevant to "${businessType}" — search or select multiple` : "Select a Business Type above to see relevant options, or search freely"}
+                >
+                  <MultiSelectFeatures
+                    selected={keyProducts}
+                    onChange={setKeyProducts}
+                    options={businessType ? getProductOptions(businessType) : COMBINED_OPTIONS}
+                    placeholder={businessType ? `Search ${businessType} products / services...` : "Select a business type first, or search all options..."}
+                  />
+                </FormField>
               </div>
+              <div className="sm:col-span-2">
+                <FormField label="Business Goals" hint="Primary goals the client aims to achieve"
+                  templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.businessGoals as string)} onSelect={setBusinessGoals} />}>
+                  <TextInput value={businessGoals} onChange={setBusinessGoals} rows={3} placeholder="e.g. Increase monthly active users by 30%, streamline operations..." />
+                </FormField>
+              </div>
+              <div className="sm:col-span-2">
+                <FormField label="Key Challenges" hint="Major problems or challenges the client currently faces"
+                  templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.keyChallenges as string)} onSelect={setKeyChallenges} />}>
+                  <TextInput value={keyChallenges} onChange={setKeyChallenges} rows={3} placeholder="e.g. Manual processes, customer acquisition, data silos..." />
+                </FormField>
+              </div>
+              <div className="sm:col-span-2">
+                <FormField label="Current Software or Systems Used" hint="CRM, ERP, inventory tools, or other existing platforms"
+                  templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s2?.currentSystems as string)} onSelect={setCurrentSystems} />}>
+                  <TextInput value={currentSystems} onChange={setCurrentSystems} placeholder="e.g. Salesforce CRM, QuickBooks, legacy inventory system..." />
+                </FormField>
+              </div>
+            </div>
+            <SaveButton sectionKey="s2" saved={!!savedSections.s2} dirty={!!dirtySections.s2} onSave={saveS2} />
+          </section>
+        );
+
+        else if (sectionId === "s35") content = (
+          <section>
+            <div className="flex items-start justify-between gap-3 mb-6">
               <div className="flex-1 min-w-0">
-                <input
-                  value={detailedNotesTitle}
-                  onChange={e => setDetailedNotesTitle(e.target.value)}
-                  placeholder="Section title…"
-                  className="block w-full text-base font-semibold text-foreground bg-transparent border-b border-transparent hover:border-border focus:border-primary/50 focus:outline-none pb-0.5 transition-colors"
-                />
-                <input
-                  value={detailedNotesSubtitle}
-                  onChange={e => setDetailedNotesSubtitle(e.target.value)}
-                  placeholder="Section description…"
-                  className="block w-full text-xs text-muted-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary/30 focus:outline-none mt-1 pb-0.5 transition-colors"
-                />
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mt-0.5">
+                    <PenLine className="text-primary" size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <input
+                      value={detailedNotesTitle}
+                      onChange={e => setDetailedNotesTitle(e.target.value)}
+                      placeholder="Section title…"
+                      className="block w-full text-base font-semibold text-foreground bg-transparent border-b border-transparent hover:border-border focus:border-primary/50 focus:outline-none pb-0.5 transition-colors"
+                    />
+                    <input
+                      value={detailedNotesSubtitle}
+                      onChange={e => setDetailedNotesSubtitle(e.target.value)}
+                      placeholder="Section description…"
+                      className="block w-full text-xs text-muted-foreground bg-transparent border-b border-transparent hover:border-border/60 focus:border-primary/30 focus:outline-none mt-1 pb-0.5 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+              <RichTextTplPicker onChange={setDetailedNotes} />
+            </div>
+            <RichTextEditor
+              value={detailedNotes}
+              onChange={setDetailedNotes}
+              placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
+            />
+            <ImageAttachment
+              images={detailedNotesImages}
+              onAdd={addDetailedNotesImage}
+              onRemove={removeDetailedNotesImage}
+            />
+            <SaveButton sectionKey="s35" saved={!!savedSections.s35} dirty={!!dirtySections.s35} onSave={saveS35} />
+          </section>
+        );
+
+        else if (sectionId.startsWith("sc:")) {
+          const secId = sectionId.slice(3);
+          const sec = customSections.find(s => s.id === secId);
+          if (sec) content = (
+            <section>
+              <div className="flex items-start gap-2 mb-0">
+                <div className="flex-1">
+                  <EditableSectionHeader
+                    icon={FileText}
+                    title={sec.title}
+                    onTitleChange={v => updateCustomSection(sec.id, "title", v)}
+                    subtitle={sec.subtitle}
+                    onSubtitleChange={v => updateCustomSection(sec.id, "subtitle", v)}
+                  />
+                </div>
+                <RichTextTplPicker onChange={v => updateCustomSection(sec.id, "content", v)} />
+                <button
+                  type="button"
+                  onClick={() => removeCustomSection(sec.id)}
+                  className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+                  title="Remove this section"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <RichTextEditor
+                value={sec.content}
+                onChange={v => updateCustomSection(sec.id, "content", v)}
+                placeholder="Write the content for this section…"
+              />
+              <ImageAttachment
+                images={sec.images ?? []}
+                onAdd={url => addCustomSectionImage(sec.id, url)}
+                onRemove={i => removeCustomSectionImage(sec.id, i)}
+              />
+              <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} dirty={!!dirtySections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
+            </section>
+          );
+        }
+
+        else if (sectionId === "s5") content = (
+          <section>
+            <SectionHeader icon={DollarSign} title="5. Budget & Costing" subtitle="Estimated costs and payment arrangements — linked to milestone payments" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <FormField label="Currency" required>
+                <select
+                  value={currency}
+                  onChange={e => setCurrency(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Payment Structure" required>
+                <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
+              </FormField>
+              <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically"
+                templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s5?.additionalCosts as string)} onSelect={setAdditionalCosts} />}>
+                <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 90000" />
+              </FormField>
+
+              <div className="sm:col-span-3">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Items / Services</span>
+                  <button
+                    type="button"
+                    onClick={addLineItem}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/5 transition-colors"
+                  >
+                    <Plus size={12} /> Add Item
+                  </button>
+                </div>
+                <div className="hidden sm:grid grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 mb-1 px-1">
+                  {["Item / Service","Qty","Per Unit","Total","Discount","Sub Total",""].map(h => (
+                    <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
+                  ))}
+                </div>
+                <div className="space-y-1.5">
+                  {lineItems.map((row, idx) => {
+                    const { totalCost, subTotal } = lineItemTotals[idx];
+                    return (
+                      <div key={row.id} className="border border-border/50 rounded-lg overflow-hidden bg-background">
+                        <div className="grid grid-cols-1 sm:grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 items-center px-2 py-1.5">
+                          <input
+                            value={row.item}
+                            onChange={e => updateLineItem(row.id, "item", e.target.value)}
+                            placeholder="e.g. Web Design"
+                            className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <input
+                            type="number" min="0" value={row.qty}
+                            onChange={e => updateLineItem(row.id, "qty", e.target.value)}
+                            placeholder="1"
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <input
+                            type="number" min="0" step="0.01" value={row.perUnit}
+                            onChange={e => updateLineItem(row.id, "perUnit", e.target.value)}
+                            placeholder="0.00"
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <div className="h-8 flex items-center justify-end px-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-sm font-medium text-blue-700 dark:text-blue-300 tabular-nums">
+                            {totalCost > 0 ? formatCurrency(totalCost) : <span className="text-muted-foreground/40">—</span>}
+                          </div>
+                          <input
+                            type="number" min="0" step="0.01" value={row.discount}
+                            onChange={e => updateLineItem(row.id, "discount", e.target.value)}
+                            placeholder="0.00"
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
+                            {subTotal > 0 ? formatCurrency(subTotal) : <span className="text-muted-foreground/40">—</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeLineItem(row.id)}
+                            className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="px-2 pb-2 border-t border-border/30 pt-1.5 bg-muted/20">
+                          <input
+                            value={row.description}
+                            onChange={e => updateLineItem(row.id, "description", e.target.value)}
+                            placeholder="Description…"
+                            className="h-7 w-full rounded-md border border-input bg-background px-2.5 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-col sm:flex-row sm:justify-end gap-1.5 px-1">
+                  {lineItems.some(r => parseFloat(r.perUnit) > 0) && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground">Total (ex. discount):</span>
+                      <span className="font-medium tabular-nums">{formatCurrency(lineItemTotals.reduce((s, r) => s + r.totalCost, 0))}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 text-sm sm:ml-6 border-t sm:border-t-0 sm:border-l border-border/60 pt-1.5 sm:pt-0 sm:pl-6">
+                    <span className="font-semibold text-foreground">Grand Total:</span>
+                    <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="sm:col-span-3 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-primary">Budget Breakdown</span>
+                  <span className="ml-auto text-xs text-muted-foreground">Linked to milestone payments below</span>
+                </div>
+                {lineItemsGrandTotal > 0 && (
+                  <div className="grid grid-cols-3 gap-3 pb-3 border-b border-primary/15">
+                    <div className="text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Items Grand Total</p>
+                      <p className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</p>
+                    </div>
+                    <div className="text-center border-x border-primary/15">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Milestones Total</p>
+                      <p className={`text-base font-bold tabular-nums ${milestonesTotal > lineItemsGrandTotal ? "text-destructive" : "text-foreground"}`}>
+                        {formatCurrency(milestonesTotal)}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Remaining</p>
+                      <p className={`text-base font-bold tabular-nums ${lineItemsGrandTotal - milestonesTotal < 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
+                        {formatCurrency(Math.max(0, lineItemsGrandTotal - milestonesTotal))}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {milestones.some((m) => m.payment.trim() !== "") ? (
+                  <div className="space-y-1.5">
+                    {milestones.filter((m) => m.payment.trim() !== "").map((m, i) => {
+                      const amt = parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0;
+                      return (
+                        <div key={m.id} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <span className="inline-flex w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold items-center justify-center flex-shrink-0">{i + 1}</span>
+                            {m.title || `Milestone ${i + 1}`}
+                          </span>
+                          <span className="font-medium text-foreground tabular-nums">{formatCurrency(amt)}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-primary/20 pt-2 mt-2 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-foreground">Total Milestone Budget</span>
+                      <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No milestone payments entered yet. Add milestones with payment amounts in the Timeline section below — they will appear here automatically.</p>
+                )}
               </div>
             </div>
-          </div>
+            <SaveButton sectionKey="s5" saved={!!savedSections.s5} dirty={!!dirtySections.s5} onSave={saveS5} />
+          </section>
+        );
 
-          {/* Per-section template loader — sources from Settings → Legal Documents */}
-          <RichTextTplPicker onChange={setDetailedNotes} />
-        </div>
-
-        <RichTextEditor
-          value={detailedNotes}
-          onChange={setDetailedNotes}
-          placeholder="Document detailed client requirements, meeting notes, feature specifications, user stories, or any additional context here. Supports rich formatting — headings, lists, bold, links, and more."
-        />
-        <ImageAttachment
-          images={detailedNotesImages}
-          onAdd={addDetailedNotesImage}
-          onRemove={removeDetailedNotesImage}
-        />
-        <SaveButton sectionKey="s35" saved={!!savedSections.s35} dirty={!!dirtySections.s35} onSave={saveS35} />
-      </section>
-
-      <SectionDivider />
-
-      {/* Custom sections */}
-      {customSections.map(sec => (
-        <section key={sec.id}>
-          <div className="flex items-start gap-2 mb-0">
-            <div className="flex-1">
-              <EditableSectionHeader
-                icon={FileText}
-                title={sec.title}
-                onTitleChange={v => updateCustomSection(sec.id, "title", v)}
-                subtitle={sec.subtitle}
-                onSubtitleChange={v => updateCustomSection(sec.id, "subtitle", v)}
-              />
+        else if (sectionId === "s6") content = (
+          <section>
+            <SectionHeader icon={Clock} title="6. Project Timeline" subtitle="Milestones, start date, and expected delivery" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormField label="Start Date" required>
+                <DateInput value={startDate} onChange={setStartDate} />
+              </FormField>
+              <FormField label="Expected Delivery Date" required>
+                <DateInput value={deliveryDate} onChange={setDeliveryDate} />
+              </FormField>
+              <div className="sm:col-span-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <FieldLabel label="Milestones" />
+                    <button type="button" onClick={addMilestone}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 transition-colors">
+                      <span className="text-base leading-none">+</span>Add Milestone
+                    </button>
+                  </div>
+                  <div className="space-y-2.5">
+                    {milestones.map((m, index) => (
+                      <div key={m.id} className="rounded-xl border border-border bg-background overflow-hidden">
+                        <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
+                          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={m.title}
+                            onChange={(e) => updateMilestone(m.id, "title", e.target.value)}
+                            placeholder={`e.g. Week ${index + 1}: Design & Planning`}
+                            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                          />
+                          <button type="button" onClick={() => removeMilestone(m.id)} disabled={milestones.length === 1}
+                            title="Remove milestone"
+                            className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 pb-3">
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Due Date</p>
+                            <input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, "date", e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">
+                              Payment
+                              {lineItemsGrandTotal > 0 && (
+                                <span className="ml-1 text-muted-foreground/60 normal-case">
+                                  (max {formatCurrency(Math.max(0, lineItemsGrandTotal - milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0)))})
+                                </span>
+                              )}
+                            </p>
+                            <input
+                              type="number" min="0" step="0.01" value={m.payment}
+                              onChange={(e) => {
+                                const otherTotal = milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0);
+                                const maxVal = lineItemsGrandTotal > 0 ? Math.max(0, lineItemsGrandTotal - otherTotal) : Infinity;
+                                const raw = parseFloat(e.target.value) || 0;
+                                updateMilestone(m.id, "payment", String(Math.min(raw, maxVal)));
+                              }}
+                              placeholder="0.00"
+                              className={`w-full px-3 py-2 rounded-lg border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${milestonesTotal > lineItemsGrandTotal && lineItemsGrandTotal > 0 ? "border-destructive" : "border-border"}`}
+                            />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment Status</p>
+                            <div className="relative">
+                              <select value={m.paymentStatus} onChange={(e) => updateMilestone(m.id, "paymentStatus", e.target.value)}
+                                className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
+                                style={{ color: m.paymentStatus === "Paid" ? "#16a34a" : m.paymentStatus === "Overdue" ? "#dc2626" : m.paymentStatus === "Partial" ? "#d97706" : undefined }}>
+                                <option value="">— Select —</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Partial">Partial</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Overdue">Overdue</option>
+                              </select>
+                              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Task Status</p>
+                            <div className="relative">
+                              <select value={m.taskStatus} onChange={(e) => updateMilestone(m.id, "taskStatus", e.target.value)}
+                                className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
+                                style={{ color: m.taskStatus === "Completed" ? "#16a34a" : m.taskStatus === "Cancelled" ? "#dc2626" : m.taskStatus === "In Progress" ? "#2563eb" : m.taskStatus === "On Hold" ? "#d97706" : undefined }}>
+                                <option value="">— Select —</option>
+                                <option value="Not Started">Not Started</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                                <option value="On Hold">On Hold</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {milestonesTotal > 0 && (
+                    <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/10 border border-primary/20 px-4 py-2.5">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Total across {milestones.filter((m) => m.payment.trim() !== "").length} milestone{milestones.filter((m) => m.payment.trim() !== "").length !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-2">Key phases and their expected completion dates — payments auto-update the Budget section above</p>
+                </div>
+              </div>
             </div>
-            <RichTextTplPicker onChange={v => updateCustomSection(sec.id, "content", v)} />
-            <button
-              type="button"
-              onClick={() => removeCustomSection(sec.id)}
-              className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
-              title="Remove this section"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-          <RichTextEditor
-            value={sec.content}
-            onChange={v => updateCustomSection(sec.id, "content", v)}
-            placeholder="Write the content for this section…"
-          />
-          <ImageAttachment
-            images={sec.images ?? []}
-            onAdd={url => addCustomSectionImage(sec.id, url)}
-            onRemove={i => removeCustomSectionImage(sec.id, i)}
-          />
-          <SaveButton sectionKey={`sc_${sec.id}`} saved={!!savedSections[`sc_${sec.id}`]} dirty={!!dirtySections[`sc_${sec.id}`]} onSave={() => saveCustomSection(sec.id)} />
-          <SectionDivider />
-        </section>
-      ))}
+            <SaveButton sectionKey="s6" saved={!!savedSections.s6} dirty={!!dirtySections.s6} onSave={saveS6} />
+          </section>
+        );
 
-      {/* Add custom section button */}
-      <div className="flex items-center gap-3 py-2">
+        else if (sectionId.startsWith("sc2:")) {
+          const secId = sectionId.slice(4);
+          const sec = customSections2.find(s => s.id === secId);
+          if (sec) content = (
+            <section>
+              <div className="flex items-start gap-2 mb-0">
+                <div className="flex-1">
+                  <EditableSectionHeader
+                    icon={FileText}
+                    title={sec.title}
+                    onTitleChange={v => updateCustomSection2(sec.id, "title", v)}
+                    subtitle={sec.subtitle}
+                    onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
+                  />
+                </div>
+                <RichTextTplPicker onChange={v => updateCustomSection2(sec.id, "content", v)} />
+                <button
+                  type="button"
+                  onClick={() => removeCustomSection2(sec.id)}
+                  className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+                  title="Remove this section"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <RichTextEditor
+                value={sec.content}
+                onChange={v => updateCustomSection2(sec.id, "content", v)}
+                placeholder="Write the content for this section…"
+              />
+              <ImageAttachment
+                images={sec.images ?? []}
+                onAdd={url => addCustomSection2Image(sec.id, url)}
+                onRemove={i => removeCustomSection2Image(sec.id, i)}
+              />
+              <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} dirty={!!dirtySections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
+            </section>
+          );
+        }
+
+        if (!content) return null;
+        return (
+          <div
+            key={sectionId}
+            onDragOver={e => handleDragOver(sectionId, e)}
+            onDragLeave={handleDragLeave}
+            onDrop={e => handleDrop(sectionId, e)}
+            className={`group relative transition-all duration-150 ${isDragging ? "opacity-40" : ""} ${isDragOver ? "ring-2 ring-primary/40 ring-offset-1 rounded-xl bg-primary/[0.02]" : ""}`}
+          >
+            {/* Drag handle — visible on hover */}
+            <div
+              draggable
+              onDragStart={e => handleDragStart(sectionId, e)}
+              onDragEnd={handleDragEnd}
+              className="flex items-center justify-center gap-1.5 h-7 mb-1.5 rounded-lg text-muted-foreground/40 hover:text-muted-foreground/70 hover:bg-muted/60 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity select-none"
+              title="Drag to reorder this section"
+            >
+              <GripVertical size={14} />
+              <span className="text-[11px] font-medium uppercase tracking-wide">drag to reorder</span>
+              <GripVertical size={14} />
+            </div>
+            {content}
+            <SectionDivider />
+          </div>
+        );
+      })}
+
+      {/* Add custom section buttons */}
+      <div className="flex flex-col sm:flex-row gap-2.5 py-2">
         <button
           type="button"
           onClick={addCustomSection}
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary border border-dashed border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 transition-colors w-full justify-center"
+          className="flex-1 inline-flex items-center justify-center gap-2 text-sm font-medium text-primary border border-dashed border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 transition-colors"
         >
           <Plus size={15} />
           Add custom section
+        </button>
+        <button
+          type="button"
+          onClick={addCustomSection2}
+          className="flex-1 inline-flex items-center justify-center gap-2 text-sm font-medium text-muted-foreground border border-dashed border-border rounded-lg px-4 py-2.5 hover:bg-muted/60 hover:text-foreground transition-colors"
+        >
+          <Plus size={15} />
+          Add custom section (alt)
         </button>
       </div>
 
       <SectionDivider />
 
-      {/* Section 5: Budget & Costing */}
-      <section>
-        <SectionHeader icon={DollarSign} title="5. Budget & Costing" subtitle="Estimated costs and payment arrangements — linked to milestone payments" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <FormField label="Currency" required>
-            <select
-              value={currency}
-              onChange={e => setCurrency(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            >
-              {CURRENCIES.map(c => (
-                <option key={c.code} value={c.code}>{c.label}</option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Payment Structure" required>
-            <SelectInput options={PAYMENT_STRUCTURES} value={paymentStructure} onChange={setPaymentStructure} placeholder="Select payment structure" />
-          </FormField>
-          <FormField label="Actual Cost" hint="Numeric value (e.g. 90000) — the currency above will be applied automatically"
-            templateAction={<FieldTplPicker docs={docs} extract={d => (((d.sections ?? {}) as Record<string,Record<string,unknown>>).s5?.additionalCosts as string)} onSelect={setAdditionalCosts} />}>
-            <TextInput value={additionalCosts} onChange={setAdditionalCosts} placeholder="e.g. 90000" />
-          </FormField>
-
-          {/* Line Items Table */}
-          <div className="sm:col-span-3">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Items / Services</span>
-              <button
-                type="button"
-                onClick={addLineItem}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/5 transition-colors"
-              >
-                <Plus size={12} /> Add Item
-              </button>
-            </div>
-
-            {/* Table header — Row 1 columns only */}
-            <div className="hidden sm:grid grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 mb-1 px-1">
-              {["Item / Service","Qty","Per Unit","Total","Discount","Sub Total",""].map(h => (
-                <span key={h} className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{h}</span>
-              ))}
-            </div>
-
-            <div className="space-y-1.5">
-              {lineItems.map((row, idx) => {
-                const { totalCost, subTotal } = lineItemTotals[idx];
-                return (
-                  <div key={row.id} className="border border-border/50 rounded-lg overflow-hidden bg-background">
-                    {/* Row 1: pricing */}
-                    <div className="grid grid-cols-1 sm:grid-cols-[2fr_55px_80px_90px_80px_90px_32px] gap-2 items-center px-2 py-1.5">
-                      <input
-                        value={row.item}
-                        onChange={e => updateLineItem(row.id, "item", e.target.value)}
-                        placeholder="e.g. Web Design"
-                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={row.qty}
-                        onChange={e => updateLineItem(row.id, "qty", e.target.value)}
-                        placeholder="1"
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row.perUnit}
-                        onChange={e => updateLineItem(row.id, "perUnit", e.target.value)}
-                        placeholder="0.00"
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                      {/* Total = Qty × Per Unit (read-only) */}
-                      <div className="h-8 flex items-center justify-end px-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-sm font-medium text-blue-700 dark:text-blue-300 tabular-nums">
-                        {totalCost > 0 ? formatCurrency(totalCost) : <span className="text-muted-foreground/40">—</span>}
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row.discount}
-                        onChange={e => updateLineItem(row.id, "discount", e.target.value)}
-                        placeholder="0.00"
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                      {/* Sub Total = Total − Discount (read-only) */}
-                      <div className="h-8 flex items-center justify-end px-2 rounded-md bg-muted/60 text-sm font-semibold text-foreground tabular-nums">
-                        {subTotal > 0 ? formatCurrency(subTotal) : <span className="text-muted-foreground/40">—</span>}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeLineItem(row.id)}
-                        className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                    {/* Row 2: description */}
-                    <div className="px-2 pb-2 border-t border-border/30 pt-1.5 bg-muted/20">
-                      <input
-                        value={row.description}
-                        onChange={e => updateLineItem(row.id, "description", e.target.value)}
-                        placeholder="Description…"
-                        className="h-7 w-full rounded-md border border-input bg-background px-2.5 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Totals row */}
-            <div className="mt-3 flex flex-col sm:flex-row sm:justify-end gap-1.5 px-1">
-              {lineItems.some(r => parseFloat(r.perUnit) > 0) && (
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-foreground">Total (ex. discount):</span>
-                  <span className="font-medium tabular-nums">{formatCurrency(lineItemTotals.reduce((s, r) => s + r.totalCost, 0))}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-3 text-sm sm:ml-6 border-t sm:border-t-0 sm:border-l border-border/60 pt-1.5 sm:pt-0 sm:pl-6">
-                <span className="font-semibold text-foreground">Grand Total:</span>
-                <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="sm:col-span-3 rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-primary" />
-              <span className="text-xs font-semibold uppercase tracking-wide text-primary">Budget Breakdown</span>
-              <span className="ml-auto text-xs text-muted-foreground">Linked to milestone payments below</span>
-            </div>
-
-            {/* Alignment row: Items Grand Total vs Milestone Total vs Remaining */}
-            {lineItemsGrandTotal > 0 && (
-              <div className="grid grid-cols-3 gap-3 pb-3 border-b border-primary/15">
-                <div className="text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Items Grand Total</p>
-                  <p className="text-base font-bold text-primary tabular-nums">{formatCurrency(lineItemsGrandTotal)}</p>
-                </div>
-                <div className="text-center border-x border-primary/15">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Milestones Total</p>
-                  <p className={`text-base font-bold tabular-nums ${milestonesTotal > lineItemsGrandTotal ? "text-destructive" : "text-foreground"}`}>
-                    {formatCurrency(milestonesTotal)}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Remaining</p>
-                  <p className={`text-base font-bold tabular-nums ${lineItemsGrandTotal - milestonesTotal < 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
-                    {formatCurrency(Math.max(0, lineItemsGrandTotal - milestonesTotal))}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {milestones.some((m) => m.payment.trim() !== "") ? (
-              <div className="space-y-1.5">
-                {milestones.filter((m) => m.payment.trim() !== "").map((m, i) => {
-                  const amt = parseFloat(m.payment.replace(/[£$€,\s]/g, "")) || 0;
-                  return (
-                    <div key={m.id} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <span className="inline-flex w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold items-center justify-center flex-shrink-0">{i + 1}</span>
-                        {m.title || `Milestone ${i + 1}`}
-                      </span>
-                      <span className="font-medium text-foreground tabular-nums">{formatCurrency(amt)}</span>
-                    </div>
-                  );
-                })}
-                <div className="border-t border-primary/20 pt-2 mt-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-foreground">Total Milestone Budget</span>
-                  <span className="text-base font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground italic">No milestone payments entered yet. Add milestones with payment amounts in the Timeline section below — they will appear here automatically.</p>
-            )}
-          </div>
-        </div>
-        <SaveButton sectionKey="s5" saved={!!savedSections.s5} dirty={!!dirtySections.s5} onSave={saveS5} />
-      </section>
-
-      <SectionDivider />
-
-      {/* Section 6: Project Timeline */}
-      <section>
-        <SectionHeader icon={Clock} title="6. Project Timeline" subtitle="Milestones, start date, and expected delivery" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <FormField label="Start Date" required>
-            <DateInput value={startDate} onChange={setStartDate} />
-          </FormField>
-          <FormField label="Expected Delivery Date" required>
-            <DateInput value={deliveryDate} onChange={setDeliveryDate} />
-          </FormField>
-          <div className="sm:col-span-2">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <FieldLabel label="Milestones" />
-                <button type="button" onClick={addMilestone}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 transition-colors">
-                  <span className="text-base leading-none">+</span>Add Milestone
-                </button>
-              </div>
-              <div className="space-y-2.5">
-                {milestones.map((m, index) => (
-                  <div key={m.id} className="rounded-xl border border-border bg-background overflow-hidden">
-                    <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-xs font-semibold text-primary">{index + 1}</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={m.title}
-                        onChange={(e) => updateMilestone(m.id, "title", e.target.value)}
-                        placeholder={`e.g. Week ${index + 1}: Design & Planning`}
-                        className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                      />
-                      <button type="button" onClick={() => removeMilestone(m.id)} disabled={milestones.length === 1}
-                        title="Remove milestone"
-                        className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-3 pb-3">
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Due Date</p>
-                        <input type="date" value={m.date} onChange={(e) => updateMilestone(m.id, "date", e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">
-                          Payment
-                          {lineItemsGrandTotal > 0 && (
-                            <span className="ml-1 text-muted-foreground/60 normal-case">
-                              (max {formatCurrency(Math.max(0, lineItemsGrandTotal - milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0)))})
-                            </span>
-                          )}
-                        </p>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={m.payment}
-                          onChange={(e) => {
-                            const otherTotal = milestones.filter(x => x.id !== m.id).reduce((s, x) => s + (parseFloat(x.payment.replace(/[^0-9.]/g, "")) || 0), 0);
-                            const maxVal = lineItemsGrandTotal > 0 ? Math.max(0, lineItemsGrandTotal - otherTotal) : Infinity;
-                            const raw = parseFloat(e.target.value) || 0;
-                            updateMilestone(m.id, "payment", String(Math.min(raw, maxVal)));
-                          }}
-                          placeholder="0.00"
-                          className={`w-full px-3 py-2 rounded-lg border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${milestonesTotal > lineItemsGrandTotal && lineItemsGrandTotal > 0 ? "border-destructive" : "border-border"}`}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Payment Status</p>
-                        <div className="relative">
-                          <select value={m.paymentStatus} onChange={(e) => updateMilestone(m.id, "paymentStatus", e.target.value)}
-                            className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
-                            style={{ color: m.paymentStatus === "Paid" ? "#16a34a" : m.paymentStatus === "Overdue" ? "#dc2626" : m.paymentStatus === "Partial" ? "#d97706" : undefined }}>
-                            <option value="">— Select —</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Partial">Partial</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Overdue">Overdue</option>
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 ml-0.5">Task Status</p>
-                        <div className="relative">
-                          <select value={m.taskStatus} onChange={(e) => updateMilestone(m.id, "taskStatus", e.target.value)}
-                            className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-7"
-                            style={{ color: m.taskStatus === "Completed" ? "#16a34a" : m.taskStatus === "Cancelled" ? "#dc2626" : m.taskStatus === "In Progress" ? "#2563eb" : m.taskStatus === "On Hold" ? "#d97706" : undefined }}>
-                            <option value="">— Select —</option>
-                            <option value="Not Started">Not Started</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
-                            <option value="On Hold">On Hold</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {milestonesTotal > 0 && (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/10 border border-primary/20 px-4 py-2.5">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Total across {milestones.filter((m) => m.payment.trim() !== "").length} milestone{milestones.filter((m) => m.payment.trim() !== "").length !== 1 ? "s" : ""}
-                  </span>
-                  <span className="text-sm font-bold text-primary tabular-nums">{formatCurrency(milestonesTotal)}</span>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground mt-2">Key phases and their expected completion dates — payments auto-update the Budget section above</p>
-            </div>
-          </div>
-        </div>
-        <SaveButton sectionKey="s6" saved={!!savedSections.s6} dirty={!!dirtySections.s6} onSave={saveS6} />
-      </section>
-
-      <SectionDivider />
-
-      {/* Custom sections after financial sections */}
-      {customSections2.map(sec => (
-        <section key={sec.id}>
-          <div className="flex items-start gap-2 mb-0">
-            <div className="flex-1">
-              <EditableSectionHeader
-                icon={FileText}
-                title={sec.title}
-                onTitleChange={v => updateCustomSection2(sec.id, "title", v)}
-                subtitle={sec.subtitle}
-                onSubtitleChange={v => updateCustomSection2(sec.id, "subtitle", v)}
-              />
-            </div>
-            <RichTextTplPicker onChange={v => updateCustomSection2(sec.id, "content", v)} />
-            <button
-              type="button"
-              onClick={() => removeCustomSection2(sec.id)}
-              className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
-              title="Remove this section"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-          <RichTextEditor
-            value={sec.content}
-            onChange={v => updateCustomSection2(sec.id, "content", v)}
-            placeholder="Write the content for this section…"
-          />
-          <ImageAttachment
-            images={sec.images ?? []}
-            onAdd={url => addCustomSection2Image(sec.id, url)}
-            onRemove={i => removeCustomSection2Image(sec.id, i)}
-          />
-          <SaveButton sectionKey={`sc2_${sec.id}`} saved={!!savedSections[`sc2_${sec.id}`]} dirty={!!dirtySections[`sc2_${sec.id}`]} onSave={() => saveCustomSection2(sec.id)} />
-          <SectionDivider />
-        </section>
-      ))}
-
-      {/* Add custom section button (post-financial) */}
-      <button
-        type="button"
-        onClick={addCustomSection2}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-primary/30 text-primary/70 hover:text-primary hover:border-primary/60 hover:bg-primary/5 transition-all text-sm font-medium"
-      >
-        <Plus size={14} /> Add custom section
-      </button>
-
-      <SectionDivider />
-
-      {/* Document Footer */}
+            {/* Document Footer */}
       <section>
         <div className="rounded-xl bg-muted/50 border border-border p-6">
           <div className="flex items-center gap-2 mb-5">

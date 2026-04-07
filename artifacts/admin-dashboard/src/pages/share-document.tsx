@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import { getDoc, RequirementDoc } from "@/lib/store";
 import { formatAmount, formatCurrencyString } from "@/lib/currencies";
@@ -684,6 +684,18 @@ export default function ShareDocument() {
   const customSecsView: CustomSection[] = (s.sCustom?.sections ?? []) as CustomSection[];
   const customSecs2View: CustomSection[] = (s.sCustom2?.sections ?? []) as CustomSection[];
 
+  const defaultSectionOrder: string[] = [
+    "s2",
+    "s35",
+    ...customSecsView.map(sec => `sc:${sec.id}`),
+    "s5",
+    "s6",
+    ...customSecs2View.map(sec => `sc2:${sec.id}`),
+  ];
+  const sectionOrderView: string[] = Array.isArray((s as Record<string, unknown>).sectionOrder)
+    ? (s as Record<string, unknown>).sectionOrder as string[]
+    : defaultSectionOrder;
+
   const statusClass = STATUS_COLORS[doc.status] ?? STATUS_COLORS.Draft;
 
   return (
@@ -790,28 +802,7 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
-        {/* Section 2: Business Information */}
-        {(s2.businessType || s2.targetAudience || s2.businessGoals || s2.keyChallenges || s2.currentSystems || (s2.keyProducts?.length ?? 0) > 0) && (
-          <SectionBlock icon={Building2} title="Business Information">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Business Type" value={s2.businessType} />
-                <Field label="Target Audience" value={s2.targetAudience} />
-              </div>
-              {(s2.keyProducts?.length ?? 0) > 0 && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Key Products / Services</p>
-                  <TagList items={s2.keyProducts} />
-                </div>
-              )}
-              {s2.businessGoals && <Field label="Business Goals" value={<p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{s2.businessGoals}</p>} />}
-              {s2.keyChallenges && <Field label="Key Challenges" value={<p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{s2.keyChallenges}</p>} />}
-              {s2.currentSystems && <Field label="Current Systems" value={s2.currentSystems} />}
-            </div>
-          </SectionBlock>
-        )}
-
-        {/* Section 3: Software Requirements */}
+        {/* Legacy sections (s3/s4) — rendered at fixed position above reorderable block */}
         {(s3.purpose || (s3.keyFeatures?.length ?? 0) > 0) && (
           <SectionBlock icon={Layers} title="Software Requirements">
             <div className="space-y-4">
@@ -833,37 +824,6 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
-        {/* Custom sections (block 1) */}
-        {customSecsView.filter(sec => sec.content && sec.content !== "<p></p>").map(sec => (
-          <SectionBlock key={sec.id} icon={FileText} title={sec.title || "Custom Section"}>
-            {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
-            <div
-              className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
-              dangerouslySetInnerHTML={{ __html: sec.content }}
-            />
-          </SectionBlock>
-        ))}
-
-        {/* Section 3.5: Detailed Requirements Notes (rich text) */}
-        {s35.detailedNotes && s35.detailedNotes !== "<p></p>" && (
-          <SectionBlock icon={FileText} title={s35.detailedNotesTitle || "Detailed Requirements Notes"}>
-            <div
-              className="prose prose-sm max-w-none text-foreground
-                prose-headings:font-semibold prose-headings:text-foreground
-                prose-p:text-sm prose-p:leading-relaxed prose-p:text-foreground
-                prose-ul:text-sm prose-ol:text-sm
-                prose-li:text-foreground prose-li:leading-relaxed
-                prose-strong:text-foreground prose-strong:font-semibold
-                prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground
-                prose-code:bg-muted prose-code:rounded prose-code:px-1 prose-code:text-xs
-                prose-a:text-primary prose-a:underline
-                prose-hr:border-border"
-              dangerouslySetInnerHTML={{ __html: s35.detailedNotes }}
-            />
-          </SectionBlock>
-        )}
-
-        {/* Section 4: Technical Requirements */}
         {((s4.integrations?.length ?? 0) > 0 || (s4.techStack?.length ?? 0) > 0 || s4.hosting || s4.security) && (
           <SectionBlock icon={Wrench} title="Technical Requirements">
             <div className="space-y-4">
@@ -887,194 +847,255 @@ export default function ShareDocument() {
           </SectionBlock>
         )}
 
-        {/* Line items table */}
-        {hasLineItemsView && (
-          <SectionBlock icon={DollarSign} title="Items / Services">
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Item / Service</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-12">Qty</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Per Unit</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Total</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden md:table-cell">Discount</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-24">Sub Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItemsView.filter(r => r.item || parseFloat(r.perUnit) > 0).map((r, i) => {
-                    const { total, subTotal } = lineItemTotalsView[i];
-                    return (
-                      <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                        <td className="py-2.5 px-2">
-                          <div className="font-medium text-foreground">{r.item || "—"}</div>
-                          {r.description && <div className="text-xs text-muted-foreground mt-0.5">{r.description}</div>}
-                        </td>
-                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums">{r.qty || "1"}</td>
-                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
-                          {total > 0 ? formatAmount(parseFloat(r.perUnit) || 0, currencyCode) : "—"}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-medium text-primary tabular-nums hidden sm:table-cell">
-                          {total > 0 ? formatAmount(total, currencyCode) : "—"}
-                        </td>
-                        <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden md:table-cell">
-                          {parseFloat(r.discount) > 0 ? formatAmount(parseFloat(r.discount), currencyCode) : "—"}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
-                          {subTotal > 0 ? formatAmount(subTotal, currencyCode) : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                {lineItemsGrandTotalView > 0 && (
-                  <tfoot>
-                    <tr className="border-t-2 border-primary/20">
-                      <td colSpan={4} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Grand Total</td>
-                      <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide sm:hidden">Grand Total</td>
-                      <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums hidden md:table-cell">
-                        {formatAmount(lineItemsGrandTotalView, currencyCode)}
-                      </td>
-                      <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums md:hidden">
-                        {formatAmount(lineItemsGrandTotalView, currencyCode)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </SectionBlock>
-        )}
-
-        {/* Section 5 + 6: Budget & Timeline */}
-        {(s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0 || s6.startDate || s6.deliveryDate) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-          {/* Budget */}
-          {(s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
-            <SectionBlock icon={DollarSign} title="Budget & Costing">
-              <div className="space-y-3">
-                <Field label="Payment Structure" value={s5.paymentStructure} />
-                {s5.additionalCosts && (
-                  <Field label="Actual Cost" value={formatCurrencyString(s5.additionalCosts, currencyCode) ?? s5.additionalCosts} />
-                )}
-                {(lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
-                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Grand Total</span>
-                    <span className="text-base font-bold text-primary">
-                      {formatAmount(lineItemsGrandTotalView > 0 ? lineItemsGrandTotalView : milestonesTotal, currencyCode)}
-                    </span>
+        {/* Reorderable sections — rendered in saved order */}
+        {sectionOrderView.map(sectionId => {
+          if (sectionId === "s2") {
+            if (!(s2.businessType || s2.targetAudience || s2.businessGoals || s2.keyChallenges || s2.currentSystems || (s2.keyProducts?.length ?? 0) > 0)) return null;
+            return (
+              <SectionBlock key="s2" icon={Building2} title="Business Information">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field label="Business Type" value={s2.businessType} />
+                    <Field label="Target Audience" value={s2.targetAudience} />
                   </div>
+                  {(s2.keyProducts?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Key Products / Services</p>
+                      <TagList items={s2.keyProducts} />
+                    </div>
+                  )}
+                  {s2.businessGoals && <Field label="Business Goals" value={<p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{s2.businessGoals}</p>} />}
+                  {s2.keyChallenges && <Field label="Key Challenges" value={<p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{s2.keyChallenges}</p>} />}
+                  {s2.currentSystems && <Field label="Current Systems" value={s2.currentSystems} />}
+                </div>
+              </SectionBlock>
+            );
+          }
+
+          if (sectionId === "s35") {
+            if (!(s35.detailedNotes && s35.detailedNotes !== "<p></p>")) return null;
+            return (
+              <SectionBlock key="s35" icon={FileText} title={s35.detailedNotesTitle || "Detailed Requirements Notes"}>
+                <div
+                  className="prose prose-sm max-w-none text-foreground
+                    prose-headings:font-semibold prose-headings:text-foreground
+                    prose-p:text-sm prose-p:leading-relaxed prose-p:text-foreground
+                    prose-ul:text-sm prose-ol:text-sm
+                    prose-li:text-foreground prose-li:leading-relaxed
+                    prose-strong:text-foreground prose-strong:font-semibold
+                    prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground
+                    prose-code:bg-muted prose-code:rounded prose-code:px-1 prose-code:text-xs
+                    prose-a:text-primary prose-a:underline
+                    prose-hr:border-border"
+                  dangerouslySetInnerHTML={{ __html: s35.detailedNotes }}
+                />
+              </SectionBlock>
+            );
+          }
+
+          if (sectionId === "s5") {
+            const hasS5 = s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0 || hasLineItemsView;
+            if (!hasS5) return null;
+            return (
+              <React.Fragment key="s5">
+                {hasLineItemsView && (
+                  <SectionBlock icon={DollarSign} title="Items / Services">
+                    <div className="overflow-x-auto -mx-1">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Item / Service</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-12">Qty</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Per Unit</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden sm:table-cell">Total</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-20 hidden md:table-cell">Discount</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-24">Sub Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lineItemsView.filter(r => r.item || parseFloat(r.perUnit) > 0).map((r, i) => {
+                            const { total, subTotal } = lineItemTotalsView[i];
+                            return (
+                              <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                                <td className="py-2.5 px-2">
+                                  <div className="font-medium text-foreground">{r.item || "—"}</div>
+                                  {r.description && <div className="text-xs text-muted-foreground mt-0.5">{r.description}</div>}
+                                </td>
+                                <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums">{r.qty || "1"}</td>
+                                <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden sm:table-cell">
+                                  {total > 0 ? formatAmount(parseFloat(r.perUnit) || 0, currencyCode) : "—"}
+                                </td>
+                                <td className="py-2.5 px-2 text-right font-medium text-primary tabular-nums hidden sm:table-cell">
+                                  {total > 0 ? formatAmount(total, currencyCode) : "—"}
+                                </td>
+                                <td className="py-2.5 px-2 text-right text-muted-foreground tabular-nums hidden md:table-cell">
+                                  {parseFloat(r.discount) > 0 ? formatAmount(parseFloat(r.discount), currencyCode) : "—"}
+                                </td>
+                                <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
+                                  {subTotal > 0 ? formatAmount(subTotal, currencyCode) : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {lineItemsGrandTotalView > 0 && (
+                          <tfoot>
+                            <tr className="border-t-2 border-primary/20">
+                              <td colSpan={4} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Grand Total</td>
+                              <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide sm:hidden">Grand Total</td>
+                              <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums hidden md:table-cell">
+                                {formatAmount(lineItemsGrandTotalView, currencyCode)}
+                              </td>
+                              <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums md:hidden">
+                                {formatAmount(lineItemsGrandTotalView, currencyCode)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </SectionBlock>
                 )}
-              </div>
-            </SectionBlock>
-          )}
-
-          {/* Timeline */}
-          {(s6.startDate || s6.deliveryDate) && (
-            <SectionBlock icon={Clock} title="Project Timeline">
-              <div className="space-y-3">
-                <Field label="Start Date" value={formatDate(s6.startDate)} />
-                <Field label="Delivery Date" value={formatDate(s6.deliveryDate)} />
-                {s6.startDate && s6.deliveryDate && (() => {
-                  try {
-                    const days = Math.ceil((new Date(s6.deliveryDate).getTime() - new Date(s6.startDate).getTime()) / 86400000);
-                    const weeks = Math.round(days / 7);
-                    return <Field label="Duration" value={`${days} days (~${weeks} weeks)`} />;
-                  } catch { return null; }
-                })()}
-              </div>
-            </SectionBlock>
-          )}
-        </div>
-        )}
-
-        {/* Milestones table */}
-        {milestones.length > 0 && milestones.some((m) => m.title || m.date || m.payment) && (
-          <SectionBlock icon={Calendar} title="Project Milestones">
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-8">#</th>
-                    <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Milestone</th>
-                    <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden sm:table-cell">Due Date</th>
-                    <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Payment</th>
-                    <th className="text-center py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden sm:table-cell">Payment</th>
-                    <th className="text-center py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden md:table-cell">Task</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {milestones.map((m, i) => (
-                    <tr key={m.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 px-2">
-                        <span className="inline-flex w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold items-center justify-center">{i + 1}</span>
-                      </td>
-                      <td className="py-2.5 px-2 font-medium text-foreground">
-                        {m.title || <span className="text-muted-foreground italic">Milestone {i + 1}</span>}
-                      </td>
-                      <td className="py-2.5 px-2 text-muted-foreground hidden sm:table-cell">
-                        {m.date ? formatDate(m.date) : "—"}
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
-                        {formatCurrency(m.payment, currencyCode) ?? "—"}
-                      </td>
-                      <td className="py-2.5 px-2 text-center hidden sm:table-cell">
-                        {m.paymentStatus ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PAYMENT_STATUS_COLORS[m.paymentStatus] ?? "bg-gray-100 text-gray-600"}`}>
-                            {m.paymentStatus}
+                {(s5.paymentStructure || s5.additionalCosts || lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
+                  <SectionBlock icon={DollarSign} title="Budget & Costing">
+                    <div className="space-y-3">
+                      <Field label="Payment Structure" value={s5.paymentStructure} />
+                      {s5.additionalCosts && (
+                        <Field label="Actual Cost" value={formatCurrencyString(s5.additionalCosts, currencyCode) ?? s5.additionalCosts} />
+                      )}
+                      {(lineItemsGrandTotalView > 0 || milestonesTotal > 0) && (
+                        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Grand Total</span>
+                          <span className="text-base font-bold text-primary">
+                            {formatAmount(lineItemsGrandTotalView > 0 ? lineItemsGrandTotalView : milestonesTotal, currencyCode)}
                           </span>
-                        ) : "—"}
-                      </td>
-                      <td className="py-2.5 px-2 text-center hidden md:table-cell">
-                        <span className={`text-xs font-medium ${TASK_STATUS_COLORS[m.taskStatus] ?? "text-muted-foreground"}`}>
-                          {m.taskStatus || "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {milestonesTotal > 0 && (
-                  <tfoot>
-                    <tr className="border-t-2 border-primary/20">
-                      <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</td>
-                      <td className="hidden sm:table-cell" />
-                      <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums">
-                        {formatAmount(milestonesTotal, currencyCode)}
-                      </td>
-                      <td className="hidden sm:table-cell" />
-                      <td className="hidden md:table-cell" />
-                    </tr>
-                  </tfoot>
+                        </div>
+                      )}
+                    </div>
+                  </SectionBlock>
                 )}
-              </table>
-            </div>
-          </SectionBlock>
-        )}
+              </React.Fragment>
+            );
+          }
 
-        {/* Section 7: Support & Maintenance (legacy) */}
-        {(s7.postLaunch || s7.maintenance) && (
-          <SectionBlock icon={Target} title="Support & Maintenance">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {s7.postLaunch && <Field label="Post-Launch Support" value={<p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{s7.postLaunch}</p>} />}
-              <Field label="Maintenance Duration" value={s7.maintenance} />
-            </div>
-          </SectionBlock>
-        )}
+          if (sectionId === "s6") {
+            const hasS6 = s6.startDate || s6.deliveryDate || (milestones.length > 0 && milestones.some((m) => m.title || m.date || m.payment));
+            if (!hasS6) return null;
+            return (
+              <React.Fragment key="s6">
+                {(s6.startDate || s6.deliveryDate) && (
+                  <SectionBlock icon={Clock} title="Project Timeline">
+                    <div className="space-y-3">
+                      <Field label="Start Date" value={formatDate(s6.startDate)} />
+                      <Field label="Delivery Date" value={formatDate(s6.deliveryDate)} />
+                      {s6.startDate && s6.deliveryDate && (() => {
+                        try {
+                          const days = Math.ceil((new Date(s6.deliveryDate).getTime() - new Date(s6.startDate).getTime()) / 86400000);
+                          const weeks = Math.round(days / 7);
+                          return <Field label="Duration" value={`${days} days (~${weeks} weeks)`} />;
+                        } catch { return null; }
+                      })()}
+                    </div>
+                  </SectionBlock>
+                )}
+                {milestones.length > 0 && milestones.some((m) => m.title || m.date || m.payment) && (
+                  <SectionBlock icon={Calendar} title="Project Milestones">
+                    <div className="overflow-x-auto -mx-1">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground w-8">#</th>
+                            <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Milestone</th>
+                            <th className="text-left py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden sm:table-cell">Due Date</th>
+                            <th className="text-right py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Payment</th>
+                            <th className="text-center py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden sm:table-cell">Payment</th>
+                            <th className="text-center py-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hidden md:table-cell">Task</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {milestones.map((m, i) => (
+                            <tr key={m.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                              <td className="py-2.5 px-2">
+                                <span className="inline-flex w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold items-center justify-center">{i + 1}</span>
+                              </td>
+                              <td className="py-2.5 px-2 font-medium text-foreground">
+                                {m.title || <span className="text-muted-foreground italic">Milestone {i + 1}</span>}
+                              </td>
+                              <td className="py-2.5 px-2 text-muted-foreground hidden sm:table-cell">
+                                {m.date ? formatDate(m.date) : "—"}
+                              </td>
+                              <td className="py-2.5 px-2 text-right font-semibold text-foreground tabular-nums">
+                                {formatCurrency(m.payment, currencyCode) ?? "—"}
+                              </td>
+                              <td className="py-2.5 px-2 text-center hidden sm:table-cell">
+                                {m.paymentStatus ? (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PAYMENT_STATUS_COLORS[m.paymentStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                                    {m.paymentStatus}
+                                  </span>
+                                ) : "—"}
+                              </td>
+                              <td className="py-2.5 px-2 text-center hidden md:table-cell">
+                                <span className={`text-xs font-medium ${TASK_STATUS_COLORS[m.taskStatus] ?? "text-muted-foreground"}`}>
+                                  {m.taskStatus || "—"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {milestonesTotal > 0 && (
+                          <tfoot>
+                            <tr className="border-t-2 border-primary/20">
+                              <td colSpan={2} className="py-2.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</td>
+                              <td className="hidden sm:table-cell" />
+                              <td className="py-2.5 px-2 text-right text-base font-bold text-primary tabular-nums">
+                                {formatAmount(milestonesTotal, currencyCode)}
+                              </td>
+                              <td colSpan={2} className="hidden sm:table-cell" />
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </SectionBlock>
+                )}
+              </React.Fragment>
+            );
+          }
 
-        {/* Custom sections (block 2 — after financial) */}
-        {customSecs2View.filter(sec => sec.content && sec.content !== "<p></p>").map(sec => (
-          <SectionBlock key={sec.id} icon={FileText} title={sec.title || "Custom Section"}>
-            {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
-            <div
-              className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
-              dangerouslySetInnerHTML={{ __html: sec.content }}
-            />
-          </SectionBlock>
-        ))}
+          if (sectionId.startsWith("sc:")) {
+            const secId = sectionId.slice(3);
+            const sec = customSecsView.find(s => s.id === secId);
+            if (!sec || !sec.content || sec.content === "<p></p>") return null;
+            return (
+              <SectionBlock key={sectionId} icon={FileText} title={sec.title || "Custom Section"}>
+                {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
+                <div
+                  className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
+                  dangerouslySetInnerHTML={{ __html: sec.content }}
+                />
+              </SectionBlock>
+            );
+          }
 
-        {/* Confirmation / signature strip */}
+          if (sectionId.startsWith("sc2:")) {
+            const secId = sectionId.slice(4);
+            const sec = customSecs2View.find(s => s.id === secId);
+            if (!sec || !sec.content || sec.content === "<p></p>") return null;
+            return (
+              <SectionBlock key={sectionId} icon={FileText} title={sec.title || "Custom Section"}>
+                {sec.subtitle && <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{sec.subtitle}</p>}
+                <div
+                  className="prose prose-sm max-w-none text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-p:text-sm prose-p:leading-relaxed prose-ul:text-sm prose-ol:text-sm prose-li:text-foreground prose-strong:text-foreground prose-a:text-primary"
+                  dangerouslySetInnerHTML={{ __html: sec.content }}
+                />
+              </SectionBlock>
+            );
+          }
+
+          return null;
+        })}
+
+                {/* Confirmation / signature strip */}
         <div className="rounded-xl border-2 border-primary/20 bg-primary/5 px-6 py-6">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle2 className="w-5 h-5 text-primary" />
