@@ -745,6 +745,7 @@ export default function NewDocument() {
   const [sectionOrder, setSectionOrder] = useState<string[]>(DEFAULT_SECTION_ORDER);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
 
   const addCustomSection = () => {
     const newId = Date.now().toString();
@@ -865,6 +866,45 @@ export default function NewDocument() {
     setDragId(null);
   };
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
+  // ─── Section label helper ────────────────────────────────────────────────────
+  const getSectionLabel = (id: string): { label: string; icon: React.ElementType } => {
+    if (id === 's2') return { label: 'Business Information', icon: Briefcase };
+    if (id === 's35') return { label: 'Detailed Notes', icon: FileText };
+    if (id === 's5') return { label: 'Budget & Costing', icon: DollarSign };
+    if (id === 's6') return { label: 'Project Timeline', icon: Clock };
+    if (id.startsWith('sc:')) {
+      const sec = customSections.find((s: CustomSection) => s.id === id.slice(3));
+      return { label: sec?.title || 'Custom Section', icon: PenLine };
+    }
+    if (id.startsWith('sc2:')) {
+      const sec = customSections2.find((s: CustomSection) => s.id === id.slice(4));
+      return { label: sec?.title || 'Custom Section', icon: PenLine };
+    }
+    return { label: id, icon: FileText };
+  };
+
+  // ─── Active section tracker (IntersectionObserver) ────────────────────────
+  useEffect(() => {
+    const ids = ['s1', ...sectionOrder, 'footer'];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id.replace('section-', ''));
+            break;
+          }
+        }
+      },
+      { rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+    );
+    ids.forEach(id => {
+      const el = document.getElementById(`section-${id}`);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOrder]);
 
   // Load data on mount — edit mode loads from the saved document, new mode from draft
   useEffect(() => {
@@ -1070,7 +1110,67 @@ export default function NewDocument() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-2 sm:px-4 pb-28">
+    <div className="flex items-start min-h-full">
+
+      {/* ── Section Navigator Sidebar ─────────────────────────────────────── */}
+      <aside className="hidden xl:flex flex-col flex-shrink-0 w-52 sticky top-0 h-screen overflow-y-auto border-r border-border/50 bg-background/95 backdrop-blur-sm z-10">
+        <div className="px-3 py-3 border-b border-border/50 flex-shrink-0">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Sections</span>
+        </div>
+        <div className="flex-1 overflow-y-auto py-1">
+          {/* Static: Document Info */}
+          <button
+            type="button"
+            onClick={() => document.getElementById('section-s1')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors text-left ${activeSection === 's1' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
+          >
+            <FileText size={12} className="flex-shrink-0" />
+            <span className="truncate">Document Info</span>
+          </button>
+
+          {/* Reorderable sections */}
+          {sectionOrder.map(sid => {
+            const { label, icon: SideIcon } = getSectionLabel(sid);
+            const isSbDragging = dragId === sid;
+            const isSbDragOver = dragOverId === sid && dragId !== sid;
+            return (
+              <div
+                key={sid}
+                draggable
+                onDragStart={e => { e.stopPropagation(); handleDragStart(sid, e); }}
+                onDragEnd={handleDragEnd}
+                onDragOver={e => { e.stopPropagation(); handleDragOver(sid, e); }}
+                onDragLeave={handleDragLeave}
+                onDrop={e => { e.stopPropagation(); handleDrop(sid, e); }}
+                onClick={() => document.getElementById(`section-${sid}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                title={`Click to scroll · Drag to reorder`}
+                className={`group/sb flex items-center gap-2 px-3 py-2 text-xs cursor-grab active:cursor-grabbing transition-colors select-none ${
+                  isSbDragging ? 'opacity-40' : ''
+                } ${isSbDragOver ? 'bg-primary/15 text-primary border-l-2 border-primary' : ''} ${
+                  activeSection === sid && !isSbDragOver ? 'bg-primary/10 text-primary font-medium border-l-2 border-primary' : ''
+                } ${!isSbDragOver && activeSection !== sid ? 'text-muted-foreground hover:bg-muted/60 hover:text-foreground' : ''}`}
+              >
+                <GripVertical size={11} className="flex-shrink-0 opacity-0 group-hover/sb:opacity-50 transition-opacity" />
+                <SideIcon size={12} className="flex-shrink-0" />
+                <span className="truncate">{label}</span>
+              </div>
+            );
+          })}
+
+          {/* Static: Footer */}
+          <button
+            type="button"
+            onClick={() => document.getElementById('section-footer')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors text-left ${activeSection === 'footer' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
+          >
+            <FileText size={12} className="flex-shrink-0" />
+            <span className="truncate">Document Footer</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main content ──────────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 max-w-4xl mx-auto py-6 px-2 sm:px-4 pb-28">
 
       {/* Page header */}
       <div className="mb-8 pb-6 border-b border-border">
@@ -1137,7 +1237,7 @@ export default function NewDocument() {
       </div>
 
       {/* Section 1: Document Information */}
-      <section>
+      <section id="section-s1">
         <SectionHeader icon={FileText} title="1. Document Information" subtitle="Basic details about this requirement document" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="sm:col-span-2">
@@ -1715,6 +1815,7 @@ export default function NewDocument() {
         return (
           <div
             key={sectionId}
+            id={`section-${sectionId}`}
             onDragOver={e => handleDragOver(sectionId, e)}
             onDragLeave={handleDragLeave}
             onDrop={e => handleDrop(sectionId, e)}
@@ -1761,7 +1862,7 @@ export default function NewDocument() {
       <SectionDivider />
 
             {/* Document Footer */}
-      <section>
+      <section id="section-footer">
         <div className="rounded-xl bg-muted/50 border border-border p-6">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-6 h-6 rounded bg-muted-foreground/10 flex items-center justify-center">
@@ -1826,6 +1927,7 @@ export default function NewDocument() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
