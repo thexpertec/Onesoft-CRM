@@ -695,7 +695,8 @@ export type Product = {
   brand: string;
   category: string;
   unit: string;
-  price: string;
+  costPrice?: string;  // Cost price per unit
+  price: string;       // Sale price per unit
   description: string;
   status: ProductStatus;
   thumbnail?: string;

@@ -14,7 +14,7 @@ import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } 
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
-type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "price" | "status" | "description";
+type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "costPrice" | "price" | "status" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -23,16 +23,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", brand: "", category: "", unit: "", price: "", status: "Active", description: "",
+  name: "", sku: "", brand: "", category: "", unit: "", costPrice: "", price: "", status: "Active", description: "",
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
-const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "price", "status", "description"];
-const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "price", "status", "description"];
+const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "costPrice", "price", "status", "description"];
+const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "costPrice", "price", "status", "description"];
 
 function downloadTemplate() {
   const sample = [
-    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "999.00", "Active", "Cloud-based CRM solution",
+    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "750.00", "999.00", "Active", "Cloud-based CRM solution",
   ];
   const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -73,7 +73,7 @@ function parseCSV(text: string): ImportRow[] {
 
   return lines.slice(1).map((line, i) => {
     const cells = parseLine(line);
-    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", price: "", status: "Active", description: "" };
+    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", costPrice: "", price: "", status: "Active", description: "" };
     CSV_HEADERS.forEach(f => {
       const ci = colMap[f];
       row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci] : "";
@@ -138,7 +138,7 @@ export default function ProductsPage() {
     const valid = importRows.filter(r => !r._error);
     valid.forEach(r => addProduct({
       name: r.name, sku: r.sku, brand: r.brand, category: r.category,
-      unit: r.unit, price: r.price,
+      unit: r.unit, costPrice: r.costPrice, price: r.price,
       status: (r.status as Product["status"]) || "Active",
       description: r.description,
     }));
@@ -155,23 +155,25 @@ export default function ProductsPage() {
   const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
 
   const COLS: ColDef[] = useMemo(() => [
-    { field: "name",        label: "Product Name",  minW: 220, type: "text"                                                                   },
-    { field: "sku",         label: "SKU",           minW: 120, type: "text"                                                                   },
-    { field: "brand",       label: "Brand",         minW: 150, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
-    { field: "category",    label: "Category",      minW: 160, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
-    { field: "unit",        label: "Unit",          minW: 140, type: "select", options: unitOptions.length     ? unitOptions     : undefined   },
-    { field: "price",       label: `Price (${sym})`,minW: 110, type: "text"                                                                   },
-    { field: "status",      label: "Status",        minW: 120, type: "select",
+    { field: "name",        label: "Product Name",       minW: 200, type: "text"                                                                   },
+    { field: "sku",         label: "SKU",                minW: 110, type: "text"                                                                   },
+    { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
+    { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
+    { field: "unit",        label: "Unit",               minW: 120, type: "select", options: unitOptions.length     ? unitOptions     : undefined   },
+    { field: "costPrice",   label: `Cost (${sym})`,      minW: 110, type: "text"                                                                   },
+    { field: "price",       label: `Sale (${sym})`,      minW: 110, type: "text"                                                                   },
+    { field: "profit",      label: `Profit (${sym})`,    minW: 110, type: "readonly"                                                               },
+    { field: "status",      label: "Status",             minW: 120, type: "select",
       options: ["Active", "Inactive", "Draft"],
       optionColors: STATUS_COLORS,
     },
-    { field: "description", label: "Description",   minW: 260, type: "text"                                                                   },
+    { field: "description", label: "Description",        minW: 220, type: "text"                                                                   },
   ], [brandOptions, categoryOptions, unitOptions, sym]);
 
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
   const filtered = products
-    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.costPrice, p.price].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(p => statusFilter === "All" || p.status === statusFilter)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -225,7 +227,8 @@ export default function ProductsPage() {
     if (!newRow?.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); setNewRowActive(0); return; }
     addProduct({
       name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
-      unit: newRow.unit, price: newRow.price, status: (newRow.status as Product["status"]) || "Active",
+      unit: newRow.unit, costPrice: newRow.costPrice, price: newRow.price,
+      status: (newRow.status as Product["status"]) || "Active",
       description: newRow.description,
     });
     toast({ title: "Product added", description: `"${newRow.name}" created.` });
@@ -335,6 +338,14 @@ export default function ProductsPage() {
               {COLS.map((c, ci) => {
                 const isA = newRowActive === ci;
                 const val = newRow[c.field as EditableField] ?? "";
+                // Readonly / computed columns (profit) — show "—" in new row
+                if (c.type === "readonly") {
+                  return (
+                    <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0" style={{ height: `${CELL_H}px` }}>
+                      <div className="w-full h-full flex items-center px-3 text-[12px] text-muted-foreground/50 select-none">—</div>
+                    </td>
+                  );
+                }
                 return (
                   <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={{ height: `${CELL_H}px` }}>
                     {isA && c.type === "select" ? (
@@ -382,19 +393,39 @@ export default function ProductsPage() {
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
-                  const rawVal = String((prod as unknown as Record<string, string>)[c.field] ?? "");
+                  // Compute profit for the readonly profit column
+                  let rawVal: string;
+                  if (c.field === "profit") {
+                    const cost = parseFloat(prod.costPrice ?? "");
+                    const sale = parseFloat(prod.price ?? "");
+                    rawVal = (!isNaN(cost) && !isNaN(sale)) ? (sale - cost).toFixed(2) : "";
+                  } else {
+                    rawVal = String((prod as unknown as Record<string, string>)[c.field] ?? "");
+                  }
+                  // Color the profit cell: green positive, red negative, muted zero/empty
+                  const profitColor = c.field === "profit" && rawVal !== ""
+                    ? (parseFloat(rawVal) > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium"
+                      : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
+                      : "text-muted-foreground")
+                    : "";
                   return (
-                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && setActiveCell({ id: prod.id, col: ci })}>
-                      <EditableCell
-                        value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
-                        onActivate={() => setActiveCell({ id: prod.id, col: ci })}
-                        onCommit={v => commitCell(prod.id, c.field as EditableField, v)}
-                        onCancel={() => setActiveCell(null)}
-                        onTab={s => navigateCell(prod.id, ci, s)}
-                        onEnter={() => moveCellDown(prod.id, ci)}
-                      />
+                      onClick={() => !isA && isAuthenticated && c.type !== "readonly" && setActiveCell({ id: prod.id, col: ci })}>
+                      {c.field === "profit" ? (
+                        <div className={`w-full h-full flex items-center px-3 text-[12px] truncate select-none ${rawVal ? profitColor : "text-muted-foreground/40"}`}>
+                          {rawVal || "—"}
+                        </div>
+                      ) : (
+                        <EditableCell
+                          value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                          onActivate={() => setActiveCell({ id: prod.id, col: ci })}
+                          onCommit={v => commitCell(prod.id, c.field as EditableField, v)}
+                          onCancel={() => setActiveCell(null)}
+                          onTab={s => navigateCell(prod.id, ci, s)}
+                          onEnter={() => moveCellDown(prod.id, ci)}
+                        />
+                      )}
                     </td>
                   );
                 })}
