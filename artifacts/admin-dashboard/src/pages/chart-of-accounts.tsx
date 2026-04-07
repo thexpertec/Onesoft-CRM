@@ -118,7 +118,7 @@ function suggestCode(
 }
 
 // ─── Modal types ──────────────────────────────────────────────────────────────
-type LedgerEntry = { _key: string; code: string; name: string; openingBalance: string; subType: string };
+type LedgerEntry = { _key: string; code: string; name: string; openingBalance: string; paymentType: "Debit" | "Credit"; subType: string };
 type GroupEntry  = { _key: string; code: string; name: string; subType: string };
 
 type ModalState = {
@@ -156,6 +156,7 @@ const defaultModal = (
       code: code0,
       name: "",
       openingBalance: "0",
+      paymentType: "Debit" as const,
       subType: HEAD_SUB_TYPES[head][0],
     }],
   };
@@ -487,6 +488,7 @@ export default function ChartOfAccountsPage() {
       description: acc.description, parentId: acc.parentId ?? null,
       accountType: acc.accountType ?? "Group",
       openingBalance: acc.openingBalance ?? 0,
+      paymentType: acc.paymentType ?? null,
       isActive: acc.isActive,
     });
     setShowEdit(true);
@@ -525,6 +527,7 @@ export default function ChartOfAccountsPage() {
           code: suggestCode(parent, head, accounts),
           name: "",
           openingBalance: "0",
+          paymentType: "Debit" as const,
           subType: HEAD_SUB_TYPES[head][0],
         }],
       } : m);
@@ -579,6 +582,7 @@ export default function ChartOfAccountsPage() {
         code: suggestCode(parent, modal.head, accounts, idx),
         name: "",
         openingBalance: "0",
+        paymentType: "Debit" as const,
         subType: HEAD_SUB_TYPES[modal.head][0],
       }],
     } : m);
@@ -611,7 +615,7 @@ export default function ChartOfAccountsPage() {
       entries.forEach(e => {
         addAccount({
           code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
-          description: "", parentId, accountType: "Group", openingBalance: 0, isActive: true,
+          description: "", parentId, accountType: "Group", openingBalance: 0, paymentType: null, isActive: true,
         });
       });
       toast({ title: `${entries.length} group${entries.length > 1 ? "s" : ""} created` });
@@ -642,7 +646,9 @@ export default function ChartOfAccountsPage() {
         addAccount({
           code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
           description: "", parentId, accountType: "Ledger",
-          openingBalance: parseFloat(e.openingBalance) || 0, isActive: true,
+          openingBalance: parseFloat(e.openingBalance) || 0,
+          paymentType: e.paymentType ?? "Debit",
+          isActive: true,
         });
       });
       toast({ title: `${entries.length} ledger${entries.length > 1 ? "s" : ""} created` });
@@ -777,12 +783,23 @@ export default function ChartOfAccountsPage() {
           ) : null}
         </div>
 
-        {/* Opening balance (ledgers only) */}
-        <div className="w-28 flex-shrink-0 pr-2 text-right">
+        {/* Opening balance + Dr/Cr (ledgers only) */}
+        <div className="w-36 flex-shrink-0 pr-2 flex items-center justify-end gap-1.5">
           {isLedger && (
-            <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
-              {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
-            </span>
+            <>
+              <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
+                {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
+              </span>
+              {acc.paymentType && (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
+                  acc.paymentType === "Debit"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                    : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                }`}>
+                  {acc.paymentType === "Debit" ? "Dr" : "Cr"}
+                </span>
+              )}
+            </>
           )}
         </div>
 
@@ -983,12 +1000,29 @@ export default function ChartOfAccountsPage() {
               </select>
             </div>
             {(editForm.accountType ?? "Group") === "Ledger" && (
-              <div className="w-40 flex-shrink-0">
-                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Opening Balance</label>
-                <input type="number" value={editForm.openingBalance ?? 0}
-                  onChange={e => setEF("openingBalance", parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
+              <>
+                <div className="w-36 flex-shrink-0">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Opening Balance</label>
+                  <input type="number" value={editForm.openingBalance ?? 0}
+                    onChange={e => setEF("openingBalance", parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Payment Type</label>
+                  <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden h-9">
+                    <button type="button"
+                      onClick={() => setEF("paymentType", "Debit")}
+                      className={`flex-1 px-3 text-[12px] font-bold transition-colors ${(editForm.paymentType ?? "Debit") === "Debit" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}>
+                      Dr
+                    </button>
+                    <button type="button"
+                      onClick={() => setEF("paymentType", "Credit")}
+                      className={`flex-1 px-3 text-[12px] font-bold transition-colors border-l border-gray-200 dark:border-zinc-700 ${(editForm.paymentType ?? "Debit") === "Credit" ? "bg-orange-500 text-white" : "bg-white dark:bg-zinc-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}>
+                      Cr
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
             <div className="flex-1">
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
@@ -1018,7 +1052,7 @@ export default function ChartOfAccountsPage() {
             <div className="w-7 flex-shrink-0">#</div>
             <div className="w-24 flex-shrink-0">Code</div>
             <div className="flex-1">Account Name</div>
-            <div className="w-28 flex-shrink-0 text-right pr-2">Opening Bal.</div>
+            <div className="w-36 flex-shrink-0 text-right pr-2">Opening Bal. / Dr·Cr</div>
             <div className="w-52 flex-shrink-0">Parent Account</div>
             <div className="w-20 flex-shrink-0 text-center">Status</div>
             <div className="w-20 flex-shrink-0" />
@@ -1044,8 +1078,23 @@ export default function ChartOfAccountsPage() {
                         <div className="text-[10px] text-gray-400 truncate">{getPath(accounts, acc)}</div>
                         <div className={`truncate ${isLedger ? "text-[12px] italic text-gray-600 dark:text-gray-400" : "text-[13px] font-semibold text-gray-900 dark:text-gray-100"}`}>{acc.name}</div>
                       </div>
-                      <div className="w-28 flex-shrink-0 pr-2 text-right">
-                        {isLedger && acc.openingBalance !== 0 && <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">{acc.openingBalance.toLocaleString()}</span>}
+                      <div className="w-36 flex-shrink-0 pr-2 flex items-center justify-end gap-1.5">
+                        {isLedger && (
+                          <>
+                            <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
+                              {acc.openingBalance !== 0 ? acc.openingBalance.toLocaleString() : "—"}
+                            </span>
+                            {acc.paymentType && (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
+                                acc.paymentType === "Debit"
+                                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                                  : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                              }`}>
+                                {acc.paymentType === "Debit" ? "Dr" : "Cr"}
+                              </span>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div className="w-52 flex-shrink-0 pr-2">
                         {(() => {
@@ -1273,7 +1322,7 @@ export default function ChartOfAccountsPage() {
                     Ledger Entries <span className="text-red-500">*</span>
                   </label>
                   {modal.ledgerEntries.map((entry, idx) => (
-                    <div key={entry._key} className="grid grid-cols-[100px_1fr_110px_1fr] gap-2 items-end">
+                    <div key={entry._key} className="grid grid-cols-[100px_1fr_110px_78px_1fr] gap-2 items-end">
                       <div>
                         {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Code</label>}
                         <input
@@ -1292,13 +1341,28 @@ export default function ChartOfAccountsPage() {
                         />
                       </div>
                       <div>
-                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Opening Balance</label>}
+                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Opening Bal.</label>}
                         <input
                           type="number"
                           value={entry.openingBalance}
                           onChange={e => updateLedgerEntry(entry._key, "openingBalance", e.target.value)}
                           className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[13px] font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                         />
+                      </div>
+                      <div>
+                        {idx === 0 && <label className="block text-[10px] text-gray-400 mb-1">Dr / Cr</label>}
+                        <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden h-[36px]">
+                          <button type="button"
+                            onClick={() => updateLedgerEntry(entry._key, "paymentType", "Debit")}
+                            className={`flex-1 text-[11px] font-bold transition-colors ${entry.paymentType === "Debit" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}>
+                            Dr
+                          </button>
+                          <button type="button"
+                            onClick={() => updateLedgerEntry(entry._key, "paymentType", "Credit")}
+                            className={`flex-1 text-[11px] font-bold transition-colors border-l border-gray-200 dark:border-zinc-700 ${entry.paymentType === "Credit" ? "bg-orange-500 text-white" : "bg-white dark:bg-zinc-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}>
+                            Cr
+                          </button>
+                        </div>
                       </div>
                       <div className="flex gap-1.5">
                         <div className="flex-1">

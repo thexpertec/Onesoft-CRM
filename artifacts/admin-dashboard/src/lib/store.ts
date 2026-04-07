@@ -1544,6 +1544,7 @@ export type Account = {
   parentId: string | null;
   accountType: AccountKind;
   openingBalance: number;
+  paymentType: "Debit" | "Credit" | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1579,6 +1580,7 @@ export function getAccounts(): Account[] {
         parentId: a.parentId ?? null,
         accountType: a.accountType ?? "Group",
         openingBalance: a.openingBalance ?? 0,
+        paymentType: a.paymentType ?? null,
       }));
     }
   } catch { /* ignore */ }
