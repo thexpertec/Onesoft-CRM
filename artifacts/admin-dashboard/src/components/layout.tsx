@@ -169,18 +169,6 @@ const CRM_COLUMNS = [
       { label: "Add Supplier",  href: "/suppliers", icon: UserPlus },
     ],
   },
-  {
-    href:  "/shareholders",
-    label: "Shareholders",
-    icon:  Landmark,
-    color: "text-amber-500",
-    bg:    "bg-amber-50 dark:bg-amber-950/40",
-    desc:  "Equity & ownership",
-    links: [
-      { label: "All Shareholders", href: "/shareholders", icon: Landmark },
-      { label: "Add Shareholder",  href: "/shareholders", icon: UserPlus },
-    ],
-  },
 ];
 
 // ─── Other nav items ──────────────────────────────────────────────────────────
@@ -233,19 +221,20 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "investments", label: "Investments", icon: TrendingUp,
     items: [
+      { label: "Shareholders",     href: "/shareholders",    icon: Landmark,   desc: "Equity & ownership"             },
       { label: "Investment Plans", href: "/investment-plans", icon: TrendingUp, desc: "Define & manage investment plans" },
     ],
   },
   { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
 ];
 
-const CRM_ROUTES       = ["/leads", "/customers", "/suppliers", "/shareholders"];
+const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
 const SALES_ROUTES     = ["/sales", "/invoices"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
-const INVESTMENTS_ROUTES = ["/investment-plans"];
+const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
