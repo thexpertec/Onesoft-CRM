@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, Plus, Trash2, X, Save, Upload, Download, FileSpreadsheet,
   CheckCircle2, AlertCircle, TrendingUp, Lock, ArrowUpCircle, ArrowDownCircle,
-  ClipboardList, Printer,
+  ClipboardList, Printer, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -362,7 +362,7 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
 // ─── Share Plans Dialog ───────────────────────────────────────────────────────
 function SharePlansDialog({
   shareholder, open, onClose,
-  plans, onAddPlan, onDeletePlan,
+  plans, onAddPlan, onUpdatePlan, onDeletePlan,
   productOptions, categoryOptions,
 }: {
   shareholder: Shareholder | null;
@@ -370,17 +370,47 @@ function SharePlansDialog({
   onClose: () => void;
   plans: InvestmentPlan[];
   onAddPlan: (data: Omit<InvestmentPlan, "id"|"createdAt"|"updatedAt">) => void;
+  onUpdatePlan: (id: string, data: Partial<InvestmentPlan>) => void;
   onDeletePlan: (id: string) => void;
   productOptions: string[];
   categoryOptions: string[];
 }) {
   const currSym = getCurrency(getSettings().currency).symbol;
 
-  const [form,    setForm]    = useState<PlanForm>(BLANK_PLAN());
-  const [adding,  setAdding]  = useState(false);
-  const [delId,   setDelId]   = useState<string | null>(null);
+  const [form,           setForm]           = useState<PlanForm>(BLANK_PLAN());
+  const [adding,         setAdding]         = useState(false);
+  const [delId,          setDelId]          = useState<string | null>(null);
+  const [editingPlanId,  setEditingPlanId]  = useState<string | null>(null);
 
-  useEffect(() => { if (open) { setForm(BLANK_PLAN()); setAdding(false); } }, [open, shareholder?.id]);
+  useEffect(() => {
+    if (open) { setForm(BLANK_PLAN()); setAdding(false); setEditingPlanId(null); }
+  }, [open, shareholder?.id]);
+
+  const startEdit = (plan: InvestmentPlan) => {
+    setForm({
+      title:                  plan.title,
+      investmentOn:           plan.investmentOn,
+      product:                plan.product                || "",
+      business:               plan.business               || "",
+      specificProductGroups:  plan.specificProductGroups  || "",
+      timeDuration:           plan.timeDuration            || "",
+      lockForSpecificTime:    plan.lockForSpecificTime     || "No",
+      profitMarginWithLoss:   plan.profitMarginWithLoss    || "",
+      profitMarginWithoutLoss:plan.profitMarginWithoutLoss || "",
+      maxProfit:              plan.maxProfit               || "",
+      maxLoss:                plan.maxLoss                 || "",
+      productItems:           plan.productItems && plan.productItems.length > 0
+                                ? plan.productItems.map(i => ({ ...i }))
+                                : [BLANK_PRODUCT_ITEM()],
+      investmentAmount:       plan.investmentAmount        || "",
+      unitsInvested:          plan.unitsInvested           || "",
+      descriptions:           plan.descriptions && plan.descriptions.length > 0
+                                ? [...plan.descriptions]
+                                : plan.description ? [plan.description] : [""],
+    });
+    setEditingPlanId(plan.id);
+    setAdding(true);
+  };
 
   const handlePrint = () => {
     if (!shareholder) return;
@@ -431,7 +461,7 @@ function SharePlansDialog({
   const handleSubmit = () => {
     if (!form.title.trim()) return;
     const filledDescriptions = form.descriptions.filter(d => d && d.replace(/<[^>]*>/g, "").trim());
-    onAddPlan({
+    const payload = {
       title: form.title,
       shareholderId: shareholder.id,
       investmentOn:            form.investmentOn as InvestmentType,
@@ -449,9 +479,15 @@ function SharePlansDialog({
       unitsInvested:           isProductMode ? (totalUnits  > 0 ? String(totalUnits)  : undefined) : (form.unitsInvested    || undefined),
       descriptions:            filledDescriptions.length > 0 ? filledDescriptions : undefined,
       description:             filledDescriptions[0] || undefined,
-    });
+    };
+    if (editingPlanId) {
+      onUpdatePlan(editingPlanId, payload);
+    } else {
+      onAddPlan(payload);
+    }
     setForm(BLANK_PLAN());
     setAdding(false);
+    setEditingPlanId(null);
   };
 
 
@@ -583,12 +619,22 @@ function SharePlansDialog({
                           ));
                         })()}
                       </div>
-                      <button
-                        onClick={() => setDelId(plan.id)}
-                        className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Delete plan">
-                        <Trash2 size={13} />
-                      </button>
+                      <div className="flex items-start gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(plan)}
+                          className="p-1.5 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                          title="Edit plan">
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDelId(plan.id)}
+                          className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                          title="Delete plan">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -603,10 +649,16 @@ function SharePlansDialog({
               </div>
             )}
 
-            {/* Add Plan form */}
+            {/* Add / Edit Plan form */}
             {adding ? (
-              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-4">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">New Share Plan</p>
+              <div className={`rounded-lg border p-4 space-y-4 ${editingPlanId
+                ? "border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/10"
+                : "border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10"}`}>
+                <p className={`text-[11px] font-bold uppercase tracking-widest ${editingPlanId
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-blue-600 dark:text-blue-400"}`}>
+                  {editingPlanId ? "Edit Share Plan" : "New Share Plan"}
+                </p>
 
                 {/* Row 1: Title + Investment On */}
                 <div className="grid grid-cols-2 gap-3">
@@ -803,10 +855,10 @@ function SharePlansDialog({
 
                 {/* Form actions */}
                 <div className="flex items-center gap-2 pt-1">
-                  <Button size="sm" className="h-8 gap-1.5 text-[13px]" onClick={handleSubmit} disabled={!form.title.trim()}>
-                    <Save size={13} /> Save Plan
+                  <Button size="sm" className={`h-8 gap-1.5 text-[13px] ${editingPlanId ? "bg-amber-600 hover:bg-amber-700" : ""}`} onClick={handleSubmit} disabled={!form.title.trim()}>
+                    <Save size={13} /> {editingPlanId ? "Update Plan" : "Save Plan"}
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-[13px]" onClick={() => { setForm(BLANK_PLAN()); setAdding(false); }}>
+                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-[13px]" onClick={() => { setForm(BLANK_PLAN()); setAdding(false); setEditingPlanId(null); }}>
                     <X size={13} /> Cancel
                   </Button>
                 </div>
@@ -855,7 +907,7 @@ const NEW_ROW_ID = "__new__";
 
 export default function ShareholdersPage() {
   const { shareholders, addShareholder, editShareholder, removeShareholder } = useShareholders();
-  const { plans, addPlan, removePlan } = useInvestmentPlans();
+  const { plans, addPlan, editPlan, removePlan } = useInvestmentPlans();
   const { products }   = useProducts();
   const { categories } = useProductCategories();
   const { isAuthenticated } = useAuth();
@@ -996,6 +1048,11 @@ export default function ShareholdersPage() {
     const p = plans.find(pl => pl.id === id);
     removePlan(id);
     toast({ title: "Plan removed", description: `"${p?.title}" deleted.` });
+  };
+
+  const handleUpdatePlan = (id: string, data: Partial<InvestmentPlan>) => {
+    editPlan(id, data);
+    toast({ title: "Plan updated", description: `"${data.title}" saved.` });
   };
 
   const planModalShareholder = shareholders.find(s => s.id === planModalId) ?? null;
@@ -1250,6 +1307,7 @@ export default function ShareholdersPage() {
         onClose={() => setPlanModalId(null)}
         plans={plans}
         onAddPlan={handleAddPlan}
+        onUpdatePlan={handleUpdatePlan}
         onDeletePlan={handleDeletePlan}
         productOptions={productOptions}
         categoryOptions={categoryOptions}
