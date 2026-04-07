@@ -142,7 +142,7 @@ export default function JournalEntryPage() {
   const [description, setDesc] = useState("");
 
   // ── Rows ──────────────────────────────────────────────────────────────────
-  const [rows, setRows] = useState<Row[]>([emptyRow(), emptyRow()]);
+  const [rows, setRows] = useState<Row[]>(() => Array.from({ length: 10 }, emptyRow));
 
   // ── Active cell & ledger dropdown ─────────────────────────────────────────
   const [openLedger, setOpenLedger]   = useState<string | null>(null); // rowId
