@@ -120,7 +120,7 @@ function ActivityLogPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type SubItem = { label: string; href: string; icon: React.ElementType; desc?: string };
+type SubItem = { label: string; href?: string; icon?: React.ElementType; desc?: string; divider?: boolean };
 type NavItem = {
   key: string;
   href?: string;
@@ -179,21 +179,17 @@ const OTHER_NAV: NavItem[] = [
     items: null,
   },
   {
-    key: "products", label: "Products", icon: Package,
+    key: "products", label: "Products & Stock", icon: Package,
     items: [
-      { label: "Products",   href: "/products",   icon: Package,            desc: "Product catalogue"    },
-      { label: "Brands",     href: "/brands",     icon: Bookmark,           desc: "Brand management"     },
-      { label: "Categories", href: "/categories", icon: FolderOpen,         desc: "Product grouping"     },
-      { label: "Attributes",     href: "/attributes", icon: SlidersHorizontal,  desc: "Product properties"   },
-      { label: "Units",          href: "/units",      icon: Ruler,              desc: "Measurement units"    },
-      { label: "Media Library",  href: "/media",      icon: ImageIcon,          desc: "Product images"       },
-    ],
-  },
-  {
-    key: "stock", label: "Stock", icon: Boxes,
-    items: [
-      { label: "All Stock",   href: "/stock",       icon: Boxes, desc: "Product quantities & levels" },
-      { label: "Stock Holds", href: "/stock/holds", icon: Lock,  desc: "Reserved (Not For Sale) items" },
+      { label: "Products",      href: "/products",    icon: Package,           desc: "Product catalogue"    },
+      { label: "Brands",        href: "/brands",      icon: Bookmark,          desc: "Brand management"     },
+      { label: "Categories",    href: "/categories",  icon: FolderOpen,        desc: "Product grouping"     },
+      { label: "Attributes",    href: "/attributes",  icon: SlidersHorizontal, desc: "Product properties"   },
+      { label: "Units",         href: "/units",       icon: Ruler,             desc: "Measurement units"    },
+      { label: "Media Library", href: "/media",       icon: ImageIcon,         desc: "Product images"       },
+      { label: "Stock",         divider: true },
+      { label: "All Stock",     href: "/stock",       icon: Boxes,             desc: "Product quantities & levels"   },
+      { label: "Stock Holds",   href: "/stock/holds", icon: Lock,              desc: "Reserved (Not For Sale) items" },
     ],
   },
   {
@@ -229,8 +225,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES       = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media"];
-const STOCK_ROUTES     = ["/stock"];
+const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", "/units", "/media", "/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
 const SALES_ROUTES     = ["/sales", "/invoices"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
@@ -366,7 +361,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isCrmActive         = CRM_ROUTES.some(r         => location === r || location.startsWith(r));
   const isProductsActive    = PRODUCTS_ROUTES.some(r    => location === r || location.startsWith(r));
-  const isStockActive       = STOCK_ROUTES.some(r       => location === r || location.startsWith(r));
   const isPurchasesActive   = PURCHASES_ROUTES.some(r   => location === r || location.startsWith(r));
   const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
   const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
@@ -551,7 +545,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               const isActive =
                 item.key === "crm"         ? isCrmActive :
                 item.key === "products"    ? isProductsActive :
-                item.key === "stock"       ? isStockActive :
                 item.key === "purchases"   ? isPurchasesActive :
                 item.key === "sales"       ? isSalesActive :
                 item.key === "hrm"         ? isHrmActive :
@@ -663,15 +656,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <ChevronDown size={11} className="ml-0.5 text-gray-400 group-data-[state=open]:rotate-180 transition-transform" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" sideOffset={0} className="w-48">
-                    {item.items.map((sub, idx) => (
-                      <DropdownMenuItem key={idx} asChild>
-                        <Link href={sub.href} className="flex items-center gap-2 cursor-pointer text-[13px]">
-                          <sub.icon size={13} className="text-muted-foreground" />
-                          {sub.label}
-                        </Link>
-                      </DropdownMenuItem>
-                    ))}
+                  <DropdownMenuContent align="start" sideOffset={0} className="w-52">
+                    {item.items.map((sub, idx) =>
+                      sub.divider ? (
+                        <div key={idx}>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold px-2 py-1">
+                            {sub.label}
+                          </DropdownMenuLabel>
+                        </div>
+                      ) : (
+                        <DropdownMenuItem key={idx} asChild>
+                          <Link href={sub.href!} className="flex items-center gap-2 cursor-pointer text-[13px]">
+                            {sub.icon && <sub.icon size={13} className="text-muted-foreground" />}
+                            {sub.label}
+                          </Link>
+                        </DropdownMenuItem>
+                      )
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               );
@@ -702,15 +704,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </div>}
 
-              {/* Products group */}
-              {isModuleAllowed("products") && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products</p>
+              {/* Products & Stock group */}
+              {(isModuleAllowed("products") || isModuleAllowed("stock")) && <div className="pt-1 pb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products & Stock</p>
                 {[
-                  { href: "/products",   label: "Products",   icon: Package           },
-                  { href: "/brands",     label: "Brands",     icon: Bookmark          },
-                  { href: "/categories", label: "Categories", icon: FolderOpen        },
-                  { href: "/attributes", label: "Attributes", icon: SlidersHorizontal },
-                  { href: "/units",      label: "Units",      icon: Ruler             },
+                  ...(isModuleAllowed("products") ? [
+                    { href: "/products",   label: "Products",   icon: Package           },
+                    { href: "/brands",     label: "Brands",     icon: Bookmark          },
+                    { href: "/categories", label: "Categories", icon: FolderOpen        },
+                    { href: "/attributes", label: "Attributes", icon: SlidersHorizontal },
+                    { href: "/units",      label: "Units",      icon: Ruler             },
+                  ] : []),
+                  ...(isModuleAllowed("stock") ? [
+                    { href: "/stock",       label: "All Stock",   icon: Boxes },
+                    { href: "/stock/holds", label: "Stock Holds", icon: Lock  },
+                  ] : []),
                 ].map(item => (
                   <Link key={item.href} href={item.href}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -726,21 +734,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   location.startsWith("/purchases") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
                 <ShoppingCart size={16} /> Purchases
               </Link>}
-
-              {/* Stock */}
-              {isModuleAllowed("stock") && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Stock</p>
-                {[
-                  { href: "/stock",       label: "All Stock",   icon: Boxes },
-                  { href: "/stock/holds", label: "Stock Holds", icon: Lock  },
-                ].map(item => (
-                  <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      location === item.href ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                    <item.icon size={16} /> {item.label}
-                  </Link>
-                ))}
-              </div>}
 
               {/* Documents */}
               {isModuleAllowed("documents") && <Link href="/documents"
