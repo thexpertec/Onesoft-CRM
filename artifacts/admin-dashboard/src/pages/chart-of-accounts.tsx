@@ -16,6 +16,15 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// ─── Head numbering (canonical account prefix per head) ──────────────────────
+const HEAD_BASE_CODE: Record<AccountHead, string> = {
+  "Assets":           "1",
+  "Liabilities":      "2",
+  "Revenue / Income": "3",
+  "Expense":          "4",
+  "Equity":           "5",
+};
+
 // ─── Head visual config ───────────────────────────────────────────────────────
 const HEAD_STYLE: Record<AccountHead, {
   bg: string; text: string; border: string; badgeBg: string; dot: string;
@@ -73,20 +82,36 @@ function getPath(accounts: Account[], acc: Account): string {
   return parts.join(" › ");
 }
 
-/** Suggest the next auto-code for a new child of `parent` (or root if null). */
+/** Suggest the next auto-code for a new child of `parent` (or root if null).
+ *
+ *  Numbering convention:
+ *    Assets=1, Liabilities=2, Revenue/Income=3, Expense=4, Equity=5
+ *    Root accounts under Assets  → 1.1, 1.2, 1.3 …
+ *    Children of 1.1             → 1.1.1, 1.1.2 …
+ *    Children of 1.1.1           → 1.1.1.1, 1.1.1.2 …
+ */
 function suggestCode(
   parent: Account | null,
   head: AccountHead,
   allAccounts: Account[],
   offset = 0,
 ): string {
+  const base = HEAD_BASE_CODE[head];          // "1" | "2" | … | "5"
+
   if (!parent) {
-    const rootCount = allAccounts.filter(a => a.head === head && !a.parentId).length;
-    return String(rootCount + offset + 1);
+    // Root-level accounts under this head get e.g. 1.1, 1.2, 1.3 …
+    const roots = allAccounts.filter(a => a.head === head && !a.parentId);
+    const nums  = roots
+      .map(r => { const parts = r.code.split("."); return parseInt(parts[parts.length - 1], 10); })
+      .filter(n => !isNaN(n));
+    const maxN = nums.length > 0 ? Math.max(...nums) : 0;
+    return `${base}.${maxN + offset + 1}`;
   }
+
+  // Child accounts: append next sequential number to parent's code
   const siblings = allAccounts.filter(a => a.parentId === parent.id);
   const nums = siblings
-    .map(s => { const p = s.code.split("."); return parseInt(p[p.length - 1]); })
+    .map(s => { const p = s.code.split("."); return parseInt(p[p.length - 1], 10); })
     .filter(n => !isNaN(n));
   const maxN = nums.length > 0 ? Math.max(...nums) : 0;
   return `${parent.code}.${maxN + offset + 1}`;
@@ -291,7 +316,7 @@ function downloadCoATemplate() {
     "# CHART OF ACCOUNTS - IMPORT TEMPLATE",
     "# ---------------------------------------------------------------------------",
     "# COLUMNS (case-insensitive headers - column order does not matter):",
-    "#   code           | required | Account code  e.g. 1  or  1.1  or  1.1.2",
+    "#   code           | required | Account code  e.g. 1.1 or 1.1.1 (use head prefix: Assets=1, Liabilities=2, Revenue=3, Expense=4, Equity=5)",
     "#   name           | required | Account name",
     "#   head           | required | Assets | Liabilities | Revenue / Income | Expense | Equity",
     "#   type           | required | Group (can have children)  or  Ledger (leaf/final entry)",
@@ -315,30 +340,35 @@ function downloadCoATemplate() {
     "#   5. Lines starting with # are comments and are ignored by the importer.",
     "#   6. You may delete the example rows below - the header row must remain.",
     "#",
+    "# NUMBERING CONVENTION:",
+    "#   Head prefix  :  Assets=1  Liabilities=2  Revenue / Income=3  Expense=4  Equity=5",
+    "#   Root accounts → 1.1, 1.2, 1.3 …     (prefix.N)",
+    "#   Sub-groups    → 1.1.1, 1.1.2 …       (parent.N)",
+    "#   Ledgers       → 1.1.1.1, 1.1.1.2 …   (parent.N)",
     "# ---------------------------------------------------------------------------",
     "code,name,head,type,subType,parentCode,openingBalance,description",
-    "1,Fixed Assets,Assets,Group,Fixed Asset,,0,Long-term tangible assets",
-    "1.1,Machinery and Equipment,Assets,Group,Fixed Asset,1,0,",
-    "1.1.1,CNC Machine - Islamabad,Assets,Ledger,Fixed Asset,1.1,50000,Purchased Jan 2024",
-    "1.1.2,CNC Machine - Hull UK,Assets,Ledger,Fixed Asset,1.1,35000,",
-    "1.2,Office Equipment,Assets,Group,Fixed Asset,1,0,",
-    "1.2.1,Computers and Laptops,Assets,Ledger,Fixed Asset,1.2,15000,",
-    "2,Current Assets,Assets,Group,Current Asset,,0,",
-    "2.1,Bank and Cash,Assets,Group,Current Asset,2,0,",
-    "2.1.1,Cash in Hand - Islamabad,Assets,Ledger,Current Asset,2.1,5000,",
-    "2.1.2,Cash in Hand - Hull,Assets,Ledger,Current Asset,2.1,3000,",
-    "2.1.3,HBL Business Account,Assets,Ledger,Current Asset,2.1,120000,",
-    "3,Short-term Loans,Liabilities,Group,Current Liability,,0,",
-    "3.1,Bank Overdraft - HBL,Liabilities,Ledger,Current Liability,3,0,",
-    "4,Long-term Finance,Liabilities,Group,Long-term Liability,,0,",
-    "5,Sales Revenue,Revenue / Income,Group,Operating Revenue,,0,",
-    "5.1,Software License Sales,Revenue / Income,Ledger,Operating Revenue,5,0,",
-    "5.2,Consulting and Services,Revenue / Income,Ledger,Operating Revenue,5,0,",
-    "6,Operating Expenses,Expense,Group,Operating Expense,,0,",
-    "6.1,Staff Salaries,Expense,Ledger,Operating Expense,6,0,",
-    "6.2,Office Rent,Expense,Ledger,Operating Expense,6,0,",
-    "7,Owner Capital,Equity,Group,Owner's Equity,,0,",
-    "7.1,Share Capital,Equity,Ledger,Owner's Equity,7,0,",
+    "1.1,Fixed Assets,Assets,Group,Fixed Asset,,0,Long-term tangible assets",
+    "1.1.1,Machinery and Equipment,Assets,Group,Fixed Asset,1.1,0,",
+    "1.1.1.1,CNC Machine - Islamabad,Assets,Ledger,Fixed Asset,1.1.1,50000,Purchased Jan 2024",
+    "1.1.1.2,CNC Machine - Hull UK,Assets,Ledger,Fixed Asset,1.1.1,35000,",
+    "1.1.2,Office Equipment,Assets,Group,Fixed Asset,1.1,0,",
+    "1.1.2.1,Computers and Laptops,Assets,Ledger,Fixed Asset,1.1.2,15000,",
+    "1.2,Current Assets,Assets,Group,Current Asset,,0,",
+    "1.2.1,Bank and Cash,Assets,Group,Current Asset,1.2,0,",
+    "1.2.1.1,Cash in Hand - Islamabad,Assets,Ledger,Current Asset,1.2.1,5000,",
+    "1.2.1.2,Cash in Hand - Hull,Assets,Ledger,Current Asset,1.2.1,3000,",
+    "1.2.1.3,HBL Business Account,Assets,Ledger,Current Asset,1.2.1,120000,",
+    "2.1,Short-term Loans,Liabilities,Group,Current Liability,,0,",
+    "2.1.1,Bank Overdraft - HBL,Liabilities,Ledger,Current Liability,2.1,0,",
+    "2.2,Long-term Finance,Liabilities,Group,Long-term Liability,,0,",
+    "3.1,Sales Revenue,Revenue / Income,Group,Operating Revenue,,0,",
+    "3.1.1,Software License Sales,Revenue / Income,Ledger,Operating Revenue,3.1,0,",
+    "3.1.2,Consulting and Services,Revenue / Income,Ledger,Operating Revenue,3.1,0,",
+    "4.1,Operating Expenses,Expense,Group,Operating Expense,,0,",
+    "4.1.1,Staff Salaries,Expense,Ledger,Operating Expense,4.1,0,",
+    "4.1.2,Office Rent,Expense,Ledger,Operating Expense,4.1,0,",
+    "5.1,Owner Capital,Equity,Group,Owner's Equity,,0,",
+    "5.1.1,Share Capital,Equity,Ledger,Owner's Equity,5.1,0,",
   ];
   // UTF-8 BOM + "sep=," directive: BOM tells Excel the encoding is UTF-8,
   // and "sep=," overrides Excel's regional list-separator so commas always split columns.
@@ -1001,6 +1031,7 @@ export default function ChartOfAccountsPage() {
                     <div className={`flex items-center gap-2 px-4 py-2 border-b ${s.border} ${s.bg}`}>
                       <button onClick={() => setHeadCollapsed(p => ({ ...p, [head]: !p[head] }))} className="flex items-center gap-2 flex-1 min-w-0">
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+                        <span className={`font-mono text-[12px] font-extrabold flex-shrink-0 ${s.text} opacity-60`}>{HEAD_BASE_CODE[head]}</span>
                         <span className={`text-[11px] font-bold uppercase tracking-wider flex-1 text-left ${s.text}`}>{head}</span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${s.badgeBg}`}>{headAccounts.length}</span>
                         {isHCollapsed ? <ChevronRight size={13} className={s.text} /> : <ChevronDown size={13} className={s.text} />}
