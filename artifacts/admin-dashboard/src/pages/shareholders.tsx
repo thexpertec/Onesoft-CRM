@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useShareholders, useInvestmentPlans, useProducts, useProductCategories } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Shareholder, InvestmentPlan, InvestmentType, ProductItem } from "@/lib/store";
+import { Shareholder, InvestmentPlan, InvestmentType, ProductItem, getSettings } from "@/lib/store";
+import { getCurrency } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Plus, Trash2, X, Save, Upload, Download, FileSpreadsheet,
@@ -129,9 +130,9 @@ const BLANK_PLAN = (): PlanForm => ({
 });
 
 // ─── Print / PDF helper ───────────────────────────────────────────────────────
-function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]): string {
+function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[], currSym: string = "£"): string {
   const fmt = (n: string | undefined) => n ? Number(n).toLocaleString() : "—";
-  const fmtP = (n: string | undefined) => n ? `£${Number(n).toLocaleString()}` : "—";
+  const fmtP = (n: string | undefined) => n ? `${currSym}${Number(n).toLocaleString()}` : "—";
   const date = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
 
   const planCards = plans.map(plan => {
@@ -141,7 +142,7 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
 
     const productSection = hasItems
       ? `<table class="prod-table">
-          <thead><tr><th class="left">Product</th><th class="right">Units</th><th class="right">Invested (£)</th></tr></thead>
+          <thead><tr><th class="left">Product</th><th class="right">Units</th><th class="right">Invested (${currSym})</th></tr></thead>
           <tbody>
             ${plan.productItems!.map(item => `
               <tr>
@@ -153,7 +154,7 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
               <tr class="total-row">
                 <td><strong>Total</strong></td>
                 <td class="right blue"><strong>${totalU?.toLocaleString()}</strong></td>
-                <td class="right green"><strong>£${totalA?.toLocaleString()}</strong></td>
+                <td class="right green"><strong>${currSym}${totalA?.toLocaleString()}</strong></td>
               </tr>` : ""}
           </tbody>
         </table>`
@@ -164,8 +165,8 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
     const metrics = [
       plan.timeDuration        ? `<span class="chip">Duration: ${plan.timeDuration}</span>` : "",
       plan.lockForSpecificTime === "Yes" ? `<span class="chip locked">🔒 Locked</span>` : "",
-      plan.maxProfit           ? `<span class="chip profit">Max Profit: £${fmt(plan.maxProfit)}</span>` : "",
-      plan.maxLoss             ? `<span class="chip loss">Max Loss: £${fmt(plan.maxLoss)}</span>` : "",
+      plan.maxProfit           ? `<span class="chip profit">Max Profit: ${currSym}${fmt(plan.maxProfit)}</span>` : "",
+      plan.maxLoss             ? `<span class="chip loss">Max Loss: ${currSym}${fmt(plan.maxLoss)}</span>` : "",
       plan.profitMarginWithLoss    ? `<span class="chip">Margin w/ Loss: ${plan.profitMarginWithLoss}%</span>` : "",
       plan.profitMarginWithoutLoss ? `<span class="chip">Margin w/o Loss: ${plan.profitMarginWithoutLoss}%</span>` : "",
     ].filter(Boolean).join(" ");
@@ -364,6 +365,8 @@ function SharePlansDialog({
   productOptions: string[];
   categoryOptions: string[];
 }) {
+  const currSym = getCurrency(getSettings().currency).symbol;
+
   const [form,    setForm]    = useState<PlanForm>(BLANK_PLAN());
   const [adding,  setAdding]  = useState(false);
   const [delId,   setDelId]   = useState<string | null>(null);
@@ -373,7 +376,7 @@ function SharePlansDialog({
   const handlePrint = () => {
     if (!shareholder) return;
     const myPlans = plans.filter(p => p.shareholderId === shareholder.id);
-    const html    = generateSharePlanHTML(shareholder, myPlans);
+    const html    = generateSharePlanHTML(shareholder, myPlans, currSym);
     const win     = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
@@ -490,7 +493,7 @@ function SharePlansDialog({
                                 <tr className="bg-gray-50 dark:bg-muted/30">
                                   <th className="text-left px-2 py-1 font-medium text-muted-foreground">Product</th>
                                   <th className="text-right px-2 py-1 font-medium text-muted-foreground">Units</th>
-                                  <th className="text-right px-2 py-1 font-medium text-muted-foreground">Invested (£)</th>
+                                  <th className="text-right px-2 py-1 font-medium text-muted-foreground">Invested ({currSym})</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -498,7 +501,7 @@ function SharePlansDialog({
                                   <tr key={i} className="border-t border-gray-100 dark:border-border">
                                     <td className="px-2 py-1">{item.productName}</td>
                                     <td className="px-2 py-1 text-right text-muted-foreground">{item.units ? Number(item.units).toLocaleString() : "—"}</td>
-                                    <td className="px-2 py-1 text-right text-muted-foreground">{item.investedAmount ? `£${Number(item.investedAmount).toLocaleString()}` : "—"}</td>
+                                    <td className="px-2 py-1 text-right text-muted-foreground">{item.investedAmount ? `${currSym}${Number(item.investedAmount).toLocaleString()}` : "—"}</td>
                                   </tr>
                                 ))}
                                 {/* Totals row */}
@@ -509,7 +512,7 @@ function SharePlansDialog({
                                       {plan.productItems.reduce((s, r) => s + (parseFloat(r.units) || 0), 0).toLocaleString()}
                                     </td>
                                     <td className="px-2 py-1 text-right text-emerald-600 dark:text-emerald-400">
-                                      £{plan.productItems.reduce((s, r) => s + (parseFloat(r.investedAmount) || 0), 0).toLocaleString()}
+                                      {currSym}{plan.productItems.reduce((s, r) => s + (parseFloat(r.investedAmount) || 0), 0).toLocaleString()}
                                     </td>
                                   </tr>
                                 )}
@@ -530,7 +533,7 @@ function SharePlansDialog({
                             )}
                             {plan.investmentAmount && (
                               <span className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 font-medium">
-                                £{Number(plan.investmentAmount).toLocaleString()}
+                                {currSym}{Number(plan.investmentAmount).toLocaleString()}
                               </span>
                             )}
                           </div>
@@ -542,12 +545,12 @@ function SharePlansDialog({
                           )}
                           {plan.maxProfit && (
                             <span className="flex items-center gap-1 text-[12px] text-emerald-600 dark:text-emerald-400">
-                              <ArrowUpCircle size={11} /> {Number(plan.maxProfit).toLocaleString()}
+                              <ArrowUpCircle size={11} /> {currSym}{Number(plan.maxProfit).toLocaleString()}
                             </span>
                           )}
                           {plan.maxLoss && (
                             <span className="flex items-center gap-1 text-[12px] text-red-500 dark:text-red-400">
-                              <ArrowDownCircle size={11} /> {Number(plan.maxLoss).toLocaleString()}
+                              <ArrowDownCircle size={11} /> {currSym}{Number(plan.maxLoss).toLocaleString()}
                             </span>
                           )}
                         </div>
@@ -620,7 +623,7 @@ function SharePlansDialog({
                     <div className="grid gap-1.5" style={{ gridTemplateColumns: "1fr 90px 110px 28px" }}>
                       <span className="text-[11px] text-muted-foreground px-1">Product Name</span>
                       <span className="text-[11px] text-muted-foreground px-1">Units</span>
-                      <span className="text-[11px] text-muted-foreground px-1">Invested (£)</span>
+                      <span className="text-[11px] text-muted-foreground px-1">Invested ({currSym})</span>
                       <span />
                     </div>
                     {/* Product rows */}
@@ -653,7 +656,7 @@ function SharePlansDialog({
                           {totalUnits > 0 ? totalUnits.toLocaleString() : "—"}
                         </span>
                         <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 px-1">
-                          {totalAmount > 0 ? `£${totalAmount.toLocaleString()}` : "—"}
+                          {totalAmount > 0 ? `${currSym}${totalAmount.toLocaleString()}` : "—"}
                         </span>
                         <span />
                       </div>
@@ -705,7 +708,7 @@ function SharePlansDialog({
                   {/* Investment Amount + Units for non-Product modes */}
                   {!isProductMode && (
                     <div className="space-y-1">
-                      <Label className="text-[12px]">Investment Amount (£)</Label>
+                      <Label className="text-[12px]">Investment Amount ({currSym})</Label>
                       <Input value={form.investmentAmount} onChange={e => setForm(f => ({...f, investmentAmount: e.target.value}))}
                         placeholder="25000" type="number" className="h-8 text-[13px]" />
                     </div>
