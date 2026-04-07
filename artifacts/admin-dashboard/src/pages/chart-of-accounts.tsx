@@ -786,21 +786,14 @@ export default function ChartOfAccountsPage() {
           )}
         </div>
 
-        {/* Sub-type */}
-        <div className="w-36 flex-shrink-0 pr-2">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${s.bg} ${s.text} ${s.border}`}>
-            {acc.subType}
-          </span>
-        </div>
-
         {/* Parent account */}
-        <div className="w-44 flex-shrink-0 pr-2">
+        <div className="w-52 flex-shrink-0 pr-2">
           {(() => {
             const parent = acc.parentId ? accounts.find(a => a.id === acc.parentId) : null;
             return parent ? (
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="font-mono text-[10px] font-bold text-gray-400 flex-shrink-0">{parent.code}</span>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{parent.name}</span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`font-mono text-[11px] font-extrabold flex-shrink-0 ${s.text}`}>{parent.code}</span>
+                <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{parent.name}</span>
               </div>
             ) : (
               <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
@@ -1026,8 +1019,7 @@ export default function ChartOfAccountsPage() {
             <div className="w-24 flex-shrink-0">Code</div>
             <div className="flex-1">Account Name</div>
             <div className="w-28 flex-shrink-0 text-right pr-2">Opening Bal.</div>
-            <div className="w-36 flex-shrink-0">Type</div>
-            <div className="w-44 flex-shrink-0">Parent Account</div>
+            <div className="w-52 flex-shrink-0">Parent Account</div>
             <div className="w-20 flex-shrink-0 text-center">Status</div>
             <div className="w-20 flex-shrink-0" />
           </div>
@@ -1055,16 +1047,13 @@ export default function ChartOfAccountsPage() {
                       <div className="w-28 flex-shrink-0 pr-2 text-right">
                         {isLedger && acc.openingBalance !== 0 && <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">{acc.openingBalance.toLocaleString()}</span>}
                       </div>
-                      <div className="w-36 flex-shrink-0 pr-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${s.bg} ${s.text} ${s.border}`}>{acc.subType}</span>
-                      </div>
-                      <div className="w-44 flex-shrink-0 pr-2">
+                      <div className="w-52 flex-shrink-0 pr-2">
                         {(() => {
                           const parent = acc.parentId ? accounts.find(a => a.id === acc.parentId) : null;
                           return parent ? (
-                            <div className="flex items-center gap-1 min-w-0">
-                              <span className="font-mono text-[10px] font-bold text-gray-400 flex-shrink-0">{parent.code}</span>
-                              <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{parent.name}</span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`font-mono text-[11px] font-extrabold flex-shrink-0 ${s.text}`}>{parent.code}</span>
+                              <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{parent.name}</span>
                             </div>
                           ) : <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>;
                         })()}
