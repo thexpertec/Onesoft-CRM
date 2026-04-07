@@ -793,6 +793,21 @@ export default function ChartOfAccountsPage() {
           </span>
         </div>
 
+        {/* Parent account */}
+        <div className="w-44 flex-shrink-0 pr-2">
+          {(() => {
+            const parent = acc.parentId ? accounts.find(a => a.id === acc.parentId) : null;
+            return parent ? (
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="font-mono text-[10px] font-bold text-gray-400 flex-shrink-0">{parent.code}</span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{parent.name}</span>
+              </div>
+            ) : (
+              <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
+            );
+          })()}
+        </div>
+
         {/* Status */}
         <div className="w-20 flex-shrink-0 flex justify-center">
           <button
@@ -1012,6 +1027,7 @@ export default function ChartOfAccountsPage() {
             <div className="flex-1">Account Name</div>
             <div className="w-28 flex-shrink-0 text-right pr-2">Opening Bal.</div>
             <div className="w-36 flex-shrink-0">Type</div>
+            <div className="w-44 flex-shrink-0">Parent Account</div>
             <div className="w-20 flex-shrink-0 text-center">Status</div>
             <div className="w-20 flex-shrink-0" />
           </div>
@@ -1041,6 +1057,17 @@ export default function ChartOfAccountsPage() {
                       </div>
                       <div className="w-36 flex-shrink-0 pr-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${s.bg} ${s.text} ${s.border}`}>{acc.subType}</span>
+                      </div>
+                      <div className="w-44 flex-shrink-0 pr-2">
+                        {(() => {
+                          const parent = acc.parentId ? accounts.find(a => a.id === acc.parentId) : null;
+                          return parent ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="font-mono text-[10px] font-bold text-gray-400 flex-shrink-0">{parent.code}</span>
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{parent.name}</span>
+                            </div>
+                          ) : <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>;
+                        })()}
                       </div>
                       <div className="w-20 flex-shrink-0 flex justify-center">
                         <button onClick={e => { e.stopPropagation(); editAccount(acc.id, { isActive: !acc.isActive }); toast({ title: acc.isActive ? "Deactivated" : "Activated" }); }}
