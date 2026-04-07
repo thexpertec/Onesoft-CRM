@@ -17,7 +17,7 @@ import {
   getSales, createSale, updateSale, deleteSale,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
-  Lead, RequirementDoc, Customer, ProductCategory, Supplier, Shareholder,
+  Lead, RequirementDoc, Customer, ProductCategory, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
 } from "@/lib/store";
 
@@ -359,4 +359,14 @@ export function useShareholders() {
   const editShareholder   = (id: string, u: Parameters<typeof updateShareholder>[1])    => { const s = updateShareholder(id, u); fetch(); return s; };
   const removeShareholder = (id: string)                                                 => { deleteShareholder(id);              fetch(); };
   return { shareholders, addShareholder, editShareholder, removeShareholder, refresh: fetch };
+}
+
+export function useInvestmentPlans() {
+  const [plans, setPlans] = useState<InvestmentPlan[]>([]);
+  const fetch = useCallback(() => setPlans(getInvestmentPlans()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addPlan    = (d: Parameters<typeof createInvestmentPlan>[0])                => { const p = createInvestmentPlan(d);    fetch(); return p; };
+  const editPlan   = (id: string, u: Parameters<typeof updateInvestmentPlan>[1])    => { const p = updateInvestmentPlan(id, u); fetch(); return p; };
+  const removePlan = (id: string)                                                    => { deleteInvestmentPlan(id);              fetch(); };
+  return { plans, addPlan, editPlan, removePlan, refresh: fetch };
 }

@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark,
+  Landmark, TrendingUp,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -230,6 +230,12 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   { key: "accounts", href: "/chart-of-accounts", label: "Accounts", icon: BookOpen, items: null },
+  {
+    key: "investments", label: "Investments", icon: TrendingUp,
+    items: [
+      { label: "Investment Plans", href: "/investment-plans", icon: TrendingUp, desc: "Define & manage investment plans" },
+    ],
+  },
   { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
 ];
 
@@ -238,7 +244,8 @@ const PRODUCTS_ROUTES  = ["/products", "/brands", "/categories", "/attributes", 
 const STOCK_ROUTES     = ["/stock"];
 const PURCHASES_ROUTES = ["/purchases"];
 const SALES_ROUTES     = ["/sales", "/invoices"];
-const HRM_ROUTES       = ["/staff", "/roles", "/users"];
+const HRM_ROUTES         = ["/staff", "/roles", "/users"];
+const INVESTMENTS_ROUTES = ["/investment-plans"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
@@ -368,12 +375,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
     .split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const isCrmActive       = CRM_ROUTES.some(r       => location === r || location.startsWith(r));
-  const isProductsActive  = PRODUCTS_ROUTES.some(r  => location === r || location.startsWith(r));
-  const isStockActive     = STOCK_ROUTES.some(r     => location === r || location.startsWith(r));
-  const isPurchasesActive = PURCHASES_ROUTES.some(r => location === r || location.startsWith(r));
-  const isSalesActive     = SALES_ROUTES.some(r     => location === r || location.startsWith(r));
-  const isHrmActive       = HRM_ROUTES.some(r       => location === r || location.startsWith(r));
+  const isCrmActive         = CRM_ROUTES.some(r         => location === r || location.startsWith(r));
+  const isProductsActive    = PRODUCTS_ROUTES.some(r    => location === r || location.startsWith(r));
+  const isStockActive       = STOCK_ROUTES.some(r       => location === r || location.startsWith(r));
+  const isPurchasesActive   = PURCHASES_ROUTES.some(r   => location === r || location.startsWith(r));
+  const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
+  const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
+  const isInvestmentsActive = INVESTMENTS_ROUTES.some(r => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -552,12 +560,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
             {navItems.map(item => {
               const isActive =
-                item.key === "crm"       ? isCrmActive :
-                item.key === "products"  ? isProductsActive :
-                item.key === "stock"     ? isStockActive :
-                item.key === "purchases" ? isPurchasesActive :
-                item.key === "sales"     ? isSalesActive :
-                item.key === "hrm"       ? isHrmActive :
+                item.key === "crm"         ? isCrmActive :
+                item.key === "products"    ? isProductsActive :
+                item.key === "stock"       ? isStockActive :
+                item.key === "purchases"   ? isPurchasesActive :
+                item.key === "sales"       ? isSalesActive :
+                item.key === "hrm"         ? isHrmActive :
+                item.key === "investments" ? isInvestmentsActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
