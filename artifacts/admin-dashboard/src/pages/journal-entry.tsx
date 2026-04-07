@@ -98,7 +98,7 @@ function LedgerDropdown({
           />
         </div>
       </div>
-      <div className="max-h-56 overflow-y-auto">
+      <div className="max-h-80 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="px-4 py-6 text-center text-[12px] text-gray-400">No ledgers found</div>
         ) : (
@@ -166,7 +166,7 @@ export default function JournalEntryPage() {
             debit:  l.debit  > 0 ? String(l.debit)  : "",
             credit: l.credit > 0 ? String(l.credit) : "",
           }))
-        : [emptyRow(), emptyRow()],
+        : Array.from({ length: 10 }, emptyRow),
     );
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -219,7 +219,7 @@ export default function JournalEntryPage() {
     setDate(today());
     setRef(nextRef(entries));
     setDesc("");
-    setRows([emptyRow(), emptyRow()]);
+    setRows(Array.from({ length: 10 }, emptyRow));
   };
 
   // ── Totals ────────────────────────────────────────────────────────────────
