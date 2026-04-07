@@ -3,10 +3,11 @@ import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Staff, StaffStatus } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Users2, Plus, Search, X, Save, Trash2 } from "lucide-react";
+import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
 
@@ -55,6 +56,9 @@ export default function StaffPage() {
   const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
+  const [loginTarget,  setLoginTarget]  = useState<Staff | null>(null);
+  const [loginForm,    setLoginForm]    = useState({ enabled: false, username: "", password: "" });
+  const [showLoginPwd, setShowLoginPwd] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,6 +147,49 @@ export default function StaffPage() {
     removeStaff(deleteId);
     toast({ title: "Staff member removed", description: `"${s?.name}" removed.` });
     setDeleteId(null);
+  };
+
+  const openLoginDialog = (member: Staff) => {
+    setLoginTarget(member);
+    setLoginForm({
+      enabled:  member.loginEnabled ?? false,
+      username: member.username ?? member.name.toLowerCase().replace(/\s+/g, "."),
+      password: member.password ?? "",
+    });
+    setShowLoginPwd(false);
+  };
+
+  const saveLoginAccess = () => {
+    if (!loginTarget) return;
+    if (loginForm.enabled) {
+      if (!loginForm.username.trim()) {
+        toast({ title: "Username is required", variant: "destructive" }); return;
+      }
+      if (loginForm.password.length < 6) {
+        toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return;
+      }
+      // Check uniqueness — no two staff with same username
+      const conflict = staff.find(
+        s => s.id !== loginTarget.id &&
+             s.loginEnabled &&
+             s.username?.toLowerCase() === loginForm.username.trim().toLowerCase()
+      );
+      if (conflict) {
+        toast({ title: `Username "${loginForm.username.trim()}" is already taken`, variant: "destructive" }); return;
+      }
+    }
+    editStaff(loginTarget.id, {
+      loginEnabled: loginForm.enabled,
+      username:     loginForm.enabled ? loginForm.username.trim() : undefined,
+      password:     loginForm.enabled ? loginForm.password : undefined,
+    });
+    toast({
+      title: loginForm.enabled ? "Login access enabled" : "Login access disabled",
+      description: loginForm.enabled
+        ? `${loginTarget.name} can now log in as "${loginForm.username.trim()}"`
+        : `${loginTarget.name} can no longer log in`,
+    });
+    setLoginTarget(null);
   };
 
   // ── pills ──
@@ -342,10 +389,22 @@ export default function StaffPage() {
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {isAuthenticated && (
-                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Remove"
-                        onClick={() => setDeleteId(member.id)}>
-                        <Trash2 size={13} />
-                      </button>
+                      <>
+                        <button
+                          title={member.loginEnabled ? "Login access enabled — click to edit" : "Set login access"}
+                          onClick={() => openLoginDialog(member)}
+                          className={`p-1 rounded transition-colors ${
+                            member.loginEnabled
+                              ? "text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                              : "text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                          }`}>
+                          <KeyRound size={13} />
+                        </button>
+                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Remove"
+                          onClick={() => setDeleteId(member.id)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -381,6 +440,115 @@ export default function StaffPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Login Access dialog */}
+      <Dialog open={!!loginTarget} onOpenChange={v => !v && setLoginTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
+              <KeyRound size={16} className="text-teal-600" />
+              Login Access — {loginTarget?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            {/* Role badge */}
+            {loginTarget?.role && (
+              <div className="text-[12px] text-gray-500 dark:text-muted-foreground">
+                Role: <span className="font-semibold text-gray-700 dark:text-foreground">{loginTarget.role}</span>
+                {loginTarget.designation && (
+                  <> &nbsp;·&nbsp; {loginTarget.designation}</>
+                )}
+              </div>
+            )}
+
+            {/* Enable toggle */}
+            <div className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+              loginForm.enabled
+                ? "bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800"
+                : "bg-gray-50 dark:bg-zinc-800/30 border-gray-200 dark:border-zinc-700"
+            }`}>
+              <div className="flex items-center gap-2">
+                {loginForm.enabled
+                  ? <ShieldCheck size={15} className="text-teal-600 dark:text-teal-400" />
+                  : <ShieldOff   size={15} className="text-gray-400" />}
+                <span className={`text-[13px] font-semibold ${loginForm.enabled ? "text-teal-700 dark:text-teal-400" : "text-gray-500 dark:text-muted-foreground"}`}>
+                  {loginForm.enabled ? "Login enabled" : "Login disabled"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLoginForm(f => ({ ...f, enabled: !f.enabled }))}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                  loginForm.enabled ? "bg-teal-500" : "bg-gray-300 dark:bg-zinc-600"
+                }`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  loginForm.enabled ? "translate-x-4" : "translate-x-1"
+                }`} />
+              </button>
+            </div>
+
+            {/* Credentials (only shown when enabled) */}
+            {loginForm.enabled && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-gray-600 dark:text-muted-foreground uppercase tracking-wide">Username</label>
+                  <Input
+                    value={loginForm.username}
+                    onChange={e => setLoginForm(f => ({ ...f, username: e.target.value.replace(/\s+/g, ".").toLowerCase() }))}
+                    placeholder="firstname.lastname"
+                    className="h-9 text-[13px] font-mono"
+                  />
+                  <p className="text-[11px] text-gray-400">Used to log in. Lowercase letters and dots only.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-semibold text-gray-600 dark:text-muted-foreground uppercase tracking-wide">Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showLoginPwd ? "text" : "password"}
+                      value={loginForm.password}
+                      onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                      placeholder="Minimum 6 characters"
+                      className="h-9 text-[13px] pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPwd(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-foreground transition-colors"
+                    >
+                      {showLoginPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  {loginForm.password && loginForm.password.length < 6 && (
+                    <p className="text-[11px] text-red-500">Password must be at least 6 characters</p>
+                  )}
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900">
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                    This staff member will be able to log in at the Admin Portal using the <strong>Staff</strong> tab.
+                    Their dashboard access will be limited to their assigned role: <strong>{loginTarget?.role || "—"}</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setLoginTarget(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={saveLoginAccess}
+              className={loginForm.enabled ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}
+            >
+              <KeyRound size={13} className="mr-1.5" />
+              Save Access Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,12 +1,15 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import {
   AdminUser,
-  Tenant,
   getAdminUsers,
   getAdminUserById,
   getTenantByCredentials,
   getTenantById,
   tenantToAdminUser,
+  getStaffByCredentials,
+  getStaff,
+  getStaffRoles,
+  staffToAdminUser,
   setActiveTenant,
   getActiveTenantId,
   syncAllFromServer,
@@ -18,22 +21,26 @@ const AUTH_USER_ID = "onesoft-admin-user-id";
 const TENANT_KEY   = "onesoft-tenant-id";
 
 type AuthContextType = {
-  isAuthenticated:  boolean;
-  currentUser:      AdminUser | null;
-  isSuperAdmin:     boolean;
-  currentTenantId:  string | null;
-  currentTenant:    Tenant | null;
-  isSyncing:        boolean;
-  login:            (username: string, password: string) => Promise<boolean>;
-  logout:           () => void;
+  isAuthenticated:   boolean;
+  currentUser:       AdminUser | null;
+  isSuperAdmin:      boolean;
+  isStaff:           boolean;
+  staffPermissions:  Set<string>; // HRM role permissions for staff users
+  currentTenantId:   string | null;
+  currentTenant:     Tenant | null;
+  isSyncing:         boolean;
+  login:             (username: string, password: string) => Promise<boolean>;
+  logout:            () => void;
   refreshCurrentUser: () => void;
-  switchTenant:     (tenantId: string | null) => void;
+  switchTenant:      (tenantId: string | null) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
   isAuthenticated:    false,
   currentUser:        null,
   isSuperAdmin:       false,
+  isStaff:            false,
+  staffPermissions:   new Set(),
   currentTenantId:    null,
   currentTenant:      null,
   isSyncing:          false,
@@ -78,7 +85,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = currentUser !== null;
   const isSuperAdmin    = currentUser?.role === "superadmin";
+  const isStaff         = currentUser?.role === "staff";
   const currentTenant   = currentTenantId ? (getTenantById(currentTenantId) ?? null) : null;
+
+  /** Permissions set for the currently logged-in staff member (empty for admins). */
+  const staffPermissions = (() => {
+    if (!isStaff || !currentUser) return new Set<string>();
+    const staffMember = getStaff().find(s => s.id === currentUser.id);
+    if (!staffMember) return new Set<string>();
+    const roles = getStaffRoles();
+    const hrmRole = roles.find(r => r.name === staffMember.role);
+    if (!hrmRole) return new Set<string>();
+    return new Set(
+      hrmRole.permissions.split(",").map(p => p.trim()).filter(Boolean)
+    );
+  })();
 
   // ── On app load: if already authenticated, sync from DB ────────────────────
   useEffect(() => {
@@ -149,6 +170,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
+    // 3. Check HRM staff with login enabled
+    const staffMember = getStaffByCredentials(username, password);
+    if (staffMember) {
+      if (staffMember.status === "Terminated") return false;
+      const staffUser = staffToAdminUser(staffMember);
+      setActiveTenant(null);
+      setActivityUser(staffUser.fullName || staffUser.username);
+      sessionStorage.setItem(AUTH_KEY,     "true");
+      sessionStorage.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
+      sessionStorage.setItem(TENANT_KEY,   "");
+      setCurrentUser(staffUser);
+      setCurrentTenantId(null);
+      return true;
+    }
+
     return false;
   };
 
@@ -185,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       isAuthenticated, currentUser, isSuperAdmin,
+      isStaff, staffPermissions,
       currentTenantId, currentTenant,
       isSyncing,
       login, logout, refreshCurrentUser, switchTenant,

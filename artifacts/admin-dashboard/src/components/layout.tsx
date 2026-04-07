@@ -248,7 +248,7 @@ const QUICK_ADD: SubItem[] = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
+  const { isSuperAdmin, isStaff, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
 
   const [mobileOpen,       setMobileOpen]       = useState(false);
   const [searchOpen,       setSearchOpen]       = useState(false);
@@ -313,7 +313,38 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // When the superadmin is in "view as tenant" mode (currentTenantId set),
   // apply the tenant's module group restrictions — same view the tenant would have.
   // When superadmin is in their own context (no tenant), full access always.
+  // When a staff member is logged in, use their HRM role permissions.
+
+  /** Map from moduleId → HRM permission strings required (any one is sufficient). */
+  const STAFF_MODULE_PERMS: Partial<Record<ModuleId, string[]>> = {
+    crm_leads:     ["View Leads",     "Manage Leads"],
+    crm_customers: ["View Customers", "Manage Customers"],
+    crm_suppliers: ["View Suppliers", "Manage Suppliers"],
+    products:      ["View Products",  "Manage Products"],
+    stock:         ["View Products",  "Manage Products"],
+    purchases:     ["View Purchases", "Manage Purchases"],
+    sales:         ["View Sales",     "Manage Sales"],
+    invoices:      ["View Sales",     "Manage Sales"],
+    documents:     ["View Documents", "Manage Documents"],
+    hrm_staff:     ["View Staff",     "Manage Staff"],
+    hrm_roles:     ["View Roles",     "Manage Roles"],
+    settings:      ["Manage Settings"],
+    media:         ["View Products",  "Manage Products"],
+  };
+
   const isModuleAllowed = (moduleId: ModuleId): boolean => {
+    // Staff: check their HRM role permissions
+    if (isStaff) {
+      if (moduleId === "crm_leads" || moduleId === "crm_customers" || moduleId === "crm_suppliers" ||
+          moduleId === "products" || moduleId === "stock" || moduleId === "purchases" ||
+          moduleId === "sales" || moduleId === "invoices" || moduleId === "documents" ||
+          moduleId === "hrm_staff" || moduleId === "hrm_roles" || moduleId === "media" || moduleId === "settings") {
+        const required = STAFF_MODULE_PERMS[moduleId] ?? [];
+        return required.some(p => staffPermissions.has(p));
+      }
+      // Dashboard is always allowed for staff
+      return true;
+    }
     if (isSuperAdmin && !currentTenantId) return true; // superadmin in own context
     if (!currentTenant?.moduleGroupId) return true;    // no restriction group assigned → full access
     const group = getModuleGroupById(currentTenant.moduleGroupId);
@@ -330,7 +361,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const hrmItems: SubItem[] = [
     ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff", href: "/staff", icon: Users2,   desc: "Employees by dept & designation" }] : []),
     ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles", href: "/roles", icon: KeyRound, desc: "Permission roles"                }] : []),
-    ...(isSuperAdmin && !currentTenantId ? [
+    ...(!isStaff && isSuperAdmin && !currentTenantId ? [
       { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System users"          },
       { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
       { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
@@ -483,7 +514,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-muted transition-colors ml-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : "bg-blue-500"}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : "bg-blue-500"}`}>
                     {userInitials}
                   </div>
                   <div className="hidden sm:block text-left min-w-0">
@@ -491,7 +522,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       {currentUser?.fullName || currentUser?.username}
                     </p>
                     <p className="text-[10px] text-gray-400 dark:text-muted-foreground leading-tight">
-                      {isSuperAdmin ? "Super Admin" : "Admin"}
+                      {isSuperAdmin ? "Super Admin" : isStaff ? "Staff Member" : "Admin"}
                     </p>
                   </div>
                   <ChevronDown size={11} className="text-gray-400 hidden sm:block" />
@@ -499,7 +530,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-3 py-3 border-b border-border flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : "bg-blue-500"}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : "bg-blue-500"}`}>
                     {userInitials}
                   </div>
                   <div className="min-w-0">
@@ -507,9 +538,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <p className="text-[11px] text-muted-foreground truncate">
                       {currentUser?.email || (isSuperAdmin ? "superadmin@onesoft.com" : "admin@onesoft.com")}
                     </p>
-                    <span className={`inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isSuperAdmin ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300" : "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"}`}>
-                      {isSuperAdmin ? "Super Admin" : "Admin"}
+                    <span className={`inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      isSuperAdmin
+                        ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                        : isStaff
+                        ? "bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300"
+                        : "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
+                    }`}>
+                      {isSuperAdmin ? "Super Admin" : isStaff ? "Staff" : "Admin"}
                     </span>
+                    {isStaff && staffPermissions.size > 0 && (
+                      <p className="text-[9px] text-muted-foreground truncate mt-0.5">
+                        {staffPermissions.size} permission{staffPermissions.size !== 1 ? "s" : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="py-1">

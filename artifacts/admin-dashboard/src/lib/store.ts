@@ -698,7 +698,7 @@ export const getTenantStats = (tenantId: string): Record<string, number> => {
 };
 
 // ─── Admin Users API ──────────────────────────────────────────────────────────
-export type UserRole = "superadmin" | "admin";
+export type UserRole = "superadmin" | "admin" | "staff";
 
 export type AdminUser = {
   id: string;
@@ -748,6 +748,11 @@ export const getAdminUserById = (id: string): AdminUser | undefined => {
     const tenantId = id.slice(7);
     const tenant = getTenantById(tenantId);
     return tenant ? tenantToAdminUser(tenant) : undefined;
+  }
+  if (id.startsWith("staff:")) {
+    const staffId = id.slice(6);
+    const s = getStaff().find(x => x.id === staffId);
+    return s ? staffToAdminUser(s) : undefined;
   }
   return getAdminUsers().find(u => u.id === id);
 };
@@ -1307,6 +1312,10 @@ export type Staff = {
   phone: string;
   joinDate: string;
   notes: string;
+  // Login credentials (optional — set by admin)
+  username?: string;
+  password?: string;
+  loginEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1333,6 +1342,26 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
 export const deleteStaff = (id: string): void => {
   setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
 };
+
+/** Find a staff member by login credentials (only if loginEnabled). */
+export const getStaffByCredentials = (username: string, password: string): Staff | undefined =>
+  getStaff().find(
+    s => s.loginEnabled === true &&
+         s.username?.toLowerCase() === username.toLowerCase() &&
+         s.password === password
+  );
+
+/** Map a Staff record to the AdminUser shape for the auth context. */
+export const staffToAdminUser = (s: Staff): AdminUser => ({
+  id:        s.id,
+  username:  s.username ?? s.name.toLowerCase().replace(/\s+/g, "."),
+  fullName:  s.name,
+  email:     s.email ?? "",
+  role:      "staff",
+  password:  s.password ?? "",
+  createdAt: s.createdAt,
+  updatedAt: s.updatedAt,
+});
 
 // ─── HRM — Roles ─────────────────────────────────────────────────────────────
 export type StaffRole = {
