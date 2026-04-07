@@ -1613,6 +1613,62 @@ export function deleteAccount(id: string): void {
   _saveAccounts(getAccounts().filter(a => a.id !== id));
 }
 
+// ─── Journal Entry ────────────────────────────────────────────────────────────
+
+export type JournalEntryLine = {
+  id: string;
+  ledgerId: string;
+  narration: string;
+  debit: number;
+  credit: number;
+};
+
+export type JournalEntry = {
+  id: string;
+  date: string;
+  reference: string;
+  description: string;
+  lines: JournalEntryLine[];
+  status: "draft" | "posted";
+  totalDebit: number;
+  totalCredit: number;
+  isBalanced: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const JE_KEY = "admin-journal-entries";
+
+export function getJournalEntries(): JournalEntry[] {
+  try {
+    const raw = localStorage.getItem(tenantKey(JE_KEY));
+    if (raw) return JSON.parse(raw) as JournalEntry[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function _saveJournalEntries(entries: JournalEntry[]): void {
+  const sk = tenantKey(JE_KEY);
+  localStorage.setItem(sk, JSON.stringify(entries));
+  _apiWrite(sk, entries);
+}
+
+export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">): JournalEntry {
+  const entry: JournalEntry = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  _saveJournalEntries([...getJournalEntries(), entry]);
+  return entry;
+}
+
+export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntry, "id" | "createdAt">>): JournalEntry {
+  const entries = getJournalEntries().map(e => e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e);
+  _saveJournalEntries(entries);
+  return entries.find(e => e.id === id)!;
+}
+
+export function deleteJournalEntry(id: string): void {
+  _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
+}
+
 // ─── Server sync ──────────────────────────────────────────────────────────────
 
 /**
