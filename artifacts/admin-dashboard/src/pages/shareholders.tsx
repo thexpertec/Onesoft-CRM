@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, Plus, Trash2, X, Save, Upload, Download, FileSpreadsheet,
   CheckCircle2, AlertCircle, TrendingUp, Lock, ArrowUpCircle, ArrowDownCircle,
-  ChevronDown, ClipboardList,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,12 +111,14 @@ type PlanForm = {
   specificProductGroups: string; timeDuration: string; lockForSpecificTime: string;
   profitMarginWithLoss: string; profitMarginWithoutLoss: string;
   maxProfit: string; maxLoss: string;
+  investmentAmount: string; unitsInvested: string; description: string;
 };
 
 const BLANK_PLAN = (): PlanForm => ({
   title: "", investmentOn: "Product", product: "", business: "",
   specificProductGroups: "", timeDuration: "", lockForSpecificTime: "No",
   profitMarginWithLoss: "", profitMarginWithoutLoss: "", maxProfit: "", maxLoss: "",
+  investmentAmount: "", unitsInvested: "", description: "",
 });
 
 // ─── Share Plans Dialog ───────────────────────────────────────────────────────
@@ -153,16 +155,19 @@ function SharePlansDialog({
     onAddPlan({
       title: form.title,
       shareholderId: shareholder.id,
-      investmentOn:           form.investmentOn as InvestmentType,
-      product:                form.product,
-      business:               form.business,
-      specificProductGroups:  form.specificProductGroups,
-      timeDuration:           form.timeDuration,
-      lockForSpecificTime:    (form.lockForSpecificTime || "No") as "Yes"|"No",
-      profitMarginWithLoss:   form.profitMarginWithLoss,
+      investmentOn:            form.investmentOn as InvestmentType,
+      product:                 form.product,
+      business:                form.business,
+      specificProductGroups:   form.specificProductGroups,
+      timeDuration:            form.timeDuration,
+      lockForSpecificTime:     (form.lockForSpecificTime || "No") as "Yes"|"No",
+      profitMarginWithLoss:    form.profitMarginWithLoss,
       profitMarginWithoutLoss: form.profitMarginWithoutLoss,
-      maxProfit:              form.maxProfit,
-      maxLoss:                form.maxLoss,
+      maxProfit:               form.maxProfit,
+      maxLoss:                 form.maxLoss,
+      investmentAmount:        form.investmentAmount || undefined,
+      unitsInvested:           form.unitsInvested    || undefined,
+      description:             form.description      || undefined,
     });
     setForm(BLANK_PLAN());
     setAdding(false);
@@ -217,6 +222,16 @@ function SharePlansDialog({
                               {plan.product || plan.business || plan.specificProductGroups}
                             </span>
                           )}
+                          {plan.unitsInvested && (
+                            <span className="text-[12px] text-muted-foreground font-medium">
+                              {Number(plan.unitsInvested).toLocaleString()} units
+                            </span>
+                          )}
+                          {plan.investmentAmount && (
+                            <span className="flex items-center gap-1 text-[12px] text-blue-600 dark:text-blue-400 font-medium">
+                              £{Number(plan.investmentAmount).toLocaleString()}
+                            </span>
+                          )}
                           {plan.timeDuration && (
                             <span className="text-[12px] text-muted-foreground">{plan.timeDuration}</span>
                           )}
@@ -236,6 +251,11 @@ function SharePlansDialog({
                             {plan.profitMarginWithLoss && <span>Margin w/ Loss: <strong>{plan.profitMarginWithLoss}%</strong></span>}
                             {plan.profitMarginWithoutLoss && <span>Margin w/o Loss: <strong>{plan.profitMarginWithoutLoss}%</strong></span>}
                           </div>
+                        )}
+                        {plan.description && (
+                          <p className="mt-1.5 text-[12px] text-muted-foreground italic leading-relaxed border-t pt-1.5">
+                            {plan.description}
+                          </p>
                         )}
                       </div>
                       <button
@@ -371,6 +391,32 @@ function SharePlansDialog({
                     <Input value={form.maxLoss} onChange={e => setForm(f => ({...f, maxLoss: e.target.value}))}
                       placeholder="10000" type="number" className="h-8 text-[13px]" />
                   </div>
+                </div>
+
+                {/* Investment Amount + Units Invested */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[12px]">Investment Amount (£)</Label>
+                    <Input value={form.investmentAmount} onChange={e => setForm(f => ({...f, investmentAmount: e.target.value}))}
+                      placeholder="25000" type="number" className="h-8 text-[13px]" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[12px]">No. of Units Invested</Label>
+                    <Input value={form.unitsInvested} onChange={e => setForm(f => ({...f, unitsInvested: e.target.value}))}
+                      placeholder="100" type="number" className="h-8 text-[13px]" />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="space-y-1">
+                  <Label className="text-[12px]">Description</Label>
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({...f, description: e.target.value}))}
+                    placeholder="Optional notes about this share plan…"
+                    rows={3}
+                    className="w-full px-3 py-2 text-[13px] rounded-md border border-input bg-background dark:text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                  />
                 </div>
 
                 {/* Form actions */}

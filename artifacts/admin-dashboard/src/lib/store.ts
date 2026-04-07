@@ -437,6 +437,9 @@ export type InvestmentPlan = {
   profitMarginWithoutLoss: string;
   maxProfit: string;
   maxLoss: string;
+  investmentAmount?: string;
+  unitsInvested?: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 };
