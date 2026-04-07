@@ -426,6 +426,7 @@ export type InvestmentType = "Product" | "Business" | "Product Groups";
 export type InvestmentPlan = {
   id: string;
   title: string;
+  shareholderId?: string;
   investmentOn: InvestmentType;
   product: string;
   business: string;
