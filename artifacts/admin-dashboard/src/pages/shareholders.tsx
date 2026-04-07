@@ -511,7 +511,7 @@ function SharePlansDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={v => !v && onClose()}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0">
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-5xl max-h-[90vh] flex flex-col gap-0 p-0">
           {/* Header */}
           <DialogHeader className="px-6 pt-5 pb-4 border-b">
             <DialogTitle className="flex items-center gap-2 text-base">
