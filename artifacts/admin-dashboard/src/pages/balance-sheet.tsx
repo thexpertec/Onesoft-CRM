@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { Account, AccountHead, ACCOUNT_HEADS } from "@/lib/store";
-import { useAccounts } from "@/hooks/use-data";
+import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import {
   LayoutDashboard, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp,
   CheckCircle, AlertTriangle, Minus,
@@ -34,14 +34,35 @@ function fmt(n: number): string {
   return Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Recursively sum all Ledger descendant opening balances for a given node. */
-function subtreeBalance(accounts: Account[], nodeId: string): number {
+/** JE movement map: ledgerId → total posted debits & credits */
+type JeMap = Record<string, { dr: number; cr: number }>;
+
+/**
+ * Compute a ledger account's running balance, incorporating:
+ *   1. openingBalance (from COA)
+ *   2. All POSTED journal-entry movements
+ *
+ * Sign convention follows the account's normal balance:
+ *   Debit-normal  (Assets, Expenses):  balance = opening + JE_dr − JE_cr
+ *   Credit-normal (Liabilities, Equity, Revenue): balance = opening + JE_cr − JE_dr
+ */
+function ledgerBalance(account: Account, jeMap: JeMap): number {
+  const opening = account.openingBalance ?? 0;
+  const je = jeMap[account.id] ?? { dr: 0, cr: 0 };
+  const isDebitNormal = (account.paymentType ?? "Debit") === "Debit";
+  return isDebitNormal
+    ? opening + je.dr - je.cr
+    : opening + je.cr - je.dr;
+}
+
+/** Recursively sum all Ledger descendant balances for a given node. */
+function subtreeBalance(accounts: Account[], nodeId: string, jeMap: JeMap): number {
   const node = accounts.find(a => a.id === nodeId);
   if (!node) return 0;
-  if (node.accountType === "Ledger") return node.openingBalance ?? 0;
+  if (node.accountType === "Ledger") return ledgerBalance(node, jeMap);
   return accounts
     .filter(a => (a.parentId ?? null) === nodeId)
-    .reduce((sum, child) => sum + subtreeBalance(accounts, child.id), 0);
+    .reduce((sum, child) => sum + subtreeBalance(accounts, child.id, jeMap), 0);
 }
 
 /** Flat tree row for rendering */
@@ -58,6 +79,7 @@ function buildTree(
   parentId: string | null,
   depth: number,
   collapsed: Record<string, boolean>,
+  jeMap: JeMap,
 ): TreeRow[] {
   const children = headAccounts
     .filter(a => (a.parentId ?? null) === parentId)
@@ -66,11 +88,11 @@ function buildTree(
   for (const acc of children) {
     const hasChildren = headAccounts.some(a => (a.parentId ?? null) === acc.id);
     const balance = acc.accountType === "Ledger"
-      ? (acc.openingBalance ?? 0)
-      : subtreeBalance(accounts, acc.id);
+      ? ledgerBalance(acc, jeMap)
+      : subtreeBalance(accounts, acc.id, jeMap);
     rows.push({ account: acc, depth, hasChildren, balance });
     if (hasChildren && !collapsed[acc.id]) {
-      rows.push(...buildTree(accounts, headAccounts, acc.id, depth + 1, collapsed));
+      rows.push(...buildTree(accounts, headAccounts, acc.id, depth + 1, collapsed, jeMap));
     }
   }
   return rows;
