@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown,
-  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff,
+  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil,
 } from "lucide-react";
 import { useAccounts } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
@@ -290,6 +290,28 @@ export default function JournalEntryPage() {
 
         {/* ── Entry form card ─────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+
+          {/* Editing mode banner */}
+          {editingEntryId && (() => {
+            const orig = entries.find(e => e.id === editingEntryId);
+            return (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
+                <Pencil size={12} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                  Editing: {orig?.reference ?? "entry"}
+                </span>
+                <span className="text-[11px] text-amber-600 dark:text-amber-500 opacity-70">
+                  — make changes and click Update Draft or Update &amp; Post
+                </span>
+                <button
+                  onClick={clearAll}
+                  className="ml-auto text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 flex items-center gap-1"
+                >
+                  <XCircle size={11} /> Cancel
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Entry metadata row */}
           <div className="grid grid-cols-3 gap-0 border-b border-gray-100 dark:border-zinc-800">
@@ -594,13 +616,26 @@ export default function JournalEntryPage() {
                           <td className="px-4 py-2.5">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
+                                title="View lines"
                                 onClick={ev => { ev.stopPropagation(); setViewEntry(viewEntry === e.id ? null : e.id); }}
                                 className="p-1.5 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
                               >
                                 <Eye size={12} />
                               </button>
                               <button
-                                onClick={ev => { ev.stopPropagation(); removeEntry(e.id); if (viewEntry === e.id) setViewEntry(null); }}
+                                title="Edit entry"
+                                onClick={ev => { ev.stopPropagation(); loadEntryForEdit(e); }}
+                                className={`p-1.5 rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors ${
+                                  editingEntryId === e.id
+                                    ? "text-amber-600 bg-amber-50 dark:bg-amber-950/20"
+                                    : "text-gray-400 hover:text-amber-500"
+                                }`}
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
+                                title="Delete entry"
+                                onClick={ev => { ev.stopPropagation(); removeEntry(e.id); if (viewEntry === e.id) setViewEntry(null); if (editingEntryId === e.id) clearAll(); }}
                                 className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                               >
                                 <Trash2 size={12} />
