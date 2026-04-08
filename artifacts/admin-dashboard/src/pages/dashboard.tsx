@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders } from "@/hooks/use-data";
+import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders, useInvoices } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { getAdminUsers, getSettings } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,15 +14,20 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { format, isToday, isYesterday, formatDistanceToNow, startOfWeek, startOfMonth, subDays, isSameDay } from "date-fns";
+import { format, isToday, isYesterday, formatDistanceToNow, startOfWeek, startOfMonth, subDays, isSameDay, subWeeks, addWeeks } from "date-fns";
 import {
   Users, FileText, TrendingUp, PoundSterling, Plus, ArrowRight,
   Target, CheckCircle2, Building2, MapPin, Layers, UserPlus, UserCheck,
   ShoppingCart, Package, Boxes, Receipt, AlertTriangle, Users2,
   ArrowUpRight, ArrowDownRight, Truck, BarChart3, CreditCard,
-  Banknote, Wifi, WifiOff, Tag, Shield, Settings,
+  Banknote, Wifi, WifiOff, Tag, Shield, Settings, Clock,
 } from "lucide-react";
 import { CURRENCIES, fmtMoneyCompact, fmtMoney, getSettingsCurrencySymbol } from "@/lib/currencies";
+import {
+  AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer,
+  LineChart, Line,
+} from "recharts";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 const fmtCurrency = fmtMoneyCompact;
@@ -183,11 +188,13 @@ export default function Dashboard() {
   const { staff }             = useStaff();
   const { products }          = useProducts();
   const { purchaseOrders }    = usePurchaseOrders();
+  const { invoices }          = useInvoices();
   const { addCustomer }       = useCustomers();
   const { currentUser, isAuthenticated } = useAuth();
   const { toast }             = useToast();
 
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [dateRange, setDateRange]             = useState<"7d" | "30d" | "90d">("30d");
 
   const settings = useMemo(() => getSettings(), []);
 
@@ -334,6 +341,104 @@ export default function Dashboard() {
   const recentPOs = useMemo(() =>
     [...purchaseOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4),
   [purchaseOrders]);
+
+  // ── Date-range analytics ────────────────────────────────────────────────────
+  const drDays = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
+
+  // Revenue trend — daily data for selected range (AreaChart)
+  const revenueTrend = useMemo(() => {
+    return Array.from({ length: drDays }, (_, i) => {
+      const d  = subDays(now, drDays - 1 - i);
+      const ds = format(d, "yyyy-MM-dd");
+      const rev = completedSales
+        .filter(s => s.saleDate === ds)
+        .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0);
+      return {
+        date: drDays > 30 ? format(d, "d MMM") : format(d, "d"),
+        fullDate: format(d, "d MMM"),
+        revenue: parseFloat(rev.toFixed(2)),
+      };
+    });
+  }, [completedSales, drDays]);
+
+  // Top products by revenue (bar chart / ranked list)
+  const topProducts = useMemo(() => {
+    const map: Record<string, number> = {};
+    completedSales.forEach(s => {
+      (s.items as { productName: string; qty: string; unitPrice: string; discount: string }[]).forEach(item => {
+        const name  = item.productName || "Unknown";
+        const total = (parseFloat(item.qty) || 0) * (parseFloat(item.unitPrice) || 0) * (1 - (parseFloat(item.discount) || 0) / 100);
+        map[name] = (map[name] || 0) + total;
+      });
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 7)
+      .map(([name, revenue]) => ({ name: name.length > 20 ? name.slice(0, 18) + "…" : name, revenue: parseFloat(revenue.toFixed(2)) }));
+  }, [completedSales]);
+
+  // Invoice analytics
+  const invoiceStats = useMemo(() => {
+    const calc = (items: { qty: string; unitPrice: string; discount: string }[], taxRate: string, shippingFee: string, handlingFee: string) => {
+      const sub = items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0) * (1 - (parseFloat(it.discount) || 0) / 100), 0);
+      return sub + sub * (parseFloat(taxRate) || 0) / 100 + (parseFloat(shippingFee) || 0) + (parseFloat(handlingFee) || 0);
+    };
+    let paid = 0, overdue = 0, pending = 0, draft = 0, partial = 0;
+    invoices.forEach(inv => {
+      const total = calc(inv.items as { qty: string; unitPrice: string; discount: string }[], inv.taxRate, inv.shippingFee, inv.handlingFee);
+      if      (inv.status === "Paid")      paid    += total;
+      else if (inv.status === "Overdue")   overdue += total;
+      else if (inv.status === "Sent")      pending += total;
+      else if (inv.status === "Partial")   partial += total;
+      else if (inv.status === "Draft")     draft   += total;
+    });
+    const total = paid + overdue + pending + partial + draft;
+    return { paid, overdue, pending, partial, draft, total, count: invoices.length };
+  }, [invoices]);
+
+  // Customer growth — weekly additions (last 8 weeks, LineChart)
+  const customerGrowth = useMemo(() => {
+    return Array.from({ length: 8 }, (_, i) => {
+      const weekStart2 = subWeeks(now, 7 - i);
+      const weekEnd2   = addWeeks(weekStart2, 1);
+      const count = customers.filter(c => {
+        const d = new Date(c.createdAt);
+        return d >= weekStart2 && d < weekEnd2;
+      }).length;
+      return { week: format(weekStart2, "d MMM"), customers: count };
+    });
+  }, [customers]);
+
+  // Sales funnel — conversion from leads to completed sales
+  const salesFunnel = useMemo(() => {
+    const items = [
+      { label: "Total Leads",     count: leads.length,             color: "#3b82f6" },
+      { label: "Qualified",       count: (statusCounts["Qualified"] || 0) + (statusCounts["Proposal Sent"] || 0) + (wonLeads || 0), color: "#06b6d4" },
+      { label: "Won Leads",       count: wonLeads,                 color: "#10b981" },
+      { label: "Sales Created",   count: sales.length,             color: "#8b5cf6" },
+      { label: "Completed Sales", count: completedSales.length,    color: "#6366f1" },
+    ];
+    const max = items[0]?.count || 1;
+    return items.map(it => ({ ...it, pct: max ? Math.round((it.count / max) * 100) : 0 }));
+  }, [leads, statusCounts, wonLeads, sales, completedSales]);
+
+  // Revenue vs Purchases cost (last 30 days) — weekly comparison
+  const revenueVsCost = useMemo(() => {
+    return Array.from({ length: 6 }, (_, i) => {
+      const wStart = subWeeks(now, 5 - i);
+      const wEnd   = addWeeks(wStart, 1);
+      const wStartStr = format(wStart, "yyyy-MM-dd");
+      const wEndStr   = format(wEnd, "yyyy-MM-dd");
+      const rev  = completedSales.filter(s => s.saleDate >= wStartStr && s.saleDate < wEndStr)
+        .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0);
+      const cost = purchaseOrders.filter(p => p.status === "Received" && p.createdAt >= wStart.toISOString() && p.createdAt < wEnd.toISOString())
+        .reduce((sum, po) => {
+          const items = (po.items || []) as { qty: string; unitPrice: string; discount: string }[];
+          return sum + items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0) * (1 - (parseFloat(it.discount) || 0) / 100), 0);
+        }, 0);
+      return { week: format(wStart, "d MMM"), revenue: parseFloat(rev.toFixed(2)), cost: parseFloat(cost.toFixed(2)) };
+    });
+  }, [completedSales, purchaseOrders]);
 
   // ── Greeting ───────────────────────────────────────────────────────────────
   const hour = new Date().getHours();
@@ -571,6 +676,304 @@ export default function Dashboard() {
           <QuickTile href="/documents" icon={FileText}     label="Docs"      count={docs.length}           sub={`${pendingDocs} pending`} color="bg-violet-500" />
         </div>
       </div>
+
+      {/* ══ Analytics Header ══════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BarChart3 size={16} className="text-muted-foreground" />
+          <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wide">Analytics</h2>
+        </div>
+        <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
+          {(["7d", "30d", "90d"] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setDateRange(r)}
+              className={`text-[11px] font-medium px-3 py-1 rounded-md transition-all ${
+                dateRange === r
+                  ? "bg-white dark:bg-card shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {r === "7d" ? "7 Days" : r === "30d" ? "30 Days" : "90 Days"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ Revenue Trend Chart + Top Products ════════════════════════════════ */}
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        {/* Revenue area chart */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <TrendingUp size={16} className="text-emerald-500" />
+                Revenue Trend
+                <span className="text-[11px] font-normal text-muted-foreground">({dateRange === "7d" ? "last 7 days" : dateRange === "30d" ? "last 30 days" : "last 90 days"})</span>
+              </CardTitle>
+              <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                {fmtCurrency(revenueTrend.reduce((s, d) => s + d.revenue, 0))} total
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {revenueTrend.every(d => d.revenue === 0) ? (
+              <div className="flex flex-col items-center justify-center h-36 text-muted-foreground text-sm border border-dashed rounded-lg">
+                No revenue data for this period.
+                <Link href="/sales/new"><span className="text-primary underline text-xs mt-1 cursor-pointer">Create a sale</span></Link>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={revenueTrend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}    />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval={drDays > 30 ? 9 : drDays > 14 ? 4 : 0} />
+                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtMoneyCompact(v)} />
+                  <ReTooltip
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                    formatter={(value: number) => [fmtMoney(value), "Revenue"]}
+                    labelFormatter={(label: string, payload: { payload?: { fullDate?: string } }[]) => payload?.[0]?.payload?.fullDate || label}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} fill="url(#revenueGrad)" dot={false} activeDot={{ r: 4, fill: "#10b981" }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top products by revenue */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+              <Package size={16} className="text-indigo-500" /> Top Products
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-28 text-muted-foreground text-sm border border-dashed rounded-lg text-center">
+                <Package size={20} className="mb-1 opacity-40" />
+                No product sales data yet.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {topProducts.map((p, idx) => {
+                  const maxRev = topProducts[0]?.revenue || 1;
+                  const pct    = Math.round((p.revenue / maxRev) * 100);
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] font-bold text-muted-foreground w-4 shrink-0">#{idx + 1}</span>
+                          <span className="text-[12px] font-medium truncate">{p.name}</span>
+                        </div>
+                        <span className="text-[11px] font-semibold tabular-nums shrink-0 text-indigo-600 dark:text-indigo-400">{fmtCurrency(p.revenue)}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ══ Invoice Analytics + Customer Growth + Sales Funnel ════════════════ */}
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        {/* Invoice analytics */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+                <FileText size={16} className="text-violet-500" /> Invoice Analytics
+              </CardTitle>
+              <Link href="/invoices">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                  View <ArrowRight size={12} />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {invoiceStats.count === 0 ? (
+              <div className="flex flex-col items-center justify-center h-28 text-muted-foreground text-sm border border-dashed rounded-lg text-center">
+                <FileText size={20} className="mb-1 opacity-40" />
+                No invoices yet.
+              </div>
+            ) : (
+              <>
+                {/* Stacked progress bar */}
+                <div>
+                  <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 mb-3">
+                    {invoiceStats.total > 0 && [
+                      { val: invoiceStats.paid,    cls: "bg-emerald-500" },
+                      { val: invoiceStats.partial, cls: "bg-amber-400"   },
+                      { val: invoiceStats.pending, cls: "bg-blue-400"    },
+                      { val: invoiceStats.overdue, cls: "bg-red-500"     },
+                      { val: invoiceStats.draft,   cls: "bg-gray-300 dark:bg-gray-600" },
+                    ].map((seg, i) => seg.val > 0 && (
+                      <div
+                        key={i}
+                        className={`${seg.cls} transition-all`}
+                        style={{ width: `${(seg.val / invoiceStats.total) * 100}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { label: "Paid",     val: invoiceStats.paid,    dot: "bg-emerald-500", cnt: invoices.filter(i => i.status === "Paid").length     },
+                      { label: "Partial",  val: invoiceStats.partial,  dot: "bg-amber-400",   cnt: invoices.filter(i => i.status === "Partial").length   },
+                      { label: "Pending",  val: invoiceStats.pending,  dot: "bg-blue-400",    cnt: invoices.filter(i => i.status === "Sent").length      },
+                      { label: "Overdue",  val: invoiceStats.overdue,  dot: "bg-red-500",     cnt: invoices.filter(i => i.status === "Overdue").length   },
+                      { label: "Draft",    val: invoiceStats.draft,    dot: "bg-gray-400",    cnt: invoices.filter(i => i.status === "Draft").length     },
+                    ].filter(r => r.val > 0 || r.cnt > 0).map(row => (
+                      <div key={row.label} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${row.dot}`} />
+                          <span className="text-[12px] font-medium">{row.label}</span>
+                          <span className="text-[10px] text-muted-foreground">({row.cnt})</span>
+                        </div>
+                        <span className="text-[12px] font-semibold tabular-nums">{fmtCurrency(row.val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-border flex justify-between">
+                  <span className="text-[11px] text-muted-foreground">{invoiceStats.count} invoices total</span>
+                  <span className="text-[12px] font-bold tabular-nums">{fmtCurrency(invoiceStats.total)}</span>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Customer growth line chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+              <UserPlus size={16} className="text-cyan-500" /> Customer Growth
+              <span className="text-[11px] font-normal text-muted-foreground">(8 weeks)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {customers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-28 text-muted-foreground text-sm border border-dashed rounded-lg text-center">
+                <Users size={20} className="mb-1 opacity-40" />
+                No customers yet.
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={130}>
+                  <LineChart data={customerGrowth} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                    <XAxis dataKey="week" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <ReTooltip
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                      formatter={(value: number) => [value, "New Customers"]}
+                    />
+                    <Line type="monotone" dataKey="customers" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3, fill: "#06b6d4" }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="bg-cyan-50 dark:bg-cyan-950/30 rounded-lg p-2 text-center">
+                    <p className="text-[11px] text-muted-foreground">Total</p>
+                    <p className="text-[16px] font-bold text-cyan-700 dark:text-cyan-300 tabular-nums">{customers.length}</p>
+                  </div>
+                  <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-2 text-center">
+                    <p className="text-[11px] text-muted-foreground">Active</p>
+                    <p className="text-[16px] font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{activeCustomers}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sales conversion funnel */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+              <Target size={16} className="text-rose-500" /> Conversion Funnel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {leads.length === 0 && sales.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-28 text-muted-foreground text-sm border border-dashed rounded-lg text-center">
+                <Target size={20} className="mb-1 opacity-40" />
+                No data yet. Add leads and sales.
+              </div>
+            ) : (
+              salesFunnel.map((stage, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-medium">{stage.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-bold tabular-nums">{stage.count}</span>
+                      <span className="text-[10px] text-muted-foreground w-8 text-right">{stage.pct}%</span>
+                    </div>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${stage.pct}%`, backgroundColor: stage.color }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ══ Revenue vs Costs (weekly grouped bar) ═════════════════════════════ */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
+              <Banknote size={16} className="text-amber-500" /> Revenue vs Purchasing Cost
+              <span className="text-[11px] font-normal text-muted-foreground">(last 6 weeks)</span>
+            </CardTitle>
+            <div className="flex items-center gap-4 text-[11px]">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Revenue</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400 inline-block" /> Cost</span>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {revenueVsCost.every(d => d.revenue === 0 && d.cost === 0) ? (
+            <div className="flex flex-col items-center justify-center h-24 text-muted-foreground text-sm border border-dashed rounded-lg">
+              No revenue or purchasing data for comparison yet.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={160}>
+              <ReBarChart data={revenueVsCost} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                <XAxis dataKey="week" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtMoneyCompact(v)} />
+                <ReTooltip
+                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                  formatter={(value: number, name: string) => [fmtMoney(value), name === "revenue" ? "Revenue" : "Purchasing Cost"]}
+                />
+                <Bar dataKey="revenue" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                <Bar dataKey="cost"    fill="#f87171" radius={[3, 3, 0, 0]} maxBarSize={32} />
+              </ReBarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ══ Pipeline + Purchases ══════════════════════════════════════════════ */}
       <div className="grid gap-4 lg:grid-cols-2">
