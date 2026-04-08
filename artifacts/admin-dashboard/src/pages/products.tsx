@@ -352,8 +352,8 @@ export default function ProductsPage() {
               <Upload size={13} /> Import CSV
             </Button>
             <Button size="sm" variant="outline" onClick={() => {
-              downloadExcel("Products", "Products", filteredProducts, [
-                { header: "#",               key: "id",            getValue: (_, i?: number) => (i ?? 0) + 1, width: 5 },
+              downloadExcel("Products", "Products", filtered, [
+                { header: "#",               key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
                 { header: "Product Name",    key: "name",          width: 32 },
                 { header: "SKU",             key: "sku",           width: 18 },
                 { header: "Brand",           key: "brand",         width: 16 },
@@ -365,7 +365,7 @@ export default function ProductsPage() {
                 { header: "Status",          key: "status",        width: 12 },
                 { header: "Condition",       key: "condition",     width: 14 },
                 { header: "Description",     key: "description",   width: 40 },
-              ].map((c, i, arr) => ({ ...c, getValue: c.getValue ? (r: Product) => c.getValue!(r, filteredProducts.indexOf(r)) : undefined }))
+              ]);
             }} className="gap-1.5 h-8 text-[13px]">
               <FileDown size={13} /> Export Excel
             </Button>

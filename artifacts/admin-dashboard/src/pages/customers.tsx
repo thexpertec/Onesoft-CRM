@@ -366,6 +366,24 @@ export default function CustomersPage() {
             <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="gap-1.5">
               <Upload size={13} /> Import
             </Button>
+            <Button variant="outline" size="sm" onClick={() => {
+              downloadExcel("Customers", "Customers", filtered, [
+                { header: "#",             key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
+                { header: "Name",          key: "name",          width: 24 },
+                { header: "Company",       key: "company",       width: 24 },
+                { header: "Email",         key: "email",         width: 28 },
+                { header: "Phone",         key: "phone",         width: 18 },
+                { header: "Industry",      key: "industry",      width: 20 },
+                { header: "City",          key: "city",          width: 18 },
+                { header: "Status",        key: "status",        width: 12 },
+                { header: "Currency",      key: "currency",      width: 10 },
+                { header: "Total Value",   key: "totalValue",    width: 14 },
+                { header: "Customer Since",key: "customerSince", getValue: r => r.customerSince ? r.customerSince.slice(0, 10) : "", width: 18 },
+                { header: "Notes",         key: "notes",         width: 40 },
+              ]);
+            }} className="gap-1.5">
+              <FileDown size={13} /> Export Excel
+            </Button>
             <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-customer">
               <Plus size={14} /> Add Customer
             </Button>

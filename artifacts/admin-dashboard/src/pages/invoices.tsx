@@ -1200,12 +1200,39 @@ export default function InvoicesPage() {
               <p className="text-[11px] text-gray-500 dark:text-gray-400">{typedInvoices.length} invoice{typedInvoices.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate(isPurchase ? "/invoices/new?type=purchase" : "/invoices/new")}
-            className={`flex items-center gap-2 h-9 px-4 rounded-xl text-white text-[13px] font-bold shadow-md transition-colors ${accentCls}`}
-          >
-            <Plus size={15} /> {isPurchase ? "New Purchase Invoice" : "New Sale Invoice"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                downloadExcel(
+                  isPurchase ? "Purchase_Invoices" : "Sale_Invoices",
+                  isPurchase ? "Purchase Invoices" : "Sale Invoices",
+                  filtered,
+                  [
+                    { header: "#",              key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
+                    { header: "Invoice #",      key: "invoiceNumber", width: 18 },
+                    { header: "Title",          key: "invoiceTitle",  width: 18 },
+                    { header: "Date",           key: "invoiceDate",   width: 14 },
+                    { header: "Due Date",       key: "dueDate",       width: 14 },
+                    { header: isPurchase ? "Supplier" : "Customer", key: "customer", width: 24 },
+                    { header: "Status",         key: "status",        width: 14 },
+                    { header: "Payment",        key: "paymentMethod", width: 16 },
+                    { header: "Total (£)",      key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).total.toFixed(2), width: 14 },
+                    { header: "Paid (£)",       key: "amountPaid",    width: 12 },
+                    { header: "Balance (£)",    key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).balance.toFixed(2), width: 14 },
+                  ]
+                );
+              }}
+              className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-[12px] font-semibold border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors"
+            >
+              <FileDown size={14} /> Export Excel
+            </button>
+            <button
+              onClick={() => navigate(isPurchase ? "/invoices/new?type=purchase" : "/invoices/new")}
+              className={`flex items-center gap-2 h-9 px-4 rounded-xl text-white text-[13px] font-bold shadow-md transition-colors ${accentCls}`}
+            >
+              <Plus size={15} /> {isPurchase ? "New Purchase Invoice" : "New Sale Invoice"}
+            </button>
+          </div>
         </div>
 
         {/* ── Status Filter Tabs ── */}

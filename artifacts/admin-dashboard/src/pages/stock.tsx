@@ -212,9 +212,33 @@ export default function StockPage() {
           </p>
         </div>
         {isAuthenticated && (
-          <Button size="sm" onClick={() => { setNewRow(BLANK(isHoldsView)); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow}>
-            <Plus size={14} /> {isHoldsView ? "Add Hold" : "Add Stock"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => {
+              downloadExcel(
+                isHoldsView ? "Stock_Holds" : "Stock",
+                isHoldsView ? "Stock Holds" : "Stock",
+                filtered,
+                [
+                  { header: "#",              key: "id",           getValue: r => filtered.indexOf(r) + 1, width: 5 },
+                  { header: "Product",        key: "productName",  width: 28 },
+                  { header: "SKU",            key: "sku",          width: 18 },
+                  { header: "Stock Type",     key: "stockType",    width: 18 },
+                  { header: "Quantity",       key: "quantity",     width: 12 },
+                  { header: "Unit",           key: "unit",         width: 10 },
+                  { header: "Min Level",      key: "minLevel",     width: 12 },
+                  { header: "Store/Location", key: "store",        width: 20 },
+                  { header: "Hold Customer",  key: "holdCustomer", width: 22 },
+                  { header: "Hold Reason",    key: "holdReason",   width: 28 },
+                  { header: "Notes",          key: "notes",        width: 40 },
+                ]
+              );
+            }} className="gap-1.5">
+              <FileDown size={13} /> Export Excel
+            </Button>
+            <Button size="sm" onClick={() => { setNewRow(BLANK(isHoldsView)); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow}>
+              <Plus size={14} /> {isHoldsView ? "Add Hold" : "Add Stock"}
+            </Button>
+          </div>
         )}
       </div>
 

@@ -375,6 +375,24 @@ export default function SuppliersPage() {
             <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="gap-1.5">
               <Upload size={13} /> Import
             </Button>
+            <Button variant="outline" size="sm" onClick={() => {
+              downloadExcel("Suppliers", "Suppliers", filtered, [
+                { header: "#",              key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
+                { header: "Company",        key: "company",       width: 28 },
+                { header: "Contact Person", key: "contactPerson", width: 22 },
+                { header: "Email",          key: "email",         width: 28 },
+                { header: "Phone",          key: "phone",         width: 18 },
+                { header: "Category",       key: "category",      width: 20 },
+                { header: "City",           key: "city",          width: 16 },
+                { header: "Country",        key: "country",       width: 16 },
+                { header: "Status",         key: "status",        width: 14 },
+                { header: "Rating",         key: "rating",        width: 10 },
+                { header: "Currency",       key: "currency",      width: 10 },
+                { header: "Notes",          key: "notes",         width: 40 },
+              ]);
+            }} className="gap-1.5">
+              <FileDown size={13} /> Export Excel
+            </Button>
             <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-supplier">
               <Plus size={14} /> Add Supplier
             </Button>

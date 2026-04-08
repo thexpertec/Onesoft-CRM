@@ -246,17 +246,34 @@ export default function PurchasesPage() {
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Click <Eye size={11} className="inline" /> to manage line items</p>
         </div>
         {isAuthenticated && (
-          <Button
-            size="sm"
-            onClick={() => { if (noSuppliers) { navigate("/suppliers"); return; } setNewRow(blankNewRow()); setNewRowActive(0); }}
-            className="gap-1.5"
-            disabled={!!newRow}
-            title={noSuppliers ? "Add suppliers first before creating a purchase order" : undefined}
-            data-testid="btn-new-po"
-          >
-            {noSuppliers ? <Truck size={14} /> : <Plus size={14} />}
-            {noSuppliers ? "Add Suppliers First" : "New PO"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => {
+              downloadExcel("Purchase_Orders", "Purchase Orders", filtered, [
+                { header: "#",             key: "id",           getValue: r => filtered.indexOf(r) + 1, width: 5 },
+                { header: "PO Number",     key: "poNumber",     width: 18 },
+                { header: "Supplier",      key: "supplier",     width: 24 },
+                { header: "Order Date",    key: "orderDate",    getValue: r => r.orderDate?.slice(0, 10) ?? "", width: 14 },
+                { header: "Delivery Date", key: "deliveryDate", getValue: r => r.deliveryDate?.slice(0, 10) ?? "", width: 16 },
+                { header: "Status",        key: "status",       width: 14 },
+                { header: "Items",         key: "items",        getValue: r => r.items.length, width: 8 },
+                { header: "Total (£)",     key: "items",        getValue: r => r.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0).toFixed(2), width: 14 },
+                { header: "Notes",         key: "notes",        width: 40 },
+              ]);
+            }} className="gap-1.5">
+              <FileDown size={13} /> Export Excel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => { if (noSuppliers) { navigate("/suppliers"); return; } setNewRow(blankNewRow()); setNewRowActive(0); }}
+              className="gap-1.5"
+              disabled={!!newRow}
+              title={noSuppliers ? "Add suppliers first before creating a purchase order" : undefined}
+              data-testid="btn-new-po"
+            >
+              {noSuppliers ? <Truck size={14} /> : <Plus size={14} />}
+              {noSuppliers ? "Add Suppliers First" : "New PO"}
+            </Button>
+          </div>
         )}
       </div>
 
