@@ -14,7 +14,7 @@ import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } 
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
-type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "status" | "description";
+type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -22,17 +22,25 @@ const STATUS_COLORS: Record<string, string> = {
   Draft:    "bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400",
 };
 
+const CONDITION_COLORS: Record<string, string> = {
+  New:          "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+  Used:         "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Fresh:        "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  Refurbished:  "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+  Damaged:      "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300",
+};
+
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", description: "",
+  name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", condition: "", description: "",
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
-const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "description"];
-const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "description"];
+const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "condition", "description"];
+const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "condition", "description"];
 
 function downloadTemplate() {
   const sample = [
-    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "600.00", "750.00", "999.00", "Active", "Cloud-based CRM solution",
+    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "600.00", "750.00", "999.00", "Active", "New", "Cloud-based CRM solution",
   ];
   const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -73,7 +81,7 @@ function parseCSV(text: string): ImportRow[] {
 
   return lines.slice(1).map((line, i) => {
     const cells = parseLine(line);
-    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", description: "" };
+    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", condition: "", description: "" };
     CSV_HEADERS.forEach(f => {
       const ci = colMap[f];
       row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci] : "";
@@ -81,6 +89,8 @@ function parseCSV(text: string): ImportRow[] {
     if (!row.name.trim()) row._error = "Name is required";
     const validStatuses = ["Active", "Inactive", "Draft"];
     if (row.status && !validStatuses.includes(row.status)) row.status = "Active";
+    const validConditions = ["New", "Used", "Fresh", "Refurbished", "Damaged"];
+    if (row.condition && !validConditions.includes(row.condition)) row.condition = "";
     return row;
   });
 }
@@ -142,6 +152,7 @@ export default function ProductsPage() {
       name: r.name, sku: r.sku, brand: r.brand, category: r.category,
       unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice, price: r.price,
       status: (r.status as Product["status"]) || "Active",
+      condition: (r.condition as Product["condition"]) || undefined,
       description: r.description,
     }));
     toast({ title: `${valid.length} product${valid.length !== 1 ? "s" : ""} imported`, description: importRows.length > valid.length ? `${importRows.length - valid.length} row(s) skipped due to errors.` : undefined });
@@ -182,13 +193,17 @@ export default function ProductsPage() {
       options: ["Active", "Inactive", "Draft"],
       optionColors: STATUS_COLORS,
     },
+    { field: "condition",   label: "Condition",          minW: 130, type: "select",
+      options: ["", "New", "Used", "Fresh", "Refurbished", "Damaged"],
+      optionColors: CONDITION_COLORS,
+    },
     { field: "description", label: "Description",        minW: 220, type: "text"                                                                   },
   ], [brandOptions, categoryOptions, unitOptions, sym]);
 
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
   const filtered = products
-    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.purchasePrice, p.costPrice, p.price].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(p => statusFilter === "All" || p.status === statusFilter)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -244,6 +259,7 @@ export default function ProductsPage() {
       name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
       unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice, price: newRow.price,
       status: (newRow.status as Product["status"]) || "Active",
+      condition: (newRow.condition as Product["condition"]) || undefined,
       description: newRow.description,
     });
     toast({ title: "Product added", description: `"${newRow.name}" created.` });

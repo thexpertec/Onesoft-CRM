@@ -867,7 +867,8 @@ export const getTeamMembers = (): string[] => {
 };
 
 // ─── Products (catalogue) API ─────────────────────────────────────────────────
-export type ProductStatus = "Active" | "Inactive" | "Draft";
+export type ProductStatus    = "Active" | "Inactive" | "Draft";
+export type ProductCondition = "New" | "Used" | "Fresh" | "Refurbished" | "Damaged";
 
 export type Product = {
   id: string;
@@ -876,11 +877,12 @@ export type Product = {
   brand: string;
   category: string;
   unit: string;
-  purchasePrice?: string; // Purchase price (from supplier)
-  costPrice?: string;     // Cost price per unit (internal cost including overheads)
-  price: string;          // Sale price per unit
+  purchasePrice?: string;    // Purchase price (from supplier)
+  costPrice?: string;        // Cost price per unit (internal cost including overheads)
+  price: string;             // Sale price per unit
   description: string;
   status: ProductStatus;
+  condition?: ProductCondition; // Physical condition of the product
   thumbnail?: string;
   images?: string[];
   createdAt: string;
