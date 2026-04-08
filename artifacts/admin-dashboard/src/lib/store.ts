@@ -893,7 +893,20 @@ const PRODUCTS_KEY = "admin-products";
 
 export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);
 
+// ── SKU uniqueness helper ──────────────────────────────────────────────────
+const skuConflict = (sku: string, excludeId?: string): string | null => {
+  if (!sku.trim()) return null;
+  const match = getProducts().find(
+    p => p.sku.trim().toLowerCase() === sku.trim().toLowerCase() && p.id !== excludeId
+  );
+  return match ? match.name : null;
+};
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
+  if (data.sku?.trim()) {
+    const conflict = skuConflict(data.sku);
+    if (conflict) throw new Error(`SKU "${data.sku}" is already used by "${conflict}".`);
+  }
   const item: Product = {
     ...data,
     id: crypto.randomUUID(),
@@ -909,6 +922,10 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   const items = getProducts();
   const i = items.findIndex(p => p.id === id);
   if (i === -1) throw new Error("Product not found");
+  if (updates.sku?.trim()) {
+    const conflict = skuConflict(updates.sku, id);
+    if (conflict) throw new Error(`SKU "${updates.sku}" is already used by "${conflict}".`);
+  }
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PRODUCTS_KEY, items);
   addActivity({ action: "updated", entity: "Product", entityName: items[i].name });

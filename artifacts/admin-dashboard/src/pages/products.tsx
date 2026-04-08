@@ -117,13 +117,32 @@ export default function ProductsPage() {
   const [importing,     setImporting]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── SKU duplicate check for CSV: flags conflicts vs existing + within file ──
+  const enrichWithSkuErrors = useCallback((rows: ImportRow[]): ImportRow[] => {
+    const existingSkuMap = new Map(
+      products.filter(p => p.sku.trim()).map(p => [p.sku.trim().toLowerCase(), p.name])
+    );
+    const seenInFile = new Map<string, number>();
+    return rows.map(r => {
+      if (r._error) return r;
+      if (!r.sku.trim()) return r;
+      const key = r.sku.trim().toLowerCase();
+      if (existingSkuMap.has(key))
+        return { ...r, _error: `SKU "${r.sku}" already used by "${existingSkuMap.get(key)}"` };
+      if (seenInFile.has(key))
+        return { ...r, _error: `SKU "${r.sku}" duplicated in this file (first at row ${seenInFile.get(key)})` };
+      seenInFile.set(key, r._rowNum);
+      return r;
+    });
+  }, [products]);
+
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       const text = ev.target?.result as string;
-      const rows = parseCSV(text);
+      const rows = enrichWithSkuErrors(parseCSV(text));
       setImportRows(rows);
       setImportOpen(true);
     };
@@ -138,7 +157,7 @@ export default function ProductsPage() {
     const reader = new FileReader();
     reader.onload = ev => {
       const text = ev.target?.result as string;
-      const rows = parseCSV(text);
+      const rows = enrichWithSkuErrors(parseCSV(text));
       setImportRows(rows);
       setImportOpen(true);
     };
@@ -219,9 +238,14 @@ export default function ProductsPage() {
   const commitCell = useCallback((id: string, field: EditableField, value: string) => {
     const prod = products.find(p => p.id === id);
     if (!prod || (prod as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
-    editProduct(id, { [field]: value } as Partial<Product>);
-    setActiveCell(null);
-    toast({ title: "Saved" });
+    try {
+      editProduct(id, { [field]: value } as Partial<Product>);
+      setActiveCell(null);
+      toast({ title: "Saved" });
+    } catch (err: unknown) {
+      toast({ title: "Cannot save", description: err instanceof Error ? err.message : "An error occurred.", variant: "destructive" });
+      setActiveCell(null);
+    }
   }, [products, editProduct, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
@@ -255,15 +279,19 @@ export default function ProductsPage() {
 
   const commitNewRow = () => {
     if (!newRow?.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); setNewRowActive(0); return; }
-    addProduct({
-      name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
-      unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice, price: newRow.price,
-      status: (newRow.status as Product["status"]) || "Active",
-      condition: (newRow.condition as Product["condition"]) || undefined,
-      description: newRow.description,
-    });
-    toast({ title: "Product added", description: `"${newRow.name}" created.` });
-    setNewRow(null); setNewRowActive(null);
+    try {
+      addProduct({
+        name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
+        unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice, price: newRow.price,
+        status: (newRow.status as Product["status"]) || "Active",
+        condition: (newRow.condition as Product["condition"]) || undefined,
+        description: newRow.description,
+      });
+      toast({ title: "Product added", description: `"${newRow.name}" created.` });
+      setNewRow(null); setNewRowActive(null);
+    } catch (err: unknown) {
+      toast({ title: "Cannot add product", description: err instanceof Error ? err.message : "An error occurred.", variant: "destructive" });
+    }
   };
 
   const handleDelete = () => {
