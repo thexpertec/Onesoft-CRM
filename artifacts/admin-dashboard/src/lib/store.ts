@@ -835,8 +835,9 @@ export type Product = {
   brand: string;
   category: string;
   unit: string;
-  costPrice?: string;  // Cost price per unit
-  price: string;       // Sale price per unit
+  purchasePrice?: string; // Purchase price (from supplier)
+  costPrice?: string;     // Cost price per unit (internal cost including overheads)
+  price: string;          // Sale price per unit
   description: string;
   status: ProductStatus;
   thumbnail?: string;
