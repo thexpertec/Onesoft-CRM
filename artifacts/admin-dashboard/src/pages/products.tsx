@@ -152,7 +152,19 @@ export default function ProductsPage() {
 
   // Load reference data from other stores
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), [products]);
-  const categoryOptions = useMemo(() => getProductCategories().map(c => c.name), [products]);
+  const categoryOptions = useMemo(() => {
+    const cats = getProductCategories();
+    const parents = cats.filter(c => !c.parentId);
+    const subs = cats.filter(c => !!c.parentId);
+    const options: string[] = [];
+    parents.forEach(p => {
+      options.push(p.name);
+      subs.filter(s => s.parentId === p.id).forEach(s => options.push(`${p.name} > ${s.name}`));
+    });
+    // any subs whose parent wasn't found
+    subs.filter(s => !parents.find(p => p.id === s.parentId)).forEach(s => options.push(s.name));
+    return options;
+  }, [products]);
   const unitOptions     = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
   const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
 

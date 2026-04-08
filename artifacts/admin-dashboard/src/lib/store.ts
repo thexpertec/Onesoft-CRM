@@ -516,6 +516,7 @@ export type ProductCategory = {
   name: string;
   description: string;
   color: string;
+  parentId?: string | null; // null / undefined = top-level category
   createdAt: string;
   updatedAt: string;
 };
