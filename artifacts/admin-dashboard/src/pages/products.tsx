@@ -4,16 +4,18 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "status" | "condition" | "description";
 
@@ -109,6 +111,7 @@ export default function ProductsPage() {
   const [newRow,         setNewRow]         = useState<Record<EditableField, string> | null>(null);
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
+  const [viewProdId,    setViewProdId]    = useState<string | null>(null);
 
   const [showHelp,      setShowHelp]      = useState(false);
 
@@ -611,6 +614,10 @@ export default function ProductsPage() {
                     ) : null}
                     {/* Action buttons — visible on row hover */}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="p-1 rounded text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors" title="View product details & ledger"
+                        onClick={e => { e.stopPropagation(); setViewProdId(prod.id); }}>
+                        <Eye size={13} />
+                      </button>
                       {isAuthenticated && (
                         <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Manage images"
                           onClick={() => setImagesDialogId(prod.id)}>
@@ -811,6 +818,254 @@ export default function ProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Product Detail Sheet ─────────────────────────────────────────────── */}
+      {(() => {
+        const prod = viewProdId ? products.find(p => p.id === viewProdId) ?? null : null;
+        if (!prod) return null;
+
+        const sym = getSettingsCurrencySymbol();
+        const purchaseP = parseFloat(prod.purchasePrice ?? "") || 0;
+        const costP     = parseFloat(prod.costPrice     ?? "") || 0;
+        const saleP     = parseFloat(prod.price         ?? "") || 0;
+        const margin    = costP > 0 && saleP > 0 ? ((saleP - costP) / saleP * 100) : null;
+        const profit    = saleP > 0 && costP > 0 ? saleP - costP : null;
+
+        // Stock for this product
+        const stockEntries = getStock().filter(s =>
+          s.productName.trim().toLowerCase() === prod.name.trim().toLowerCase() ||
+          (prod.sku && s.sku && s.sku.trim().toLowerCase() === prod.sku.trim().toLowerCase())
+        );
+        const totalStock = stockEntries.reduce((sum, s) => sum + (parseFloat(s.quantity) || 0), 0);
+
+        // Ledger entries — purchases
+        type LedgerEntry = {
+          date: string; type: "purchase" | "sale"; ref: string; party: string;
+          qty: number; unitPrice: number; total: number;
+        };
+        const ledger: LedgerEntry[] = [];
+
+        getPurchaseOrders().forEach(po => {
+          po.items.forEach(item => {
+            if (item.productName.trim().toLowerCase() !== prod.name.trim().toLowerCase()) return;
+            ledger.push({
+              date: po.orderDate || po.createdAt?.slice(0, 10) || "",
+              type: "purchase", ref: po.poNumber, party: po.supplier,
+              qty: parseFloat(item.qty) || 0,
+              unitPrice: parseFloat(item.unitPrice) || 0,
+              total: (parseFloat(item.qty) || 0) * (parseFloat(item.unitPrice) || 0),
+            });
+          });
+        });
+
+        getInvoices().forEach(inv => {
+          if ((inv.invoiceType ?? "sale") !== "sale") return;
+          inv.items.forEach(item => {
+            const nameMatch = item.productName?.trim().toLowerCase() === prod.name.trim().toLowerCase();
+            const skuMatch  = prod.sku && item.sku && item.sku.trim().toLowerCase() === prod.sku.trim().toLowerCase();
+            if (!nameMatch && !skuMatch) return;
+            const qty  = parseFloat(item.qty) || 0;
+            const up   = parseFloat(item.unitPrice) || 0;
+            ledger.push({
+              date: inv.invoiceDate || inv.createdAt?.slice(0, 10) || "",
+              type: "sale", ref: inv.invoiceNumber, party: inv.customer,
+              qty, unitPrice: up,
+              total: qty * up * (1 - (parseFloat(item.discount ?? "0") / 100)),
+            });
+          });
+        });
+
+        ledger.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+        const totalSoldQty      = ledger.filter(e => e.type === "sale").reduce((s, e) => s + e.qty, 0);
+        const totalPurchasedQty = ledger.filter(e => e.type === "purchase").reduce((s, e) => s + e.qty, 0);
+        const totalRevenue      = ledger.filter(e => e.type === "sale").reduce((s, e) => s + e.total, 0);
+
+        return (
+          <Sheet open={!!viewProdId} onOpenChange={o => { if (!o) setViewProdId(null); }}>
+            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0 flex flex-col gap-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>{prod.name} — Product Details</SheetTitle>
+              </SheetHeader>
+              {/* Header */}
+              <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 px-6 py-5 text-white shrink-0">
+                <div className="flex items-start gap-4">
+                  {prod.thumbnail ? (
+                    <img src={prod.thumbnail} alt={prod.name}
+                      className="w-16 h-16 rounded-xl object-cover border-2 border-white/30 shrink-0 shadow-lg" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                      <Package size={28} className="text-white/60" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-bold leading-tight truncate">{prod.name}</h2>
+                    {prod.sku && <p className="text-indigo-200 text-[12px] font-mono mt-0.5">SKU: {prod.sku}</p>}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${prod.status === "Active" ? "bg-emerald-400/30 text-emerald-100" : prod.status === "Inactive" ? "bg-amber-400/30 text-amber-100" : "bg-white/20 text-white/80"}`}>
+                        {prod.status}
+                      </span>
+                      {prod.condition && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/20 text-white/90">{prod.condition}</span>
+                      )}
+                      {prod.brand && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-white/80">{prod.brand}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {/* Price Cards */}
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Pricing</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: "Purchase", value: purchaseP, icon: <ShoppingCart size={14} /> },
+                      { label: "Cost",     value: costP,     icon: <Boxes size={14} /> },
+                      { label: "Sale",     value: saleP,     icon: <ReceiptText size={14} /> },
+                      { label: "Profit",   value: profit,    icon: profit !== null && profit > 0 ? <TrendingUp size={14} /> : profit !== null && profit < 0 ? <TrendingDown size={14} /> : <Minus size={14} />, isProfit: true },
+                    ].map(card => (
+                      <div key={card.label} className="bg-muted/40 rounded-xl p-3 space-y-1">
+                        <div className="flex items-center gap-1.5 text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
+                          {card.icon} {card.label}
+                        </div>
+                        <p className={`text-[15px] font-bold ${card.isProfit ? (card.value === null ? "text-muted-foreground" : (card.value as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : (card.value as number) < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground") : ""}`}>
+                          {card.value === null || (card.value as number) === 0 && card.label !== "Profit" ? "—" : `${sym}${(card.value as number).toFixed(2)}`}
+                        </p>
+                        {card.label === "Profit" && margin !== null && (
+                          <p className="text-[10px] text-muted-foreground">{margin.toFixed(1)}% margin</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Details</h3>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    {[
+                      { label: "Category",  value: prod.category },
+                      { label: "Unit",      value: prod.unit },
+                      { label: "Brand",     value: prod.brand },
+                      { label: "Condition", value: prod.condition },
+                      { label: "Created",   value: prod.createdAt ? format(new Date(prod.createdAt), "d MMM yyyy") : "—" },
+                      { label: "Updated",   value: prod.updatedAt ? format(new Date(prod.updatedAt), "d MMM yyyy") : "—" },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
+                        <p className="font-medium text-[13px]">{value || "—"}</p>
+                      </div>
+                    ))}
+                    {prod.description && (
+                      <div className="col-span-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Description</p>
+                        <p className="text-[13px] text-muted-foreground leading-relaxed">{prod.description}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stock Summary */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Stock</h3>
+                    <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${totalStock > 0 ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                      {totalStock} {prod.unit || "units"} total
+                    </span>
+                  </div>
+                  {stockEntries.length === 0 ? (
+                    <p className="text-[13px] text-muted-foreground italic">No stock entries found for this product.</p>
+                  ) : (
+                    <div className="rounded-lg border border-border overflow-hidden">
+                      <table className="w-full text-[12px]">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            {["Store / Location", "Type", "Qty", "Min Level"].map(h => (
+                              <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stockEntries.map((s, i) => (
+                            <tr key={s.id} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                              <td className="px-3 py-2 font-medium">{s.store || "—"}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{s.stockType}</td>
+                              <td className="px-3 py-2 font-semibold">{s.quantity} {s.unit}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{parseFloat(s.minLevel) > 0 ? s.minLevel : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Ledger */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Product Ledger</h3>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span><span className="font-bold text-blue-600 dark:text-blue-400">{totalPurchasedQty}</span> purchased</span>
+                      <span><span className="font-bold text-emerald-600 dark:text-emerald-400">{totalSoldQty}</span> sold</span>
+                      <span><span className="font-bold text-foreground">{sym}{totalRevenue.toFixed(2)}</span> revenue</span>
+                    </div>
+                  </div>
+                  {ledger.length === 0 ? (
+                    <p className="text-[13px] text-muted-foreground italic">No purchase or sale records found for this product.</p>
+                  ) : (
+                    <div className="rounded-lg border border-border overflow-hidden">
+                      <table className="w-full text-[12px]">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            {["Date", "Type", "Reference", "Party", "Qty", `Unit (${sym})`, `Total (${sym})`].map(h => (
+                              <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ledger.map((e, i) => (
+                            <tr key={i} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                              <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
+                                {e.date ? format(new Date(e.date), "d MMM yy") : "—"}
+                              </td>
+                              <td className="px-3 py-2">
+                                {e.type === "purchase" ? (
+                                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold">
+                                    <TrendingDown size={11} /> Purchase IN
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    <TrendingUp size={11} /> Sale OUT
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 font-mono font-medium text-[11px]">{e.ref}</td>
+                              <td className="px-3 py-2 max-w-[120px] truncate text-muted-foreground" title={e.party}>{e.party || "—"}</td>
+                              <td className="px-3 py-2 font-semibold text-right">{e.qty}</td>
+                              <td className="px-3 py-2 text-right">{e.unitPrice.toFixed(2)}</td>
+                              <td className="px-3 py-2 font-semibold text-right">{e.total.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-muted/40 border-t-2">
+                            <td colSpan={4} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Totals</td>
+                            <td className="px-3 py-2 font-bold text-right text-[12px]">{totalSoldQty + totalPurchasedQty}</td>
+                            <td className="px-3 py-2"></td>
+                            <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{(ledger.reduce((s, e) => s + e.total, 0)).toFixed(2)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+        );
+      })()}
     </div>
   );
 }
