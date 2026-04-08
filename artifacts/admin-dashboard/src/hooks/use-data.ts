@@ -3,6 +3,7 @@ import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
+  getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup,
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getShareholders, createShareholder, updateShareholder, deleteShareholder,
   getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,

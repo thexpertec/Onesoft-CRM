@@ -549,6 +549,46 @@ export const deleteProductCategory = (id: string): void => {
   setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
 };
 
+// ─── Product Groups / Menus ───────────────────────────────────────────────────
+export type ProductGroupItem = {
+  productId: string;
+  quantity: number;
+  note?: string;
+};
+
+export type ProductGroup = {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  items: ProductGroupItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const PRODUCT_GROUPS_KEY = "admin-product-groups";
+
+export const getProductGroups = (): ProductGroup[] => getStored<ProductGroup>(PRODUCT_GROUPS_KEY);
+
+export const createProductGroup = (data: Omit<ProductGroup, "id" | "createdAt" | "updatedAt">): ProductGroup => {
+  const item: ProductGroup = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(PRODUCT_GROUPS_KEY, [...getProductGroups(), item]);
+  return item;
+};
+
+export const updateProductGroup = (id: string, updates: Partial<Omit<ProductGroup, "id" | "createdAt">>): ProductGroup => {
+  const items = getProductGroups();
+  const i = items.findIndex(g => g.id === id);
+  if (i === -1) throw new Error("Group not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PRODUCT_GROUPS_KEY, items);
+  return items[i];
+};
+
+export const deleteProductGroup = (id: string): void => {
+  setStored(PRODUCT_GROUPS_KEY, getProductGroups().filter(g => g.id !== id));
+};
+
 // ─── Module Definitions (platform-level feature catalogue) ───────────────────
 export type ModuleId =
   | "crm_leads" | "crm_customers" | "crm_suppliers"
