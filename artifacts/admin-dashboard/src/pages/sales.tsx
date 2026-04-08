@@ -384,15 +384,23 @@ function POSView({
 
   const allProducts  = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
   const allCats      = useMemo(() => {
-    const cats = getProductCategories().map(c => c.name);
+    const allCategoryRecords = getProductCategories();
+    const parentCats = allCategoryRecords.filter(c => !c.parentId).map(c => c.name);
     const fromProds = allProducts.map(p => p.category).filter(Boolean);
-    const set = new Set([...cats, ...fromProds]);
+    const parentPrefix = (cat: string) => cat.includes(" > ") ? cat.split(" > ")[0] : cat;
+    const set = new Set([...parentCats, ...fromProds.map(parentPrefix)]);
     return Array.from(set).sort();
   }, [allProducts]);
 
   const filteredProds = useMemo(() => {
     let list = allProducts;
-    if (catFilter !== "All") list = list.filter(p => p.category === catFilter);
+    if (catFilter !== "All") {
+      list = list.filter(p => {
+        if (!p.category) return false;
+        const parentName = p.category.includes(" > ") ? p.category.split(" > ")[0] : p.category;
+        return parentName === catFilter || p.category === catFilter;
+      });
+    }
     if (prodSearch.trim()) {
       const q = prodSearch.toLowerCase();
       list = list.filter(p =>
