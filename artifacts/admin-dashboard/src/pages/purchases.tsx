@@ -331,7 +331,7 @@ export default function PurchasesPage() {
 
       {/* Excel grid */}
       <div ref={tableRef}>
-        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
+        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="purchases">
 
           {/* ── New row ── */}
           {isAuthenticated && newRow && (

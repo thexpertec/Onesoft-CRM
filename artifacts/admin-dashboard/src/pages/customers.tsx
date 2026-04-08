@@ -461,7 +461,7 @@ export default function CustomersPage() {
 
           {/* Excel grid */}
           <div ref={tableRef}>
-            <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
+            <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="customers">
 
               {/* New row */}
               {isAuthenticated && newRow && (

@@ -224,16 +224,59 @@ export function EditableCell({
   );
 }
 
-// ─── Grid shell — sticky header + scrollable body ─────────────────────────────
+// ─── Grid shell — sticky header + scrollable body + resizable columns ─────────
 export function ExcelGridShell({
   cols,
   totalMinW,
+  tableId,
   children,
 }: {
   cols: ColDef[];
   totalMinW: number;
+  tableId?: string;
   children: React.ReactNode;
 }) {
+  const storageKey = tableId ? `onesoft-col-widths:${tableId}` : null;
+
+  const [widths, setWidths] = useState<Record<string, number>>(() => {
+    const stored: Record<string, number> = storageKey
+      ? (() => { try { return JSON.parse(localStorage.getItem(storageKey) ?? "{}"); } catch { return {}; } })()
+      : {};
+    const result: Record<string, number> = {};
+    cols.forEach(c => { result[c.field] = stored[c.field] ?? c.minW; });
+    return result;
+  });
+
+  const widthsRef = useRef(widths);
+  useEffect(() => { widthsRef.current = widths; }, [widths]);
+
+  const startResize = (e: React.MouseEvent, field: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widthsRef.current[field] ?? 80;
+
+    const onMove = (ev: MouseEvent) => {
+      const newW = Math.max(40, startW + (ev.clientX - startX));
+      setWidths(prev => ({ ...prev, [field]: newW }));
+    };
+
+    const onUp = () => {
+      if (storageKey) localStorage.setItem(storageKey, JSON.stringify(widthsRef.current));
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const dynamicTotal = cols.reduce((s, c) => s + (widths[c.field] ?? c.minW), 0);
+
   return (
     <div
       className="rounded-xl border border-gray-200 dark:border-border overflow-auto bg-white dark:bg-card shadow-sm"
@@ -241,19 +284,30 @@ export function ExcelGridShell({
     >
       <table
         className="border-collapse text-[13px] w-full"
-        style={{ tableLayout: "fixed", minWidth: `${totalMinW + 48 + 90}px` }}
+        style={{ tableLayout: "fixed", minWidth: `${Math.max(totalMinW, dynamicTotal) + 48 + 90}px` }}
       >
         <colgroup>
           <col style={{ width: "48px" }} />
-          {cols.map(c => <col key={c.field} style={{ width: `${c.minW}px` }} />)}
+          {cols.map(c => <col key={c.field} style={{ width: `${widths[c.field] ?? c.minW}px` }} />)}
           <col style={{ width: "90px" }} />
         </colgroup>
         <thead className="sticky top-0 z-10">
           <tr>
             <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">#</th>
             {cols.map(c => (
-              <th key={c.field} className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none">
-                {c.label}
+              <th
+                key={c.field}
+                className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none relative group"
+              >
+                <span className="pr-1">{c.label}</span>
+                {/* resize handle */}
+                <div
+                  className="absolute top-0 right-0 h-full w-2 cursor-col-resize z-20 flex items-center justify-end"
+                  onMouseDown={e => startResize(e, c.field)}
+                  title="Drag to resize"
+                >
+                  <div className="w-[3px] h-4 rounded-full bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </th>
             ))}
             <th className="border-b border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none sticky right-0">Actions</th>

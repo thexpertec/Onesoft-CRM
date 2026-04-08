@@ -464,7 +464,7 @@ export default function SuppliersPage() {
 
       {/* Excel grid */}
       <div ref={tableRef}>
-        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
+        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="suppliers">
 
           {/* New row */}
           {isAuthenticated && newRow && (

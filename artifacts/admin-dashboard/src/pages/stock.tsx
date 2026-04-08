@@ -323,7 +323,7 @@ export default function StockPage() {
 
       {/* Grid */}
       <div ref={tableRef}>
-        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
+        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="stock">
 
           {/* ── New row ── */}
           {isAuthenticated && newRow && (
