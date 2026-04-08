@@ -344,7 +344,11 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
 
     /* ── Print ── */
     @media print {
-      @page { margin: 0; size: A4; }
+      /* @page margins match the fixed header/footer heights exactly so the
+         browser's print engine reserves that space on EVERY page — not just page 1.
+         Without this, pages 2+ start at the paper edge and get hidden under the
+         fixed header/footer overlays. */
+      @page { margin: 15mm 13mm 13mm 13mm; size: A4; }
       html, body { background: #fff !important; }
       .toolbar { display: none !important; }
       .wrap {
@@ -353,8 +357,10 @@ function generatePrintHTML(doc: RequirementDoc, logo: string): string {
         box-shadow: none !important;
         overflow: visible !important;
         max-width: 100% !important;
-        /* leave room for fixed header (13mm) + side margins (13mm each) + fixed footer (11mm) */
-        padding: 14mm 13mm 13mm !important;
+        /* @page margins already provide the gutters; only add a little
+           vertical breathing room so content doesn't press right against
+           the header/footer rule lines */
+        padding: 4mm 0 4mm !important;
       }
       /* Running page header — repeats on every page */
       .print-pg-header {
