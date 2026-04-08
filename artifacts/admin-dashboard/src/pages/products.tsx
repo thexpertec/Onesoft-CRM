@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
@@ -50,7 +50,7 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-type ImportRow = Record<EditableField, string> & { _rowNum: number; _error?: string };
+type ImportRow = Record<EditableField, string> & { _rowNum: number; _error?: string; _updateId?: string };
 
 function parseCSV(text: string): ImportRow[] {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim());
@@ -112,23 +112,27 @@ export default function ProductsPage() {
   const [showHelp,      setShowHelp]      = useState(false);
 
   // ── Import state ──────────────────────────────────────────────────────────
-  const [importOpen,    setImportOpen]    = useState(false);
-  const [importRows,    setImportRows]    = useState<ImportRow[]>([]);
-  const [importing,     setImporting]     = useState(false);
+  const [importOpen,     setImportOpen]     = useState(false);
+  const [rawImportRows,  setRawImportRows]  = useState<ImportRow[]>([]);
+  const [importMode,     setImportMode]     = useState<"insert" | "upsert">("insert");
+  const [importing,      setImporting]      = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── SKU duplicate check for CSV: flags conflicts vs existing + within file ──
-  const enrichWithSkuErrors = useCallback((rows: ImportRow[]): ImportRow[] => {
+  // ── SKU check: "insert" mode flags conflicts; "upsert" mode marks them for update ──
+  const enrichWithSkuErrors = useCallback((rows: ImportRow[], mode: "insert" | "upsert"): ImportRow[] => {
     const existingSkuMap = new Map(
-      products.filter(p => p.sku.trim()).map(p => [p.sku.trim().toLowerCase(), p.name])
+      products.filter(p => p.sku.trim()).map(p => [p.sku.trim().toLowerCase(), { name: p.name, id: p.id }])
     );
     const seenInFile = new Map<string, number>();
     return rows.map(r => {
       if (r._error) return r;
       if (!r.sku.trim()) return r;
       const key = r.sku.trim().toLowerCase();
-      if (existingSkuMap.has(key))
-        return { ...r, _error: `SKU "${r.sku}" already used by "${existingSkuMap.get(key)}"` };
+      if (existingSkuMap.has(key)) {
+        const existing = existingSkuMap.get(key)!;
+        if (mode === "upsert") return { ...r, _updateId: existing.id };
+        return { ...r, _error: `SKU "${r.sku}" already used by "${existing.name}"` };
+      }
       if (seenInFile.has(key))
         return { ...r, _error: `SKU "${r.sku}" duplicated in this file (first at row ${seenInFile.get(key)})` };
       seenInFile.set(key, r._rowNum);
@@ -136,14 +140,21 @@ export default function ProductsPage() {
     });
   }, [products]);
 
+  // Derived rows re-evaluated whenever raw rows OR mode changes
+  const importRows = useMemo(
+    () => enrichWithSkuErrors(rawImportRows, importMode),
+    [rawImportRows, importMode, enrichWithSkuErrors]
+  );
+
+  const resetImport = () => { setImportOpen(false); setRawImportRows([]); setImportMode("insert"); };
+
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      const text = ev.target?.result as string;
-      const rows = enrichWithSkuErrors(parseCSV(text));
-      setImportRows(rows);
+      const rows = parseCSV(ev.target?.result as string);
+      setRawImportRows(rows);
       setImportOpen(true);
     };
     reader.readAsText(file);
@@ -156,9 +167,8 @@ export default function ProductsPage() {
     if (!file || !file.name.endsWith(".csv")) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      const text = ev.target?.result as string;
-      const rows = enrichWithSkuErrors(parseCSV(text));
-      setImportRows(rows);
+      const rows = parseCSV(ev.target?.result as string);
+      setRawImportRows(rows);
       setImportOpen(true);
     };
     reader.readAsText(file);
@@ -167,16 +177,25 @@ export default function ProductsPage() {
   const confirmImport = () => {
     setImporting(true);
     const valid = importRows.filter(r => !r._error);
-    valid.forEach(r => addProduct({
-      name: r.name, sku: r.sku, brand: r.brand, category: r.category,
-      unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice, price: r.price,
-      status: (r.status as Product["status"]) || "Active",
-      condition: (r.condition as Product["condition"]) || undefined,
-      description: r.description,
-    }));
-    toast({ title: `${valid.length} product${valid.length !== 1 ? "s" : ""} imported`, description: importRows.length > valid.length ? `${importRows.length - valid.length} row(s) skipped due to errors.` : undefined });
-    setImportOpen(false);
-    setImportRows([]);
+    let created = 0, updated = 0;
+    valid.forEach(r => {
+      const payload = {
+        name: r.name, sku: r.sku, brand: r.brand, category: r.category,
+        unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice, price: r.price,
+        status: (r.status as Product["status"]) || "Active",
+        condition: (r.condition as Product["condition"]) || undefined,
+        description: r.description,
+      };
+      if (r._updateId) { editProduct(r._updateId, payload); updated++; }
+      else              { addProduct(payload); created++; }
+    });
+    const skipped = importRows.length - valid.length;
+    const parts: string[] = [];
+    if (created > 0) parts.push(`${created} created`);
+    if (updated > 0) parts.push(`${updated} updated`);
+    if (skipped > 0) parts.push(`${skipped} skipped`);
+    toast({ title: "Import complete", description: parts.join(" · ") });
+    resetImport();
     setImporting(false);
   };
 
@@ -638,16 +657,34 @@ export default function ProductsPage() {
       })()}
 
       {/* ── Import Dialog ─────────────────────────────────────────────────── */}
-      <Dialog open={importOpen} onOpenChange={v => { if (!v) { setImportOpen(false); setImportRows([]); } }}>
+      <Dialog open={importOpen} onOpenChange={v => { if (!v) resetImport(); }}>
         <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-5 pb-4 border-b">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <FileSpreadsheet size={16} className="text-blue-600" />
-              Import Products from CSV
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileSpreadsheet size={16} className="text-blue-600" />
+                Import Products from CSV
+              </DialogTitle>
+              {rawImportRows.length > 0 && (
+                <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setImportMode("insert")}
+                    className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "insert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Insert new only
+                  </button>
+                  <button
+                    onClick={() => setImportMode("upsert")}
+                    className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "upsert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <RefreshCw size={10} className="inline mr-1" />Update existing too
+                  </button>
+                </div>
+              )}
+            </div>
           </DialogHeader>
 
-          {importRows.length === 0 ? (
+          {rawImportRows.length === 0 ? (
             /* Drop zone — shown before a file is loaded */
             <div className="flex-1 flex flex-col items-center justify-center p-10 gap-4"
               onDragOver={e => e.preventDefault()} onDrop={handleFileDrop}>
@@ -674,18 +711,21 @@ export default function ProductsPage() {
           ) : (
             /* Preview table */
             <Fragment>
+              {/* Summary bar */}
               <div className="px-6 py-3 border-b bg-muted/30 flex items-center gap-3 flex-wrap text-[12px]">
                 <span className="font-medium">{importRows.length} row{importRows.length !== 1 ? "s" : ""} detected</span>
-                {importRows.filter(r => !r._error).length !== importRows.length && (
-                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                    <AlertCircle size={12} />
-                    {importRows.filter(r => !!r._error).length} with errors (will be skipped)
-                  </span>
-                )}
-                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium ml-auto">
-                  <CheckCircle2 size={12} />
-                  {importRows.filter(r => !r._error).length} ready to import
-                </span>
+                {(() => {
+                  const newRows    = importRows.filter(r => !r._error && !r._updateId).length;
+                  const updateRows = importRows.filter(r => !r._error && !!r._updateId).length;
+                  const errorRows  = importRows.filter(r => !!r._error).length;
+                  return (
+                    <>
+                      {newRows > 0 && <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 size={12} />{newRows} new</span>}
+                      {updateRows > 0 && <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium"><RefreshCw size={12} />{updateRows} will update</span>}
+                      {errorRows > 0 && <span className="flex items-center gap-1 text-red-500 dark:text-red-400 font-medium"><AlertCircle size={12} />{errorRows} skipped (errors)</span>}
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="flex-1 overflow-auto">
@@ -696,12 +736,12 @@ export default function ProductsPage() {
                       {CSV_HEADERS.map(h => (
                         <th key={h} className="border-b border-r px-3 py-2 text-left font-semibold text-muted-foreground capitalize">{h}</th>
                       ))}
-                      <th className="border-b px-3 py-2 text-left font-semibold text-muted-foreground w-28">Status</th>
+                      <th className="border-b px-3 py-2 text-left font-semibold text-muted-foreground w-36">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {importRows.map(row => (
-                      <tr key={row._rowNum} className={`border-b transition-colors ${row._error ? "bg-red-50/60 dark:bg-red-950/20" : "hover:bg-muted/20"}`}>
+                      <tr key={row._rowNum} className={`border-b transition-colors ${row._error ? "bg-red-50/60 dark:bg-red-950/20" : row._updateId ? "bg-blue-50/40 dark:bg-blue-950/10" : "hover:bg-muted/20"}`}>
                         <td className="border-r px-3 py-1.5 text-muted-foreground font-mono">{row._rowNum}</td>
                         {CSV_HEADERS.map(h => (
                           <td key={h} className="border-r px-3 py-1.5 max-w-[180px] truncate" title={row[h]}>
@@ -710,9 +750,11 @@ export default function ProductsPage() {
                         ))}
                         <td className="px-3 py-1.5">
                           {row._error ? (
-                            <span className="flex items-center gap-1 text-red-600 dark:text-red-400"><AlertCircle size={11} />{row._error}</span>
+                            <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-[11px]"><AlertCircle size={11} />{row._error}</span>
+                          ) : row._updateId ? (
+                            <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium"><RefreshCw size={11} />Update existing</span>
                           ) : (
-                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={11} />OK</span>
+                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 size={11} />New</span>
                           )}
                         </td>
                       </tr>
@@ -728,14 +770,20 @@ export default function ProductsPage() {
               <Download size={13} /> Download Template
             </Button>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setImportOpen(false); setImportRows([]); }}>Cancel</Button>
-              {importRows.length > 0 && (
-                <Button size="sm" className="gap-1.5" disabled={importing || importRows.filter(r => !r._error).length === 0} onClick={confirmImport}>
-                  <Upload size={13} />
-                  Import {importRows.filter(r => !r._error).length} Product{importRows.filter(r => !r._error).length !== 1 ? "s" : ""}
-                </Button>
-              )}
-              {importRows.length === 0 && (
+              <Button variant="outline" size="sm" onClick={resetImport}>Cancel</Button>
+              {rawImportRows.length > 0 && (() => {
+                const validCount = importRows.filter(r => !r._error).length;
+                const newCount   = importRows.filter(r => !r._error && !r._updateId).length;
+                const updCount   = importRows.filter(r => !r._error && !!r._updateId).length;
+                const label = [newCount > 0 && `${newCount} new`, updCount > 0 && `${updCount} update`].filter(Boolean).join(" + ");
+                return (
+                  <Button size="sm" className="gap-1.5" disabled={importing || validCount === 0} onClick={confirmImport}>
+                    <Upload size={13} />
+                    Import {label || `${validCount} product${validCount !== 1 ? "s" : ""}`}
+                  </Button>
+                );
+              })()}
+              {rawImportRows.length === 0 && (
                 <Button size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
                   <Upload size={13} /> Choose file…
                 </Button>
