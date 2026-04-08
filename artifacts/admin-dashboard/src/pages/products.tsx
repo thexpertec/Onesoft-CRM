@@ -99,6 +99,8 @@ export default function ProductsPage() {
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
 
+  const [showHelp,      setShowHelp]      = useState(false);
+
   // ── Import state ──────────────────────────────────────────────────────────
   const [importOpen,    setImportOpen]    = useState(false);
   const [importRows,    setImportRows]    = useState<ImportRow[]>([]);
@@ -295,6 +297,67 @@ export default function ProductsPage() {
           </span>
         </div>
       )}
+
+      {/* Collapsible how-to instructions */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowHelp(v => !v)}
+          className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+        >
+          <span className="flex items-center gap-2 text-[12px] font-semibold text-foreground">
+            <FileSpreadsheet size={13} className="text-primary flex-shrink-0" />
+            How to add products &amp; import data
+          </span>
+          <ChevronDown size={14} className={`text-muted-foreground flex-shrink-0 transition-transform duration-200 ${showHelp ? "rotate-180" : ""}`} />
+        </button>
+
+        {showHelp && (
+          <div className="px-4 py-4 bg-background border-t border-border grid grid-cols-1 md:grid-cols-3 gap-5 text-[12px] text-foreground">
+
+            {/* Column 1 — Adding products */}
+            <div className="space-y-2.5">
+              <p className="font-semibold text-primary uppercase tracking-wide text-[10px]">Adding Products</p>
+              <ol className="space-y-1.5 list-decimal list-inside text-muted-foreground leading-relaxed">
+                <li>Click <span className="font-semibold text-foreground">+ Add Product</span> to insert a blank row directly in the table.</li>
+                <li>Type into each cell — use <kbd className="px-1 py-0.5 rounded bg-muted border border-border font-mono text-[10px]">Tab</kbd> to move right, <kbd className="px-1 py-0.5 rounded bg-muted border border-border font-mono text-[10px]">Enter</kbd> to save.</li>
+                <li>Click any cell on an existing row to edit it inline — changes save immediately.</li>
+                <li>Use the <span className="font-semibold text-foreground">Actions</span> column to open the image gallery or delete a row.</li>
+              </ol>
+              <p className="text-[11px] text-muted-foreground/70 pt-1">Tip: Set up <span className="font-semibold">Brands</span>, <span className="font-semibold">Categories</span> and <span className="font-semibold">Units</span> first so those columns become searchable dropdowns.</p>
+            </div>
+
+            {/* Column 2 — CSV import */}
+            <div className="space-y-2.5">
+              <p className="font-semibold text-primary uppercase tracking-wide text-[10px]">Bulk Import via CSV</p>
+              <ol className="space-y-1.5 list-decimal list-inside text-muted-foreground leading-relaxed">
+                <li>Click <span className="font-semibold text-foreground">Template</span> to download a ready-made CSV with the correct column headers and a sample row.</li>
+                <li>Open the file in Excel, Google Sheets, or any spreadsheet app.</li>
+                <li>Fill in your products — one row per product (or per variant).</li>
+                <li>Save as <span className="font-semibold text-foreground">.csv</span> and click <span className="font-semibold text-foreground">Import CSV</span> to upload.</li>
+                <li>Review the preview — rows with errors are highlighted. Fix and re-import if needed.</li>
+              </ol>
+              <p className="text-[11px] text-muted-foreground/70 pt-1">
+                CSV columns in order: <span className="font-mono">name · sku · brand · category · unit · purchasePrice · costPrice · price · status · description</span>
+              </p>
+            </div>
+
+            {/* Column 3 — Multiple variants */}
+            <div className="space-y-2.5">
+              <p className="font-semibold text-primary uppercase tracking-wide text-[10px]">Multiple Variants (Sizes, Colours, etc.)</p>
+              <p className="text-muted-foreground leading-relaxed">Each variant is its own row. Use a consistent naming convention so they group naturally when searching or filtering:</p>
+              <div className="rounded bg-muted/60 border border-border px-3 py-2 font-mono text-[11px] space-y-1 text-foreground">
+                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – S</div>
+                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – M</div>
+                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – L</div>
+                <div className="pt-1 border-t border-border"><span className="text-muted-foreground">sku  →</span> TSH-BLU-S / -M / -L</div>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">Keep <span className="font-semibold">Brand</span> and <span className="font-semibold">Category</span> identical across variants — this makes filtering and stock tracking consistent. Each variant has its own purchase, cost, and sale price.</p>
+            </div>
+
+          </div>
+        )}
+      </div>
 
       {/* KPI pills */}
       <div className="flex items-center gap-2 flex-wrap">
