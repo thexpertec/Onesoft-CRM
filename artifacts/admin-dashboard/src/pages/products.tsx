@@ -345,14 +345,26 @@ export default function ProductsPage() {
             {/* Column 3 — Multiple variants */}
             <div className="space-y-2.5">
               <p className="font-semibold text-primary uppercase tracking-wide text-[10px]">Multiple Variants (Sizes, Colours, etc.)</p>
-              <p className="text-muted-foreground leading-relaxed">Each variant is its own row. Use a consistent naming convention so they group naturally when searching or filtering:</p>
-              <div className="rounded bg-muted/60 border border-border px-3 py-2 font-mono text-[11px] space-y-1 text-foreground">
-                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – S</div>
-                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – M</div>
-                <div><span className="text-muted-foreground">name →</span> T-Shirt Blue – L</div>
-                <div className="pt-1 border-t border-border"><span className="text-muted-foreground">sku  →</span> TSH-BLU-S / -M / -L</div>
+              <p className="text-muted-foreground leading-relaxed">Each variant is a <span className="font-semibold text-foreground">separate row</span>. Every row must have its own unique SKU — add a suffix to the base code for each variant:</p>
+              <div className="rounded bg-muted/60 border border-border divide-y divide-border font-mono text-[10.5px] text-foreground overflow-hidden">
+                <div className="grid grid-cols-2 gap-2 px-3 py-1.5 bg-muted/80 text-[9px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>Name (one row each)</span><span>SKU</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
+                  <span>T-Shirt Blue – S</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-S</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
+                  <span>T-Shirt Blue – M</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-M</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
+                  <span>T-Shirt Blue – L</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-L</span>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground/70">Keep <span className="font-semibold">Brand</span> and <span className="font-semibold">Category</span> identical across variants — this makes filtering and stock tracking consistent. Each variant has its own purchase, cost, and sale price.</p>
+              <div className="rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold">What is a SKU?</p>
+                <p className="leading-relaxed">A <span className="font-semibold">SKU (Stock Keeping Unit)</span> is a short unique code you assign to identify each product or variant. It must be <span className="font-semibold">unique across all rows</span> — no two products can share one. A common format is <span className="font-mono">BRAND-PRODUCT-VARIANT</span> (e.g. <span className="font-mono">TSH-BLU-M</span> = T-Shirt, Blue, Medium).</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">Keep <span className="font-semibold">Brand</span> and <span className="font-semibold">Category</span> the same across variants — each row has its own purchase, cost, and sale price.</p>
             </div>
 
           </div>
