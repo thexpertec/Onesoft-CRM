@@ -25,6 +25,7 @@ import HrmRolesPage from "@/pages/hrm-roles";
 import CustomersPage from "@/pages/customers";
 import ProductsPage from "@/pages/products";
 import CategoriesPage from "@/pages/categories";
+import ProductGroupsPage from "@/pages/product-groups";
 import BrandsPage from "@/pages/brands";
 import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
@@ -106,6 +107,7 @@ function Router() {
               <Route path="/products" component={ProductsPage} />
               <Route path="/brands" component={BrandsPage} />
               <Route path="/categories" component={CategoriesPage} />
+              <Route path="/product-groups" component={ProductGroupsPage} />
               <Route path="/attributes" component={AttributesPage} />
               <Route path="/units" component={UnitsPage} />
               <Route path="/suppliers" component={SuppliersPage} />

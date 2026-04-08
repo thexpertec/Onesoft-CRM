@@ -19,7 +19,7 @@ import {
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
   getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
-  Lead, RequirementDoc, Customer, ProductCategory, Supplier, Shareholder, InvestmentPlan,
+  Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
   JournalEntry,
 } from "@/lib/store";
@@ -382,4 +382,14 @@ export function useJournalEntries() {
   const editEntry   = (id: string, u: Parameters<typeof updateJournalEntry>[1])    => { const e = updateJournalEntry(id, u); fetch(); return e; };
   const removeEntry = (id: string)                                                  => { deleteJournalEntry(id);              fetch(); };
   return { entries, addEntry, editEntry, removeEntry, refresh: fetch };
+}
+
+export function useProductGroups() {
+  const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const fetch = useCallback(() => setGroups(getProductGroups()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addGroup    = (d: Parameters<typeof createProductGroup>[0])                => { const g = createProductGroup(d);    fetch(); return g; };
+  const editGroup   = (id: string, u: Parameters<typeof updateProductGroup>[1])    => { const g = updateProductGroup(id, u); fetch(); return g; };
+  const removeGroup = (id: string)                                                  => { deleteProductGroup(id);              fetch(); };
+  return { groups, addGroup, editGroup, removeGroup, refresh: fetch };
 }

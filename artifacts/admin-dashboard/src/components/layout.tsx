@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, FileText, Moon, Sun, Menu, X,
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
-  ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen,
+  ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen, Layers,
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
@@ -181,11 +181,12 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "products", label: "Products & Stock", icon: Package,
     items: [
-      { label: "Products",      href: "/products",    icon: Package,           desc: "Product catalogue"    },
-      { label: "Brands",        href: "/brands",      icon: Bookmark,          desc: "Brand management"     },
-      { label: "Categories",    href: "/categories",  icon: FolderOpen,        desc: "Product grouping"     },
-      { label: "Attributes",    href: "/attributes",  icon: SlidersHorizontal, desc: "Product properties"   },
-      { label: "Units",         href: "/units",       icon: Ruler,             desc: "Measurement units"    },
+      { label: "Products",        href: "/products",        icon: Package,           desc: "Product catalogue"    },
+      { label: "Product Groups",  href: "/product-groups",  icon: Layers,            desc: "Menus & bundles"      },
+      { label: "Brands",          href: "/brands",          icon: Bookmark,          desc: "Brand management"     },
+      { label: "Categories",      href: "/categories",      icon: FolderOpen,        desc: "Product grouping"     },
+      { label: "Attributes",      href: "/attributes",      icon: SlidersHorizontal, desc: "Product properties"   },
+      { label: "Units",           href: "/units",           icon: Ruler,             desc: "Measurement units"    },
       { label: "Media Library", href: "/media",       icon: ImageIcon,         desc: "Product images"       },
       { label: "Stock",         divider: true },
       { label: "All Stock",     href: "/stock",       icon: Boxes,             desc: "Product quantities & levels"   },
@@ -228,7 +229,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/attributes", "/units", "/media", "/stock"];
+const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
 const SALES_ROUTES       = ["/sales", "/invoices", "/purchases"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
 const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
@@ -754,11 +755,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products & Stock</p>
                 {[
                   ...(isModuleAllowed("products") ? [
-                    { href: "/products",   label: "Products",   icon: Package           },
-                    { href: "/brands",     label: "Brands",     icon: Bookmark          },
-                    { href: "/categories", label: "Categories", icon: FolderOpen        },
-                    { href: "/attributes", label: "Attributes", icon: SlidersHorizontal },
-                    { href: "/units",      label: "Units",      icon: Ruler             },
+                    { href: "/products",        label: "Products",       icon: Package           },
+                    { href: "/product-groups",  label: "Product Groups",  icon: Layers            },
+                    { href: "/brands",          label: "Brands",          icon: Bookmark          },
+                    { href: "/categories",      label: "Categories",      icon: FolderOpen        },
+                    { href: "/attributes",      label: "Attributes",      icon: SlidersHorizontal },
+                    { href: "/units",           label: "Units",           icon: Ruler             },
                   ] : []),
                   ...(isModuleAllowed("stock") ? [
                     { href: "/stock",       label: "All Stock",   icon: Boxes },
