@@ -23,7 +23,8 @@
     "@tiptap/extension-underline": "^3.22.1",
     "@tiptap/pm": "^3.22.1",
     "@tiptap/react": "^3.22.1",
-    "@tiptap/starter-kit": "^3.22.1"
+    "@tiptap/starter-kit": "^3.22.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

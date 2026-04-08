@@ -5,6 +5,7 @@ import { Supplier, SupplierStatus } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Truck, Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, BadgeCheck, ShieldAlert, Filter, Upload, FileDown } from "lucide-react";
+import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

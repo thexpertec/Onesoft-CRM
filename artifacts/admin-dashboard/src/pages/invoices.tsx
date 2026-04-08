@@ -16,8 +16,9 @@ import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
   CheckCircle, AlertTriangle, Ban, RotateCcw,
   Save, CreditCard, ArrowLeft, Eye,
-  ChevronDown, ChevronUp, PlusCircle,
+  ChevronDown, ChevronUp, PlusCircle, FileDown,
 } from "lucide-react";
+import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 // ─── Status config ────────────────────────────────────────────────────────────

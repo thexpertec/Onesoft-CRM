@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown } from "lucide-react";
+import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
@@ -349,6 +350,24 @@ export default function ProductsPage() {
             </Button>
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8 text-[13px]" data-testid="btn-import-products">
               <Upload size={13} /> Import CSV
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              downloadExcel("Products", "Products", filteredProducts, [
+                { header: "#",               key: "id",            getValue: (_, i?: number) => (i ?? 0) + 1, width: 5 },
+                { header: "Product Name",    key: "name",          width: 32 },
+                { header: "SKU",             key: "sku",           width: 18 },
+                { header: "Brand",           key: "brand",         width: 16 },
+                { header: "Category",        key: "category",      width: 20 },
+                { header: "Unit",            key: "unit",          width: 10 },
+                { header: "Purchase Price",  key: "purchasePrice", width: 16 },
+                { header: "Cost Price",      key: "costPrice",     width: 14 },
+                { header: "Sale Price",      key: "price",         width: 14 },
+                { header: "Status",          key: "status",        width: 12 },
+                { header: "Condition",       key: "condition",     width: 14 },
+                { header: "Description",     key: "description",   width: 40 },
+              ].map((c, i, arr) => ({ ...c, getValue: c.getValue ? (r: Product) => c.getValue!(r, filteredProducts.indexOf(r)) : undefined }))
+            }} className="gap-1.5 h-8 text-[13px]">
+              <FileDown size={13} /> Export Excel
             </Button>
             <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5 h-8 text-[13px]" data-testid="btn-add-product">
               <Plus size={14} /> Add Product
