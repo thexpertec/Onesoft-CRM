@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
-import { useProducts } from "@/hooks/use-data";
+import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
@@ -100,7 +100,26 @@ function parseCSV(text: string): ImportRow[] {
 
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct } = useProducts();
+  const { stock } = useStock();
   const { isAuthenticated } = useAuth();
+
+  // Build a map: SKU (lowercased) → total qty across all stock entries
+  const stockBySkuMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    stock.forEach(s => {
+      const key = s.sku?.trim().toLowerCase() || s.productName.trim().toLowerCase();
+      m[key] = (m[key] || 0) + (parseFloat(s.quantity) || 0);
+    });
+    return m;
+  }, [stock]);
+
+  const getProductStock = (prod: Product): number | null => {
+    const bysku  = prod.sku?.trim()  ? stockBySkuMap[prod.sku.trim().toLowerCase()]  : undefined;
+    const byname = prod.name?.trim() ? stockBySkuMap[prod.name.trim().toLowerCase()] : undefined;
+    const v = bysku ?? byname;
+    return v !== undefined ? v : null;
+  };
+
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
@@ -231,6 +250,7 @@ export default function ProductsPage() {
     { field: "costPrice",     label: `Cost (${sym})`,       minW: 110, type: "text"                                                                },
     { field: "price",         label: `Sale (${sym})`,       minW: 110, type: "text"                                                                },
     { field: "profit",        label: `Profit (${sym})`,     minW: 110, type: "readonly"                                                            },
+    { field: "stock",         label: "Stock",               minW: 90,  type: "readonly"                                                            },
     { field: "status",      label: "Status",             minW: 120, type: "select",
       options: ["Active", "Inactive", "Draft"],
       optionColors: STATUS_COLORS,
@@ -581,6 +601,31 @@ export default function ProductsPage() {
                       : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
                       : "text-muted-foreground")
                     : "";
+
+                  // Stock column — read-only pill
+                  if (c.field === "stock") {
+                    const qty = getProductStock(prod);
+                    const isLow = qty !== null && qty > 0 && qty <= 5;
+                    const isOut = qty !== null && qty === 0;
+                    return (
+                      <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
+                        style={{ height: `${CELL_H}px` }}>
+                        <div className="w-full h-full flex items-center justify-end px-2.5">
+                          {qty === null ? (
+                            <span className="text-[11px] text-muted-foreground/40">—</span>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full tabular-nums
+                              ${isOut  ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
+                               : isLow ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                               :         "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"}`}>
+                              {isOut ? "0 — Out" : isLow ? `⚠ ${qty}` : qty}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  }
+
                   return (
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}

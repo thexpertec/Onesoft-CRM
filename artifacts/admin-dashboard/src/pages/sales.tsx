@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useSales, useCustomers } from "@/hooks/use-data";
+import { useSales, useCustomers, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
   SALE_STATUSES, SALE_PAYMENTS,
-  getProducts, getCustomers, getProductCategories, getSales, getStock, getSalesAgents, Product,
+  getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
   deductStockForSale, restoreStockForSale, getSettings,
 } from "@/lib/store";
 import { printSaleInvoice } from "@/lib/print-invoice";
@@ -354,6 +354,7 @@ function POSView({
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
   onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete, onAddCustomer,
 }: POSViewProps) {
+  const { stock } = useStock();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
@@ -428,12 +429,12 @@ function POSView({
     return m;
   }, [localItems]);
 
-  // Stock qty per SKU (sum across all stock entries)
+  // Stock qty per SKU — reactive: updates whenever stock changes (e.g. after a sale deducts)
   const stockMap = useMemo(() => {
     const m: Record<string, number> = {};
-    getStock().forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
+    stock.forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
     return m;
-  }, []);
+  }, [stock]);
 
   const qtyChange = (itemId: string, delta: number) => {
     const item = localItems.find(i => i.id === itemId);
@@ -1022,9 +1023,17 @@ function POSView({
                             </span>
                           )}
                         </div>
-                        {/* Stock qty */}
-                        <div className={`text-[9px] font-medium ${stockQty === null ? "text-gray-300 dark:text-zinc-700" : lowStock ? "text-amber-500" : "text-gray-400"}`}>
-                          {stockQty === null ? "No stock data" : lowStock ? `⚠ ${stockQty} left` : `${stockQty} in stock`}
+                        {/* Stock qty — read-only pill, colour-coded */}
+                        <div className="flex items-center justify-between mt-0.5">
+                          {stockQty === null ? (
+                            <span className="text-[9px] text-gray-300 dark:text-zinc-700 tabular-nums">No stock</span>
+                          ) : stockQty === 0 ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 tabular-nums">Out of stock</span>
+                          ) : lowStock ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 tabular-nums">⚠ {stockQty} left</span>
+                          ) : (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 tabular-nums">{stockQty} in stock</span>
+                          )}
                         </div>
                       </div>
                     </button>
