@@ -642,9 +642,9 @@ export default function ManufacturingPage() {
         </SheetContent>
       </Sheet>
 
-      {/* ════ Detail Sheet ═══════════════════════════════════════════════════════ */}
+      {/* ════ Detail Sheet (bottom, full-width) ═══════════════════════════════ */}
       <Sheet open={!!viewId} onOpenChange={o => { if (!o) setViewId(null); }}>
-        <SheetContent side="right" className="w-full sm:w-[580px] overflow-y-auto p-0 flex flex-col">
+        <SheetContent side="bottom" className="h-[92vh] rounded-t-2xl p-0 flex flex-col overflow-hidden">
           {viewOrder && (() => {
             const vRMCost   = calcRMCost(viewOrder.inputs, rms);
             const vProdCost = calcProdCost(viewOrder.productionCosts || []);
@@ -653,250 +653,242 @@ export default function ManufacturingPage() {
 
             return (
               <>
-                {/* Header */}
+                {/* ── Gradient header ── */}
                 <div className="flex-none" style={{ background: "linear-gradient(135deg,#ea580c,#f59e0b)" }}>
-                  <div className="px-5 py-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                        <Factory size={18} className="text-white" />
+                  <div className="flex items-center justify-between gap-4 px-6 py-4 flex-wrap">
+                    {/* Left: icon + title + badges */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                        <Factory size={20} className="text-white" />
                       </div>
                       <div>
-                        <SheetTitle className="text-white text-base font-bold">{viewOrder.orderNumber}</SheetTitle>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[viewOrder.status] || "bg-white/20 text-white"}`}>{viewOrder.status}</span>
-                          <span className="text-white/70 text-[11px]">
+                        <SheetTitle className="text-white text-lg font-bold leading-tight">{viewOrder.orderNumber}</SheetTitle>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_BADGE[viewOrder.status] || "bg-white/20 text-white"}`}>{viewOrder.status}</span>
+                          <span className="text-white/70 text-[12px]">
                             {viewOrder.orderDate ? (() => { try { return format(new Date(viewOrder.orderDate), "d MMM yyyy"); } catch { return viewOrder.orderDate; } })() : "—"}
                           </span>
+                          {viewOrder.notes && <span className="text-white/50 text-[11px] italic truncate max-w-[260px]">{viewOrder.notes}</span>}
                         </div>
                       </div>
                     </div>
-                    {/* Cost pills */}
-                    <div className="flex gap-2 flex-wrap mt-2">
+                    {/* Right: cost pills + action */}
+                    <div className="flex items-center gap-3 flex-wrap">
                       {[
-                        { label: "RM Cost", val: `${sym}${vRMCost.toFixed(2)}` },
-                        { label: "Prod. Cost", val: `${sym}${vProdCost.toFixed(2)}` },
-                        { label: "Total", val: `${sym}${vTotal.toFixed(2)}` },
+                        { label: "RM Cost",    val: vRMCost,   color: "bg-white/15" },
+                        { label: "Prod. Cost", val: vProdCost, color: "bg-white/15" },
+                        { label: "Total",      val: vTotal,    color: "bg-white/25 ring-1 ring-white/30" },
                       ].map(p => (
-                        <div key={p.label} className="bg-white/15 rounded-lg px-2.5 py-1 text-white text-[11px]">
-                          <span className="opacity-70">{p.label}: </span><span className="font-bold">{p.val}</span>
+                        <div key={p.label} className={`${p.color} rounded-xl px-3 py-1.5 text-white`}>
+                          <div className="text-[9px] uppercase tracking-widest text-white/60 font-semibold">{p.label}</div>
+                          <div className="text-[13px] font-bold">{sym}{p.val.toFixed(2)}</div>
                         </div>
                       ))}
+                      {canEdit && (viewOrder.status === "Draft" || viewOrder.status === "In Progress") && (
+                        <Button className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold gap-1.5 h-10 px-4 text-[13px] shadow-lg"
+                          onClick={() => handleComplete(viewOrder.id)}>
+                          <CheckCircle2 size={15} /> Complete Order
+                        </Button>
+                      )}
+                      {viewOrder.status === "Completed" && (
+                        <span className="flex items-center gap-1.5 bg-emerald-500/30 border border-emerald-400/40 text-white rounded-xl px-3 py-1.5 text-[12px] font-semibold">
+                          <CheckCircle2 size={13} /> Completed
+                        </span>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Tab bar */}
-                  <div className="flex border-t border-white/20">
-                    {([
-                      ["inputs",  `Inputs (${viewOrder.inputs.length})`],
-                      ["outputs", `Outputs (${(viewOrder.outputs||[]).length})`],
-                      ["costs",   `Costs (${(viewOrder.productionCosts||[]).length})`],
-                      ["waste",   "Waste"],
-                    ] as [Tab, string][]).map(([t, label]) => (
-                      <button key={t} onClick={() => setActiveTab(t)}
-                        className={`flex-1 py-2 text-[11px] font-semibold transition-colors ${
-                          activeTab === t ? "bg-white/20 text-white" : "text-white/60 hover:text-white/80 hover:bg-white/10"
-                        }`}>
-                        {label}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
-                {/* Action bar */}
-                {canEdit && (viewOrder.status === "Draft" || viewOrder.status === "In Progress") && (
-                  <div className="flex-none px-5 py-3 border-b bg-muted/30">
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-[13px]"
-                      onClick={() => handleComplete(viewOrder.id)}>
-                      <CheckCircle2 size={14} /> Complete Order — Deduct Materials & Add to Stock
-                    </Button>
-                  </div>
-                )}
+                {/* ── Two-column body ── */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 min-h-full divide-y lg:divide-y-0 lg:divide-x divide-border">
 
-                {/* Tab content */}
-                <div className="flex-1 overflow-y-auto p-5">
+                    {/* LEFT: Inputs + Waste */}
+                    <div className="p-6 flex flex-col gap-6">
 
-                  {/* Inputs tab */}
-                  {activeTab === "inputs" && (
-                    <div className="space-y-3">
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Raw Materials Consumed</h3>
-                      <div className="rounded-lg border overflow-hidden">
-                        <table className="w-full text-[12px]">
-                          <thead>
-                            <tr className="bg-emerald-50 dark:bg-emerald-950/20">
-                              {["Material", "Unit", "Qty Used", "Line Cost"].map(h => (
-                                <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 border-b">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {viewOrder.inputs.map((inp, i) => {
-                              const rm = rms.find(r => r.id === inp.rmId);
-                              const lc = (parseFloat(rm?.costPerUnit || "0")) * (parseFloat(inp.qtyUsed) || 0);
-                              return (
-                                <tr key={inp.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                                  <td className="px-3 py-2 font-medium">{inp.rmName || "—"}</td>
-                                  <td className="px-3 py-2 text-muted-foreground">{inp.unit || "—"}</td>
-                                  <td className="px-3 py-2 font-semibold">{inp.qtyUsed}</td>
-                                  <td className="px-3 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                                    {lc > 0 ? `${sym}${lc.toFixed(2)}` : "—"}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-emerald-50/60 dark:bg-emerald-950/10 border-t-2">
-                              <td colSpan={3} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Total RM Cost</td>
-                              <td className="px-3 py-2 text-right font-bold text-emerald-700 dark:text-emerald-400">{sym}{vRMCost.toFixed(2)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Outputs tab */}
-                  {activeTab === "outputs" && (
-                    <div className="space-y-3">
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Products Produced</h3>
-                      <div className="rounded-lg border overflow-hidden">
-                        <table className="w-full text-[12px]">
-                          <thead>
-                            <tr className="bg-orange-50 dark:bg-orange-950/20">
-                              {["Product", "Qty", "Unit", "Est. Cost", "Cost/Unit"].map(h => (
-                                <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase text-orange-700 dark:text-orange-400 border-b">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(viewOrder.outputs || []).map((out, i) => {
-                              const qty = parseFloat(out.qty) || 0;
-                              const share = vOutQty > 0 ? qty / vOutQty : 0;
-                              const estCost = vTotal * share;
-                              const unitCost = qty > 0 ? estCost / qty : 0;
-                              return (
-                                <tr key={out.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                                  <td className="px-3 py-2 font-medium">{out.productName || "—"}</td>
-                                  <td className="px-3 py-2 font-semibold">{out.qty}</td>
-                                  <td className="px-3 py-2 text-muted-foreground">{out.unit || "—"}</td>
-                                  <td className="px-3 py-2 text-right text-orange-700 dark:text-orange-400">{estCost > 0 ? `${sym}${estCost.toFixed(2)}` : "—"}</td>
-                                  <td className="px-3 py-2 text-right font-bold text-orange-700 dark:text-orange-400">{unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-orange-50/60 dark:bg-orange-950/10 border-t-2">
-                              <td colSpan={3} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Grand Total</td>
-                              <td className="px-3 py-2 text-right font-bold text-orange-600">{sym}{vTotal.toFixed(2)}</td>
-                              <td className="px-3 py-2 text-right font-bold text-orange-600">
-                                {vOutQty > 0 ? `${sym}${(vTotal / vOutQty).toFixed(3)}/unit` : "—"}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                      {viewOrder.status === "Completed" && (
-                        <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-[12px] text-emerald-700 dark:text-emerald-400 font-medium">
-                          ✓ All products have been added to stock.
+                      {/* Raw Materials Consumed */}
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <FlaskConical size={15} className="text-emerald-600" />
+                          <h2 className="text-[13px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Raw Materials Consumed</h2>
+                          <span className="ml-auto text-[11px] text-muted-foreground">{viewOrder.inputs.length} material(s)</span>
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Costs tab */}
-                  {activeTab === "costs" && (
-                    <div className="space-y-3">
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Production Costs</h3>
-                      {(viewOrder.productionCosts || []).length === 0 ? (
-                        <p className="text-[13px] text-muted-foreground italic">No additional production costs recorded.</p>
-                      ) : (
-                        <div className="rounded-lg border overflow-hidden">
+                        <div className="rounded-xl border overflow-hidden">
                           <table className="w-full text-[12px]">
                             <thead>
-                              <tr className="bg-violet-50 dark:bg-violet-950/20">
-                                {["Description", "Amount"].map(h => (
-                                  <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase text-violet-700 dark:text-violet-400 border-b">{h}</th>
+                              <tr className="bg-emerald-50 dark:bg-emerald-950/20 border-b">
+                                {["Material", "Qty Used", "Unit", "Line Cost"].map(h => (
+                                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {(viewOrder.productionCosts || []).map((c, i) => (
-                                <tr key={c.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                                  <td className="px-3 py-2">{c.description}</td>
-                                  <td className="px-3 py-2 text-right font-semibold">{sym}{parseFloat(c.amount || "0").toFixed(2)}</td>
-                                </tr>
-                              ))}
+                              {viewOrder.inputs.map((inp, i) => {
+                                const rm = rms.find(r => r.id === inp.rmId);
+                                const lc = (parseFloat(rm?.costPerUnit || "0")) * (parseFloat(inp.qtyUsed) || 0);
+                                return (
+                                  <tr key={inp.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                                    <td className="px-3 py-2.5 font-medium">{inp.rmName || "—"}</td>
+                                    <td className="px-3 py-2.5 font-semibold text-emerald-700 dark:text-emerald-400">{inp.qtyUsed}</td>
+                                    <td className="px-3 py-2.5 text-muted-foreground">{inp.unit || "—"}</td>
+                                    <td className="px-3 py-2.5 text-right font-semibold">{lc > 0 ? `${sym}${lc.toFixed(2)}` : "—"}</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                             <tfoot>
-                              <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2">
-                                <td className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Total</td>
-                                <td className="px-3 py-2 text-right font-bold text-violet-700 dark:text-violet-400">{sym}{vProdCost.toFixed(2)}</td>
+                              <tr className="bg-emerald-50/60 dark:bg-emerald-950/10 border-t-2 border-emerald-200 dark:border-emerald-800">
+                                <td colSpan={3} className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Total RM Cost</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700 dark:text-emerald-400">{sym}{vRMCost.toFixed(2)}</td>
                               </tr>
                             </tfoot>
                           </table>
                         </div>
-                      )}
-                      {/* Cost breakdown */}
-                      <div className="rounded-xl border p-4 space-y-2">
-                        <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Full Cost Breakdown</h4>
-                        {[
-                          { label: "Raw Materials", val: vRMCost,   c: "text-emerald-600" },
-                          { label: "Production",    val: vProdCost, c: "text-violet-600"  },
-                        ].map(r => (
-                          <div key={r.label} className="flex justify-between text-[13px]">
-                            <span className="text-muted-foreground">{r.label}</span>
-                            <span className={`font-semibold ${r.c}`}>{sym}{r.val.toFixed(2)}</span>
-                          </div>
-                        ))}
-                        <div className="border-t pt-2 flex justify-between text-[14px] font-bold">
-                          <span>Total Cost</span>
-                          <span className="text-orange-600">{sym}{vTotal.toFixed(2)}</span>
+                      </div>
+
+                      {/* Waste */}
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle size={15} className="text-amber-600" />
+                          <h2 className="text-[13px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">Waste / Loss</h2>
                         </div>
-                        {vOutQty > 0 && vTotal > 0 && (
-                          <div className="flex justify-between text-[12px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2">
-                            <span className="text-muted-foreground">Avg. Cost / Unit</span>
-                            <span className="font-bold text-orange-600">{sym}{(vTotal / vOutQty).toFixed(3)}</span>
+                        {(!viewOrder.wasteQty || viewOrder.wasteQty === "0" || viewOrder.wasteQty === "") ? (
+                          <p className="text-[13px] text-muted-foreground italic px-1">No waste recorded for this order.</p>
+                        ) : (
+                          <div className="rounded-xl border p-4 bg-amber-50/60 dark:bg-amber-950/10 space-y-3">
+                            <div className="flex gap-4">
+                              <div className="bg-white dark:bg-card rounded-lg border px-4 py-3 flex-1">
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Waste Qty</div>
+                                <div className="text-xl font-bold text-amber-600">{viewOrder.wasteQty} <span className="text-base font-medium">{viewOrder.wasteUnit}</span></div>
+                              </div>
+                            </div>
+                            {viewOrder.wasteNotes && (
+                              <div className="text-[13px] text-muted-foreground bg-white dark:bg-card rounded-lg border p-3">{viewOrder.wasteNotes}</div>
+                            )}
                           </div>
                         )}
                       </div>
                     </div>
-                  )}
 
-                  {/* Waste tab */}
-                  {activeTab === "waste" && (
-                    <div className="space-y-3">
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Waste & Loss</h3>
-                      {(!viewOrder.wasteQty || viewOrder.wasteQty === "0" || viewOrder.wasteQty === "") ? (
-                        <p className="text-[13px] text-muted-foreground italic">No waste recorded for this order.</p>
-                      ) : (
-                        <div className="rounded-xl border p-4 bg-amber-50/50 dark:bg-amber-950/10 space-y-3">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle size={16} className="text-amber-600" />
-                            <span className="text-[13px] font-bold text-amber-700 dark:text-amber-400">Waste Recorded</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-white dark:bg-card rounded-lg border p-3">
-                              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Waste Qty</div>
-                              <div className="text-lg font-bold text-amber-600">{viewOrder.wasteQty} {viewOrder.wasteUnit}</div>
-                            </div>
-                          </div>
-                          {viewOrder.wasteNotes && (
-                            <div className="text-[13px] text-muted-foreground bg-white dark:bg-card rounded-lg border p-3">
-                              {viewOrder.wasteNotes}
-                            </div>
-                          )}
+                    {/* RIGHT: Outputs + Cost Breakdown */}
+                    <div className="p-6 flex flex-col gap-6">
+
+                      {/* Products Produced */}
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <Package size={15} className="text-orange-600" />
+                          <h2 className="text-[13px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-400">Products Produced</h2>
+                          <span className="ml-auto text-[11px] text-muted-foreground">{(viewOrder.outputs||[]).length} output(s)</span>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        <div className="rounded-xl border overflow-hidden">
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="bg-orange-50 dark:bg-orange-950/20 border-b">
+                                {["Product", "Qty", "Unit", "Est. Cost", "Cost/Unit"].map(h => (
+                                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-orange-700 dark:text-orange-400">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(viewOrder.outputs || []).map((out, i) => {
+                                const qty = parseFloat(out.qty) || 0;
+                                const share = vOutQty > 0 ? qty / vOutQty : 0;
+                                const estCost = vTotal * share;
+                                const unitCost = qty > 0 ? estCost / qty : 0;
+                                return (
+                                  <tr key={out.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                                    <td className="px-3 py-2.5 font-medium">{out.productName || "—"}</td>
+                                    <td className="px-3 py-2.5 font-semibold text-orange-700 dark:text-orange-400">{out.qty}</td>
+                                    <td className="px-3 py-2.5 text-muted-foreground">{out.unit || "—"}</td>
+                                    <td className="px-3 py-2.5 text-right">{estCost > 0 ? `${sym}${estCost.toFixed(2)}` : "—"}</td>
+                                    <td className="px-3 py-2.5 text-right font-bold text-orange-700 dark:text-orange-400">{unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-orange-50/60 dark:bg-orange-950/10 border-t-2 border-orange-200 dark:border-orange-800">
+                                <td colSpan={3} className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Grand Total</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-orange-600">{sym}{vTotal.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-orange-600">{vOutQty > 0 ? `${sym}${(vTotal/vOutQty).toFixed(3)}/unit` : "—"}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                        {viewOrder.status === "Completed" && (
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-[12px] text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 size={13} /> All products have been added to stock.
+                          </div>
+                        )}
+                      </div>
 
-                {viewOrder.notes && (
-                  <div className="flex-none px-5 pb-4">
-                    <div className="rounded-lg border p-3 bg-muted/20 text-[12px] text-muted-foreground">{viewOrder.notes}</div>
+                      {/* Production Costs + Full Breakdown */}
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-600"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                          <h2 className="text-[13px] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-400">Production Costs</h2>
+                          <span className="ml-auto text-[11px] text-muted-foreground">{(viewOrder.productionCosts||[]).length} item(s)</span>
+                        </div>
+                        {(viewOrder.productionCosts || []).length > 0 ? (
+                          <div className="rounded-xl border overflow-hidden">
+                            <table className="w-full text-[12px]">
+                              <thead>
+                                <tr className="bg-violet-50 dark:bg-violet-950/20 border-b">
+                                  {["Description", "Amount"].map(h => (
+                                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:text-violet-400">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(viewOrder.productionCosts || []).map((c, i) => (
+                                  <tr key={c.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                                    <td className="px-3 py-2.5">{c.description}</td>
+                                    <td className="px-3 py-2.5 text-right font-semibold text-violet-700 dark:text-violet-400">{sym}{parseFloat(c.amount || "0").toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2 border-violet-200 dark:border-violet-800">
+                                  <td className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Total</td>
+                                  <td className="px-3 py-2.5 text-right font-bold text-violet-700 dark:text-violet-400">{sym}{vProdCost.toFixed(2)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-[13px] text-muted-foreground italic px-1">No additional production costs recorded.</p>
+                        )}
+
+                        {/* Full cost breakdown card */}
+                        <div className="rounded-xl border p-4 space-y-2.5 bg-muted/20">
+                          <h4 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Full Cost Breakdown</h4>
+                          <div className="space-y-2">
+                            {[
+                              { label: "Raw Materials", val: vRMCost,   c: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20" },
+                              { label: "Production",    val: vProdCost, c: "text-violet-600",  bg: "bg-violet-50 dark:bg-violet-950/20"  },
+                            ].map(r => (
+                              <div key={r.label} className={`flex justify-between items-center rounded-lg px-3 py-2 ${r.bg}`}>
+                                <span className="text-[13px] text-muted-foreground">{r.label}</span>
+                                <span className={`text-[13px] font-bold ${r.c}`}>{sym}{r.val.toFixed(2)}</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between items-center rounded-lg px-3 py-2.5 bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                              <span className="text-[14px] font-bold">Total Cost</span>
+                              <span className="text-[15px] font-bold text-orange-600">{sym}{vTotal.toFixed(2)}</span>
+                            </div>
+                            {vOutQty > 0 && vTotal > 0 && (
+                              <div className="flex justify-between items-center px-3 py-1.5">
+                                <span className="text-[12px] text-muted-foreground">Avg. Cost / Unit</span>
+                                <span className="text-[13px] font-bold text-orange-600">{sym}{(vTotal / vOutQty).toFixed(3)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
-                )}
+                </div>
               </>
             );
           })()}
