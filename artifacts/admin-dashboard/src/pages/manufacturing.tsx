@@ -231,149 +231,196 @@ export default function ManufacturingPage() {
 
       {/* ── New Order Sheet ───────────────────────────────────────────────────── */}
       <Sheet open={newOpen} onOpenChange={o => { if (!o) setNewOpen(false); }}>
-        <SheetContent side="right" className="w-full sm:w-[520px] overflow-y-auto">
-          <SheetHeader className="pb-4">
-            <div className="h-16 rounded-xl flex items-center gap-4 px-5"
-              style={{ background: "linear-gradient(135deg,#ea580c,#f59e0b)" }}>
-              <Factory size={20} className="text-white" />
-              <SheetTitle className="text-white text-base font-bold">New Manufacturing Order</SheetTitle>
-            </div>
-          </SheetHeader>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className={lbl}>Order Date</Label>
-                <Input type="date" value={form.orderDate}
-                  onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} className="text-[13px]" />
+        <SheetContent side="bottom" className="h-[92vh] rounded-t-2xl p-0 flex flex-col overflow-hidden">
+          {/* Sticky header */}
+          <div className="flex-none" style={{ background: "linear-gradient(135deg,#ea580c,#f59e0b)" }}>
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Factory size={18} className="text-white" />
+                </div>
+                <SheetTitle className="text-white text-lg font-bold">New Manufacturing Order</SheetTitle>
               </div>
-              <div>
-                <Label className={lbl}>Status</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                  <SelectTrigger className="text-[13px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["Draft", "In Progress"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Raw Material Inputs */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className={lbl}>Raw Materials (Inputs)</Label>
-                <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1" onClick={addInput}>
-                  <Plus size={10} /> Add Row
-                </Button>
-              </div>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      {["Raw Material", "Unit", "Qty Used", ""].map(h => (
-                        <th key={h} className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {form.inputs.map(inp => (
-                      <tr key={inp.id} className="border-b last:border-0">
-                        <td className="px-1 py-1">
-                          {rms.length > 0 ? (
-                            <Select value={inp.rmId || ""} onValueChange={v => {
-                              const rm = rms.find(r => r.id === v);
-                              if (rm) updateInput(inp.id, { rmId: rm.id, rmName: rm.name, unit: rm.unit });
-                            }}>
-                              <SelectTrigger className="h-7 text-[12px] border-0 focus:ring-0"><SelectValue placeholder="Select RM" /></SelectTrigger>
-                              <SelectContent>
-                                {rms.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.rmCode}) — Stock: {r.currentStock} {r.unit}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input placeholder="Raw material name" value={inp.rmName}
-                              onChange={e => updateInput(inp.id, { rmName: e.target.value })}
-                              className="h-7 text-[12px] border-0" />
-                          )}
-                        </td>
-                        <td className="px-1 py-1 w-20">
-                          <Input value={inp.unit} onChange={e => updateInput(inp.id, { unit: e.target.value })}
-                            placeholder="unit" className="h-7 text-[12px] border-0" />
-                        </td>
-                        <td className="px-1 py-1 w-24">
-                          <Input type="number" min="0" value={inp.qtyUsed} onChange={e => updateInput(inp.id, { qtyUsed: e.target.value })}
-                            placeholder="0" className="h-7 text-[12px] border-0" />
-                        </td>
-                        <td className="px-1 py-1 w-8">
-                          {form.inputs.length > 1 && (
-                            <button onClick={() => removeInput(inp.id)} className="text-red-400 hover:text-red-600">
-                              <XCircle size={13} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Output */}
-            <div className="border rounded-xl p-3 space-y-3 bg-orange-50/50 dark:bg-orange-950/10">
-              <Label className={lbl + " text-orange-700 dark:text-orange-400"}>Output (Finished Product)</Label>
-              <div>
-                <Label className={lbl}>Product</Label>
-                {products.length > 0 ? (
-                  <Select value={form.outputProductId || ""} onValueChange={v => {
-                    const p = products.find(p => p.id === v);
-                    if (p) setForm(f => ({ ...f, outputProductId: p.id, outputProductName: p.name, outputUnit: p.unit }));
-                    else    setForm(f => ({ ...f, outputProductId: v,   outputProductName: "" }));
-                  }}>
-                    <SelectTrigger className="text-[13px]"><SelectValue placeholder="Select product" /></SelectTrigger>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-white/15 rounded-lg px-3 py-1.5">
+                  <span className="text-white/70 text-[11px] uppercase tracking-wide font-semibold">Date</span>
+                  <Input type="date" value={form.orderDate}
+                    onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))}
+                    className="h-7 w-36 text-[13px] bg-white/20 border-0 text-white [color-scheme:dark] focus-visible:ring-0" />
+                </div>
+                <div className="flex items-center gap-2 bg-white/15 rounded-lg px-3 py-1.5">
+                  <span className="text-white/70 text-[11px] uppercase tracking-wide font-semibold">Status</span>
+                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger className="h-7 w-32 text-[13px] bg-white/20 border-0 text-white focus:ring-0">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>)}
+                      {["Draft", "In Progress"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                ) : (
-                  <Input value={form.outputProductName}
-                    onChange={e => setForm(f => ({ ...f, outputProductName: e.target.value }))}
-                    placeholder="Product name" className="text-[13px]" />
-                )}
-              </div>
-              {products.length > 0 && form.outputProductId && !form.outputProductName && (
-                <div>
-                  <Label className={lbl}>Product Name</Label>
-                  <Input value={form.outputProductName}
-                    onChange={e => setForm(f => ({ ...f, outputProductName: e.target.value }))}
-                    placeholder="Product name" className="text-[13px]" />
                 </div>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className={lbl}>Output Quantity</Label>
-                  <Input type="number" min="0" value={form.outputQty}
-                    onChange={e => setForm(f => ({ ...f, outputQty: e.target.value }))}
-                    placeholder="0" className="text-[13px]" />
-                </div>
-                <div>
-                  <Label className={lbl}>Unit</Label>
-                  <Input value={form.outputUnit}
-                    onChange={e => setForm(f => ({ ...f, outputUnit: e.target.value }))}
-                    placeholder="pcs, kg, box..." className="text-[13px]" />
-                </div>
+                <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30 text-[13px]"
+                  onClick={() => setNewOpen(false)}>Cancel</Button>
+                <Button size="sm" className="bg-white text-orange-600 hover:bg-white/90 font-bold text-[13px]" onClick={handleSave}>
+                  Create Order
+                </Button>
               </div>
             </div>
+          </div>
 
-            <div>
-              <Label className={lbl}>Notes</Label>
-              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                rows={2} placeholder="Optional notes..." className="text-[13px]" />
-            </div>
+          {/* Two-column body */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full divide-y lg:divide-y-0 lg:divide-x divide-border">
 
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setNewOpen(false)}>Cancel</Button>
-              <Button className="flex-1 bg-orange-600 hover:bg-orange-700 text-white" onClick={handleSave}>
-                Create Order
-              </Button>
+              {/* Left: Raw Materials */}
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-[13px] font-bold text-foreground">Raw Materials</h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Select materials consumed in this production run</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="gap-1 text-[12px]" onClick={addInput}>
+                    <Plus size={12} /> Add Row
+                  </Button>
+                </div>
+
+                <div className="border rounded-xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-muted/60">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b">Raw Material</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b w-28">Unit</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b w-32">Qty Used</th>
+                        <th className="w-10 border-b" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.inputs.map((inp, idx) => (
+                        <tr key={inp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                          <td className="px-2 py-2">
+                            {rms.length > 0 ? (
+                              <Select value={inp.rmId || ""} onValueChange={v => {
+                                const rm = rms.find(r => r.id === v);
+                                if (rm) updateInput(inp.id, { rmId: rm.id, rmName: rm.name, unit: rm.unit });
+                              }}>
+                                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select raw material…" /></SelectTrigger>
+                                <SelectContent>
+                                  {rms.map(r => (
+                                    <SelectItem key={r.id} value={r.id}>
+                                      <span className="font-medium">{r.name}</span>
+                                      <span className="text-muted-foreground ml-2 text-[11px]">{r.rmCode} · Stock: {r.currentStock} {r.unit}</span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input placeholder="Raw material name" value={inp.rmName}
+                                onChange={e => updateInput(inp.id, { rmName: e.target.value })}
+                                className="h-9 text-[13px]" />
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <Input value={inp.unit} onChange={e => updateInput(inp.id, { unit: e.target.value })}
+                              placeholder="kg / L / pcs" className="h-9 text-[13px]" />
+                          </td>
+                          <td className="px-2 py-2">
+                            <Input type="number" min="0" value={inp.qtyUsed}
+                              onChange={e => updateInput(inp.id, { qtyUsed: e.target.value })}
+                              placeholder="0" className="h-9 text-[13px]" />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            {form.inputs.length > 1 && (
+                              <button onClick={() => removeInput(inp.id)}
+                                className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30">
+                                <XCircle size={15} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/30">
+                        <td colSpan={2} className="px-4 py-2 text-[11px] text-muted-foreground">{form.inputs.filter(i => i.rmName).length} material(s) selected</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Right: Output + Notes */}
+              <div className="p-6 space-y-5 overflow-y-auto">
+                {/* Output product */}
+                <div className="rounded-xl border-2 border-orange-200 dark:border-orange-800 p-5 space-y-4 bg-orange-50/60 dark:bg-orange-950/10">
+                  <div>
+                    <h2 className="text-[13px] font-bold text-orange-700 dark:text-orange-400">Output — Finished Product</h2>
+                    <p className="text-[11px] text-orange-600/70 dark:text-orange-500/70 mt-0.5">What will be produced and added to stock</p>
+                  </div>
+
+                  <div>
+                    <Label className={lbl}>Product</Label>
+                    {products.length > 0 ? (
+                      <Select value={form.outputProductId || ""} onValueChange={v => {
+                        const p = products.find(p => p.id === v);
+                        if (p) setForm(f => ({ ...f, outputProductId: p.id, outputProductName: p.name, outputUnit: p.unit }));
+                        else    setForm(f => ({ ...f, outputProductId: v, outputProductName: "" }));
+                      }}>
+                        <SelectTrigger className="text-[13px] h-10 bg-white dark:bg-card"><SelectValue placeholder="Select product from catalogue…" /></SelectTrigger>
+                        <SelectContent>
+                          {products.map(p => (
+                            <SelectItem key={p.id} value={p.id}>
+                              <span className="font-medium">{p.name}</span>
+                              <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input value={form.outputProductName}
+                        onChange={e => setForm(f => ({ ...f, outputProductName: e.target.value }))}
+                        placeholder="Product name" className="text-[13px] h-10 bg-white dark:bg-card" />
+                    )}
+                  </div>
+
+                  {form.outputProductName && (
+                    <div className="px-3 py-2 bg-white dark:bg-card rounded-lg border text-[13px] font-medium text-orange-700 dark:text-orange-400">
+                      ✓ {form.outputProductName}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className={lbl}>Output Quantity</Label>
+                      <Input type="number" min="0" value={form.outputQty}
+                        onChange={e => setForm(f => ({ ...f, outputQty: e.target.value }))}
+                        placeholder="0" className="text-[13px] h-10 bg-white dark:bg-card" />
+                    </div>
+                    <div>
+                      <Label className={lbl}>Unit</Label>
+                      <Input value={form.outputUnit}
+                        onChange={e => setForm(f => ({ ...f, outputUnit: e.target.value }))}
+                        placeholder="pcs, kg, box…" className="text-[13px] h-10 bg-white dark:bg-card" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <Label className={lbl}>Notes (optional)</Label>
+                  <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                    rows={4} placeholder="Production notes, batch reference, special instructions…" className="text-[13px] resize-none" />
+                </div>
+
+                {/* Summary */}
+                <div className="rounded-lg bg-muted/40 border p-4 text-[12px] text-muted-foreground space-y-1">
+                  <div className="font-semibold text-foreground text-[13px] mb-2">Order Summary</div>
+                  <div className="flex justify-between"><span>Inputs:</span><span className="font-medium text-foreground">{form.inputs.filter(i => i.rmName).length} material(s)</span></div>
+                  <div className="flex justify-between"><span>Output:</span><span className="font-medium text-foreground">{form.outputProductName || "—"}</span></div>
+                  <div className="flex justify-between"><span>Qty:</span><span className="font-medium text-foreground">{form.outputQty || "0"} {form.outputUnit}</span></div>
+                  <div className="flex justify-between"><span>Status:</span><span className="font-medium text-foreground">{form.status}</span></div>
+                </div>
+              </div>
             </div>
           </div>
         </SheetContent>
