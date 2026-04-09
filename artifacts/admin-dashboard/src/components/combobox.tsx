@@ -117,7 +117,7 @@ export function Combobox({
         <ul
           ref={listRef}
           role="listbox"
-          className="absolute z-[200] left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-md shadow-xl overflow-y-auto max-h-56 text-sm"
+          className="absolute z-[200] left-0 mt-1 min-w-[220px] w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-md shadow-xl overflow-y-auto max-h-56 text-sm"
         >
           {filtered.map((opt, i) => (
             <li
@@ -126,18 +126,20 @@ export function Combobox({
               aria-selected={i === highlighted}
               onMouseDown={(e) => { e.preventDefault(); select(opt); }}
               onMouseEnter={() => setHighlighted(i)}
-              className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
+              className={`flex items-start gap-2 px-3 py-2 cursor-pointer transition-colors ${
                 i === highlighted
                   ? "bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
                   : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
               }`}
             >
-              <span className="flex-1 truncate font-medium text-[13px]">{opt.label}</span>
-              {opt.sub && (
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0 truncate max-w-[200px]">{opt.sub}</span>
-              )}
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-[13px] truncate">{opt.label}</div>
+                {opt.sub && (
+                  <div className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{opt.sub}</div>
+                )}
+              </div>
               {opt.tag && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 shrink-0 whitespace-nowrap">{opt.tag}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 shrink-0 whitespace-nowrap mt-0.5">{opt.tag}</span>
               )}
             </li>
           ))}
