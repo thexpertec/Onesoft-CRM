@@ -131,7 +131,14 @@ export default function PurchasesPage() {
 
   // ── cell value for a given PO row ──
   const cellValue = (po: PurchaseOrder, field: string): string => {
-    if (field === "itemCount") return String(po.items.length);
+    if (field === "itemCount") {
+      const prod = po.items.filter(i => !i.itemType || i.itemType === "product").length;
+      const rm   = po.items.filter(i => i.itemType === "raw-material").length;
+      if (prod > 0 && rm > 0) return `${prod} Prod · ${rm} RM`;
+      if (rm > 0)  return `${rm} RM`;
+      if (prod > 0) return `${prod} Prod`;
+      return "0";
+    }
     if (field === "total") return po.items.reduce((s, i) => s + lineTotal(i), 0).toFixed(2);
     return String((po as unknown as Record<string, string>)[field] ?? "");
   };
@@ -556,69 +563,128 @@ export default function PurchasesPage() {
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-                    {["#", "Product / Service", "Qty", "Unit", `Unit Price (${sym})`, "Notes", `Total (${sym})`, ""].map((h, i) => (
-                      <th key={i} className={`text-left text-[11px] font-semibold text-zinc-500 py-2 px-3 border border-zinc-200 dark:border-zinc-700 ${i === 0 ? "w-7" : i === 7 ? "w-8" : i === 2 ? "w-20" : i === 3 ? "w-24" : i === 4 ? "w-28" : i === 6 ? "w-24 text-right" : ""}`}>{h}</th>
+                    {["#", "Type", "Item Name", "Qty", "Unit", `Unit Price (${sym})`, "Notes", `Total (${sym})`, ""].map((h, i) => (
+                      <th key={i} className={`text-left text-[11px] font-semibold text-zinc-500 py-2 px-3 border border-zinc-200 dark:border-zinc-700 ${i === 0 ? "w-7" : i === 1 ? "w-32" : i === 8 ? "w-8" : i === 3 ? "w-20" : i === 4 ? "w-24" : i === 5 ? "w-28" : i === 7 ? "w-24 text-right" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {localItems.length === 0 && !addingItem && (
-                    <tr><td colSpan={8} className="py-8 text-center text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                    <tr><td colSpan={9} className="py-8 text-center text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                       No items yet — click "Add Item" to get started
                     </td></tr>
                   )}
-                  {localItems.map((item, idx) => (
-                    <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                      <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-400">{idx + 1}</td>
-                      {(["productName", "qty", "unit", "unitPrice", "notes"] as (keyof PurchaseOrderItem2)[]).map(field => (
-                        <td key={field} className={`py-1 px-1 border border-zinc-200 dark:border-zinc-700 ${field === "productName" ? "bg-gray-50/60 dark:bg-gray-800/20" : ""}`}>
-                          {field === "productName" ? (
-                            <div className="flex items-center gap-1.5 px-2 py-1">
-                              <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${item.itemType === "raw-material" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}`}>
-                                {item.itemType === "raw-material" ? "RM" : "Prod"}
-                              </span>
-                              <span className="flex-1 truncate text-xs text-zinc-600 dark:text-zinc-300">{String(item[field]) || "—"}</span>
-                            </div>
-                          ) : (
+
+                  {localItems.map((item, idx) => {
+                    const isRM = item.itemType === "raw-material";
+                    return (
+                      <tr key={item.id} className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${isRM ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
+                        <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-400 text-center">{idx + 1}</td>
+
+                        {/* ── Type selector ── */}
+                        <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700">
+                          <select
+                            value={item.itemType || "product"}
+                            disabled={!isAuthenticated || detailPo?.status === "Received" || detailPo?.status === "Cancelled"}
+                            onChange={e => {
+                              const t = e.target.value as "product" | "raw-material";
+                              const updated = localItems.map(i => i.id === item.id
+                                ? { ...i, itemType: t, productName: "", productId: undefined, rmId: undefined, unit: "", unitPrice: "" }
+                                : i
+                              );
+                              saveItems(updated);
+                            }}
+                            className={`w-full rounded px-2 py-1 text-[11px] font-bold border-0 outline-none cursor-pointer appearance-none
+                              ${isRM
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                                : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                              }`}
+                          >
+                            <option value="product">📦 Product</option>
+                            <option value="raw-material">🧪 Raw Material</option>
+                          </select>
+                        </td>
+
+                        {/* ── Item name (combobox for live lookup) ── */}
+                        <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700">
+                          <Combobox
+                            value={item.productName}
+                            onChange={v => handleItemFieldChange(item.id, "productName", v)}
+                            onSelect={opt => {
+                              const rm2 = isRM ? getRawMaterials().find(r => r.name === opt.value) : undefined;
+                              const pr2 = !isRM ? getProducts().find(p => p.name === opt.value) : undefined;
+                              const updated = localItems.map(i => i.id === item.id
+                                ? { ...i, productName: opt.value,
+                                    rmId: rm2?.id, productId: pr2?.id,
+                                    unit: (rm2?.unit || pr2?.unit || i.unit),
+                                    unitPrice: (rm2?.costPerUnit || pr2?.price || i.unitPrice) }
+                                : i
+                              );
+                              saveItems(updated);
+                            }}
+                            onBlur={handleItemBlur}
+                            options={isRM ? rawMatComboOpts : productComboOpts}
+                            placeholder={isRM ? "Select raw material…" : "Product or service name…"}
+                            className="w-full"
+                            inputClassName="w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs"
+                            disabled={!isAuthenticated || detailPo?.status === "Received" || detailPo?.status === "Cancelled"}
+                          />
+                        </td>
+
+                        {/* ── Numeric / text fields ── */}
+                        {(["qty", "unit", "unitPrice", "notes"] as (keyof PurchaseOrderItem2)[]).map(field => (
+                          <td key={field} className="py-1 px-1 border border-zinc-200 dark:border-zinc-700">
                             <input
                               type={field === "qty" || field === "unitPrice" ? "number" : "text"}
                               min={field === "qty" || field === "unitPrice" ? "0" : undefined}
                               step={field === "qty" || field === "unitPrice" ? "any" : undefined}
                               placeholder={field === "qty" ? "1" : field === "unit" ? "e.g. pcs" : field === "unitPrice" ? "0.00" : ""}
-                              className="w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs"
+                              className="w-full bg-transparent outline-none px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-blue-400 text-xs disabled:opacity-50"
                               value={String(item[field])}
                               onChange={e => handleItemFieldChange(item.id, field, e.target.value)}
                               onBlur={handleItemBlur}
+                              disabled={!isAuthenticated || detailPo?.status === "Received" || detailPo?.status === "Cancelled"}
                             />
+                          </td>
+                        ))}
+
+                        <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums">
+                          {sym}{lineTotal(item).toFixed(2)}
+                        </td>
+                        <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700 text-center">
+                          {isAuthenticated && detailPo?.status !== "Received" && detailPo?.status !== "Cancelled" && (
+                            <button onClick={() => handleDeleteItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors" title="Remove line">
+                              <X size={13} />
+                            </button>
                           )}
                         </td>
-                      ))}
-                      <td className="py-1 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums">
-                        {sym}{lineTotal(item).toFixed(2)}
-                      </td>
-                      <td className="py-1 px-1 border border-zinc-200 dark:border-zinc-700 text-center">
-                        <button onClick={() => handleDeleteItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors" title="Remove item">
-                          <X size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
 
-                  {/* New item form row */}
+                  {/* ── New item form row ── */}
                   {addingItem && newItem && (
-                    <tr className="bg-amber-50 dark:bg-amber-900/20">
-                      <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-zinc-400">{localItems.length + 1}</td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
-                        {/* Type toggle */}
-                        <div className="flex gap-1 px-1 pt-1 pb-0.5">
-                          {(["product", "raw-material"] as const).map(t => (
-                            <button key={t} type="button"
-                              onClick={() => { setNewItemType(t); setNewItem(blankItem(t)); }}
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${newItemType === t ? (t === "raw-material" ? "bg-amber-500 border-amber-500 text-white" : "bg-blue-500 border-blue-500 text-white") : "bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-zinc-500"}`}>
-                              {t === "product" ? "Product" : "Raw Material"}
-                            </button>
-                          ))}
-                        </div>
+                    <tr className="bg-blue-50/60 dark:bg-blue-900/10">
+                      <td className="py-1 px-3 border border-blue-300 dark:border-blue-700 text-zinc-400 text-center">{localItems.length + 1}</td>
+
+                      {/* Type select */}
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
+                        <select
+                          value={newItemType}
+                          onChange={e => { const t = e.target.value as "product" | "raw-material"; setNewItemType(t); setNewItem(blankItem(t)); }}
+                          className={`w-full rounded px-2 py-1 text-[11px] font-bold border-0 outline-none cursor-pointer appearance-none
+                            ${newItemType === "raw-material"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                            }`}
+                        >
+                          <option value="product">📦 Product</option>
+                          <option value="raw-material">🧪 Raw Material</option>
+                        </select>
+                      </td>
+
+                      {/* Item name combobox */}
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
                         <Combobox autoFocus value={newItem.productName}
                           onChange={v => setNewItem(p => p ? { ...p, productName: v } : p)}
                           onSelect={opt => {
@@ -633,37 +699,38 @@ export default function PurchasesPage() {
                           options={newItemType === "raw-material" ? rawMatComboOpts : productComboOpts}
                           placeholder={newItemType === "raw-material" ? "Select raw material *" : "Product or service name *"}
                           className="w-full"
-                          inputClassName="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                          inputClassName="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-blue-400 text-xs"
                         />
                       </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
+
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
                         <input type="number" min="0" step="any" placeholder="1"
-                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-blue-400 text-xs"
                           value={newItem.qty}
                           onChange={e => setNewItem(p => p ? { ...p, qty: e.target.value } : p)} />
                       </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
                         <input placeholder="e.g. kg"
-                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-blue-400 text-xs"
                           value={newItem.unit}
                           onChange={e => setNewItem(p => p ? { ...p, unit: e.target.value } : p)} />
                       </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
                         <input type="number" min="0" step="any" placeholder="0.00"
-                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-blue-400 text-xs"
                           value={newItem.unitPrice}
                           onChange={e => setNewItem(p => p ? { ...p, unitPrice: e.target.value } : p)} />
                       </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700">
                         <input placeholder="Optional"
-                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
+                          className="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-blue-400 text-xs"
                           value={newItem.notes}
                           onChange={e => setNewItem(p => p ? { ...p, notes: e.target.value } : p)} />
                       </td>
-                      <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-right font-mono tabular-nums text-zinc-400">
+                      <td className="py-1 px-3 border border-blue-300 dark:border-blue-700 text-right font-mono tabular-nums text-zinc-400">
                         {sym}{(parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0")).toFixed(2)}
                       </td>
-                      <td className="py-1 px-1 border border-amber-300 dark:border-amber-700 text-center">
+                      <td className="py-1 px-1 border border-blue-300 dark:border-blue-700 text-center">
                         <button onClick={() => { setNewItem(null); setAddingItem(false); }} className="text-zinc-400 hover:text-zinc-600"><X size={13} /></button>
                       </td>
                     </tr>
@@ -673,7 +740,7 @@ export default function PurchasesPage() {
                 {(localItems.length > 0 || addingItem) && (
                   <tfoot>
                     <tr className="bg-zinc-50 dark:bg-zinc-800/60 font-semibold">
-                      <td colSpan={6} className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-[11px] text-zinc-500">Grand Total</td>
+                      <td colSpan={7} className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right text-[11px] text-zinc-500">Grand Total</td>
                       <td className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-right font-mono tabular-nums text-sm">
                         {sym}{(grandTotal + (addingItem && newItem ? parseFloat(newItem.qty || "0") * parseFloat(newItem.unitPrice || "0") : 0)).toFixed(2)}
                       </td>
