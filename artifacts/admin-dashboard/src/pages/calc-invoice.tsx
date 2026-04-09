@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProducts } from "@/hooks/use-data";
-import { getCustomers, getSettings } from "@/lib/store";
+import { getCustomers, getSettings, getSalesAgents } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { downloadExcel } from "@/lib/export-excel";
 
@@ -86,7 +86,10 @@ export default function CalcInvoicePage() {
   const [taxRate,       setTaxRate]       = useState("");
   const [paymentTerms,  setPaymentTerms]  = useState("Due on receipt");
   const [notes,         setNotes]         = useState("");
+  const [agentId,       setAgentId]       = useState("");
+  const [agentName,     setAgentName]     = useState("");
   const [showPreview,   setShowPreview]   = useState(true);
+  const agents = useMemo(() => getSalesAgents().filter(a => a.status === "Active"), []);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +142,7 @@ export default function CalcInvoicePage() {
     setLabourDesc("Labour Charges"); setLabourAmt("");
     setOtherDesc("Other Charges"); setOtherAmt("");
     setTaxRate(""); setPaymentTerms("Due on receipt"); setNotes("");
+    setAgentId(""); setAgentName("");
   };
 
   // ── Print ───────────────────────────────────────────────────────────────────
@@ -271,6 +275,33 @@ export default function CalcInvoicePage() {
               </div>
             </div>
           </section>
+
+          {/* Sales Agent */}
+          {agents.length > 0 && (
+            <section className="bg-card rounded-xl border border-border p-5 space-y-3">
+              <h2 className="text-[13px] font-bold uppercase tracking-widest text-muted-foreground border-b pb-2">Sales Agent</h2>
+              <div className="space-y-1">
+                <Label className={lbl}>Assign Agent</Label>
+                <select
+                  value={agentId}
+                  onChange={e => {
+                    const agent = agents.find(a => a.id === e.target.value);
+                    setAgentId(agent?.id || "");
+                    setAgentName(agent?.name || "");
+                  }}
+                  className={`${inp} w-full`}
+                >
+                  <option value="">— None —</option>
+                  {agents.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.agentCode})</option>
+                  ))}
+                </select>
+                {agentName && (
+                  <p className="text-[11px] text-teal-600 dark:text-teal-400 font-semibold">{agentName} will be credited for this invoice</p>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Line Items */}
           <section className="bg-card rounded-xl border border-border p-5 space-y-3">
@@ -585,6 +616,13 @@ export default function CalcInvoicePage() {
                   <div style={{ marginTop: 12, padding: "12px 16px", background: "#fafafa", borderRadius: 8, border: "1px solid #eee" }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>Notes</div>
                     <div style={{ fontSize: 12, color: "#555", whiteSpace: "pre-wrap" }}>{notes}</div>
+                  </div>
+                )}
+
+                {agentName && (
+                  <div style={{ marginTop: 12, padding: "10px 16px", background: "#f0fdfa", borderRadius: 8, border: "1px solid #99f6e4", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 10, color: "#0d9488", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5 }}>Sales Agent</div>
+                    <div style={{ fontSize: 12, color: "#0d9488", fontWeight: 600 }}>{agentName}</div>
                   </div>
                 )}
 

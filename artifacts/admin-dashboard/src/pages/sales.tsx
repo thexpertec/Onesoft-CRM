@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
   SALE_STATUSES, SALE_PAYMENTS,
-  getProducts, getCustomers, getProductCategories, getSales, getStock, Product,
+  getProducts, getCustomers, getProductCategories, getSales, getStock, getSalesAgents, Product,
   deductStockForSale, restoreStockForSale, getSettings,
 } from "@/lib/store";
 import { printSaleInvoice } from "@/lib/print-invoice";
@@ -332,11 +332,12 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
 interface POSViewProps {
   sale: Sale;
   localItems: SaleItem[];
-  localMeta: { customer: string; saleDate: string; paymentMethod: SalePayment; notes: string };
+  localMeta: { customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string };
   customerComboOpts: ComboOption[];
   productComboOpts: ComboOption[];
+  agentOpts: { id: string; code: string; name: string }[];
   onClose: () => void;
-  onMetaChange: (meta: Partial<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string }>) => void;
+  onMetaChange: (meta: Partial<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string }>) => void;
   onSaveMeta: () => void;
   onItemChange: (itemId: string, field: keyof SaleItem, value: string) => void;
   onItemBlur: () => void;
@@ -349,7 +350,7 @@ interface POSViewProps {
 }
 
 function POSView({
-  sale, localItems, localMeta, customerComboOpts, productComboOpts,
+  sale, localItems, localMeta, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
   onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete, onAddCustomer,
 }: POSViewProps) {
@@ -531,8 +532,8 @@ function POSView({
 
           <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
 
-          {/* NOTES — flex-1 takes remaining space */}
-          <div className="flex flex-col gap-0.5 flex-1 min-w-[140px]">
+          {/* NOTES */}
+          <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Notes</span>
             <input
               value={localMeta.notes}
@@ -542,6 +543,34 @@ function POSView({
               className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300 dark:placeholder:text-zinc-600 w-full"
             />
           </div>
+
+          {agentOpts.length > 0 && (<>
+            <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+            {/* SALES AGENT */}
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Sales Agent</span>
+              <div className="flex items-center gap-1">
+                <select
+                  value={localMeta.agentId || ""}
+                  onChange={e => {
+                    const agent = agentOpts.find(a => a.id === e.target.value);
+                    onMetaChange({ agentId: agent?.id || "", agentName: agent?.name || "" });
+                    onSaveMeta();
+                  }}
+                  className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pr-5 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-teal-500 transition-colors max-w-[160px]"
+                >
+                  <option value="">— None —</option>
+                  {agentOpts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.code})</option>
+                  ))}
+                </select>
+              </div>
+              {localMeta.agentName && (
+                <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold font-mono">{localMeta.agentName}</span>
+              )}
+            </div>
+          </>)}
         </div>
 
         {/* Right: timestamps */}
@@ -1076,6 +1105,7 @@ export default function SalesPage() {
     })),
   [customers]);
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const agentOpts         = useMemo(() => getSalesAgents().filter(a => a.status === "Active").map(a => ({ id: a.id, code: a.agentCode, name: a.name })), []);
   const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── List state ──
@@ -1090,7 +1120,7 @@ export default function SalesPage() {
   // ── POS state ──
   const [detailId,    setDetailId]   = useState<string | null>(null);
   const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
-  const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string } | null>(null);
+  const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string } | null>(null);
 
   // Refs so callbacks always see latest values without stale-closure issues
   const localItemsRef = useRef<SaleItem[]>(localItems);
@@ -1149,7 +1179,7 @@ export default function SalesPage() {
   // ── Open POS — accepts a Sale object directly (avoids stale-state lookup) ──
   const openDetailDirect = useCallback((sale: Sale) => {
     setLocalItems([...sale.items]);
-    setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes });
+    setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName });
     setDetailId(sale.id);
   }, []);
 
@@ -1168,7 +1198,7 @@ export default function SalesPage() {
       const sale = sales.find(s => s.id === detailId);
       if (sale) {
         setLocalItems([...sale.items]);
-        setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes });
+        setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName });
       }
     }
   }, [detailId, sales]);
@@ -1374,6 +1404,7 @@ export default function SalesPage() {
         localMeta={localMeta}
         customerComboOpts={customerComboOpts}
         productComboOpts={productComboOpts}
+        agentOpts={agentOpts}
         onClose={closePOS}
         onMetaChange={patch => setLocalMeta(m => m ? { ...m, ...patch } : m)}
         onSaveMeta={saveMeta}

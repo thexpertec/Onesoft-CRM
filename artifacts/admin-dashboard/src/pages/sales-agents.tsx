@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useSalesAgents } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getInvoices, SalesAgent } from "@/lib/store";
+import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { downloadExcel } from "@/lib/export-excel";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +56,17 @@ function calcInvTotal(inv: ReturnType<typeof getInvoices>[0]): number {
   const shipping = parseFloat(inv.shippingFee || "0");
   const handling = parseFloat(inv.handlingFee || "0");
   return itemsSum + tax + shipping + handling;
+}
+
+// ── POS Sale total helper ─────────────────────────────────────────────────────
+function calcSaleTotal(sale: Sale): number {
+  const itemsSum = sale.items.reduce((s, it) => {
+    const qty  = parseFloat(it.qty)             || 0;
+    const up   = parseFloat(it.unitPrice)       || 0;
+    const disc = parseFloat(it.discount || "0") / 100;
+    return s + qty * up * (1 - disc);
+  }, 0);
+  return itemsSum * (1 + (parseFloat(sale.taxRate || "0") / 100));
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -172,20 +183,32 @@ export default function SalesAgentsPage() {
     ).sort((a, b) => (b.invoiceDate > a.invoiceDate ? 1 : -1));
   }, [viewAgent]);
 
+  const agentSales = useMemo(() => {
+    if (!viewAgent) return [];
+    return getSales().filter(s =>
+      s.agentId === viewAgent.id ||
+      s.agentName?.trim().toLowerCase() === viewAgent.name.trim().toLowerCase()
+    ).sort((a, b) => (b.saleDate > a.saleDate ? 1 : -1));
+  }, [viewAgent]);
+
   const agentStats = useMemo(() => {
-    const totalSales  = agentInvoices.reduce((s, inv) => s + calcInvTotal(inv), 0);
-    const rate        = parseFloat(viewAgent?.commissionRate || "0") / 100;
-    const commission  = totalSales * rate;
-    const now         = new Date();
-    const thisMonthTotal = agentInvoices
-      .filter(inv => {
-        const d = new Date(inv.invoiceDate || inv.createdAt);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      })
+    const invTotal   = agentInvoices.reduce((s, inv) => s + calcInvTotal(inv), 0);
+    const posTotal   = agentSales.reduce((s, sale) => s + calcSaleTotal(sale), 0);
+    const totalSales = invTotal + posTotal;
+    const rate       = parseFloat(viewAgent?.commissionRate || "0") / 100;
+    const commission = totalSales * rate;
+    const now        = new Date();
+    const thisMonthInv = agentInvoices
+      .filter(inv => { const d = new Date(inv.invoiceDate || inv.createdAt); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
       .reduce((s, inv) => s + calcInvTotal(inv), 0);
+    const thisMonthPos = agentSales
+      .filter(s => { const d = new Date(s.saleDate || s.createdAt); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
+      .reduce((s, sale) => s + calcSaleTotal(sale), 0);
+    const thisMonthTotal = thisMonthInv + thisMonthPos;
     const target = parseFloat(viewAgent?.targetAmount || "0");
-    return { totalSales, commission, invoiceCount: agentInvoices.length, thisMonthTotal, target, rate };
-  }, [agentInvoices, viewAgent]);
+    const totalCount = agentInvoices.length + agentSales.length;
+    return { totalSales, commission, invoiceCount: totalCount, thisMonthTotal, target, rate };
+  }, [agentInvoices, agentSales, viewAgent]);
 
   const initials = (name: string) =>
     name.split(" ").map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
@@ -535,61 +558,80 @@ export default function SalesAgentsPage() {
                   )}
                 </div>
 
-                {/* Invoices table */}
-                <div>
-                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                    Invoices <span className="font-normal">({agentInvoices.length})</span>
-                  </h3>
+                {/* Unified Sales Ledger */}
+                {(() => {
+                  type LedgerRow = { key: string; date: string; ref: string; type: "Invoice" | "POS Sale"; customer: string; amount: number; status: string };
+                  const rows: LedgerRow[] = [
+                    ...agentInvoices.map(inv => ({
+                      key: inv.id, date: inv.invoiceDate || inv.createdAt, ref: inv.invoiceNumber,
+                      type: "Invoice" as const, customer: inv.customer, amount: calcInvTotal(inv), status: inv.status,
+                    })),
+                    ...agentSales.map(s => ({
+                      key: s.id, date: s.saleDate || s.createdAt, ref: s.saleNumber,
+                      type: "POS Sale" as const, customer: s.customer, amount: calcSaleTotal(s), status: s.status,
+                    })),
+                  ].sort((a, b) => (b.date > a.date ? 1 : -1));
 
-                  {agentInvoices.length === 0 ? (
-                    <p className="text-[13px] text-muted-foreground italic">No invoices linked to this agent yet.</p>
-                  ) : (
-                    <div className="rounded-lg border border-border overflow-hidden">
-                      <table className="w-full text-[12px]">
-                        <thead>
-                          <tr className="bg-muted/50">
-                            {["Date", "Invoice #", "Customer", "Total", "Status"].map(h => (
-                              <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {agentInvoices.map((inv, i) => {
-                            const total = calcInvTotal(inv);
-                            return (
-                              <tr key={inv.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                  {inv.invoiceDate ? (() => { try { return format(new Date(inv.invoiceDate), "d MMM yy"); } catch { return inv.invoiceDate; } })() : "—"}
-                                </td>
-                                <td className="px-3 py-2 font-mono font-medium text-[11px]">{inv.invoiceNumber}</td>
-                                <td className="px-3 py-2 max-w-[120px] truncate" title={inv.customer}>{inv.customer || "—"}</td>
-                                <td className="px-3 py-2 font-semibold text-right">{sym}{total.toFixed(2)}</td>
-                                <td className="px-3 py-2">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    inv.status === "Paid"    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
-                                    inv.status === "Partial" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
-                                    inv.status === "Overdue" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" :
-                                    inv.status === "Sent"    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
-                                    "bg-muted text-muted-foreground"
-                                  }`}>{inv.status}</span>
-                                </td>
+                  const grandTotal = rows.reduce((s, r) => s + r.amount, 0);
+
+                  return (
+                    <div>
+                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                        Sales Ledger <span className="font-normal">({rows.length} {rows.length === 1 ? "entry" : "entries"})</span>
+                      </h3>
+
+                      {rows.length === 0 ? (
+                        <p className="text-[13px] text-muted-foreground italic">No sales or invoices linked to this agent yet.</p>
+                      ) : (
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <table className="w-full text-[12px]">
+                            <thead>
+                              <tr className="bg-muted/50">
+                                {["Date", "Reference", "Type", "Customer", "Amount", "Status"].map(h => (
+                                  <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                                ))}
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-muted/40 border-t-2">
-                            <td colSpan={3} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Total</td>
-                            <td className="px-3 py-2 font-bold text-right text-[12px]">
-                              {sym}{agentInvoices.reduce((s, inv) => s + calcInvTotal(inv), 0).toFixed(2)}
-                            </td>
-                            <td />
-                          </tr>
-                        </tfoot>
-                      </table>
+                            </thead>
+                            <tbody>
+                              {rows.map((row, i) => (
+                                <tr key={row.key} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                    {row.date ? (() => { try { return format(new Date(row.date), "d MMM yy"); } catch { return row.date; } })() : "—"}
+                                  </td>
+                                  <td className="px-3 py-2 font-mono font-medium text-[11px]">{row.ref}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      row.type === "Invoice" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                                                             : "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
+                                    }`}>{row.type}</span>
+                                  </td>
+                                  <td className="px-3 py-2 max-w-[100px] truncate" title={row.customer}>{row.customer || "—"}</td>
+                                  <td className="px-3 py-2 font-semibold text-right">{sym}{row.amount.toFixed(2)}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      row.status === "Paid"      || row.status === "Completed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
+                                      row.status === "Partial"                                 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+                                      row.status === "Overdue"   || row.status === "Cancelled" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" :
+                                      row.status === "Sent"      || row.status === "Refunded"  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
+                                      "bg-muted text-muted-foreground"
+                                    }`}>{row.status}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-muted/40 border-t-2">
+                                <td colSpan={4} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Grand Total</td>
+                                <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{grandTotal.toFixed(2)}</td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
               </div>
             </>

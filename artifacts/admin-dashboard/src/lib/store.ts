@@ -1167,6 +1167,8 @@ export type Sale = {
   amountPaid: string;    // amount actually received at payment
   paidAt: string;        // ISO timestamp of payment confirmation; "" if unpaid
   stockDeducted: boolean; // true after stock has been deducted for this sale
+  agentId?:     string;   // linked SalesAgent.id
+  agentName?:   string;   // denormalised agent name
   createdAt: string;
   updatedAt: string;
 };

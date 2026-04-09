@@ -5,7 +5,7 @@ import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  getProducts, getCustomers, getSuppliers, getSettings,
+  getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
   deductStockForSale, restoreStockForSale,
 } from "@/lib/store";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -590,6 +590,34 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, defa
                 />
               </div>
             </div>
+
+            {/* Sales Agent — only for sale invoices */}
+            {invoiceType !== "purchase" && (() => {
+              const agents = getSalesAgents().filter(a => a.status === "Active");
+              if (agents.length === 0) return null;
+              return (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Sales Agent</label>
+                  <select
+                    value={form.agentId || ""}
+                    onChange={e => {
+                      const agent = agents.find(a => a.id === e.target.value);
+                      setF("agentId",   agent?.id   || "");
+                      setF("agentName", agent?.name || "");
+                    }}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[15px] text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-teal-500 outline-none"
+                  >
+                    <option value="">— None —</option>
+                    {agents.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.agentCode})</option>
+                    ))}
+                  </select>
+                  {form.agentName && (
+                    <p className="text-[11px] text-teal-600 dark:text-teal-400 mt-1 font-semibold">{form.agentName} assigned to this invoice</p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Invoice Date + Due Date */}
             <div className="grid grid-cols-2 gap-3">
