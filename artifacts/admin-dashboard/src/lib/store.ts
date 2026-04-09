@@ -1454,6 +1454,155 @@ export const deleteSalesAgent = (id: string): void => {
   addActivity({ action: "deleted", entity: "SalesAgent", entityName: agent?.name || id });
 };
 
+// ─── Raw Materials ────────────────────────────────────────────────────────────
+const RM_KEY = "admin-raw-materials";
+
+export type RawMaterial = {
+  id:           string;
+  rmCode:       string;   // RM-001 auto-generated
+  name:         string;
+  unit:         string;   // kg, litre, piece, etc.
+  currentStock: string;   // numeric string
+  costPerUnit:  string;   // numeric string
+  notes:        string;
+  createdAt:    string;
+  updatedAt:    string;
+};
+
+export const getRawMaterials = (): RawMaterial[] => getStored<RawMaterial>(RM_KEY);
+
+function nextRMCode(): string {
+  const codes = getRawMaterials().map(r => r.rmCode).filter(c => /^RM-\d+$/.test(c));
+  const max = codes.reduce((m, c) => Math.max(m, parseInt(c.replace("RM-", ""))), 0);
+  return `RM-${String(max + 1).padStart(3, "0")}`;
+}
+
+export const createRawMaterial = (data: Omit<RawMaterial, "id" | "rmCode" | "createdAt" | "updatedAt">): RawMaterial => {
+  const rm: RawMaterial = { ...data, id: crypto.randomUUID(), rmCode: nextRMCode(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(RM_KEY, [...getRawMaterials(), rm]);
+  addActivity({ action: "created", entity: "RawMaterial", entityName: rm.name });
+  return rm;
+};
+
+export const updateRawMaterial = (id: string, updates: Partial<Omit<RawMaterial, "id" | "createdAt">>): RawMaterial => {
+  const rms = getRawMaterials();
+  const i = rms.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Raw material not found");
+  rms[i] = { ...rms[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(RM_KEY, rms);
+  addActivity({ action: "updated", entity: "RawMaterial", entityName: rms[i].name });
+  return rms[i];
+};
+
+export const deleteRawMaterial = (id: string): void => {
+  const rm = getRawMaterials().find(r => r.id === id);
+  setStored(RM_KEY, getRawMaterials().filter(r => r.id !== id));
+  addActivity({ action: "deleted", entity: "RawMaterial", entityName: rm?.name || id });
+};
+
+// ─── Manufacturing Orders ─────────────────────────────────────────────────────
+const MFG_KEY = "admin-manufacturing-orders";
+
+export const MFG_STATUSES = ["Draft", "In Progress", "Completed", "Cancelled"] as const;
+export type MfgStatus = typeof MFG_STATUSES[number];
+
+export type MfgInput = {
+  id:     string;
+  rmId:   string;
+  rmName: string;
+  unit:   string;
+  qtyUsed: string;
+};
+
+export type ManufacturingOrder = {
+  id:                string;
+  orderNumber:       string;
+  orderDate:         string;
+  status:            MfgStatus;
+  inputs:            MfgInput[];
+  outputProductId:   string;
+  outputProductName: string;
+  outputQty:         string;
+  outputUnit:        string;
+  notes:             string;
+  createdAt:         string;
+  updatedAt:         string;
+};
+
+export const getManufacturingOrders = (): ManufacturingOrder[] => getStored<ManufacturingOrder>(MFG_KEY);
+
+function nextMOCode(): string {
+  const codes = getManufacturingOrders().map(o => o.orderNumber).filter(c => /^MO-\d+$/.test(c));
+  const max = codes.reduce((m, c) => Math.max(m, parseInt(c.replace("MO-", ""))), 0);
+  return `MO-${String(max + 1).padStart(3, "0")}`;
+}
+
+export const createManufacturingOrder = (data: Omit<ManufacturingOrder, "id" | "orderNumber" | "createdAt" | "updatedAt">): ManufacturingOrder => {
+  const order: ManufacturingOrder = { ...data, id: crypto.randomUUID(), orderNumber: nextMOCode(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(MFG_KEY, [...getManufacturingOrders(), order]);
+  addActivity({ action: "created", entity: "ManufacturingOrder", entityName: order.orderNumber });
+  return order;
+};
+
+export const updateManufacturingOrder = (id: string, updates: Partial<Omit<ManufacturingOrder, "id" | "createdAt">>): ManufacturingOrder => {
+  const orders = getManufacturingOrders();
+  const i = orders.findIndex(o => o.id === id);
+  if (i === -1) throw new Error("Manufacturing order not found");
+  orders[i] = { ...orders[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(MFG_KEY, orders);
+  addActivity({ action: "updated", entity: "ManufacturingOrder", entityName: orders[i].orderNumber });
+  return orders[i];
+};
+
+export const deleteManufacturingOrder = (id: string): void => {
+  const o = getManufacturingOrders().find(o => o.id === id);
+  setStored(MFG_KEY, getManufacturingOrders().filter(o => o.id !== id));
+  addActivity({ action: "deleted", entity: "ManufacturingOrder", entityName: o?.orderNumber || id });
+};
+
+export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
+  const orders = getManufacturingOrders();
+  const i = orders.findIndex(o => o.id === id);
+  if (i === -1) throw new Error("Manufacturing order not found");
+  const order = orders[i];
+  if (order.status === "Completed") throw new Error("Order already completed");
+
+  // Deduct raw materials
+  const rms = getRawMaterials();
+  order.inputs.forEach(inp => {
+    const ri = rms.findIndex(r => r.id === inp.rmId);
+    if (ri >= 0) {
+      const current = Math.max(0, parseFloat(rms[ri].currentStock) || 0);
+      const deduct  = Math.min(current, parseFloat(inp.qtyUsed) || 0);
+      rms[ri] = { ...rms[ri], currentStock: String(current - deduct), updatedAt: new Date().toISOString() };
+    }
+  });
+  setStored(RM_KEY, rms);
+
+  // Add output to product stock
+  const outQty = parseFloat(order.outputQty) || 0;
+  if (order.outputProductName && outQty > 0) {
+    const product = getProducts().find(p => p.id === order.outputProductId);
+    createStockItem({
+      productName:  order.outputProductName,
+      sku:          product?.sku || order.outputProductName.toLowerCase().replace(/\s+/g, "-"),
+      store:        "Manufacturing",
+      stockType:    "Available",
+      quantity:     order.outputQty,
+      minLevel:     "0",
+      unit:         order.outputUnit || product?.unit || "",
+      holdCustomer: "",
+      holdReason:   "",
+      notes:        `Produced by ${order.orderNumber}`,
+    });
+  }
+
+  orders[i] = { ...orders[i], status: "Completed", updatedAt: new Date().toISOString() };
+  setStored(MFG_KEY, orders);
+  addActivity({ action: "updated", entity: "ManufacturingOrder", entityName: order.orderNumber });
+  return orders[i];
+};
+
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────
 export type StaffStatus = "Active" | "On Leave" | "Terminated";
 

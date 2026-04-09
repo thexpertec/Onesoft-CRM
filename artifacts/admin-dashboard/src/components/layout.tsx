@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, ClipboardList, Calculator,
+  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -221,6 +221,13 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
+    key: "manufacturing", label: "Manufacturing", icon: Factory,
+    items: [
+      { label: "Raw Materials",   href: "/raw-materials", icon: FlaskConical, desc: "Track raw material stock"     },
+      { label: "Mfg. Orders",     href: "/manufacturing", icon: Factory,      desc: "Production & batch orders"   },
+    ],
+  },
+  {
     key: "investments", label: "Investments", icon: TrendingUp,
     items: [
       { label: "Shareholders",     href: "/shareholders",    icon: Landmark,   desc: "Equity & ownership"             },
@@ -233,8 +240,9 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
 const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents"];
-const HRM_ROUTES         = ["/staff", "/roles", "/users"];
-const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
+const HRM_ROUTES            = ["/staff", "/roles", "/users"];
+const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing"];
+const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet"];
 
 const QUICK_ADD: SubItem[] = [
@@ -400,8 +408,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isProductsActive    = PRODUCTS_ROUTES.some(r    => location === r || location.startsWith(r));
   const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
   const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
-  const isInvestmentsActive = INVESTMENTS_ROUTES.some(r => location === r || location.startsWith(r));
-  const isAccountsActive    = ACCOUNTS_ROUTES.some(r    => location === r || location.startsWith(r));
+  const isManufacturingActive = MANUFACTURING_ROUTES.some(r => location === r || location.startsWith(r));
+  const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r  => location === r || location.startsWith(r));
+  const isAccountsActive      = ACCOUNTS_ROUTES.some(r     => location === r || location.startsWith(r));
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -594,9 +603,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "crm"         ? isCrmActive :
                 item.key === "products"    ? isProductsActive :
                 item.key === "sales"       ? isSalesActive :
-                item.key === "hrm"         ? isHrmActive :
-                item.key === "investments" ? isInvestmentsActive :
-                item.key === "accounts"    ? isAccountsActive :
+                item.key === "hrm"           ? isHrmActive :
+                item.key === "manufacturing" ? isManufacturingActive :
+                item.key === "investments"   ? isInvestmentsActive :
+                item.key === "accounts"      ? isAccountsActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${

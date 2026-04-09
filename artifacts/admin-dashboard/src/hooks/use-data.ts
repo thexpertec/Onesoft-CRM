@@ -20,9 +20,11 @@ import {
   getAccounts, createAccount, updateAccount, deleteAccount,
   getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
   getSalesAgents, createSalesAgent, updateSalesAgent, deleteSalesAgent,
+  getRawMaterials, createRawMaterial, updateRawMaterial, deleteRawMaterial,
+  getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
-  JournalEntry, SalesAgent,
+  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -403,4 +405,25 @@ export function useSalesAgents() {
   const editAgent   = (id: string, u: Parameters<typeof updateSalesAgent>[1])   => { const a = updateSalesAgent(id, u); fetch(); return a; };
   const removeAgent = (id: string)                                               => { deleteSalesAgent(id);              fetch(); };
   return { agents, addAgent, editAgent, removeAgent, refresh: fetch };
+}
+
+export function useRawMaterials() {
+  const [rms, setRms] = useState<RawMaterial[]>([]);
+  const fetch = useCallback(() => setRms(getRawMaterials()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add    = (d: Parameters<typeof createRawMaterial>[0])             => { const r = createRawMaterial(d);    fetch(); return r; };
+  const edit   = (id: string, u: Parameters<typeof updateRawMaterial>[1]) => { const r = updateRawMaterial(id, u); fetch(); return r; };
+  const remove = (id: string)                                              => { deleteRawMaterial(id);              fetch(); };
+  return { rms, add, edit, remove, refresh: fetch };
+}
+
+export function useManufacturingOrders() {
+  const [orders, setOrders] = useState<ManufacturingOrder[]>([]);
+  const fetch = useCallback(() => setOrders(getManufacturingOrders()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add     = (d: Parameters<typeof createManufacturingOrder>[0])             => { const o = createManufacturingOrder(d);    fetch(); return o; };
+  const edit    = (id: string, u: Parameters<typeof updateManufacturingOrder>[1]) => { const o = updateManufacturingOrder(id, u); fetch(); return o; };
+  const remove  = (id: string)                                                     => { deleteManufacturingOrder(id);              fetch(); };
+  const complete = (id: string)                                                    => { const o = completeManufacturingOrder(id);  fetch(); return o; };
+  return { orders, add, edit, remove, complete, refresh: fetch };
 }

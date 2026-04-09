@@ -42,6 +42,8 @@ import ChartOfAccountsPage from "@/pages/chart-of-accounts";
 import JournalEntryPage from "@/pages/journal-entry";
 import BalanceSheetPage from "@/pages/balance-sheet";
 import SalesAgentsPage from "@/pages/sales-agents";
+import RawMaterialsPage from "@/pages/raw-materials";
+import ManufacturingPage from "@/pages/manufacturing";
 
 const queryClient = new QueryClient();
 
@@ -122,6 +124,8 @@ function Router() {
               <Route path="/invoices" component={InvoicesPage} />
               <Route path="/calc-invoice" component={CalcInvoicePage} />
               <Route path="/sales-agents" component={SalesAgentsPage} />
+              <Route path="/raw-materials" component={RawMaterialsPage} />
+              <Route path="/manufacturing" component={ManufacturingPage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />
