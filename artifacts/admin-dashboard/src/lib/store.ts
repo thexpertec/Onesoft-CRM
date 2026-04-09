@@ -1196,7 +1196,15 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       }
     } else {
       // ── Route to Product / StockItem ────────────────────────────────────────
-      const product = item.productId ? allProducts.find(p => p.id === item.productId) : undefined;
+      let pi = item.productId ? allProducts.findIndex(p => p.id === item.productId) : -1;
+      if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
+      const product = pi >= 0 ? allProducts[pi] : undefined;
+
+      // Auto-update purchasePrice from PO line unit price (user can still override manually)
+      if (pi >= 0 && item.unitPrice && parseFloat(item.unitPrice) > 0) {
+        allProducts[pi] = { ...allProducts[pi], purchasePrice: item.unitPrice, updatedAt: new Date().toISOString() };
+      }
+
       const newStock = createStockItem({
         productName:  item.productName,
         sku:          product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-"),
@@ -1218,6 +1226,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
     }
   });
 
+  setStored(PRODUCTS_KEY, allProducts);
   setStored(RM_KEY, rms);
   batchLedger(ledger);
   pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
