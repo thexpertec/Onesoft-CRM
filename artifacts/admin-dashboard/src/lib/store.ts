@@ -1783,13 +1783,33 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   });
   setStored(RM_KEY, rms);
 
+  // Calculate total production cost (RM inputs + extra production costs)
+  const rmInputCost = order.inputs.reduce((sum, inp) => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    return sum + (parseFloat(inp.qtyUsed) || 0) * (parseFloat(rm?.costPerUnit || "0") || 0);
+  }, 0);
+  const extraCost = (order.productionCosts || []).reduce((sum, pc) => sum + (parseFloat(pc.amount) || 0), 0);
+  const totalCost = rmInputCost + extraCost;
+
   // Add outputs to product stock (multi-output support) + record ledger
   const allProducts = getProducts();
   const effectiveOutputs: MfgOutput[] = (order.outputs && order.outputs.length > 0) ? order.outputs : [];
+  const totalOutputQty = effectiveOutputs.reduce((sum, out) => sum + (parseFloat(out.qty) || 0), 0);
+
   effectiveOutputs.forEach(out => {
     const qty = parseFloat(out.qty) || 0;
     if (!out.productName || qty <= 0) return;
-    const product = allProducts.find(p => p.id === out.productId);
+
+    let pi = out.productId ? allProducts.findIndex(p => p.id === out.productId) : -1;
+    if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === out.productName.toLowerCase().trim());
+    const product = pi >= 0 ? allProducts[pi] : undefined;
+
+    // Auto-update costPrice based on actual production cost (user can still override manually)
+    if (pi >= 0 && totalCost > 0 && totalOutputQty > 0) {
+      const unitCost = (totalCost / totalOutputQty).toFixed(2);
+      allProducts[pi] = { ...allProducts[pi], costPrice: unitCost, updatedAt: new Date().toISOString() };
+    }
+
     const newStock = createStockItem({
       productName:  out.productName,
       sku:          product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-"),
@@ -1810,6 +1830,7 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
     });
   });
 
+  setStored(PRODUCTS_KEY, allProducts);
   batchLedger(ledger);
 
   orders[i] = { ...orders[i], status: "Completed", updatedAt: new Date().toISOString() };
