@@ -309,34 +309,37 @@ export default function ManufacturingPage() {
             </div>
           </div>
 
-          {/* Three-column body */}
-          <div className="flex-1 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-3 h-full divide-y lg:divide-y-0 lg:divide-x divide-border overflow-y-auto lg:overflow-hidden">
+          {/* Two-column body */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 min-h-full divide-y lg:divide-y-0 lg:divide-x divide-border">
 
-              {/* ── Column 1: Raw Material Inputs ── */}
-              <div className="p-5 flex flex-col gap-3 overflow-y-auto">
+              {/* ── LEFT: Raw Materials + Waste ── */}
+              <div className="p-6 flex flex-col gap-5 overflow-y-auto">
+
+                {/* Raw Materials header */}
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <FlaskConical size={15} className="text-emerald-600" />
-                      <h2 className="text-[13px] font-bold">Raw Materials</h2>
+                      <FlaskConical size={16} className="text-emerald-600" />
+                      <h2 className="text-[15px] font-bold">Raw Materials</h2>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 ml-5">Ingredients consumed</p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Ingredients consumed in this batch</p>
                   </div>
-                  <Button size="sm" variant="outline" className="gap-1 text-[12px] h-7" onClick={addInput}>
-                    <Plus size={11} /> Add
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addInput}>
+                    <Plus size={13} /> Add Row
                   </Button>
                 </div>
 
-                <div className="border rounded-xl overflow-hidden flex-1">
+                {/* Inputs table */}
+                <div className="border rounded-xl overflow-hidden">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-emerald-50 dark:bg-emerald-950/20">
-                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b">Material</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b w-24">Unit</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b w-24">Qty Used</th>
-                        <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b w-20 text-right">Cost</th>
-                        <th className="w-8 border-b" />
+                        <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b">Raw Material</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b" style={{width:90}}>Unit</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b" style={{width:110}}>Qty Used</th>
+                        <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 border-b" style={{width:100}}>Line Cost</th>
+                        <th className="border-b" style={{width:36}} />
                       </tr>
                     </thead>
                     <tbody>
@@ -345,43 +348,43 @@ export default function ManufacturingPage() {
                         const lineCost = (parseFloat(rm?.costPerUnit || "0") * (parseFloat(inp.qtyUsed) || 0));
                         return (
                           <tr key={inp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                            <td className="px-2 py-1.5">
+                            <td className="px-3 py-2">
                               {rms.length > 0 ? (
                                 <Select value={inp.rmId || ""} onValueChange={v => {
                                   const r = rms.find(x => x.id === v);
                                   if (r) updInput(inp.id, { rmId: r.id, rmName: r.name, unit: r.unit });
                                 }}>
-                                  <SelectTrigger className="h-8 text-[12px]"><SelectValue placeholder="Select…" /></SelectTrigger>
+                                  <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select material…" /></SelectTrigger>
                                   <SelectContent>
                                     {rms.map(r => (
                                       <SelectItem key={r.id} value={r.id}>
                                         <span className="font-medium">{r.name}</span>
-                                        <span className="text-muted-foreground ml-1.5 text-[11px]">({r.rmCode}) {r.currentStock} {r.unit}</span>
+                                        <span className="text-muted-foreground ml-2 text-[11px]">{r.rmCode} · Stock: {r.currentStock} {r.unit}</span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               ) : (
                                 <Input value={inp.rmName} onChange={e => updInput(inp.id, { rmName: e.target.value })}
-                                  placeholder="Material name" className="h-8 text-[12px]" />
+                                  placeholder="Material name" className="h-10 text-[13px]" />
                               )}
                             </td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-2 py-2">
                               <Input value={inp.unit} onChange={e => updInput(inp.id, { unit: e.target.value })}
-                                placeholder="kg" className="h-8 text-[12px]" />
+                                placeholder="kg" className="h-10 text-[13px]" />
                             </td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-2 py-2">
                               <Input type="number" min="0" value={inp.qtyUsed}
                                 onChange={e => updInput(inp.id, { qtyUsed: e.target.value })}
-                                placeholder="0" className="h-8 text-[12px]" />
+                                placeholder="0" className="h-10 text-[13px]" />
                             </td>
-                            <td className="px-2 py-1.5 text-right text-[11px] font-medium text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                            <td className="px-3 py-2 text-right text-[13px] font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
                               {lineCost > 0 ? `${sym}${lineCost.toFixed(2)}` : "—"}
                             </td>
-                            <td className="px-1 py-1.5 text-center">
+                            <td className="px-1 py-2 text-center">
                               {form.inputs.length > 1 && (
-                                <button onClick={() => removeInput(inp.id)} className="text-red-400 hover:text-red-600 p-0.5">
-                                  <XCircle size={13} />
+                                <button onClick={() => removeInput(inp.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <XCircle size={15} />
                                 </button>
                               )}
                             </td>
@@ -390,11 +393,11 @@ export default function ManufacturingPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-emerald-50/60 dark:bg-emerald-950/10">
-                        <td colSpan={3} className="px-3 py-2 text-[11px] text-muted-foreground">
-                          {form.inputs.filter(i => i.rmName).length} material(s)
+                      <tr className="bg-emerald-50/60 dark:bg-emerald-950/10 border-t-2">
+                        <td colSpan={3} className="px-4 py-2.5 text-[12px] text-muted-foreground">
+                          {form.inputs.filter(i => i.rmName).length} material(s) selected
                         </td>
-                        <td className="px-2 py-2 text-right text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+                        <td className="px-3 py-2.5 text-right text-[13px] font-bold text-emerald-700 dark:text-emerald-400">
                           {sym}{rmCost.toFixed(2)}
                         </td>
                         <td />
@@ -403,108 +406,108 @@ export default function ManufacturingPage() {
                   </table>
                 </div>
 
-                {/* Waste */}
-                <div className="border rounded-xl p-3 space-y-2 bg-amber-50/50 dark:bg-amber-950/10">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <AlertTriangle size={13} className="text-amber-600" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">Waste / Loss</span>
+                {/* Waste / Loss */}
+                <div className="border rounded-xl p-4 space-y-3 bg-amber-50/50 dark:bg-amber-950/10">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={15} className="text-amber-600" />
+                    <span className="text-[13px] font-bold text-amber-700 dark:text-amber-400">Waste / Loss</span>
+                    <span className="text-[12px] text-muted-foreground">(optional)</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className={lbl}>Waste Qty</Label>
                       <Input type="number" min="0" value={form.wasteQty}
-                        onChange={e => setF({ wasteQty: e.target.value })} placeholder="0" className="h-8 text-[12px]" />
+                        onChange={e => setF({ wasteQty: e.target.value })} placeholder="0" className="h-10 text-[13px]" />
                     </div>
                     <div>
                       <Label className={lbl}>Unit</Label>
                       <Input value={form.wasteUnit}
-                        onChange={e => setF({ wasteUnit: e.target.value })} placeholder="kg, L…" className="h-8 text-[12px]" />
+                        onChange={e => setF({ wasteUnit: e.target.value })} placeholder="kg, L, pcs…" className="h-10 text-[13px]" />
                     </div>
                   </div>
                   <div>
                     <Label className={lbl}>Waste Notes</Label>
                     <Input value={form.wasteNotes} onChange={e => setF({ wasteNotes: e.target.value })}
-                      placeholder="Trimming, spoilage, evaporation…" className="h-8 text-[12px]" />
+                      placeholder="Trimming, spoilage, evaporation…" className="h-10 text-[13px]" />
                   </div>
                 </div>
               </div>
 
-              {/* ── Column 2: Multiple Outputs ── */}
-              <div className="p-5 flex flex-col gap-3 overflow-y-auto">
+              {/* ── RIGHT: Outputs + Production Costs + Summary ── */}
+              <div className="p-6 flex flex-col gap-5 overflow-y-auto">
+
+                {/* Output Products header */}
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Package size={15} className="text-orange-600" />
-                      <h2 className="text-[13px] font-bold">Output Products</h2>
+                      <Package size={16} className="text-orange-600" />
+                      <h2 className="text-[15px] font-bold">Output Products</h2>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 ml-5">Products produced from this batch</p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Products produced from this batch</p>
                   </div>
-                  <Button size="sm" variant="outline" className="gap-1 text-[12px] h-7" onClick={addOutput}>
-                    <Plus size={11} /> Add
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addOutput}>
+                    <Plus size={13} /> Add Row
                   </Button>
                 </div>
 
+                {/* Outputs table */}
                 <div className="border rounded-xl overflow-hidden">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-orange-50 dark:bg-orange-950/20">
-                        <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b">Product</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b w-24">Qty</th>
-                        <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b w-24">Unit</th>
-                        <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b w-24 text-right">Cost/Unit</th>
-                        <th className="w-8 border-b" />
+                        <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b">Product</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:110}}>Qty</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:90}}>Unit</th>
+                        <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:105}}>Cost/Unit</th>
+                        <th className="border-b" style={{width:36}} />
                       </tr>
                     </thead>
                     <tbody>
                       {form.outputs.map((out, idx) => {
-                        const outQty  = parseFloat(out.qty) || 0;
-                        const share   = totalOutQty > 0 ? outQty / totalOutQty : 0;
-                        const outCost = totalCost * share;
+                        const outQty   = parseFloat(out.qty) || 0;
+                        const share    = totalOutQty > 0 ? outQty / totalOutQty : 0;
+                        const outCost  = totalCost * share;
                         const unitCost = outQty > 0 ? outCost / outQty : 0;
                         return (
                           <tr key={out.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                            <td className="px-2 py-1.5">
+                            <td className="px-3 py-2">
                               {products.length > 0 ? (
                                 <Select value={out.productId || ""} onValueChange={v => {
                                   const p = products.find(x => x.id === v);
                                   if (p) updOutput(out.id, { productId: p.id, productName: p.name, unit: p.unit });
                                   else   updOutput(out.id, { productId: v });
                                 }}>
-                                  <SelectTrigger className="h-8 text-[12px]"><SelectValue placeholder="Select product…" /></SelectTrigger>
+                                  <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select product…" /></SelectTrigger>
                                   <SelectContent>
                                     {products.map(p => (
                                       <SelectItem key={p.id} value={p.id}>
                                         <span className="font-medium">{p.name}</span>
-                                        <span className="text-muted-foreground ml-1.5 text-[11px]">{p.sku}</span>
+                                        <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               ) : (
                                 <Input value={out.productName} onChange={e => updOutput(out.id, { productName: e.target.value })}
-                                  placeholder="Product name" className="h-8 text-[12px]" />
-                              )}
-                              {out.productName && products.find(p => p.id === out.productId) === undefined && out.productId && (
-                                <Input value={out.productName} onChange={e => updOutput(out.id, { productName: e.target.value })}
-                                  placeholder="Name" className="h-7 text-[11px] mt-1" />
+                                  placeholder="Product name" className="h-10 text-[13px]" />
                               )}
                             </td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-2 py-2">
                               <Input type="number" min="0" value={out.qty}
                                 onChange={e => updOutput(out.id, { qty: e.target.value })}
-                                placeholder="0" className="h-8 text-[12px]" />
+                                placeholder="0" className="h-10 text-[13px]" />
                             </td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-2 py-2">
                               <Input value={out.unit} onChange={e => updOutput(out.id, { unit: e.target.value })}
-                                placeholder="pcs, kg…" className="h-8 text-[12px]" />
+                                placeholder="pcs, kg…" className="h-10 text-[13px]" />
                             </td>
-                            <td className="px-2 py-1.5 text-right text-[11px] font-medium text-orange-700 dark:text-orange-400 whitespace-nowrap">
+                            <td className="px-3 py-2 text-right text-[13px] font-semibold text-orange-700 dark:text-orange-400 whitespace-nowrap">
                               {unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}
                             </td>
-                            <td className="px-1 py-1.5 text-center">
+                            <td className="px-1 py-2 text-center">
                               {form.outputs.length > 1 && (
-                                <button onClick={() => removeOutput(out.id)} className="text-red-400 hover:text-red-600 p-0.5">
-                                  <XCircle size={13} />
+                                <button onClick={() => removeOutput(out.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <XCircle size={15} />
                                 </button>
                               )}
                             </td>
@@ -513,11 +516,11 @@ export default function ManufacturingPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-orange-50/60 dark:bg-orange-950/10">
-                        <td className="px-3 py-2 text-[11px] text-muted-foreground">
+                      <tr className="bg-orange-50/60 dark:bg-orange-950/10 border-t-2">
+                        <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
                           {form.outputs.filter(o => o.productName).length} product(s)
                         </td>
-                        <td className="px-2 py-2 text-[12px] font-bold text-orange-700 dark:text-orange-400">
+                        <td className="px-3 py-2.5 text-[13px] font-bold text-orange-700 dark:text-orange-400">
                           {totalOutQty > 0 ? totalOutQty : "—"}
                         </td>
                         <td colSpan={3} />
@@ -526,68 +529,59 @@ export default function ManufacturingPage() {
                   </table>
                 </div>
 
-                {/* Notes */}
-                <div>
-                  <Label className={lbl}>Batch Notes</Label>
-                  <Textarea value={form.notes} onChange={e => setF({ notes: e.target.value })}
-                    rows={3} placeholder="Batch reference, special instructions, QC notes…" className="text-[12px] resize-none" />
-                </div>
-              </div>
-
-              {/* ── Column 3: Production Costs + Summary ── */}
-              <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+                {/* Production Costs */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <DollarSign size={15} className="text-violet-600" />
-                        <h2 className="text-[13px] font-bold">Production Costs</h2>
+                        <DollarSign size={16} className="text-violet-600" />
+                        <h2 className="text-[15px] font-bold">Production Costs</h2>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 ml-5">Labour, utilities, machine hire…</p>
+                      <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Labour, utilities, machine hire…</p>
                     </div>
-                    <Button size="sm" variant="outline" className="gap-1 text-[12px] h-7" onClick={addCost}>
-                      <Plus size={11} /> Add
+                    <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addCost}>
+                      <Plus size={13} /> Add
                     </Button>
                   </div>
 
                   {form.productionCosts.length === 0 ? (
-                    <div className="border-2 border-dashed rounded-xl p-4 text-center text-[12px] text-muted-foreground">
-                      No additional costs yet.<br />Click "Add" to record labour, electricity, etc.
+                    <div className="border-2 border-dashed rounded-xl p-5 text-center text-[13px] text-muted-foreground">
+                      No additional costs yet — click "Add" to record labour, electricity, packaging, etc.
                     </div>
                   ) : (
                     <div className="border rounded-xl overflow-hidden">
                       <table className="w-full">
                         <thead>
                           <tr className="bg-violet-50 dark:bg-violet-950/20">
-                            <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b">Description</th>
-                            <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b w-28">Amount</th>
-                            <th className="w-8 border-b" />
+                            <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b">Description</th>
+                            <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b" style={{width:140}}>Amount</th>
+                            <th className="border-b" style={{width:36}} />
                           </tr>
                         </thead>
                         <tbody>
                           {form.productionCosts.map((c, idx) => (
                             <tr key={c.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                              <td className="px-2 py-1.5">
+                              <td className="px-3 py-2">
                                 <Input value={c.description} onChange={e => updCost(c.id, { description: e.target.value })}
-                                  placeholder="e.g. Labour, Electricity…" className="h-8 text-[12px]" />
+                                  placeholder="e.g. Labour, Electricity, Packaging…" className="h-10 text-[13px]" />
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-2 py-2">
                                 <Input type="number" min="0" value={c.amount}
                                   onChange={e => updCost(c.id, { amount: e.target.value })}
-                                  placeholder="0.00" className="h-8 text-[12px] text-right" />
+                                  placeholder="0.00" className="h-10 text-[13px] text-right" />
                               </td>
-                              <td className="px-1 py-1.5 text-center">
-                                <button onClick={() => removeCost(c.id)} className="text-red-400 hover:text-red-600 p-0.5">
-                                  <XCircle size={13} />
+                              <td className="px-1 py-2 text-center">
+                                <button onClick={() => removeCost(c.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <XCircle size={15} />
                                 </button>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-violet-50/60 dark:bg-violet-950/10">
-                            <td className="px-3 py-2 text-[11px] text-muted-foreground">Subtotal</td>
-                            <td className="px-2 py-2 text-right text-[12px] font-bold text-violet-700 dark:text-violet-400">
+                          <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2">
+                            <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-semibold">Subtotal</td>
+                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-violet-700 dark:text-violet-400">
                               {sym}{prodCost.toFixed(2)}
                             </td>
                             <td />
@@ -598,35 +592,42 @@ export default function ManufacturingPage() {
                   )}
                 </div>
 
+                {/* Batch Notes */}
+                <div>
+                  <Label className={lbl}>Batch Notes (optional)</Label>
+                  <Textarea value={form.notes} onChange={e => setF({ notes: e.target.value })}
+                    rows={2} placeholder="Batch reference, special instructions, QC notes…" className="text-[13px] resize-none" />
+                </div>
+
                 {/* Cost Summary Card */}
                 <div className="rounded-xl border-2 border-orange-200 dark:border-orange-800 overflow-hidden">
-                  <div className="px-4 py-3" style={{ background: "linear-gradient(135deg,#ea580c20,#f59e0b20)" }}>
-                    <h3 className="text-[12px] font-bold text-orange-700 dark:text-orange-400">Cost Summary</h3>
+                  <div className="px-5 py-3" style={{ background: "linear-gradient(135deg,#ea580c18,#f59e0b18)" }}>
+                    <h3 className="text-[13px] font-bold text-orange-700 dark:text-orange-400">Cost Summary</h3>
                   </div>
-                  <div className="p-4 space-y-2.5">
+                  <div className="p-5 space-y-3">
                     {[
-                      { label: "Raw Material Cost",  value: rmCost,   color: "text-emerald-700 dark:text-emerald-400" },
-                      { label: "Production Costs",   value: prodCost, color: "text-violet-700 dark:text-violet-400"  },
+                      { label: "Raw Material Cost", value: rmCost,   color: "text-emerald-700 dark:text-emerald-400" },
+                      { label: "Production Costs",  value: prodCost, color: "text-violet-700 dark:text-violet-400"  },
                     ].map(r => (
-                      <div key={r.label} className="flex justify-between items-center text-[13px]">
+                      <div key={r.label} className="flex justify-between items-center text-[14px]">
                         <span className="text-muted-foreground">{r.label}</span>
                         <span className={`font-semibold ${r.color}`}>{sym}{r.value.toFixed(2)}</span>
                       </div>
                     ))}
-                    <div className="border-t pt-2 flex justify-between items-center">
-                      <span className="text-[13px] font-bold">Total Cost</span>
-                      <span className="text-[15px] font-bold text-orange-600">{sym}{totalCost.toFixed(2)}</span>
+                    <div className="border-t pt-3 flex justify-between items-center">
+                      <span className="text-[15px] font-bold">Total Cost</span>
+                      <span className="text-[18px] font-bold text-orange-600">{sym}{totalCost.toFixed(2)}</span>
                     </div>
                     {totalOutQty > 0 && totalCost > 0 && (
-                      <div className="flex justify-between items-center text-[12px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2 mt-1">
+                      <div className="flex justify-between items-center text-[13px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-4 py-2.5">
                         <span className="text-muted-foreground">Avg. Cost / Unit</span>
                         <span className="font-bold text-orange-600">{sym}{(totalCost / totalOutQty).toFixed(3)}</span>
                       </div>
                     )}
                     {(parseFloat(form.wasteQty) || 0) > 0 && (
-                      <div className="flex justify-between items-center text-[12px] bg-amber-50 dark:bg-amber-950/20 rounded-lg px-3 py-2">
-                        <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                          <AlertTriangle size={11} /> Waste
+                      <div className="flex justify-between items-center text-[13px] bg-amber-50 dark:bg-amber-950/20 rounded-lg px-4 py-2.5">
+                        <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                          <AlertTriangle size={13} /> Waste recorded
                         </span>
                         <span className="font-semibold text-amber-700 dark:text-amber-400">
                           {form.wasteQty} {form.wasteUnit}
