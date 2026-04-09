@@ -243,15 +243,25 @@ export default function RawMaterialsPage() {
       {(() => {
         const ledgerRM = ledgerId ? rms.find(r => r.id === ledgerId) ?? null : null;
         const entries = ledgerId ? getEntityLedger(ledgerId).slice().reverse() : [];
+        const rmTotalIn  = entries.filter(e => e.qtyChange > 0).reduce((s, e) => s + e.qtyChange, 0);
+        const rmTotalOut = entries.filter(e => e.qtyChange < 0).reduce((s, e) => s + Math.abs(e.qtyChange), 0);
+        const rmNet      = rmTotalIn - rmTotalOut;
         return (
           <Dialog open={!!ledgerId} onOpenChange={o => { if (!o) setLedgerId(null); }}>
             <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
-              <DialogHeader className="px-6 py-4 border-b shrink-0">
+              <DialogHeader className="px-6 py-4 border-b shrink-0 space-y-2">
                 <DialogTitle className="flex items-center gap-2 text-base">
                   <History size={16} className="text-blue-600" />
                   Stock History — {ledgerRM?.name || "—"}
-                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">({ledgerRM?.code} · {ledgerRM?.unit})</span>
+                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">({ledgerRM?.unit})</span>
                 </DialogTitle>
+                {entries.length > 0 && (
+                  <div className="flex items-center gap-4 text-[12px]">
+                    <span><span className="font-bold text-emerald-600">+{rmTotalIn}</span> <span className="text-muted-foreground">received in</span></span>
+                    <span><span className="font-bold text-red-500">−{rmTotalOut}</span> <span className="text-muted-foreground">consumed/out</span></span>
+                    <span className={`font-bold ${rmNet >= 0 ? "text-blue-600" : "text-red-600"}`}>{rmNet >= 0 ? "+" : ""}{rmNet} <span className="font-normal text-muted-foreground">net</span></span>
+                  </div>
+                )}
               </DialogHeader>
               <div className="flex-1 overflow-y-auto">
                 {entries.length === 0 ? (
@@ -287,6 +297,18 @@ export default function RawMaterialsPage() {
                         );
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/40 border-t-2">
+                        <td colSpan={2} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Net Movement</td>
+                        <td className="px-3 py-2"></td>
+                        <td className={`px-3 py-2 font-bold tabular-nums text-[12px] ${rmNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {rmNet >= 0 ? "+" : ""}{rmNet} {ledgerRM?.unit}
+                        </td>
+                        <td className="px-3 py-2 text-[11px] text-muted-foreground tabular-nums">{entries[entries.length - 1]?.qtyBefore ?? "—"}</td>
+                        <td className="px-3 py-2 font-bold tabular-nums text-[12px]">{entries[0]?.qtyAfter ?? "—"}</td>
+                        <td className="px-3 py-2"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 )}
               </div>

@@ -540,15 +540,25 @@ export default function StockPage() {
       {(() => {
         const historyItem = historyItemId ? stock.find(s => s.id === historyItemId) ?? null : null;
         const entries = historyItemId ? getEntityLedger(historyItemId).slice().reverse() : [];
+        const stTotalIn  = entries.filter(e => e.qtyChange > 0).reduce((s, e) => s + e.qtyChange, 0);
+        const stTotalOut = entries.filter(e => e.qtyChange < 0).reduce((s, e) => s + Math.abs(e.qtyChange), 0);
+        const stNet      = stTotalIn - stTotalOut;
         return (
           <Dialog open={!!historyItemId} onOpenChange={o => { if (!o) setHistoryItemId(null); }}>
             <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
-              <DialogHeader className="px-6 py-4 border-b shrink-0">
+              <DialogHeader className="px-6 py-4 border-b shrink-0 space-y-2">
                 <DialogTitle className="flex items-center gap-2 text-base">
                   <History size={16} className="text-blue-600" />
                   Stock History — {historyItem?.productName || "—"}
                   <span className="ml-1 text-[11px] font-normal text-muted-foreground">({historyItem?.store} · {historyItem?.unit})</span>
                 </DialogTitle>
+                {entries.length > 0 && (
+                  <div className="flex items-center gap-4 text-[12px]">
+                    <span><span className="font-bold text-emerald-600">+{stTotalIn}</span> <span className="text-muted-foreground">received in</span></span>
+                    <span><span className="font-bold text-red-500">−{stTotalOut}</span> <span className="text-muted-foreground">sold/used out</span></span>
+                    <span className={`font-bold ${stNet >= 0 ? "text-blue-600" : "text-red-600"}`}>{stNet >= 0 ? "+" : ""}{stNet} <span className="font-normal text-muted-foreground">net</span></span>
+                  </div>
+                )}
               </DialogHeader>
               <div className="flex-1 overflow-y-auto">
                 {entries.length === 0 ? (
@@ -584,6 +594,18 @@ export default function StockPage() {
                         );
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/40 border-t-2">
+                        <td colSpan={2} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Net Movement</td>
+                        <td className="px-3 py-2"></td>
+                        <td className={`px-3 py-2 font-bold tabular-nums text-[12px] ${stNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {stNet >= 0 ? "+" : ""}{stNet} {historyItem?.unit}
+                        </td>
+                        <td className="px-3 py-2 text-[11px] text-muted-foreground tabular-nums">{entries[entries.length - 1]?.qtyBefore ?? "—"}</td>
+                        <td className="px-3 py-2 font-bold tabular-nums text-[12px]">{entries[0]?.qtyAfter ?? "—"}</td>
+                        <td className="px-3 py-2"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 )}
               </div>
