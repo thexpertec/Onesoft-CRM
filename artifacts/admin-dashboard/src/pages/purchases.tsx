@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePurchaseOrders } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, getSuppliers, getProducts } from "@/lib/store";
+import { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, getSuppliers, getProducts, getRawMaterials, receivePurchaseOrder } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, Plus, Search, X, Save, Trash2, Eye, Package, ReceiptText, Truck, AlertCircle, FileDown } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
@@ -35,8 +35,8 @@ const blankNewRow = (): NewRowState => ({
 // ─── Line item helpers ────────────────────────────────────────────────────────
 type PurchaseOrderItem2 = PurchaseOrderItem;
 
-const blankItem = (): PurchaseOrderItem2 => ({
-  id: crypto.randomUUID(), productName: "", qty: "1", unit: "", unitPrice: "", notes: "",
+const blankItem = (type: "product" | "raw-material" = "product"): PurchaseOrderItem2 => ({
+  id: crypto.randomUUID(), itemType: type, productName: "", productId: undefined, rmId: undefined, qty: "1", unit: "", unitPrice: "", notes: "",
 });
 
 function lineTotal(item: PurchaseOrderItem2): number {
@@ -51,8 +51,9 @@ export default function PurchasesPage() {
   const [, navigate] = useLocation();
 
   // ── supplier / product options ──
-  const supplierComboOpts = useMemo<ComboOption[]>(() => getSuppliers().filter(s => s.status !== "Blacklisted").map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
-  const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const supplierComboOpts   = useMemo<ComboOption[]>(() => getSuppliers().filter(s => s.status !== "Blacklisted").map(s => ({ value: s.company, label: s.company, sub: s.contactPerson })), []);
+  const productComboOpts    = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
+  const rawMatComboOpts     = useMemo<ComboOption[]>(() => getRawMaterials().map(r => ({ value: r.name, label: r.name, sub: `${r.rmCode} · Stock: ${r.currentStock} ${r.unit}`, tag: "Raw Material" })), []);
   const noSuppliers = supplierComboOpts.length === 0;
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
@@ -83,6 +84,7 @@ export default function PurchasesPage() {
   const [localItems, setLocalItems]   = useState<PurchaseOrderItem2[]>([]);
   const [addingItem, setAddingItem]   = useState(false);
   const [newItem, setNewItem]         = useState<PurchaseOrderItem2 | null>(null);
+  const [newItemType, setNewItemType] = useState<"product" | "raw-material">("product");
 
   // Sync localItems when dialog opens / PO changes
   useEffect(() => {
@@ -217,9 +219,23 @@ export default function PurchasesPage() {
   const handleDeleteItem = (itemId: string) => saveItems(localItems.filter(i => i.id !== itemId));
 
   const handleCommitNewItem = () => {
-    if (!newItem?.productName.trim()) { toast({ title: "Product/service name is required", variant: "destructive" }); return; }
-    saveItems([...localItems, newItem]);
+    if (!newItem?.productName.trim()) {
+      toast({ title: newItemType === "raw-material" ? "Raw material name is required" : "Product/service name is required", variant: "destructive" });
+      return;
+    }
+    saveItems([...localItems, { ...newItem, itemType: newItemType }]);
     setNewItem(null); setAddingItem(false);
+  };
+
+  const handleReceiveOrder = () => {
+    if (!detailPoId) return;
+    try {
+      receivePurchaseOrder(detailPoId);
+      toast({ title: "Order received — stock updated", description: "Raw material quantities and product stock have been updated." });
+      setDetailPoId(null);
+    } catch (e: unknown) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    }
   };
 
   const grandTotal = localItems.reduce((s, i) => s + lineTotal(i), 0);
@@ -531,7 +547,7 @@ export default function PurchasesPage() {
               <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
                 <Package size={14} /> Line Items
               </h3>
-              <Button size="sm" variant="outline" onClick={() => { setAddingItem(true); setNewItem(blankItem()); }} disabled={addingItem}>
+              <Button size="sm" variant="outline" onClick={() => { setNewItemType("product"); setAddingItem(true); setNewItem(blankItem("product")); }} disabled={addingItem}>
                 <Plus size={13} className="mr-1" /> Add Item
               </Button>
             </div>
@@ -557,11 +573,11 @@ export default function PurchasesPage() {
                       {(["productName", "qty", "unit", "unitPrice", "notes"] as (keyof PurchaseOrderItem2)[]).map(field => (
                         <td key={field} className={`py-1 px-1 border border-zinc-200 dark:border-zinc-700 ${field === "productName" ? "bg-gray-50/60 dark:bg-gray-800/20" : ""}`}>
                           {field === "productName" ? (
-                            <div className="group/lock flex items-center gap-1 px-2 py-1">
-                              <span className="flex-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{String(item[field]) || "—"}</span>
-                              <span className="opacity-0 group-hover/lock:opacity-50 text-[10px] text-zinc-400 whitespace-nowrap flex items-center gap-0.5">
-                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Products
+                            <div className="flex items-center gap-1.5 px-2 py-1">
+                              <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${item.itemType === "raw-material" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}`}>
+                                {item.itemType === "raw-material" ? "RM" : "Prod"}
                               </span>
+                              <span className="flex-1 truncate text-xs text-zinc-600 dark:text-zinc-300">{String(item[field]) || "—"}</span>
                             </div>
                           ) : (
                             <input
@@ -593,14 +609,29 @@ export default function PurchasesPage() {
                     <tr className="bg-amber-50 dark:bg-amber-900/20">
                       <td className="py-1 px-3 border border-amber-300 dark:border-amber-700 text-zinc-400">{localItems.length + 1}</td>
                       <td className="py-1 px-1 border border-amber-300 dark:border-amber-700">
+                        {/* Type toggle */}
+                        <div className="flex gap-1 px-1 pt-1 pb-0.5">
+                          {(["product", "raw-material"] as const).map(t => (
+                            <button key={t} type="button"
+                              onClick={() => { setNewItemType(t); setNewItem(blankItem(t)); }}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${newItemType === t ? (t === "raw-material" ? "bg-amber-500 border-amber-500 text-white" : "bg-blue-500 border-blue-500 text-white") : "bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-zinc-500"}`}>
+                              {t === "product" ? "Product" : "Raw Material"}
+                            </button>
+                          ))}
+                        </div>
                         <Combobox autoFocus value={newItem.productName}
                           onChange={v => setNewItem(p => p ? { ...p, productName: v } : p)}
                           onSelect={opt => {
-                            const prod = getProducts().find(p => p.name === opt.value);
-                            setNewItem(prev => prev ? { ...prev, productName: opt.value, unit: prod?.unit || prev.unit, unitPrice: prod?.price || prev.unitPrice } : prev);
+                            if (newItemType === "raw-material") {
+                              const rm = getRawMaterials().find(r => r.name === opt.value);
+                              setNewItem(prev => prev ? { ...prev, productName: opt.value, rmId: rm?.id, unit: rm?.unit || prev.unit, unitPrice: rm?.costPerUnit || prev.unitPrice } : prev);
+                            } else {
+                              const prod = getProducts().find(p => p.name === opt.value);
+                              setNewItem(prev => prev ? { ...prev, productName: opt.value, productId: prod?.id, unit: prod?.unit || prev.unit, unitPrice: prod?.price || prev.unitPrice } : prev);
+                            }
                           }}
-                          options={productComboOpts}
-                          placeholder="Product or service name *"
+                          options={newItemType === "raw-material" ? rawMatComboOpts : productComboOpts}
+                          placeholder={newItemType === "raw-material" ? "Select raw material *" : "Product or service name *"}
                           className="w-full"
                           inputClassName="w-full bg-white dark:bg-zinc-800 outline-none px-2 py-1 rounded ring-1 ring-amber-400 text-xs"
                         />
@@ -654,7 +685,7 @@ export default function PurchasesPage() {
             </div>
           </div>
 
-          <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
+          <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0 gap-3 flex-wrap">
             <p className="text-xs text-zinc-400">{localItems.length} item{localItems.length !== 1 ? "s" : ""} · Changes saved automatically</p>
             {addingItem ? (
               <div className="flex gap-2">
@@ -662,7 +693,21 @@ export default function PurchasesPage() {
                 <Button size="sm" onClick={handleCommitNewItem}><Plus size={13} className="mr-1" /> Add to PO</Button>
               </div>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => setDetailPoId(null)}>Close</Button>
+              <div className="flex gap-2 flex-wrap">
+                {detailPo && detailPo.status !== "Received" && detailPo.status !== "Cancelled" && localItems.length > 0 && (
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                    onClick={handleReceiveOrder}>
+                    <Truck size={13} /> Mark as Received — Update Stock
+                  </Button>
+                )}
+                {detailPo?.status === "Received" && (
+                  <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                    Received — Stock Updated
+                  </span>
+                )}
+                <Button size="sm" variant="outline" onClick={() => setDetailPoId(null)}>Close</Button>
+              </div>
             )}
           </div>
         </DialogContent>

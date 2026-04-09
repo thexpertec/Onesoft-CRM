@@ -1064,12 +1064,15 @@ export const deleteUnit = (id: string): void => {
 export type PurchaseOrderStatus = "Draft" | "Sent" | "Confirmed" | "Received" | "Cancelled";
 
 export type PurchaseOrderItem = {
-  id: string;
+  id:          string;
+  itemType?:   "product" | "raw-material";  // defaults to "product"
+  productId?:  string;   // linked Product id
+  rmId?:       string;   // linked RawMaterial id
   productName: string;
-  qty: string;
-  unit: string;
-  unitPrice: string;
-  notes: string;
+  qty:         string;
+  unit:        string;
+  unitPrice:   string;
+  notes:       string;
 };
 
 export type PurchaseOrder = {
@@ -1130,6 +1133,55 @@ export const deletePurchaseOrder = (id: string): void => {
   const item = getPurchaseOrders().find(p => p.id === id);
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Order", entityName: item?.poNumber || id });
+};
+
+export const receivePurchaseOrder = (id: string): PurchaseOrder => {
+  const pos = getPurchaseOrders();
+  const i = pos.findIndex(p => p.id === id);
+  if (i === -1) throw new Error("Purchase order not found");
+  const order = pos[i];
+  if (order.status === "Received")  throw new Error("Order is already received");
+  if (order.status === "Cancelled") throw new Error("Cannot receive a cancelled order");
+
+  const rms        = getRawMaterials();
+  const allProducts = getProducts();
+
+  order.items.forEach(item => {
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0 || !item.productName.trim()) return;
+
+    if (item.itemType === "raw-material") {
+      // ── Route to Raw Material stock ────────────────────────────────────────
+      const ri = item.rmId ? rms.findIndex(r => r.id === item.rmId) : rms.findIndex(r => r.name === item.productName);
+      if (ri >= 0) {
+        const current = parseFloat(rms[ri].currentStock || "0");
+        // Optionally update costPerUnit from purchase price
+        const newCost = item.unitPrice ? item.unitPrice : rms[ri].costPerUnit;
+        rms[ri] = { ...rms[ri], currentStock: String(current + qty), costPerUnit: newCost, updatedAt: new Date().toISOString() };
+      }
+    } else {
+      // ── Route to Product / StockItem ────────────────────────────────────────
+      const product = item.productId ? allProducts.find(p => p.id === item.productId) : undefined;
+      createStockItem({
+        productName:  item.productName,
+        sku:          product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-"),
+        store:        "Warehouse",
+        stockType:    "Available",
+        quantity:     item.qty,
+        minLevel:     "0",
+        unit:         item.unit || product?.unit || "",
+        holdCustomer: "",
+        holdReason:   "",
+        notes:        `Received via ${order.poNumber}`,
+      });
+    }
+  });
+
+  setStored(RM_KEY, rms);
+  pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
+  setStored(PURCHASE_ORDERS_KEY, pos);
+  addActivity({ action: "status_changed", entity: "Purchase Order", entityName: order.poNumber, detail: "Received — stock updated" });
+  return pos[i];
 };
 
 // ─── Sales / POS ─────────────────────────────────────────────────────────────
