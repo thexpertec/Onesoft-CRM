@@ -196,10 +196,11 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "sales", label: "Sales & Purchases", icon: Receipt,
     items: [
-      { label: "All Sales",  href: "/sales",     icon: Receipt,      desc: "Sales & POS terminal" },
-      { label: "New Sale",   href: "/sales/new", icon: Plus,         desc: "Open POS terminal"    },
-      { label: "Invoices",   href: "/invoices",  icon: FileText,     desc: "Invoice management"   },
-      { label: "Purchases",  divider: true },
+      { label: "All Sales",     href: "/sales",         icon: Receipt,      desc: "Sales & POS terminal"          },
+      { label: "New Sale",      href: "/sales/new",     icon: Plus,         desc: "Open POS terminal"             },
+      { label: "Invoices",      href: "/invoices",      icon: FileText,     desc: "Invoice management"            },
+      { label: "Calc Invoice",  href: "/calc-invoice",  icon: Calculator,   desc: "Calculation-based invoicing"   },
+      { label: "Purchases",     divider: true },
       { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
     ],
   },
@@ -230,7 +231,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
-const SALES_ROUTES       = ["/sales", "/invoices", "/purchases"];
+const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
 const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet"];
@@ -776,14 +777,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </div>}
 
               {/* Sales & Purchases group */}
-              {(isModuleAllowed("sales") || isModuleAllowed("purchases")) && <div className="pt-1 pb-0.5">
+              {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <div className="pt-1 pb-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Sales & Purchases</p>
                 {[
                   ...(isModuleAllowed("sales") ? [
-                    { href: "/sales",         label: "All Sales",       icon: Receipt      },
-                    { href: "/sales/new",     label: "New Sale",        icon: Plus         },
-                    { href: "/invoices",      label: "Invoices",        icon: FileText     },
-                    { href: "/calc-invoice",  label: "Calc Invoice",    icon: Calculator   },
+                    { href: "/sales",     label: "All Sales",  icon: Receipt  },
+                    { href: "/sales/new", label: "New Sale",   icon: Plus     },
+                  ] : []),
+                  ...((isModuleAllowed("sales") || isModuleAllowed("invoices")) ? [
+                    { href: "/invoices",     label: "Invoices",     icon: FileText   },
+                    { href: "/calc-invoice", label: "Calc Invoice", icon: Calculator },
                   ] : []),
                   ...(isModuleAllowed("purchases") ? [
                     { href: "/purchases", label: "Purchases",  icon: ShoppingCart },
