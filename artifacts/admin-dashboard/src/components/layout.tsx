@@ -223,8 +223,9 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "manufacturing", label: "Manufacturing", icon: Factory,
     items: [
-      { label: "Raw Materials",   href: "/raw-materials", icon: FlaskConical, desc: "Track raw material stock"     },
-      { label: "Mfg. Orders",     href: "/manufacturing", icon: Factory,      desc: "Production & batch orders"   },
+      { label: "Workflow Guide",  href: "/production-guide", icon: ArrowRight,   desc: "Step-by-step production help" },
+      { label: "Raw Materials",   href: "/raw-materials",    icon: FlaskConical, desc: "Track raw material stock"     },
+      { label: "Mfg. Orders",     href: "/manufacturing",    icon: Factory,      desc: "Production & batch orders"    },
     ],
   },
   {
@@ -241,7 +242,7 @@ const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
 const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents"];
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
-const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing"];
+const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet"];
 

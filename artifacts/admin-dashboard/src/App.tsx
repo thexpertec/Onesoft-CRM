@@ -44,6 +44,7 @@ import BalanceSheetPage from "@/pages/balance-sheet";
 import SalesAgentsPage from "@/pages/sales-agents";
 import RawMaterialsPage from "@/pages/raw-materials";
 import ManufacturingPage from "@/pages/manufacturing";
+import ProductionGuidePage from "@/pages/production-guide";
 
 const queryClient = new QueryClient();
 
@@ -126,6 +127,7 @@ function Router() {
               <Route path="/sales-agents" component={SalesAgentsPage} />
               <Route path="/raw-materials" component={RawMaterialsPage} />
               <Route path="/manufacturing" component={ManufacturingPage} />
+              <Route path="/production-guide" component={ProductionGuidePage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />
