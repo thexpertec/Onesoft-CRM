@@ -10,7 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useRawMaterials } from "@/hooks/use-data";
-import { getEntityLedger, LEDGER_TX_LABELS } from "@/lib/store";
+import { getEntityLedger, LEDGER_TX_LABELS, addManualLedgerEntry } from "@/lib/store";
 import { useAuth } from "@/contexts/auth-context";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
@@ -61,7 +61,14 @@ export default function RawMaterialsPage() {
     if (delta <= 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
     const current = parseFloat(viewRM.currentStock) || 0;
     const next = adjustDir === "add" ? current + delta : Math.max(0, current - delta);
+    const change = adjustDir === "add" ? delta : -(current - next);
     edit(viewRM.id, { currentStock: String(next) });
+    addManualLedgerEntry({
+      entityType: "raw-material", entityId: viewRM.id, entityName: viewRM.name,
+      date: new Date().toISOString().slice(0, 10), txType: "manual-adjustment",
+      reference: "", qtyBefore: current, qtyChange: change, qtyAfter: next,
+      unit: viewRM.unit, notes: adjustDir === "add" ? "Manual stock addition" : "Manual stock removal",
+    });
     toast({ title: `Stock updated → ${next} ${viewRM.unit}` });
     setAdjustDelta("");
   }, [viewRM, adjustDelta, adjustDir, edit, toast]);
