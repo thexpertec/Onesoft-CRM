@@ -593,7 +593,7 @@ export const deleteProductGroup = (id: string): void => {
 export type ModuleId =
   | "crm_leads" | "crm_customers" | "crm_suppliers"
   | "products" | "stock" | "purchases"
-  | "sales" | "invoices"
+  | "sales" | "invoices" | "sales_agents"
   | "documents"
   | "hrm_staff" | "hrm_roles"
   | "media"
@@ -617,8 +617,9 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "stock",         label: "Stock",           desc: "Inventory & stock holds",        group: "Products", href: "/stock"     },
   { id: "purchases",     label: "Purchases",       desc: "Purchase orders from suppliers", group: "Products", href: "/purchases" },
   // Sales
-  { id: "sales",         label: "Sales & POS",     desc: "Sales, invoices & POS terminal", group: "Sales",    href: "/sales"     },
-  { id: "invoices",      label: "Invoices",         desc: "Invoice management & tracking",  group: "Sales",    href: "/invoices"  },
+  { id: "sales",         label: "Sales & POS",     desc: "Sales, invoices & POS terminal", group: "Sales",    href: "/sales"        },
+  { id: "invoices",      label: "Invoices",         desc: "Invoice management & tracking",  group: "Sales",    href: "/invoices"     },
+  { id: "sales_agents",  label: "Sales Agents",     desc: "Agent management & commissions", group: "Sales",    href: "/sales-agents" },
   // Documents
   { id: "documents",     label: "Documents",       desc: "Requirement & client docs",      group: "Other",    href: "/documents" },
   // HRM
@@ -1334,6 +1335,9 @@ export type Invoice = {
   shippingFee:       string;
   handlingFee:       string;
   shippingMethod:    string;
+  // Agent
+  agentId?:          string;    // linked SalesAgent.id
+  agentName?:        string;    // denormalised agent name
   // Extra
   notes:             string;    // legacy — use invoiceDocs
   agreement:         string;    // legacy — use invoiceDocs
@@ -1383,6 +1387,69 @@ export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | 
 
 export const deleteInvoice = (id: string): void => {
   setStored(INVOICES_KEY, getInvoices().filter(inv => inv.id !== id));
+};
+
+// ─── Sales Agents ─────────────────────────────────────────────────────────────
+export type SalesAgentStatus = "Active" | "Inactive";
+
+export type SalesAgent = {
+  id:             string;
+  agentCode:      string;   // unique, e.g. SA-001
+  name:           string;
+  email:          string;
+  phone:          string;
+  region:         string;   // territory / area they cover
+  commissionRate: string;   // percentage e.g. "5"
+  targetAmount:   string;   // monthly sales target (in base currency)
+  status:         SalesAgentStatus;
+  joinDate:       string;   // YYYY-MM-DD
+  notes:          string;
+  createdAt:      string;
+  updatedAt:      string;
+};
+
+const SALES_AGENTS_KEY = "admin-sales-agents";
+
+export const getSalesAgents = (): SalesAgent[] => getStored<SalesAgent>(SALES_AGENTS_KEY);
+export const getSalesAgent  = (id: string): SalesAgent | undefined => getSalesAgents().find(a => a.id === id);
+
+const nextAgentCode = (): string => {
+  const all = getSalesAgents();
+  const nums = all.map(a => {
+    const m = a.agentCode.match(/(\d+)$/);
+    return m ? parseInt(m[1]) : 0;
+  });
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `SA-${String(next).padStart(3, "0")}`;
+};
+
+export const createSalesAgent = (data: Omit<SalesAgent, "id" | "agentCode" | "createdAt" | "updatedAt">): SalesAgent => {
+  const agent: SalesAgent = {
+    ...data,
+    id:        crypto.randomUUID(),
+    agentCode: nextAgentCode(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(SALES_AGENTS_KEY, [...getSalesAgents(), agent]);
+  addActivity({ action: "created", entity: "SalesAgent", entityName: agent.name, detail: agent.agentCode });
+  return agent;
+};
+
+export const updateSalesAgent = (id: string, updates: Partial<Omit<SalesAgent, "id" | "createdAt">>): SalesAgent => {
+  const agents = getSalesAgents();
+  const idx = agents.findIndex(a => a.id === id);
+  if (idx === -1) throw new Error("Sales agent not found");
+  agents[idx] = { ...agents[idx], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SALES_AGENTS_KEY, agents);
+  addActivity({ action: "updated", entity: "SalesAgent", entityName: agents[idx].name });
+  return agents[idx];
+};
+
+export const deleteSalesAgent = (id: string): void => {
+  const agent = getSalesAgents().find(a => a.id === id);
+  setStored(SALES_AGENTS_KEY, getSalesAgents().filter(a => a.id !== id));
+  addActivity({ action: "deleted", entity: "SalesAgent", entityName: agent?.name || id });
 };
 
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────

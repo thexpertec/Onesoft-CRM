@@ -199,7 +199,8 @@ const OTHER_NAV: NavItem[] = [
       { label: "All Sales",     href: "/sales",         icon: Receipt,      desc: "Sales & POS terminal"          },
       { label: "New Sale",      href: "/sales/new",     icon: Plus,         desc: "Open POS terminal"             },
       { label: "Invoices",      href: "/invoices",      icon: FileText,     desc: "Invoice management"            },
-      { label: "Calc Invoice",  href: "/calc-invoice",  icon: Calculator,   desc: "Calculation-based invoicing"   },
+      { label: "Calc Invoice",  href: "/calc-invoice",   icon: Calculator,   desc: "Calculation-based invoicing"   },
+      { label: "Sales Agents",  href: "/sales-agents",   icon: Users2,        desc: "Agent management & commissions" },
       { label: "Purchases",     divider: true },
       { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
     ],
@@ -231,7 +232,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
-const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice"];
+const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents"];
 const HRM_ROUTES         = ["/staff", "/roles", "/users"];
 const INVESTMENTS_ROUTES = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet"];
@@ -785,8 +786,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     { href: "/sales/new", label: "New Sale",   icon: Plus     },
                   ] : []),
                   ...((isModuleAllowed("sales") || isModuleAllowed("invoices")) ? [
-                    { href: "/invoices",     label: "Invoices",     icon: FileText   },
-                    { href: "/calc-invoice", label: "Calc Invoice", icon: Calculator },
+                    { href: "/invoices",      label: "Invoices",      icon: FileText   },
+                    { href: "/calc-invoice",  label: "Calc Invoice",  icon: Calculator },
+                  ] : []),
+                  ...((isModuleAllowed("sales") || isModuleAllowed("sales_agents")) ? [
+                    { href: "/sales-agents",  label: "Sales Agents",  icon: Users2     },
                   ] : []),
                   ...(isModuleAllowed("purchases") ? [
                     { href: "/purchases", label: "Purchases",  icon: ShoppingCart },

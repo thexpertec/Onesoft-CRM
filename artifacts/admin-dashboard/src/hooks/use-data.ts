@@ -19,9 +19,10 @@ import {
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
   getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
+  getSalesAgents, createSalesAgent, updateSalesAgent, deleteSalesAgent,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
-  JournalEntry,
+  JournalEntry, SalesAgent,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -392,4 +393,14 @@ export function useProductGroups() {
   const editGroup   = (id: string, u: Parameters<typeof updateProductGroup>[1])    => { const g = updateProductGroup(id, u); fetch(); return g; };
   const removeGroup = (id: string)                                                  => { deleteProductGroup(id);              fetch(); };
   return { groups, addGroup, editGroup, removeGroup, refresh: fetch };
+}
+
+export function useSalesAgents() {
+  const [agents, setAgents] = useState<SalesAgent[]>([]);
+  const fetch = useCallback(() => setAgents(getSalesAgents()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addAgent    = (d: Parameters<typeof createSalesAgent>[0])               => { const a = createSalesAgent(d);    fetch(); return a; };
+  const editAgent   = (id: string, u: Parameters<typeof updateSalesAgent>[1])   => { const a = updateSalesAgent(id, u); fetch(); return a; };
+  const removeAgent = (id: string)                                               => { deleteSalesAgent(id);              fetch(); };
+  return { agents, addAgent, editAgent, removeAgent, refresh: fetch };
 }

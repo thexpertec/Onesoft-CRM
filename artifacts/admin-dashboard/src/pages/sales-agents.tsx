@@ -1,0 +1,601 @@
+import { useState, useMemo, useCallback } from "react";
+import { format } from "date-fns";
+import {
+  Users2, Plus, Search, X, Save, Trash2, Eye, FileSpreadsheet,
+  Phone, Mail, MapPin, TrendingUp, BadgeDollarSign, Target, FileText,
+  Award, Calendar,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useSalesAgents } from "@/hooks/use-data";
+import { useAuth } from "@/contexts/auth-context";
+import { getInvoices, SalesAgent } from "@/lib/store";
+import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { downloadExcel } from "@/lib/export-excel";
+import { useToast } from "@/hooks/use-toast";
+import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
+
+// ── Column definitions ─────────────────────────────────────────────────────────
+const COLS: ColDef[] = [
+  { field: "agentCode",      label: "Code",           minW: 90,  type: "readonly" },
+  { field: "name",           label: "Name",            minW: 160, type: "text"     },
+  { field: "email",          label: "Email",           minW: 190, type: "email"    },
+  { field: "phone",          label: "Phone",           minW: 130, type: "tel"      },
+  { field: "region",         label: "Region / Area",   minW: 140, type: "text"     },
+  { field: "commissionRate", label: "Commission %",    minW: 110, type: "text"     },
+  { field: "targetAmount",   label: "Monthly Target",  minW: 130, type: "text"     },
+  { field: "status",         label: "Status",          minW: 100, type: "select",  options: ["Active", "Inactive"] },
+  { field: "joinDate",       label: "Join Date",       minW: 110, type: "date"     },
+  { field: "notes",          label: "Notes",           minW: 200, type: "text"     },
+];
+const TOTAL_W = COLS.reduce((s, c) => s + c.minW, 0);
+
+type EditableField = "name" | "email" | "phone" | "region" | "commissionRate" | "targetAmount" | "status" | "joinDate" | "notes";
+type NewRow = Record<string, string>;
+
+const BLANK: NewRow = {
+  agentCode: "", name: "", email: "", phone: "", region: "",
+  commissionRate: "", targetAmount: "", status: "Active",
+  joinDate: format(new Date(), "yyyy-MM-dd"), notes: "",
+};
+
+// ── Invoice total helper ──────────────────────────────────────────────────────
+function calcInvTotal(inv: ReturnType<typeof getInvoices>[0]): number {
+  const itemsSum = inv.items.reduce((s, it) => {
+    const qty  = parseFloat(it.qty)              || 0;
+    const up   = parseFloat(it.unitPrice)        || 0;
+    const disc = parseFloat(it.discount || "0")  / 100;
+    return s + qty * up * (1 - disc);
+  }, 0);
+  const tax      = itemsSum * (parseFloat(inv.taxRate     || "0") / 100);
+  const shipping = parseFloat(inv.shippingFee || "0");
+  const handling = parseFloat(inv.handlingFee || "0");
+  return itemsSum + tax + shipping + handling;
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+export default function SalesAgentsPage() {
+  const { agents, addAgent, editAgent, removeAgent } = useSalesAgents();
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const sym = getSettingsCurrencySymbol();
+
+  const [search,       setSearch]       = useState("");
+  const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
+  const [newRow,       setNewRow]       = useState<NewRow | null>(null);
+  const [newRowActive, setNewRowActive] = useState<number | null>(null);
+  const [deleteId,     setDeleteId]     = useState<string | null>(null);
+  const [viewId,       setViewId]       = useState<string | null>(null);
+
+  // Editable columns (skip readonly agentCode at index 0)
+  const editableCols = COLS.filter(c => c.type !== "readonly");
+
+  // ── Filtered list ────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return agents;
+    return agents.filter(a =>
+      [a.name, a.agentCode, a.email, a.phone, a.region, a.status].some(v => v?.toLowerCase().includes(q))
+    );
+  }, [agents, search]);
+
+  // ── New-row navigation ────────────────────────────────────────────────────
+  const navigateNewRow = (ci: number, shift: boolean) => {
+    let next = shift ? ci - 1 : ci + 1;
+    if (next < 0) next = editableCols.length - 1;
+    if (next >= editableCols.length) { commitNewRow(); return; }
+    setNewRowActive(next);
+  };
+
+  // ── Commit new row ────────────────────────────────────────────────────────
+  const commitNewRow = useCallback(() => {
+    if (!newRow || !newRow.name?.trim()) {
+      toast({ title: "Name is required", variant: "destructive" });
+      return;
+    }
+    addAgent({
+      name:           newRow.name.trim(),
+      email:          newRow.email?.trim() || "",
+      phone:          newRow.phone?.trim() || "",
+      region:         newRow.region?.trim() || "",
+      commissionRate: newRow.commissionRate?.trim() || "",
+      targetAmount:   newRow.targetAmount?.trim() || "",
+      status:         (newRow.status as SalesAgent["status"]) || "Active",
+      joinDate:       newRow.joinDate || format(new Date(), "yyyy-MM-dd"),
+      notes:          newRow.notes?.trim() || "",
+    });
+    setNewRow(null);
+    setNewRowActive(null);
+    toast({ title: "Sales agent added" });
+  }, [newRow, addAgent, toast]);
+
+  // ── Commit existing cell ──────────────────────────────────────────────────
+  const commitCell = useCallback((agentId: string, field: string, value: string) => {
+    const agent = agents.find(a => a.id === agentId);
+    if (!agent) return;
+    if ((agent as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
+    editAgent(agentId, { [field]: value } as Partial<SalesAgent>);
+    setActiveCell(null);
+  }, [agents, editAgent]);
+
+  // ── Tab navigation for existing rows ─────────────────────────────────────
+  const navigateCell = useCallback((id: string, ci: number, shift: boolean) => {
+    const rows = filtered.map(a => a.id);
+    const ri   = rows.indexOf(id);
+    let nc = ci + (shift ? -1 : 1);
+    let nr = ri;
+    // skip readonly cols (agentCode at ci 0)
+    if (nc < 0)            { nc = COLS.length - 1; nr--; }
+    if (nc >= COLS.length) { nc = 0; nr++; }
+    if (nr < 0 || nr >= rows.length) { setActiveCell(null); return; }
+    setActiveCell({ id: rows[nr], col: nc });
+  }, [filtered]);
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const confirmDelete = () => {
+    if (!deleteId) return;
+    const a = agents.find(a => a.id === deleteId);
+    removeAgent(deleteId);
+    setDeleteId(null);
+    toast({ title: `${a?.name || "Agent"} deleted` });
+  };
+
+  // ── Excel export ──────────────────────────────────────────────────────────
+  const handleExport = () => {
+    downloadExcel(filtered.map(a => ({
+      Code:             a.agentCode,
+      Name:             a.name,
+      Email:            a.email,
+      Phone:            a.phone,
+      "Region / Area":  a.region,
+      "Commission %":   a.commissionRate,
+      "Monthly Target": a.targetAmount ? `${sym}${a.targetAmount}` : "",
+      Status:           a.status,
+      "Join Date":      a.joinDate,
+      Notes:            a.notes,
+    })), "Sales-Agents");
+  };
+
+  // ── Detail sheet data ─────────────────────────────────────────────────────
+  const viewAgent = viewId ? agents.find(a => a.id === viewId) ?? null : null;
+
+  const agentInvoices = useMemo(() => {
+    if (!viewAgent) return [];
+    return getInvoices().filter(inv =>
+      inv.agentId === viewAgent.id ||
+      inv.agentName?.trim().toLowerCase() === viewAgent.name.trim().toLowerCase()
+    ).sort((a, b) => (b.invoiceDate > a.invoiceDate ? 1 : -1));
+  }, [viewAgent]);
+
+  const agentStats = useMemo(() => {
+    const totalSales  = agentInvoices.reduce((s, inv) => s + calcInvTotal(inv), 0);
+    const rate        = parseFloat(viewAgent?.commissionRate || "0") / 100;
+    const commission  = totalSales * rate;
+    const now         = new Date();
+    const thisMonthTotal = agentInvoices
+      .filter(inv => {
+        const d = new Date(inv.invoiceDate || inv.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((s, inv) => s + calcInvTotal(inv), 0);
+    const target = parseFloat(viewAgent?.targetAmount || "0");
+    return { totalSales, commission, invoiceCount: agentInvoices.length, thisMonthTotal, target, rate };
+  }, [agentInvoices, viewAgent]);
+
+  const initials = (name: string) =>
+    name.split(" ").map(w => w[0] ?? "").join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="flex flex-col h-full">
+
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-background shrink-0 gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center">
+            <Users2 size={16} className="text-teal-600 dark:text-teal-400" />
+          </div>
+          <div>
+            <h1 className="text-[16px] font-bold">Sales Agents</h1>
+            <p className="text-[12px] text-muted-foreground">{agents.length} agent{agents.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAuthenticated && newRow && (
+            <>
+              <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
+              <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}>
+                <X size={12} /> Cancel
+              </Button>
+              <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}>
+                <Save size={12} /> Save Row
+              </Button>
+            </>
+          )}
+
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input className="pl-7 h-8 text-[12px] w-52" placeholder="Search agents…" value={search} onChange={e => setSearch(e.target.value)} />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={11} />
+              </button>
+            )}
+          </div>
+
+          <Button variant="outline" size="sm" className="gap-1.5 text-[12px]" onClick={handleExport}>
+            <FileSpreadsheet size={13} /> Export
+          </Button>
+
+          {isAuthenticated && !newRow && (
+            <Button size="sm" className="gap-1.5 text-[12px] bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={() => { setNewRow({ ...BLANK }); setNewRowActive(0); }}>
+              <Plus size={13} /> Add Agent
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Excel grid ───────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto px-4 py-4">
+        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="sales-agents">
+
+          {/* New row */}
+          {isAuthenticated && newRow && (
+            <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
+              <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold"
+                style={{ height: `${CELL_H}px` }}>★</td>
+
+              {COLS.map((col, ci) => {
+                const isEditableCol = col.type !== "readonly";
+                const editIdx = editableCols.indexOf(col);
+                const isA = newRowActive === editIdx;
+                const val = newRow[col.field] ?? "";
+
+                if (!isEditableCol) {
+                  return (
+                    <td key={col.field} className="border-r border-gray-100 dark:border-border relative p-0"
+                      style={{ height: `${CELL_H}px` }}>
+                      <div className="w-full h-full flex items-center px-3 text-[12px] text-muted-foreground/50 font-mono select-none">
+                        AUTO
+                      </div>
+                    </td>
+                  );
+                }
+
+                return (
+                  <td key={col.field}
+                    className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`}
+                    style={{ height: `${CELL_H}px` }}>
+                    {isA && col.type === "select" ? (
+                      <select autoFocus value={val}
+                        onChange={e => setNewRow(r => r ? { ...r, [col.field]: e.target.value } : r)}
+                        onKeyDown={e => {
+                          if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editIdx, e.shiftKey); }
+                          if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); }
+                        }}
+                        className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground">
+                        {col.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : isA ? (
+                      <input autoFocus
+                        type={col.type === "date" ? "date" : col.type === "email" ? "email" : col.type === "tel" ? "tel" : "text"}
+                        value={val}
+                        placeholder={col.label}
+                        onChange={e => setNewRow(r => r ? { ...r, [col.field]: e.target.value } : r)}
+                        onKeyDown={e => {
+                          if (e.key === "Tab") { e.preventDefault(); navigateNewRow(editIdx, e.shiftKey); }
+                          if (e.key === "Enter") { e.preventDefault(); editIdx === editableCols.length - 1 ? commitNewRow() : navigateNewRow(editIdx, false); }
+                          if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); }
+                        }}
+                        className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center px-3 cursor-text"
+                        onClick={() => setNewRowActive(editIdx)}>
+                        <span className={`truncate ${!val ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>
+                          {val || col.label}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
+
+              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border"
+                style={{ height: `${CELL_H}px` }}>
+                <div className="flex items-center justify-center gap-1">
+                  <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30" title="Save">
+                    <Save size={13} />
+                  </button>
+                  <button onClick={() => { setNewRow(null); setNewRowActive(null); }} className="p-1 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel">
+                    <X size={13} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
+
+          {/* Empty state */}
+          {filtered.length === 0 && !newRow && (
+            <tr>
+              <td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
+                {search
+                  ? "No agents match your search."
+                  : <span>No sales agents yet. Click <strong>Add Agent</strong> to get started.</span>}
+              </td>
+            </tr>
+          )}
+
+          {/* Data rows */}
+          {filtered.map((agent, ri) => {
+            const isRowActive = activeCell?.id === agent.id;
+            return (
+              <tr key={agent.id}
+                className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
+
+                {/* Row number */}
+                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none"
+                  style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
+
+                {COLS.map((col, ci) => {
+                  const isA = activeCell?.id === agent.id && activeCell.col === ci;
+                  const raw = String((agent as unknown as Record<string, string>)[col.field] ?? "");
+
+                  return (
+                    <td key={col.field}
+                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && col.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                      style={{ height: `${CELL_H}px` }}
+                      onClick={() => !isA && isAuthenticated && col.type !== "readonly" && setActiveCell({ id: agent.id, col: ci })}>
+                      <EditableCell
+                        value={raw}
+                        col={col}
+                        active={isA}
+                        canEdit={isAuthenticated && col.type !== "readonly"}
+                        onActivate={() => setActiveCell({ id: agent.id, col: ci })}
+                        onCommit={v => commitCell(agent.id, col.field, v)}
+                        onCancel={() => setActiveCell(null)}
+                        onTab={shift => navigateCell(agent.id, ci, shift)}
+                        onEnter={() => setActiveCell(null)}
+                      />
+                    </td>
+                  );
+                })}
+
+                {/* Actions */}
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center"
+                  style={{ height: `${CELL_H}px` }}>
+                  <div className="flex items-center justify-center gap-0.5 h-full px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => setViewId(agent.id)}
+                      className="p-1.5 rounded text-muted-foreground hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors"
+                      title="View agent details">
+                      <Eye size={13} />
+                    </button>
+                    {isAuthenticated && (
+                      <button
+                        onClick={() => setDeleteId(agent.id)}
+                        className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Delete agent">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </ExcelGridShell>
+      </div>
+
+      {/* ── Delete dialog ─────────────────────────────────────────────────── */}
+      <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Sales Agent</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{agents.find(a => a.id === deleteId)?.name ?? "this agent"}</strong>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Agent Detail Sheet ────────────────────────────────────────────── */}
+      <Sheet open={!!viewId} onOpenChange={o => { if (!o) setViewId(null); }}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto p-0 flex flex-col gap-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{viewAgent?.name} — Agent Details</SheetTitle>
+          </SheetHeader>
+
+          {viewAgent && (
+            <>
+              {/* Gradient header */}
+              <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-6 py-5 text-white shrink-0">
+                <div className="flex items-start gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 text-lg font-bold">
+                    {initials(viewAgent.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-bold truncate">{viewAgent.name}</h2>
+                    <p className="text-teal-200 text-[12px] font-mono mt-0.5">{viewAgent.agentCode}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${viewAgent.status === "Active" ? "bg-emerald-400/30 text-emerald-100" : "bg-white/20 text-white/70"}`}>
+                        {viewAgent.status}
+                      </span>
+                      {viewAgent.region && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-white/80 flex items-center gap-1">
+                          <MapPin size={9} /> {viewAgent.region}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+                {/* Contact */}
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Contact</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2">
+                      <Mail size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-[13px] truncate">{viewAgent.email || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-[13px]">{viewAgent.phone || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-[13px]">
+                        {viewAgent.joinDate ? (() => { try { return format(new Date(viewAgent.joinDate), "d MMM yyyy"); } catch { return viewAgent.joinDate; } })() : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Award size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-[13px]">{viewAgent.commissionRate ? `${viewAgent.commissionRate}% commission` : "No rate set"}</span>
+                    </div>
+                  </div>
+                  {viewAgent.notes && (
+                    <p className="mt-3 text-[12px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 italic">{viewAgent.notes}</p>
+                  )}
+                </div>
+
+                {/* Performance cards */}
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Performance</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      {
+                        icon: <FileText size={15} />,
+                        label: "Total Invoices",
+                        value: agentStats.invoiceCount.toString(),
+                        sub: "all time",
+                        color: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400",
+                      },
+                      {
+                        icon: <BadgeDollarSign size={15} />,
+                        label: "Total Sales",
+                        value: `${sym}${agentStats.totalSales.toFixed(2)}`,
+                        sub: "all time",
+                        color: "bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400",
+                      },
+                      {
+                        icon: <TrendingUp size={15} />,
+                        label: "Commission Earned",
+                        value: `${sym}${agentStats.commission.toFixed(2)}`,
+                        sub: agentStats.rate > 0 ? `${viewAgent.commissionRate}% of sales` : "No rate set",
+                        color: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400",
+                      },
+                      {
+                        icon: <Target size={15} />,
+                        label: "This Month",
+                        value: `${sym}${agentStats.thisMonthTotal.toFixed(2)}`,
+                        sub: agentStats.target > 0
+                          ? `${Math.round((agentStats.thisMonthTotal / agentStats.target) * 100)}% of ${sym}${agentStats.target.toLocaleString()} target`
+                          : "No target set",
+                        color: agentStats.target > 0 && agentStats.thisMonthTotal >= agentStats.target
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+                          : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400",
+                      },
+                    ].map(card => (
+                      <div key={card.label} className="bg-muted/40 rounded-xl p-3 space-y-1.5">
+                        <div className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${card.color} rounded-md px-2 py-0.5`}>
+                          {card.icon} {card.label}
+                        </div>
+                        <p className="text-[17px] font-bold">{card.value}</p>
+                        <p className="text-[10px] text-muted-foreground">{card.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {agentStats.target > 0 && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                        <span>Monthly Target Progress</span>
+                        <span>{Math.min(100, Math.round((agentStats.thisMonthTotal / agentStats.target) * 100))}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${agentStats.thisMonthTotal >= agentStats.target ? "bg-emerald-500" : "bg-teal-500"}`}
+                          style={{ width: `${Math.min(100, (agentStats.thisMonthTotal / agentStats.target) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Invoices table */}
+                <div>
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                    Invoices <span className="font-normal">({agentInvoices.length})</span>
+                  </h3>
+
+                  {agentInvoices.length === 0 ? (
+                    <p className="text-[13px] text-muted-foreground italic">No invoices linked to this agent yet.</p>
+                  ) : (
+                    <div className="rounded-lg border border-border overflow-hidden">
+                      <table className="w-full text-[12px]">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            {["Date", "Invoice #", "Customer", "Total", "Status"].map(h => (
+                              <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {agentInvoices.map((inv, i) => {
+                            const total = calcInvTotal(inv);
+                            return (
+                              <tr key={inv.id} className={`border-b last:border-0 ${i % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                  {inv.invoiceDate ? (() => { try { return format(new Date(inv.invoiceDate), "d MMM yy"); } catch { return inv.invoiceDate; } })() : "—"}
+                                </td>
+                                <td className="px-3 py-2 font-mono font-medium text-[11px]">{inv.invoiceNumber}</td>
+                                <td className="px-3 py-2 max-w-[120px] truncate" title={inv.customer}>{inv.customer || "—"}</td>
+                                <td className="px-3 py-2 font-semibold text-right">{sym}{total.toFixed(2)}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    inv.status === "Paid"    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
+                                    inv.status === "Partial" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+                                    inv.status === "Overdue" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" :
+                                    inv.status === "Sent"    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
+                                    "bg-muted text-muted-foreground"
+                                  }`}>{inv.status}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-muted/40 border-t-2">
+                            <td colSpan={3} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Total</td>
+                            <td className="px-3 py-2 font-bold text-right text-[12px]">
+                              {sym}{agentInvoices.reduce((s, inv) => s + calcInvTotal(inv), 0).toFixed(2)}
+                            </td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
