@@ -126,7 +126,7 @@ export default function RawMaterialsPage() {
               const k = `${rm.id}-${col.field}`;
               const val = col.field === "rmCode" ? rm.rmCode : String((rm as Record<string, unknown>)[col.field] ?? "");
               return (
-                <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0">
+                <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0 relative">
                   <EditableCell
                     value={val}
                     col={col}
@@ -169,7 +169,7 @@ export default function RawMaterialsPage() {
             {COLS.map(col => {
               const k = `new-${col.field}`;
               return (
-                <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0">
+                <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0 relative">
                   <EditableCell
                     value={col.field === "rmCode" ? "Auto" : String((newRow as Record<string, unknown>)[col.field] ?? "")}
                     col={col}
