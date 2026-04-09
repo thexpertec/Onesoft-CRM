@@ -1095,11 +1095,11 @@ export function InvoiceFormPage() {
       if (!inv.paidAt) updates.paidAt = new Date().toISOString();
     }
     if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
-      deductStockForSale(inv.items);
+      deductStockForSale(inv.items, inv.invoiceNumber);
       updates.stockDeducted = true;
     }
     if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
-      restoreStockForSale(inv.items);
+      restoreStockForSale(inv.items, inv.invoiceNumber);
       updates.stockDeducted = false;
       updates.paidAt = "";
     }
@@ -1109,7 +1109,7 @@ export function InvoiceFormPage() {
 
   const handleDelete = useCallback((id: string) => {
     const inv = invoices.find(i => i.id === id);
-    if (inv?.stockDeducted) restoreStockForSale(inv.items);
+    if (inv?.stockDeducted) restoreStockForSale(inv.items, inv.invoiceNumber);
     removeInvoice(id);
     toast({ title: "Invoice deleted", variant: "destructive" });
     navigate("/invoices");

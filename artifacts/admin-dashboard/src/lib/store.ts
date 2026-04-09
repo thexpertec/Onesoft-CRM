@@ -1145,6 +1145,8 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
 
   const rms        = getRawMaterials();
   const allProducts = getProducts();
+  const today       = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
   order.items.forEach(item => {
     const qty = parseFloat(item.qty) || 0;
@@ -1161,6 +1163,12 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
         const current = parseFloat(rms[ri].currentStock || "0");
         const newCost = item.unitPrice ? item.unitPrice : rms[ri].costPerUnit;
         rms[ri] = { ...rms[ri], currentStock: String(current + qty), costPerUnit: newCost, updatedAt: new Date().toISOString() };
+        ledger.push({
+          entityType: "raw-material", entityId: rms[ri].id, entityName: rms[ri].name,
+          date: today, txType: "purchase-receipt", reference: order.poNumber,
+          qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
+          unit: rms[ri].unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
+        });
       } else {
         // RM not pre-registered — auto-create it from the PO line
         const newRm: RawMaterial = {
@@ -1175,11 +1183,17 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
           updatedAt: new Date().toISOString(),
         };
         rms.push(newRm);
+        ledger.push({
+          entityType: "raw-material", entityId: newRm.id, entityName: newRm.name,
+          date: today, txType: "purchase-receipt", reference: order.poNumber,
+          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+          unit: newRm.unit, notes: `Auto-created & received via ${order.poNumber} · Supplier: ${order.supplier}`,
+        });
       }
     } else {
       // ── Route to Product / StockItem ────────────────────────────────────────
       const product = item.productId ? allProducts.find(p => p.id === item.productId) : undefined;
-      createStockItem({
+      const newStock = createStockItem({
         productName:  item.productName,
         sku:          product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-"),
         store:        "Warehouse",
@@ -1191,10 +1205,17 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
         holdReason:   "",
         notes:        `Received via ${order.poNumber}`,
       });
+      ledger.push({
+        entityType: "product", entityId: newStock.id, entityName: newStock.productName,
+        date: today, txType: "purchase-receipt", reference: order.poNumber,
+        qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+        unit: newStock.unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
+      });
     }
   });
 
   setStored(RM_KEY, rms);
+  batchLedger(ledger);
   pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
   setStored(PURCHASE_ORDERS_KEY, pos);
   addActivity({ action: "status_changed", entity: "Purchase Order", entityName: order.poNumber, detail: "Received — stock updated" });
@@ -1328,24 +1349,90 @@ export const deleteStockItem = (id: string): void => {
   setStored(STOCK_KEY, getStock().filter(s => s.id !== id));
 };
 
-export const deductStockForSale = (saleItems: SaleItem[]): void => {
+// ─── Stock Ledger ─────────────────────────────────────────────────────────────
+export type LedgerTxType =
+  | "purchase-receipt"
+  | "sale"
+  | "sale-refund"
+  | "mfg-input"
+  | "mfg-output"
+  | "manual-adjustment";
+
+export const LEDGER_TX_LABELS: Record<LedgerTxType, string> = {
+  "purchase-receipt": "Purchase Receipt",
+  "sale":             "Sale",
+  "sale-refund":      "Sale Refund",
+  "mfg-input":        "Mfg. Consumed",
+  "mfg-output":       "Mfg. Produced",
+  "manual-adjustment":"Manual Adjustment",
+};
+
+export type StockLedgerEntry = {
+  id:          string;
+  entityType:  "product" | "raw-material";
+  entityId:    string;      // StockItem.id or RawMaterial.id
+  entityName:  string;
+  date:        string;      // YYYY-MM-DD
+  txType:      LedgerTxType;
+  reference:   string;      // PO-001, SALE-001, MO-001
+  qtyBefore:   number;
+  qtyChange:   number;      // positive = IN, negative = OUT
+  qtyAfter:    number;
+  unit:        string;
+  notes:       string;
+  createdAt:   string;
+};
+
+const LEDGER_KEY = "admin-stock-ledger";
+
+export const getStockLedger     = (): StockLedgerEntry[] => getStored<StockLedgerEntry>(LEDGER_KEY);
+export const getEntityLedger    = (entityId: string) => getStockLedger().filter(e => e.entityId === entityId);
+export const clearEntityLedger  = (entityId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.entityId !== entityId));
+
+function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
+  if (entries.length === 0) return;
+  const now = new Date().toISOString();
+  const full: StockLedgerEntry[] = entries.map(e => ({ ...e, id: crypto.randomUUID(), createdAt: now }));
+  setStored(LEDGER_KEY, [...getStockLedger(), ...full]);
+}
+
+export const addManualLedgerEntry = (entry: Omit<StockLedgerEntry, "id" | "createdAt">) => {
+  batchLedger([entry]);
+};
+
+// ─── Stock Mutations (with Ledger) ────────────────────────────────────────────
+export const deductStockForSale = (saleItems: SaleItem[], reference = ""): void => {
   const stocks = getStock();
+  const today  = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
   saleItems.forEach(item => {
     if (!item.sku) return;
     let remaining = parseFloat(item.qty) || 0;
     for (let i = 0; i < stocks.length && remaining > 0; i++) {
       if (stocks[i].sku !== item.sku) continue;
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-      const deduct = Math.min(current, remaining);
+      const deduct  = Math.min(current, remaining);
       stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
       remaining -= deduct;
+      if (deduct > 0) ledger.push({
+        entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+        date: today, txType: "sale", reference,
+        qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+        unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
+      });
     }
   });
+
   setStored(STOCK_KEY, stocks);
+  batchLedger(ledger);
 };
 
-export const restoreStockForSale = (saleItems: SaleItem[]): void => {
+export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void => {
   const stocks = getStock();
+  const today  = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
   saleItems.forEach(item => {
     if (!item.sku) return;
     const qty = parseFloat(item.qty) || 0;
@@ -1353,9 +1440,17 @@ export const restoreStockForSale = (saleItems: SaleItem[]): void => {
     if (i >= 0) {
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
       stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
+      if (qty > 0) ledger.push({
+        entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+        date: today, txType: "sale-refund", reference,
+        qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
+        unit: stocks[i].unit, notes: reference ? `Refund ${reference}` : "Sale Refund",
+      });
     }
   });
+
   setStored(STOCK_KEY, stocks);
+  batchLedger(ledger);
 };
 
 // ─── Invoices (standalone, separate from POS Sales) ──────────────────────────
@@ -1654,26 +1749,35 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   const order = orders[i];
   if (order.status === "Completed") throw new Error("Order already completed");
 
-  // Deduct raw materials
-  const rms = getRawMaterials();
+  // Deduct raw materials + record ledger
+  const rms    = getRawMaterials();
+  const today  = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
   order.inputs.forEach(inp => {
     const ri = rms.findIndex(r => r.id === inp.rmId);
     if (ri >= 0) {
       const current = Math.max(0, parseFloat(rms[ri].currentStock) || 0);
       const deduct  = Math.min(current, parseFloat(inp.qtyUsed) || 0);
       rms[ri] = { ...rms[ri], currentStock: String(current - deduct), updatedAt: new Date().toISOString() };
+      if (deduct > 0) ledger.push({
+        entityType: "raw-material", entityId: rms[ri].id, entityName: rms[ri].name,
+        date: today, txType: "mfg-input", reference: order.orderNumber,
+        qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+        unit: rms[ri].unit, notes: `Consumed by ${order.orderNumber}`,
+      });
     }
   });
   setStored(RM_KEY, rms);
 
-  // Add outputs to product stock (multi-output support)
+  // Add outputs to product stock (multi-output support) + record ledger
   const allProducts = getProducts();
   const effectiveOutputs: MfgOutput[] = (order.outputs && order.outputs.length > 0) ? order.outputs : [];
   effectiveOutputs.forEach(out => {
     const qty = parseFloat(out.qty) || 0;
     if (!out.productName || qty <= 0) return;
     const product = allProducts.find(p => p.id === out.productId);
-    createStockItem({
+    const newStock = createStockItem({
       productName:  out.productName,
       sku:          product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-"),
       store:        "Manufacturing",
@@ -1685,7 +1789,15 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
       holdReason:   "",
       notes:        `Produced by ${order.orderNumber}`,
     });
+    ledger.push({
+      entityType: "product", entityId: newStock.id, entityName: newStock.productName,
+      date: today, txType: "mfg-output", reference: order.orderNumber,
+      qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+      unit: newStock.unit, notes: `Produced by ${order.orderNumber}`,
+    });
   });
+
+  batchLedger(ledger);
 
   orders[i] = { ...orders[i], status: "Completed", updatedAt: new Date().toISOString() };
   setStored(MFG_KEY, orders);

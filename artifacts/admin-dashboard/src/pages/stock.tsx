@@ -2,13 +2,14 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { StockItem, StockType, STOCK_TYPES, getProducts, getCustomers } from "@/lib/store";
+import { StockItem, StockType, STOCK_TYPES, getProducts, getCustomers, getEntityLedger, StockLedgerEntry, LEDGER_TX_LABELS } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown } from "lucide-react";
+import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown, History } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
 
@@ -90,6 +91,7 @@ export default function StockPage() {
   const [newRow,         setNewRow]         = useState<Record<string, string> | null>(null);
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
+  const [historyItemId,  setHistoryItemId]  = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Reset filters when switching views
@@ -500,6 +502,10 @@ export default function StockPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                      title="Stock History" onClick={() => setHistoryItemId(item.id)}>
+                      <History size={13} />
+                    </button>
                     {isAuthenticated && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                         title="Remove" onClick={() => setDeleteId(item.id)}>
@@ -526,6 +532,62 @@ export default function StockPage() {
       </div>
 
       {/* Delete confirm */}
+      {/* ── Stock Ledger History Dialog ── */}
+      {(() => {
+        const historyItem = historyItemId ? stock.find(s => s.id === historyItemId) ?? null : null;
+        const entries = historyItemId ? getEntityLedger(historyItemId).slice().reverse() : [];
+        return (
+          <Dialog open={!!historyItemId} onOpenChange={o => { if (!o) setHistoryItemId(null); }}>
+            <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+              <DialogHeader className="px-6 py-4 border-b shrink-0">
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <History size={16} className="text-blue-600" />
+                  Stock History — {historyItem?.productName || "—"}
+                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">({historyItem?.store} · {historyItem?.unit})</span>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto">
+                {entries.length === 0 ? (
+                  <div className="py-16 text-center text-muted-foreground text-sm">No stock movements recorded yet for this item.</div>
+                ) : (
+                  <table className="w-full text-[12px]">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                      <tr>
+                        {["Date", "Type", "Reference", "Change", "Before", "After", "Notes"].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((e, i) => {
+                        const isIn = e.qtyChange > 0;
+                        return (
+                          <tr key={e.id} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.date}</td>
+                            <td className="px-3 py-2">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isIn ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                                {LEDGER_TX_LABELS[e.txType]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-blue-600 dark:text-blue-400">{e.reference || "—"}</td>
+                            <td className={`px-3 py-2 font-bold tabular-nums ${isIn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                              {isIn ? "+" : ""}{e.qtyChange} {e.unit}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums text-muted-foreground">{e.qtyBefore}</td>
+                            <td className="px-3 py-2 tabular-nums font-semibold">{e.qtyAfter}</td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

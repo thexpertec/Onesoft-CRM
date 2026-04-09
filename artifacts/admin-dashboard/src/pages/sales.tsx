@@ -1257,11 +1257,11 @@ export default function SalesPage() {
     let stockDeducted = wasDeducted;
 
     if (status === "On Credit" && !wasDeducted) {
-      deductStockForSale(localItems);
+      deductStockForSale(localItems, detailSale?.saleNumber || "");
       stockDeducted = true;
     }
     if ((status === "Refunded" || status === "Cancelled") && wasDeducted) {
-      restoreStockForSale(localItems);
+      restoreStockForSale(localItems, detailSale?.saleNumber || "");
       stockDeducted = false;
     }
 
@@ -1281,7 +1281,7 @@ export default function SalesPage() {
 
     // Deduct stock only if not already done (avoids double-deduction on re-payment)
     if (!(detailSale?.stockDeducted ?? false)) {
-      deductStockForSale(localItems);
+      deductStockForSale(localItems, detailSale?.saleNumber || "");
     }
 
     const completedSale = editSale(detailId, {

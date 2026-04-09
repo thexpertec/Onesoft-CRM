@@ -1,14 +1,16 @@
 import { useState, useCallback } from "react";
-import { FlaskConical, Eye, Trash2, Plus, Minus, Package, RefreshCw } from "lucide-react";
+import { FlaskConical, Eye, Trash2, Plus, Minus, Package, RefreshCw, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useRawMaterials } from "@/hooks/use-data";
+import { getEntityLedger, LEDGER_TX_LABELS } from "@/lib/store";
 import { useAuth } from "@/contexts/auth-context";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +47,7 @@ export default function RawMaterialsPage() {
 
   // ── Delete confirm ────────────────────────────────────────────────────────
   const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [ledgerId, setLedgerId]   = useState<string | null>(null);
 
   // ── Detail / Adjust sheet ─────────────────────────────────────────────────
   const [viewId,      setViewId]      = useState<string | null>(null);
@@ -150,6 +153,10 @@ export default function RawMaterialsPage() {
                 <button onClick={() => { setViewId(rm.id); setAdjustDelta(""); setAdjustDir("add"); }}
                   className="p-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 transition-colors" title="View / Adjust">
                   <Eye size={13} />
+                </button>
+                <button onClick={() => setLedgerId(rm.id)}
+                  className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-500 transition-colors" title="Stock History">
+                  <History size={13} />
                 </button>
                 {canEdit && (
                   <button onClick={() => setDeleteId(rm.id)}
@@ -280,6 +287,62 @@ export default function RawMaterialsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ── RM Stock Ledger History Dialog ── */}
+      {(() => {
+        const ledgerRM = ledgerId ? rms.find(r => r.id === ledgerId) ?? null : null;
+        const entries = ledgerId ? getEntityLedger(ledgerId).slice().reverse() : [];
+        return (
+          <Dialog open={!!ledgerId} onOpenChange={o => { if (!o) setLedgerId(null); }}>
+            <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+              <DialogHeader className="px-6 py-4 border-b shrink-0">
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <History size={16} className="text-blue-600" />
+                  Stock History — {ledgerRM?.name || "—"}
+                  <span className="ml-1 text-[11px] font-normal text-muted-foreground">({ledgerRM?.code} · {ledgerRM?.unit})</span>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto">
+                {entries.length === 0 ? (
+                  <div className="py-16 text-center text-muted-foreground text-sm">No stock movements recorded yet for this raw material.</div>
+                ) : (
+                  <table className="w-full text-[12px]">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                      <tr>
+                        {["Date", "Type", "Reference", "Change", "Before", "After", "Notes"].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-b">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((e, i) => {
+                        const isIn = e.qtyChange > 0;
+                        return (
+                          <tr key={e.id} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.date}</td>
+                            <td className="px-3 py-2">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isIn ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                                {LEDGER_TX_LABELS[e.txType]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-blue-600 dark:text-blue-400">{e.reference || "—"}</td>
+                            <td className={`px-3 py-2 font-bold tabular-nums ${isIn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                              {isIn ? "+" : ""}{e.qtyChange} {e.unit}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums text-muted-foreground">{e.qtyBefore}</td>
+                            <td className="px-3 py-2 tabular-nums font-semibold">{e.qtyAfter}</td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">{e.notes || "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
