@@ -252,6 +252,18 @@ export default function StockPage() {
         </div>
       )}
 
+      {/* Raw Materials info banner */}
+      {!isHoldsView && (
+        <div className="flex items-center gap-2.5 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span>
+            This page tracks <strong>finished products &amp; sellable stock</strong> only.
+            Raw material stock (e.g. Wheat, Steel, Fabric) received via Purchase Orders is tracked separately under
+            <strong className="ml-1">Manufacturing → Raw Materials</strong>.
+          </span>
+        </div>
+      )}
+
       {/* KPI pills — All Stock view */}
       {!isHoldsView && (
         <div className="flex items-center gap-2 flex-wrap">

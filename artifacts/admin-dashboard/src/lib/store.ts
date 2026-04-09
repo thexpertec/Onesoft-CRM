@@ -1152,12 +1152,29 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
 
     if (item.itemType === "raw-material") {
       // ── Route to Raw Material stock ────────────────────────────────────────
-      const ri = item.rmId ? rms.findIndex(r => r.id === item.rmId) : rms.findIndex(r => r.name === item.productName);
+      const ri = item.rmId
+        ? rms.findIndex(r => r.id === item.rmId)
+        : rms.findIndex(r => r.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
+
       if (ri >= 0) {
+        // RM exists — add to current stock, optionally update cost
         const current = parseFloat(rms[ri].currentStock || "0");
-        // Optionally update costPerUnit from purchase price
         const newCost = item.unitPrice ? item.unitPrice : rms[ri].costPerUnit;
         rms[ri] = { ...rms[ri], currentStock: String(current + qty), costPerUnit: newCost, updatedAt: new Date().toISOString() };
+      } else {
+        // RM not pre-registered — auto-create it from the PO line
+        const newRm: RawMaterial = {
+          id: crypto.randomUUID(),
+          rmCode: nextRMCode(),
+          name: item.productName.trim(),
+          unit: item.unit || "pcs",
+          currentStock: String(qty),
+          costPerUnit: item.unitPrice || "0",
+          notes: `Auto-created on receipt of ${order.poNumber}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        rms.push(newRm);
       }
     } else {
       // ── Route to Product / StockItem ────────────────────────────────────────
