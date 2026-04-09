@@ -2,9 +2,9 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { StockItem, StockType, STOCK_TYPES, getProducts, getCustomers, getEntityLedger, StockLedgerEntry, LEDGER_TX_LABELS, updateStockItem, addManualLedgerEntry } from "@/lib/store";
+import { StockItem, StockType, STOCK_TYPES, getProducts, getCustomers, getEntityLedger, StockLedgerEntry, LEDGER_TX_LABELS } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown, History, PackagePlus } from "lucide-react";
+import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown, History } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +34,8 @@ const isLowStock = (item: StockItem) => {
   return min > 0 && qty <= min;
 };
 
-// Fields owned by the Products master table — read-only on this secondary page
-const PRODUCT_LOCKED = new Set(["productName", "sku"]);
+// Fields that must never be edited directly — quantity only moves via Purchase Orders
+const PRODUCT_LOCKED = new Set(["productName", "sku", "quantity"]);
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 const ALL_COLS: ColDef[] = [
@@ -92,10 +92,6 @@ export default function StockPage() {
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
   const [historyItemId,  setHistoryItemId]  = useState<string | null>(null);
-  const [adjustItemId,   setAdjustItemId]   = useState<string | null>(null);
-  const [adjustDelta,    setAdjustDelta]    = useState("");
-  const [adjustDir,      setAdjustDir]      = useState<"add" | "sub">("add");
-  const [adjustNotes,    setAdjustNotes]    = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Reset filters when switching views
@@ -201,25 +197,6 @@ export default function StockPage() {
     toast({ title: "Stock item removed", description: `"${s?.productName}" removed.` });
     setDeleteId(null);
   };
-
-  const handleAdjustStock = useCallback(() => {
-    const item = adjustItemId ? stock.find(s => s.id === adjustItemId) : null;
-    if (!item) return;
-    const delta = parseFloat(adjustDelta) || 0;
-    if (delta <= 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
-    const current = parseFloat(item.quantity) || 0;
-    const next = adjustDir === "add" ? current + delta : Math.max(0, current - delta);
-    const change = adjustDir === "add" ? delta : -(current - next);
-    updateStockItem(item.id, { quantity: String(next) });
-    addManualLedgerEntry({
-      entityType: "product", entityId: item.id, entityName: item.productName,
-      date: new Date().toISOString().slice(0, 10), txType: "manual-adjustment",
-      reference: "", qtyBefore: current, qtyChange: change, qtyAfter: next,
-      unit: item.unit, notes: adjustNotes.trim() || (adjustDir === "add" ? "Manual stock addition" : "Manual stock removal"),
-    });
-    toast({ title: `Stock updated`, description: `${item.productName} → ${next} ${item.unit}` });
-    setAdjustDelta(""); setAdjustNotes(""); setAdjustItemId(null);
-  }, [adjustItemId, adjustDelta, adjustDir, adjustNotes, stock, toast]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -373,7 +350,12 @@ export default function StockPage() {
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`}
                     style={{ height: CELL_H }}>
-                    {isA && c.field === "stockType" ? (
+                    {c.field === "quantity" ? (
+                      <div className="w-full h-full flex items-center px-3 cursor-default">
+                        <span className="text-[13px] text-gray-400 italic">0 — set via PO</span>
+                        <span className="ml-auto flex items-center gap-0.5 text-[10px] text-gray-300 pr-1"><Lock size={9} /> PO only</span>
+                      </div>
+                    ) : isA && c.field === "stockType" ? (
                       <div className="absolute inset-0 flex items-center gap-1 px-2" tabIndex={0} autoFocus
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}>
                         {STOCK_TYPES.map(t => (
@@ -525,12 +507,6 @@ export default function StockPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && !isHoldsView && (
-                      <button className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
-                        title="Adjust Stock" onClick={() => { setAdjustItemId(item.id); setAdjustDelta(""); setAdjustDir("add"); setAdjustNotes(""); }}>
-                        <PackagePlus size={13} />
-                      </button>
-                    )}
                     <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
                       title="Stock History" onClick={() => setHistoryItemId(item.id)}>
                       <History size={13} />
@@ -559,100 +535,6 @@ export default function StockPage() {
           )}
         </ExcelGridShell>
       </div>
-
-      {/* ── Adjust Stock Dialog ── */}
-      {(() => {
-        const adjustItem = adjustItemId ? stock.find(s => s.id === adjustItemId) ?? null : null;
-        const currentQty = parseFloat(adjustItem?.quantity || "0");
-        const delta = parseFloat(adjustDelta) || 0;
-        const preview = adjustDir === "add" ? currentQty + delta : Math.max(0, currentQty - delta);
-        return (
-          <Dialog open={!!adjustItemId} onOpenChange={o => { if (!o) { setAdjustItemId(null); setAdjustDelta(""); setAdjustNotes(""); } }}>
-            <DialogContent className="max-w-sm p-0 overflow-hidden">
-              {/* Header */}
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-600 px-6 py-5 text-white">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                    <PackagePlus size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold opacity-70 uppercase tracking-widest">Adjust Stock</div>
-                    <div className="font-bold text-[15px] leading-tight">{adjustItem?.productName || "—"}</div>
-                  </div>
-                </div>
-                <div className="text-[12px] opacity-70 mt-1">{adjustItem?.store} · {adjustItem?.unit}</div>
-              </div>
-
-              <div className="px-6 py-5 space-y-4">
-                {/* Current → Preview */}
-                <div className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
-                  <div className="text-center">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">Current</div>
-                    <div className="text-xl font-bold tabular-nums">{currentQty}</div>
-                    <div className="text-[11px] text-muted-foreground">{adjustItem?.unit}</div>
-                  </div>
-                  <div className="text-muted-foreground text-lg">→</div>
-                  <div className="text-center">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">After</div>
-                    <div className={`text-xl font-bold tabular-nums ${delta > 0 ? (adjustDir === "add" ? "text-emerald-600" : "text-red-500") : "text-foreground"}`}>{delta > 0 ? preview : "—"}</div>
-                    <div className="text-[11px] text-muted-foreground">{adjustItem?.unit}</div>
-                  </div>
-                </div>
-
-                {/* Direction toggle */}
-                <div className="flex rounded-xl overflow-hidden border border-border">
-                  <button
-                    onClick={() => setAdjustDir("add")}
-                    className={`flex-1 py-2 text-[12px] font-bold transition-colors flex items-center justify-center gap-1.5
-                      ${adjustDir === "add" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                    <Plus size={13} /> Add Stock
-                  </button>
-                  <button
-                    onClick={() => setAdjustDir("sub")}
-                    className={`flex-1 py-2 text-[12px] font-bold transition-colors flex items-center justify-center gap-1.5
-                      ${adjustDir === "sub" ? "bg-red-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                    <X size={13} /> Use / Remove
-                  </button>
-                </div>
-
-                {/* Quantity input */}
-                <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Quantity</label>
-                  <Input
-                    type="number" min="0" step="any"
-                    placeholder="Enter quantity..."
-                    value={adjustDelta}
-                    onChange={e => setAdjustDelta(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") handleAdjustStock(); }}
-                    className="text-sm"
-                    autoFocus
-                  />
-                </div>
-
-                {/* Notes */}
-                <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Reason / Notes <span className="font-normal normal-case">(optional)</span></label>
-                  <Input
-                    placeholder="e.g. Opening balance, damage, return..."
-                    value={adjustNotes}
-                    onChange={e => setAdjustNotes(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-
-                {/* Apply button */}
-                <Button
-                  className={`w-full font-semibold ${adjustDir === "add" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-500 hover:bg-red-600"} text-white`}
-                  onClick={handleAdjustStock}
-                  disabled={!adjustDelta || delta <= 0}
-                >
-                  {adjustDir === "add" ? `+ Add ${delta > 0 ? delta : ""} ${adjustItem?.unit || ""}` : `— Remove ${delta > 0 ? delta : ""} ${adjustItem?.unit || ""}`}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
 
       {/* ── Stock Ledger History Dialog ── */}
       {(() => {

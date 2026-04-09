@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { FlaskConical, Eye, Trash2, Plus, Minus, Package, RefreshCw, History } from "lucide-react";
+import { FlaskConical, Eye, Trash2, Plus, Minus, Package, RefreshCw, History, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useRawMaterials } from "@/hooks/use-data";
-import { getEntityLedger, LEDGER_TX_LABELS, addManualLedgerEntry } from "@/lib/store";
+import { getEntityLedger, LEDGER_TX_LABELS } from "@/lib/store";
 import { useAuth } from "@/contexts/auth-context";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
@@ -51,27 +51,7 @@ export default function RawMaterialsPage() {
 
   // ── Detail / Adjust sheet ─────────────────────────────────────────────────
   const [viewId,      setViewId]      = useState<string | null>(null);
-  const [adjustDelta, setAdjustDelta] = useState("");
-  const [adjustDir,   setAdjustDir]   = useState<"add" | "sub">("add");
   const viewRM = viewId ? rms.find(r => r.id === viewId) ?? null : null;
-
-  const handleAdjust = useCallback(() => {
-    if (!viewRM) return;
-    const delta = parseFloat(adjustDelta) || 0;
-    if (delta <= 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
-    const current = parseFloat(viewRM.currentStock) || 0;
-    const next = adjustDir === "add" ? current + delta : Math.max(0, current - delta);
-    const change = adjustDir === "add" ? delta : -(current - next);
-    edit(viewRM.id, { currentStock: String(next) });
-    addManualLedgerEntry({
-      entityType: "raw-material", entityId: viewRM.id, entityName: viewRM.name,
-      date: new Date().toISOString().slice(0, 10), txType: "manual-adjustment",
-      reference: "", qtyBefore: current, qtyChange: change, qtyAfter: next,
-      unit: viewRM.unit, notes: adjustDir === "add" ? "Manual stock addition" : "Manual stock removal",
-    });
-    toast({ title: `Stock updated → ${next} ${viewRM.unit}` });
-    setAdjustDelta("");
-  }, [viewRM, adjustDelta, adjustDir, edit, toast]);
 
   // ── Commit new row ────────────────────────────────────────────────────────
   const commitNew = useCallback(() => {
@@ -141,7 +121,7 @@ export default function RawMaterialsPage() {
                     value={val}
                     col={col}
                     active={activeKey === k}
-                    canEdit={canEdit && col.field !== "rmCode"}
+                    canEdit={canEdit && col.field !== "rmCode" && col.field !== "currentStock"}
                     onActivate={() => setActiveKey(k)}
                     onCommit={v => { edit(rm.id, { [col.field]: v }); setActiveKey(""); }}
                     onCancel={() => setActiveKey("")}
@@ -157,8 +137,8 @@ export default function RawMaterialsPage() {
             })}
             <td className="text-center" style={{ width: 80, minWidth: 80 }}>
               <div className="flex items-center justify-center gap-1">
-                <button onClick={() => { setViewId(rm.id); setAdjustDelta(""); setAdjustDir("add"); }}
-                  className="p-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 transition-colors" title="View / Adjust">
+                <button onClick={() => setViewId(rm.id)}
+                  className="p-1 rounded hover:bg-teal-100 dark:hover:bg-teal-900/30 text-teal-600 transition-colors" title="View Details">
                   <Eye size={13} />
                 </button>
                 <button onClick={() => setLedgerId(rm.id)}
@@ -185,10 +165,10 @@ export default function RawMaterialsPage() {
               return (
                 <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0 relative">
                   <EditableCell
-                    value={col.field === "rmCode" ? "Auto" : String((newRow as Record<string, unknown>)[col.field] ?? "")}
+                    value={col.field === "rmCode" ? "Auto" : col.field === "currentStock" ? "0" : String((newRow as Record<string, unknown>)[col.field] ?? "")}
                     col={col}
                     active={activeKey === k}
-                    canEdit={col.field !== "rmCode"}
+                    canEdit={col.field !== "rmCode" && col.field !== "currentStock"}
                     onActivate={() => setActiveKey(k)}
                     onCommit={v => { setNewRow(r => ({ ...r, [col.field]: v })); setActiveKey(""); }}
                     onCancel={() => { setActiveKey(""); if (col.field === COLS[0].field) setNewRow(null); }}
@@ -249,47 +229,11 @@ export default function RawMaterialsPage() {
                 </div>
               )}
 
-              {/* Adjust Stock */}
-              {canEdit && (
-                <div className="border rounded-xl p-4 space-y-3">
-                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Adjust Stock</h3>
-                  <div className="flex gap-2">
-                    {(["add", "sub"] as const).map(dir => (
-                      <button key={dir} onClick={() => setAdjustDir(dir)}
-                        className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ${
-                          adjustDir === dir
-                            ? dir === "add" ? "bg-emerald-600 text-white border-emerald-600" : "bg-red-500 text-white border-red-500"
-                            : "border-border text-muted-foreground hover:bg-muted"
-                        }`}>
-                        {dir === "add" ? <><Plus size={12} className="inline mr-1" />Add Stock</> : <><Minus size={12} className="inline mr-1" />Use / Remove</>}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input type="number" min="0" placeholder="Quantity" value={adjustDelta}
-                      onChange={e => setAdjustDelta(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAdjust()}
-                      className="text-[13px]" />
-                    <Button size="sm" onClick={handleAdjust}
-                      className={adjustDir === "add" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-red-500 hover:bg-red-600 text-white"}>
-                      Apply
-                    </Button>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Current: <span className="font-bold text-foreground">{parseFloat(viewRM.currentStock||"0").toFixed(2)} {viewRM.unit}</span>
-                    {adjustDelta && parseFloat(adjustDelta) > 0 && (
-                      <span className="ml-2">
-                        → <span className="font-bold text-emerald-600">
-                          {adjustDir === "add"
-                            ? (parseFloat(viewRM.currentStock||"0") + parseFloat(adjustDelta)).toFixed(2)
-                            : Math.max(0, parseFloat(viewRM.currentStock||"0") - parseFloat(adjustDelta)).toFixed(2)
-                          } {viewRM.unit}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Stock is read-only here — only Purchase Orders update stock levels */}
+              <div className="border rounded-xl p-4 bg-muted/30 text-[12px] text-muted-foreground flex items-start gap-2">
+                <Lock size={13} className="mt-0.5 shrink-0 text-amber-500" />
+                <span>Stock quantity is controlled by Purchase Orders only. Receive a PO to add stock for this material.</span>
+              </div>
             </>
           )}
         </SheetContent>
