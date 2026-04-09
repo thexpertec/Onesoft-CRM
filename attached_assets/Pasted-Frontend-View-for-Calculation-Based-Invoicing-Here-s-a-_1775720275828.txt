@@ -1,0 +1,53 @@
+Frontend View for Calculation-Based Invoicing
+Here’s a simplified frontend user interface design for the invoicing page. The following elements will be visible to the user when they are entering product details, generating amounts, and viewing the invoice.
+________________________________________
+1. Product Selection
+•	Dropdown Menu:
+o	Allow the user to choose from different products
+2. Product Details Entry
+•	Dynamic Input Fields:
+o	Item Name: Automatically populated based on the product selection.
+o	For Size-Based Products (e.g., White Sheet):
+	Height (in inches/feet)
+	Width (in inches/feet)
+	Automatically calculate the total size based on these dimensions.
+o	Unit Rate:
+	Display the rate for the selected product (this will be filled by the system based on the selection).
+________________________________________
+3. Additional Charges
+•	Service Charges (Optional):
+o	Labour Charges: Field to enter labor costs (e.g., Shet Cutting or Labour).
+o	Other Charges: Field for entering any other additional costs (e.g., Power Supply).
+________________________________________
+4. Amount Calculation
+•	Auto-Calculation:
+o	Amount for Size-Based Products: Display the calculated amount (e.g., Rate x Total Size).
+o	Amount for Quantity-Based Products: Display the calculated amount (e.g., Quantity x Rate).
+________________________________________
+5. Subtotal
+•	Subtotal Display:
+o	Automatically sum up the amounts of all products and additional charges.
+________________________________________
+6. Tax Application
+•	Tax Rate Input (Optional):
+o	Allow user to input tax percentage (e.g., 5% VAT) or automatically apply if predefined.
+o	Auto-Calculated Tax: Display the calculated tax based on the subtotal.
+________________________________________
+7. Final Total
+•	Final Total:
+o	Display the final total amount after adding the tax and any additional charges.
+________________________________________
+8. Invoice Preview
+•	Invoice Layout:
+o	Show a preview of the invoice with the following fields:
+	Invoice Number
+	Client Information: Name, address, contact details.
+	Product Information: Item name, dimensions/quantity, rate, amount.
+	Subtotal: Total before tax.
+	Tax: Applied tax amount.
+	Total: Final amount including tax.
+	Payment Terms: Display payment terms (e.g., "Due on receipt", "30 days net").
+________________________________________
+9. Export Options
+•	Generate PDF/Excel: Buttons to allow users to export the invoice in PDF or Excel format.
+

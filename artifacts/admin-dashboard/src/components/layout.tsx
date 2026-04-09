@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, ClipboardList,
+  Landmark, TrendingUp, ClipboardList, Calculator,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -780,9 +780,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Sales & Purchases</p>
                 {[
                   ...(isModuleAllowed("sales") ? [
-                    { href: "/sales",     label: "All Sales",  icon: Receipt      },
-                    { href: "/sales/new", label: "New Sale",   icon: Plus         },
-                    { href: "/invoices",  label: "Invoices",   icon: FileText     },
+                    { href: "/sales",         label: "All Sales",       icon: Receipt      },
+                    { href: "/sales/new",     label: "New Sale",        icon: Plus         },
+                    { href: "/invoices",      label: "Invoices",        icon: FileText     },
+                    { href: "/calc-invoice",  label: "Calc Invoice",    icon: Calculator   },
                   ] : []),
                   ...(isModuleAllowed("purchases") ? [
                     { href: "/purchases", label: "Purchases",  icon: ShoppingCart },

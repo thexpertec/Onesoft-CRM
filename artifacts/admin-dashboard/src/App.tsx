@@ -19,6 +19,7 @@ import ShareDocument from "@/pages/share-document";
 import UsersPage from "@/pages/users";
 import SalesPage from "@/pages/sales";
 import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
+import CalcInvoicePage from "@/pages/calc-invoice";
 import StockPage from "@/pages/stock";
 import StaffPage from "@/pages/staff";
 import HrmRolesPage from "@/pages/hrm-roles";
@@ -118,6 +119,7 @@ function Router() {
               <Route path="/invoices/new" component={InvoiceFormPage} />
               <Route path="/invoices/:id" component={InvoiceFormPage} />
               <Route path="/invoices" component={InvoicesPage} />
+              <Route path="/calc-invoice" component={CalcInvoicePage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />
