@@ -186,6 +186,8 @@ function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
   localStorage.setItem(sk, JSON.stringify(data));
   _apiWrite(sk, data);
+  // Notify same-tab listeners (browser storage event only fires in other tabs)
+  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop in non-browser env */ }
 }
 
 /** Platform-level read (always unprefixed — for users & tenants registry). */
@@ -1154,9 +1156,11 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
 
     if (item.itemType === "raw-material") {
       // ── Route to Raw Material stock ────────────────────────────────────────
-      const ri = item.rmId
-        ? rms.findIndex(r => r.id === item.rmId)
-        : rms.findIndex(r => r.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
+      // Try rmId first, fall back to name match if ID not found (handles RM recreations)
+      let ri = item.rmId ? rms.findIndex(r => r.id === item.rmId) : -1;
+      if (ri === -1) {
+        ri = rms.findIndex(r => r.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
+      }
 
       if (ri >= 0) {
         // RM exists — add to current stock, optionally update cost
