@@ -1507,11 +1507,25 @@ export const MFG_STATUSES = ["Draft", "In Progress", "Completed", "Cancelled"] a
 export type MfgStatus = typeof MFG_STATUSES[number];
 
 export type MfgInput = {
-  id:     string;
-  rmId:   string;
-  rmName: string;
-  unit:   string;
+  id:      string;
+  rmId:    string;
+  rmName:  string;
+  unit:    string;
   qtyUsed: string;
+};
+
+export type MfgOutput = {
+  id:          string;
+  productId:   string;
+  productName: string;
+  qty:         string;
+  unit:        string;
+};
+
+export type ProductionCost = {
+  id:          string;
+  description: string;  // Labour, Electricity, Machine hire, etc.
+  amount:      string;  // numeric string
 };
 
 export type ManufacturingOrder = {
@@ -1520,10 +1534,14 @@ export type ManufacturingOrder = {
   orderDate:         string;
   status:            MfgStatus;
   inputs:            MfgInput[];
-  outputProductId:   string;
-  outputProductName: string;
-  outputQty:         string;
-  outputUnit:        string;
+  // Multi-output support (new)
+  outputs:           MfgOutput[];
+  // Production costs (new)
+  productionCosts:   ProductionCost[];
+  // Waste tracking (new)
+  wasteQty:          string;
+  wasteUnit:         string;
+  wasteNotes:        string;
   notes:             string;
   createdAt:         string;
   updatedAt:         string;
@@ -1579,23 +1597,26 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   });
   setStored(RM_KEY, rms);
 
-  // Add output to product stock
-  const outQty = parseFloat(order.outputQty) || 0;
-  if (order.outputProductName && outQty > 0) {
-    const product = getProducts().find(p => p.id === order.outputProductId);
+  // Add outputs to product stock (multi-output support)
+  const allProducts = getProducts();
+  const effectiveOutputs: MfgOutput[] = (order.outputs && order.outputs.length > 0) ? order.outputs : [];
+  effectiveOutputs.forEach(out => {
+    const qty = parseFloat(out.qty) || 0;
+    if (!out.productName || qty <= 0) return;
+    const product = allProducts.find(p => p.id === out.productId);
     createStockItem({
-      productName:  order.outputProductName,
-      sku:          product?.sku || order.outputProductName.toLowerCase().replace(/\s+/g, "-"),
+      productName:  out.productName,
+      sku:          product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-"),
       store:        "Manufacturing",
       stockType:    "Available",
-      quantity:     order.outputQty,
+      quantity:     out.qty,
       minLevel:     "0",
-      unit:         order.outputUnit || product?.unit || "",
+      unit:         out.unit || product?.unit || "",
       holdCustomer: "",
       holdReason:   "",
       notes:        `Produced by ${order.orderNumber}`,
     });
-  }
+  });
 
   orders[i] = { ...orders[i], status: "Completed", updatedAt: new Date().toISOString() };
   setStored(MFG_KEY, orders);

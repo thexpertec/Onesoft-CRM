@@ -24,7 +24,7 @@ import {
   getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
-  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder,
+  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost,
 } from "@/lib/store";
 
 export function useLeads() {
