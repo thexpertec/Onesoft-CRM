@@ -110,9 +110,6 @@ export default function Login() {
                 in full detail
               </span>
             </h2>
-            <p className="text-white/55 text-[13px] leading-relaxed mt-3 max-w-xs">
-              Click any demo branch below to instantly sign in and explore a fully seeded, real-world company — no setup required.
-            </p>
           </div>
 
           {/* Animated feature ticker */}
@@ -130,9 +127,12 @@ export default function Login() {
           <div className="flex-1 flex flex-col min-h-0">
             {demoTenants.length > 0 ? (
               <>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35 mb-2.5">
-                  Active Demo Branches
-                </p>
+                <div className="mb-3">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/35 mb-0.5">Active Demo Branches</p>
+                  <p className="text-xl font-extrabold text-white tracking-tight leading-tight">
+                    One Click <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-indigo-400">Demo Login</span>
+                  </p>
+                </div>
                 <div className="space-y-2 overflow-y-auto flex-1 pr-1"
                      style={{ scrollbarWidth: "none" }}>
                   {demoTenants.map((t, i) => (
