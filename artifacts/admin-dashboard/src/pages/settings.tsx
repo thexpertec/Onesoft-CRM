@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Building2, DollarSign, ShoppingBag, Database, Scale,
+  Building2, DollarSign, ShoppingBag, Database, Scale, BookOpen,
   Save, Upload, Download, Trash2, RefreshCw,
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
-  FilePlus2, FileText, Star, ChevronDown, MoreVertical,
+  FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -21,20 +21,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { useAccounts } from "@/hooks/use-data";
 import {
   AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
 } from "@/lib/store";
 import { CURRENCIES } from "@/lib/currencies";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
-type TabId = "company" | "financial" | "pos" | "legal" | "data";
+type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: "company",   label: "Company Profile",  icon: Building2,   desc: "Name, logo & office contacts"      },
-  { id: "financial", label: "Financial",         icon: DollarSign,  desc: "Currency, VAT & fiscal year"       },
-  { id: "pos",       label: "POS & Sales",       icon: ShoppingBag, desc: "Receipt, payment & tax defaults"   },
-  { id: "legal",     label: "Legal Documents",   icon: Scale,       desc: "Terms, conditions & privacy policy" },
-  { id: "data",      label: "Data Management",   icon: Database,    desc: "Backup, import & reset"            },
+  { id: "company",    label: "Company Profile",   icon: Building2,   desc: "Name, logo & office contacts"         },
+  { id: "financial",  label: "Financial",          icon: DollarSign,  desc: "Currency, VAT & fiscal year"          },
+  { id: "pos",        label: "POS & Sales",        icon: ShoppingBag, desc: "Receipt, payment & tax defaults"      },
+  { id: "accounting", label: "Accounting Links",   icon: BookOpen,    desc: "Map COA accounts to POS & Invoices"   },
+  { id: "legal",      label: "Legal Documents",    icon: Scale,       desc: "Terms, conditions & privacy policy"   },
+  { id: "data",       label: "Data Management",    icon: Database,    desc: "Backup, import & reset"               },
 ];
 
 const FISCAL_MONTHS = [
@@ -488,6 +490,10 @@ function LegalTab({
 export default function SettingsPage() {
   const { isSuperAdmin } = useAuth();
   const { toast } = useToast();
+  const { accounts } = useAccounts();
+
+  // Ledger accounts only (for accounting mappings)
+  const ledgerAccounts = accounts.filter(a => a.accountType === "Ledger" && a.isActive !== false);
 
   const [tab, setTab]         = useState<TabId>("company");
   const [form, setForm]       = useState<AppSettings>(() => getSettings());
@@ -922,6 +928,166 @@ export default function SettingsPage() {
                     <p className="text-center">{form.receiptFooter}</p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* ══ Accounting Links ═════════════════════════════════════════════ */}
+            {tab === "accounting" && (
+              <div className="space-y-6">
+                <SectionHeader
+                  title="Accounting Mappings"
+                  desc="Link your Chart of Accounts to POS sales and invoices. When a sale is completed or an invoice is paid, a balanced journal entry is automatically posted to these accounts."
+                />
+
+                {/* Info banner */}
+                <div className="flex gap-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-4">
+                  <Info size={16} className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-[12px] text-blue-800 dark:text-blue-200 space-y-1">
+                    <p className="font-semibold">How auto-journaling works</p>
+                    <p>Every completed POS sale or paid invoice automatically creates a posted journal entry:</p>
+                    <p className="mt-1 font-mono bg-blue-100 dark:bg-blue-900/40 rounded px-2 py-1 text-[11px]">
+                      DR  Cash / Bank / Receivable  =  Grand Total<br/>
+                      CR  Sales Revenue              =  Subtotal (excl. VAT)<br/>
+                      CR  VAT Payable  (if set)      =  VAT Amount
+                    </p>
+                    <p className="text-[11px] opacity-80">Only accounts of type <strong>Ledger</strong> appear in these selectors. If an account is not yet in your COA, create it first in Chart of Accounts.</p>
+                  </div>
+                </div>
+
+                {ledgerAccounts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
+                    No ledger accounts found. Please create ledger accounts in the Chart of Accounts first.
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+
+                    {/* Sales Revenue */}
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">CR</span>
+                        <span className="text-[13px] font-semibold text-foreground">Sales Revenue Account</span>
+                        <span className="text-[11px] text-muted-foreground">— credited on every sale (Revenue / Income head)</span>
+                      </div>
+                      <Select value={form.accSalesRevenue} onValueChange={v => set("accSalesRevenue", v)}>
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select revenue account…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None (disable auto-journaling) —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Revenue / Income")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Cash Account */}
+                    <div className="rounded-xl border border-blue-200 dark:border-blue-800 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-[11px] font-bold">DR</span>
+                        <span className="text-[13px] font-semibold text-foreground">Cash Account</span>
+                        <span className="text-[11px] text-muted-foreground">— debited for Cash payment method (Assets head)</span>
+                      </div>
+                      <Select value={form.accCash} onValueChange={v => set("accCash", v)}>
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select cash account…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Assets")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Bank / Card Account */}
+                    <div className="rounded-xl border border-violet-200 dark:border-violet-800 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 text-[11px] font-bold">DR</span>
+                        <span className="text-[13px] font-semibold text-foreground">Bank / Card Account</span>
+                        <span className="text-[11px] text-muted-foreground">— debited for Card, Bank Transfer & Cheque (Assets head)</span>
+                      </div>
+                      <Select value={form.accBank} onValueChange={v => set("accBank", v)}>
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select bank account…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Assets")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Accounts Receivable */}
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 text-[11px] font-bold">DR</span>
+                        <span className="text-[13px] font-semibold text-foreground">Accounts Receivable</span>
+                        <span className="text-[11px] text-muted-foreground">— debited for Credit / On-Credit sales (Assets head)</span>
+                      </div>
+                      <Select value={form.accReceivable} onValueChange={v => set("accReceivable", v)}>
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select receivable account…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Assets")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* VAT Payable (optional) */}
+                    <div className="rounded-xl border border-rose-200 dark:border-rose-800 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 text-[11px] font-bold">CR</span>
+                        <span className="text-[13px] font-semibold text-foreground">VAT Payable Account <span className="text-muted-foreground font-normal">(optional)</span></span>
+                        <span className="text-[11px] text-muted-foreground">— credited with VAT collected when tax &gt; 0 (Liabilities head)</span>
+                      </div>
+                      <Select value={form.accVatPayable} onValueChange={v => set("accVatPayable", v)}>
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select VAT payable account… (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None (VAT not separately tracked) —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Liabilities")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                  </div>
+                )}
               </div>
             )}
 

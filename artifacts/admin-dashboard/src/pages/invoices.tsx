@@ -6,7 +6,7 @@ import {
   SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
   PaymentRecord, LegalDocument, InvoiceDoc,
   getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
-  deductStockForSale, restoreStockForSale,
+  deductStockForSale, restoreStockForSale, autoPostSaleJE,
 } from "@/lib/store";
 import { Combobox, ComboOption } from "@/components/combobox";
 import RichTextEditor from "@/components/RichTextEditor";
@@ -1102,6 +1102,24 @@ export function InvoiceFormPage() {
       restoreStockForSale(inv.items, inv.invoiceNumber);
       updates.stockDeducted = false;
       updates.paidAt = "";
+    }
+    // Auto-post journal entry when invoice is first paid (only once)
+    if ((status === "Paid" || status === "Partial") && !inv.jeId) {
+      const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
+        inv.items, inv.taxRate, amountPaid ?? inv.amountPaid ?? "0",
+        inv.shippingFee, inv.handlingFee,
+      );
+      const je = autoPostSaleJE({
+        source:        "Invoice",
+        reference:     inv.invoiceNumber,
+        customer:      inv.customer || "Customer",
+        date:          inv.invoiceDate || new Date().toISOString().slice(0, 10),
+        paymentMethod: inv.paymentMethod,
+        subtotal,
+        taxAmount,
+        grandTotal,
+      });
+      if (je) updates.jeId = je.id;
     }
     editInvoice(id, updates);
     toast({ title: `Invoice marked ${status}` });

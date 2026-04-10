@@ -6,7 +6,7 @@ import {
   Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
-  deductStockForSale, restoreStockForSale, getSettings,
+  deductStockForSale, restoreStockForSale, getSettings, autoPostSaleJE,
 } from "@/lib/store";
 import { printSaleInvoice } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
@@ -1274,7 +1274,26 @@ export default function SalesPage() {
       stockDeducted = false;
     }
 
-    editSale(detailId, { ...localMeta, status, items: localItems, stockDeducted });
+    // Auto-post JE for On Credit sales (only once)
+    let jeId: string | undefined = detailSale?.jeId;
+    if (status === "On Credit" && !jeId) {
+      const subtotal  = saleTotal(localItems);
+      const taxPct    = Math.max(0, parseFloat(localMeta.taxRate ?? "0") || 0);
+      const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+      const je = autoPostSaleJE({
+        source:        "POS",
+        reference:     detailSale?.saleNumber || "",
+        customer:      localMeta.customer || "Walk-in",
+        date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+        paymentMethod: "Credit",
+        subtotal,
+        taxAmount,
+        grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+      });
+      if (je) jeId = je.id;
+    }
+
+    editSale(detailId, { ...localMeta, status, items: localItems, stockDeducted, ...(jeId ? { jeId } : {}) });
     toast({ title: status === "Completed" ? "Sale completed!" : status === "On Credit" ? "Issued on credit" : status === "Refunded" ? "Sale refunded" : "Sale cancelled" });
   };
 
@@ -1293,6 +1312,25 @@ export default function SalesPage() {
       deductStockForSale(localItems, detailSale?.saleNumber || "");
     }
 
+    // Auto-post journal entry (only once — skip if already linked)
+    let jeId: string | undefined = detailSale?.jeId;
+    if (!jeId) {
+      const subtotal  = saleTotal(localItems);
+      const taxPct    = Math.max(0, parseFloat(taxRate) || 0);
+      const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+      const je = autoPostSaleJE({
+        source:        "POS",
+        reference:     detailSale?.saleNumber || "",
+        customer:      localMeta.customer || "Walk-in",
+        date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+        paymentMethod,
+        subtotal,
+        taxAmount,
+        grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+      });
+      if (je) jeId = je.id;
+    }
+
     const completedSale = editSale(detailId, {
       ...localMeta,
       paymentMethod,
@@ -1302,6 +1340,7 @@ export default function SalesPage() {
       taxRate,
       paidAt: new Date().toISOString(),
       stockDeducted: true,
+      ...(jeId ? { jeId } : {}),
     });
 
     toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });

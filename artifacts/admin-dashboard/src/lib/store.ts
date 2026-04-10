@@ -1273,6 +1273,7 @@ export type Sale = {
   amountPaid: string;    // amount actually received at payment
   paidAt: string;        // ISO timestamp of payment confirmation; "" if unpaid
   stockDeducted: boolean; // true after stock has been deducted for this sale
+  jeId?:        string;   // journal entry ID auto-created on completion (prevents duplicates)
   agentId?:     string;   // linked SalesAgent.id
   agentName?:   string;   // denormalised agent name
   createdAt: string;
@@ -1526,6 +1527,7 @@ export type Invoice = {
   invoiceFooter:     string;    // footer text printed at bottom of invoice
   invoiceDocs?:      InvoiceDoc[];  // dynamic document blocks (replaces paymentTerms/notes/agreement)
   stockDeducted:     boolean;
+  jeId?:             string;   // journal entry ID auto-created on payment (prevents duplicates)
   createdAt:         string;
   updatedAt:         string;
 };
@@ -1983,6 +1985,12 @@ export type AppSettings = {
   socialLinks:          string;   // social media links (one per line)
   invoiceTerms:         string;   // default payment terms text
   invoiceFooter:        string;   // default invoice footer text
+  // ── Accounting mappings (COA account IDs for auto-journaling) ──
+  accSalesRevenue:      string;   // CR when a sale is completed
+  accCash:              string;   // DR for Cash payments
+  accBank:              string;   // DR for Card / Bank Transfer / Cheque payments
+  accReceivable:        string;   // DR for Credit / On-Credit sales
+  accVatPayable:        string;   // CR for VAT collected (optional)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2014,6 +2022,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   socialLinks:          "",
   invoiceTerms:         "Payment is due within 30 days of the invoice date.",
   invoiceFooter:        "",
+  accSalesRevenue:      "",
+  accCash:              "",
+  accBank:              "",
+  accReceivable:        "",
+  accVatPayable:        "",
 };
 
 export function getSettings(): AppSettings {
@@ -2240,6 +2253,93 @@ export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntr
 
 export function deleteJournalEntry(id: string): void {
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
+}
+
+// ─── Auto-journal for Sales & Invoices ────────────────────────────────────────
+
+/**
+ * Automatically creates a posted, balanced Journal Entry when a POS sale
+ * or Invoice is completed / paid.
+ *
+ * Accounting equation per transaction:
+ *   DR  Cash / Bank / Accounts-Receivable   = subtotal + taxAmount
+ *   CR  Sales Revenue                        = subtotal
+ *   CR  VAT Payable  (if tax > 0)            = taxAmount
+ *
+ * Returns the created JournalEntry, or null when account mappings are not
+ * configured (silently skipped — the sale still completes normally).
+ */
+export function autoPostSaleJE(params: {
+  source:        "POS" | "Invoice";
+  reference:     string;    // e.g. "SAL-202504-001" or "INV-202504-003"
+  customer:      string;
+  date:          string;    // YYYY-MM-DD
+  paymentMethod: SalePayment;
+  subtotal:      number;    // net of tax
+  taxAmount:     number;    // VAT / tax collected
+  grandTotal:    number;    // subtotal + taxAmount
+}): JournalEntry | null {
+  const s = getSettings();
+
+  // Must have a revenue account at minimum
+  if (!s.accSalesRevenue) return null;
+
+  // Determine the debit-side account
+  const isCredit = params.paymentMethod === "Credit";
+  const isCash   = params.paymentMethod === "Cash";
+  let debitAccId: string;
+  if (isCredit) {
+    if (!s.accReceivable) return null;
+    debitAccId = s.accReceivable;
+  } else if (isCash) {
+    if (!s.accCash) return null;
+    debitAccId = s.accCash;
+  } else {
+    // Card, Bank Transfer, Cheque
+    if (!s.accBank) return null;
+    debitAccId = s.accBank;
+  }
+
+  const narration = `${params.source} – ${params.reference} – ${params.customer}`;
+
+  const lines: JournalEntryLine[] = [
+    {
+      id: crypto.randomUUID(),
+      ledgerId:  debitAccId,
+      narration,
+      debit:  params.grandTotal,
+      credit: 0,
+    },
+    {
+      id: crypto.randomUUID(),
+      ledgerId:  s.accSalesRevenue,
+      narration: `Revenue – ${params.reference}`,
+      debit:  0,
+      credit: params.subtotal,
+    },
+  ];
+
+  // VAT line (only when a VAT payable account is configured and tax > 0)
+  if (params.taxAmount > 0 && s.accVatPayable) {
+    lines.push({
+      id: crypto.randomUUID(),
+      ledgerId:  s.accVatPayable,
+      narration: `VAT – ${params.reference}`,
+      debit:  0,
+      credit: params.taxAmount,
+    });
+  }
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `AUTO-${params.reference}`,
+    description: `${params.source} Sale: ${params.reference} – ${params.customer}`,
+    lines,
+    status:      "posted",
+    totalDebit:  params.grandTotal,
+    totalCredit: params.grandTotal,
+    isBalanced:  true,
+  });
 }
 
 // ─── Server sync ──────────────────────────────────────────────────────────────
