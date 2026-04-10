@@ -16,7 +16,7 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function today():     string { return new Date().toISOString().slice(0, 10); }
-function monthStart():string { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
+function yearStart(): string { const d = new Date(); d.setMonth(0, 1); return d.toISOString().slice(0, 10); }
 
 function fmt(n: number, sym: string): string {
   return `${sym} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -73,33 +73,38 @@ export default function ExpenseReportPage() {
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── Filters ────────────────────────────────────────────────────────────────
-  const [from,         setFrom]         = useState(monthStart());
+  const [from,         setFrom]         = useState(yearStart());
   const [to,           setTo]           = useState(today());
+  const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "draft">("all");
   const [catFilter,    setCatFilter]    = useState("__all__");
   const [search,       setSearch]       = useState("");
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
 
-  // ── Expense account set ────────────────────────────────────────────────────
-  const expenseAccounts = useMemo(
-    () => accounts.filter(a => a.head === "Expense" && a.accountType === "Ledger"),
+  // ── Account lookup map (id → account) ────────────────────────────────────
+  const accountMap = useMemo(
+    () => new Map(accounts.map(a => [a.id, a])),
     [accounts],
   );
-  const expenseAccountIds = useMemo(
-    () => new Set(expenseAccounts.map(a => a.id)),
-    [expenseAccounts],
+
+  // ── Expense accounts for the category dropdown ────────────────────────────
+  const expenseAccounts = useMemo(
+    () => accounts.filter(a => a.head === "Expense"),
+    [accounts],
   );
 
-  // ── Extract expense lines from journal entries in the date range ───────────
+  // ── Extract expense lines — no pre-built ID set; check head directly ──────
   const allLines = useMemo<ExpenseLine[]>(() => {
     const result: ExpenseLine[] = [];
     for (const je of entries) {
-      if (je.status !== "posted") continue;
+      // Status filter
+      if (statusFilter === "posted" && je.status !== "posted") continue;
+      if (statusFilter === "draft"  && je.status !== "draft")  continue;
       if (je.date < from || je.date > to) continue;
       for (const line of je.lines) {
-        if (!expenseAccountIds.has(line.ledgerId)) continue;
+        const acc = accountMap.get(line.ledgerId);
+        if (!acc || acc.head !== "Expense") continue;
         const net = line.debit - line.credit; // positive = expense increase
         if (net <= 0) continue;              // skip reversals / zero lines
-        const acc = accounts.find(a => a.id === line.ledgerId);
         result.push({
           jeId:        je.id,
           jeRef:       je.reference,
@@ -107,14 +112,14 @@ export default function ExpenseReportPage() {
           jeDesc:      je.description,
           narration:   line.narration,
           accountId:   line.ledgerId,
-          accountName: acc?.name ?? line.ledgerId,
-          accountCode: acc?.code ?? "",
+          accountName: acc.name,
+          accountCode: acc.code,
           amount:      net,
         });
       }
     }
     return result.sort((a, b) => b.jeDate.localeCompare(a.jeDate));
-  }, [entries, from, to, expenseAccountIds, accounts]);
+  }, [entries, from, to, statusFilter, accountMap]);
 
   // ── Category summaries ─────────────────────────────────────────────────────
   const categories = useMemo<CategorySummary[]>(() => {
@@ -229,7 +234,18 @@ export default function ExpenseReportPage() {
         {/* Second row */}
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={14} className="text-muted-foreground shrink-0" />
-          <span className="text-[12px] font-medium text-muted-foreground">Category:</span>
+          <span className="text-[12px] font-medium text-muted-foreground">Status:</span>
+          <Select value={statusFilter} onValueChange={v => setStatusFilter(v as "all" | "posted" | "draft")}>
+            <SelectTrigger className="h-8 w-[130px] text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Entries</SelectItem>
+              <SelectItem value="posted">Posted Only</SelectItem>
+              <SelectItem value="draft">Draft Only</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-[12px] font-medium text-muted-foreground ml-1">Category:</span>
           <Select value={catFilter} onValueChange={setCatFilter}>
             <SelectTrigger className="h-8 w-[220px] text-[13px]">
               <SelectValue placeholder="All Categories" />

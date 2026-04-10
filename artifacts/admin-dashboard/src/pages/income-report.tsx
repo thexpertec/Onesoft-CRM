@@ -15,8 +15,8 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function today():      string { return new Date().toISOString().slice(0, 10); }
-function monthStart(): string { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
+function today():     string { return new Date().toISOString().slice(0, 10); }
+function yearStart(): string { const d = new Date(); d.setMonth(0, 1); return d.toISOString().slice(0, 10); }
 
 function fmt(n: number, sym: string): string {
   return `${sym} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -71,34 +71,38 @@ export default function IncomeReportPage() {
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── Filters ────────────────────────────────────────────────────────────────
-  const [from,           setFrom]           = useState(monthStart());
+  const [from,           setFrom]           = useState(yearStart());
   const [to,             setTo]             = useState(today());
+  const [statusFilter,   setStatusFilter]   = useState<"all" | "posted" | "draft">("all");
   const [srcFilter,      setSrcFilter]      = useState("__all__");
   const [search,         setSearch]         = useState("");
   const [expandedSrcs,   setExpandedSrcs]   = useState<Record<string, boolean>>({});
 
-  // ── Revenue account set ────────────────────────────────────────────────────
-  const revenueAccounts = useMemo(
-    () => accounts.filter(a => a.head === "Revenue / Income" && a.accountType === "Ledger"),
+  // ── Account lookup map (id → account) ────────────────────────────────────
+  const accountMap = useMemo(
+    () => new Map(accounts.map(a => [a.id, a])),
     [accounts],
   );
-  const revenueAccountIds = useMemo(
-    () => new Set(revenueAccounts.map(a => a.id)),
-    [revenueAccounts],
+
+  // ── Revenue accounts for the source dropdown ──────────────────────────────
+  const revenueAccounts = useMemo(
+    () => accounts.filter(a => a.head === "Revenue / Income"),
+    [accounts],
   );
 
-  // ── Extract income lines from journal entries in the date range ───────────
+  // ── Extract income lines — check head directly via accountMap ─────────────
   // Revenue is credit-normal: net = credit - debit; positive means income earned.
   const allLines = useMemo<IncomeLine[]>(() => {
     const result: IncomeLine[] = [];
     for (const je of entries) {
-      if (je.status !== "posted") continue;
+      if (statusFilter === "posted" && je.status !== "posted") continue;
+      if (statusFilter === "draft"  && je.status !== "draft")  continue;
       if (je.date < from || je.date > to) continue;
       for (const line of je.lines) {
-        if (!revenueAccountIds.has(line.ledgerId)) continue;
+        const acc = accountMap.get(line.ledgerId);
+        if (!acc || acc.head !== "Revenue / Income") continue;
         const net = line.credit - line.debit;
         if (net <= 0) continue; // skip zero / reversals
-        const acc = accounts.find(a => a.id === line.ledgerId);
         result.push({
           jeId:        je.id,
           jeRef:       je.reference,
@@ -106,14 +110,14 @@ export default function IncomeReportPage() {
           jeDesc:      je.description,
           narration:   line.narration,
           accountId:   line.ledgerId,
-          accountName: acc?.name ?? line.ledgerId,
-          accountCode: acc?.code ?? "",
+          accountName: acc.name,
+          accountCode: acc.code,
           amount:      net,
         });
       }
     }
     return result.sort((a, b) => b.jeDate.localeCompare(a.jeDate));
-  }, [entries, from, to, revenueAccountIds, accounts]);
+  }, [entries, from, to, statusFilter, accountMap]);
 
   // ── Source summaries ───────────────────────────────────────────────────────
   const sources = useMemo<SourceSummary[]>(() => {
@@ -210,10 +214,21 @@ export default function IncomeReportPage() {
             ))}
           </div>
         </div>
-        {/* Row 2 — source + search */}
+        {/* Row 2 — status + source + search */}
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={14} className="text-muted-foreground shrink-0" />
-          <span className="text-[12px] font-medium text-muted-foreground">Source:</span>
+          <span className="text-[12px] font-medium text-muted-foreground">Status:</span>
+          <Select value={statusFilter} onValueChange={v => setStatusFilter(v as "all" | "posted" | "draft")}>
+            <SelectTrigger className="h-8 w-[130px] text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Entries</SelectItem>
+              <SelectItem value="posted">Posted Only</SelectItem>
+              <SelectItem value="draft">Draft Only</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-[12px] font-medium text-muted-foreground ml-1">Source:</span>
           <Select value={srcFilter} onValueChange={setSrcFilter}>
             <SelectTrigger className="h-8 w-[220px] text-[13px]">
               <SelectValue placeholder="All Sources" />
