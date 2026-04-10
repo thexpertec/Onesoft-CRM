@@ -179,7 +179,7 @@ const OTHER_NAV: NavItem[] = [
     items: null,
   },
   {
-    key: "products", label: "Products & Stock", icon: Package,
+    key: "products", label: "Products", icon: Package,
     items: [
       { label: "Products",        href: "/products",        icon: Package,           desc: "Product catalogue"    },
       { label: "Product Groups",  href: "/product-groups",  icon: Layers,            desc: "Menus & bundles"      },
@@ -194,7 +194,7 @@ const OTHER_NAV: NavItem[] = [
     ],
   },
   {
-    key: "sales", label: "Sales & Purchases", icon: Receipt,
+    key: "sales", label: "Sales", icon: Receipt,
     items: [
       { label: "All Sales",     href: "/sales",         icon: Receipt,      desc: "Sales & POS terminal"          },
       { label: "New Sale",      href: "/sales/new",     icon: Plus,         desc: "Open POS terminal"             },
@@ -597,7 +597,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             ROW 2 — Navigation with mega menu (desktop)
         ═══════════════════════════════════════════════════════════════ */}
         <div className="hidden md:block border-t border-gray-100 dark:border-border bg-white dark:bg-card">
-          <div className="max-w-[1600px] mx-auto px-5 md:px-8 flex items-stretch h-[40px] gap-0">
+          <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-stretch h-[38px] gap-0">
 
             {navItems.map(item => {
               const isActive =
@@ -610,7 +610,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "accounts"      ? isAccountsActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
-              const baseClass = `flex items-center gap-1.5 px-3.5 h-full text-[13px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
+              const baseClass = `flex items-center gap-1 px-2.5 h-full text-[12px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
                 isActive
                   ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20"
                   : "border-transparent text-gray-500 hover:text-gray-800 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted/40"
@@ -625,11 +625,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       onClick={() => setCrmOpen(v => !v)}
                       className={baseClass + " group"}
                     >
-                      <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
                       {item.label}
                       <ChevronDown
-                        size={11}
-                        className={`ml-0.5 text-gray-400 transition-transform duration-200 ${crmOpen ? "rotate-180" : ""}`}
+                        size={10}
+                        className={`text-gray-400 transition-transform duration-200 ${crmOpen ? "rotate-180" : ""}`}
                       />
                     </button>
 
@@ -699,7 +698,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link key={item.key} href={item.href!}
                     data-testid={`nav-${item.label.toLowerCase()}`}
                     className={baseClass}>
-                    <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
                     {item.label}
                   </Link>
                 );
@@ -710,9 +708,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenu key={item.key}>
                   <DropdownMenuTrigger asChild>
                     <button data-testid={`nav-${item.label.toLowerCase()}`} className={baseClass + " group"}>
-                      <item.icon size={13} className={isActive ? "text-blue-500" : "text-gray-400"} />
                       {item.label}
-                      <ChevronDown size={11} className="ml-0.5 text-gray-400 group-data-[state=open]:rotate-180 transition-transform" />
+                      <ChevronDown size={10} className="text-gray-400 group-data-[state=open]:rotate-180 transition-transform" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" sideOffset={0} className="w-52">
