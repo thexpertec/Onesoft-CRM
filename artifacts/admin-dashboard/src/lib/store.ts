@@ -3036,6 +3036,142 @@ export function autoPostPurchaseJE(params: {
  *
  * Called by auth-context after a successful login.
  */
+
+// ─── Receipt & Payment Vouchers ───────────────────────────────────────────────
+
+export interface RPVoucherLine {
+  id: string;
+  accountId: string;
+  accountName: string;
+  description: string;
+  amount: number;
+}
+
+export interface RPVoucher {
+  id: string;
+  voucherNumber: string;       // RV-000001 | PV-000001
+  voucherType: "receipt" | "payment";
+  date: string;
+  partyName: string;
+  cashBankAccountId: string;   // ID of Cash or Bank ledger account
+  cashBankAccountName: string;
+  reference: string;           // cheque #, transfer ref, etc.
+  lines: RPVoucherLine[];
+  totalAmount: number;
+  narration: string;
+  status: "draft" | "posted";
+  journalEntryId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const RPV_KEY = "admin-rp-vouchers";
+
+export function getRPVouchers(): RPVoucher[] {
+  return getStored<RPVoucher>(RPV_KEY);
+}
+
+function _saveRPVouchers(data: RPVoucher[]): void {
+  const sk = tenantKey(RPV_KEY);
+  localStorage.setItem(sk, JSON.stringify(data));
+  _apiWrite(sk, data);
+}
+
+function nextRPVoucherNumber(type: "receipt" | "payment"): string {
+  const prefix = type === "receipt" ? "RV" : "PV";
+  const existing = getRPVouchers()
+    .filter(v => v.voucherType === type)
+    .map(v => parseInt(v.voucherNumber.replace(/\D/g, ""), 10))
+    .filter(n => !isNaN(n));
+  const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
+  return `${prefix}-${String(next).padStart(6, "0")}`;
+}
+
+export function createRPVoucher(
+  data: Omit<RPVoucher, "id" | "voucherNumber" | "createdAt" | "updatedAt">
+): RPVoucher {
+  const v: RPVoucher = {
+    ...data,
+    id: crypto.randomUUID(),
+    voucherNumber: nextRPVoucherNumber(data.voucherType),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  _saveRPVouchers([...getRPVouchers(), v]);
+  return v;
+}
+
+export function updateRPVoucher(
+  id: string,
+  updates: Partial<Omit<RPVoucher, "id" | "createdAt">>
+): RPVoucher {
+  const all = getRPVouchers().map(v =>
+    v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v
+  );
+  _saveRPVouchers(all);
+  return all.find(v => v.id === id)!;
+}
+
+export function deleteRPVoucher(id: string): void {
+  _saveRPVouchers(getRPVouchers().filter(v => v.id !== id));
+}
+
+/**
+ * Creates a posted, balanced JE for the voucher:
+ *   Receipt  → DR Cash/Bank,      CR each line account
+ *   Payment  → DR each line acct, CR Cash/Bank
+ */
+export function postRPVoucherJE(id: string): JournalEntry {
+  const v = getRPVouchers().find(v => v.id === id);
+  if (!v) throw new Error("Voucher not found");
+  if (v.status === "posted") throw new Error("Already posted");
+
+  const total = v.lines.reduce((s, l) => s + l.amount, 0);
+  const lines: JournalEntryLine[] = [];
+
+  if (v.voucherType === "receipt") {
+    lines.push({
+      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
+      narration: `Receipt — ${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`,
+      debit: total, credit: 0,
+    });
+    for (const l of v.lines) {
+      lines.push({
+        id: crypto.randomUUID(), ledgerId: l.accountId,
+        narration: l.description || v.narration || v.voucherNumber,
+        debit: 0, credit: l.amount,
+      });
+    }
+  } else {
+    for (const l of v.lines) {
+      lines.push({
+        id: crypto.randomUUID(), ledgerId: l.accountId,
+        narration: l.description || v.narration || v.voucherNumber,
+        debit: l.amount, credit: 0,
+      });
+    }
+    lines.push({
+      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
+      narration: `Payment — ${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`,
+      debit: 0, credit: total,
+    });
+  }
+
+  const je = createJournalEntry({
+    date: v.date,
+    reference: v.voucherNumber,
+    description: `${v.voucherType === "receipt" ? "Receipt" : "Payment"} Voucher${v.partyName ? " — " + v.partyName : ""}`,
+    lines,
+    status: "posted",
+    totalDebit: total,
+    totalCredit: total,
+    isBalanced: true,
+  });
+
+  updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: total });
+  return je;
+}
+
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
     // Always sync global data (users, tenants, module groups)

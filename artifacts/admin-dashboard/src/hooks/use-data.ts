@@ -22,9 +22,10 @@ import {
   getSalesAgents, createSalesAgent, updateSalesAgent, deleteSalesAgent,
   getRawMaterials, createRawMaterial, updateRawMaterial, deleteRawMaterial,
   getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
+  getRPVouchers, createRPVoucher, updateRPVoucher, deleteRPVoucher, postRPVoucherJE,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
-  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost,
+  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost, RPVoucher,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -426,4 +427,15 @@ export function useManufacturingOrders() {
   const remove  = (id: string)                                                     => { deleteManufacturingOrder(id);              fetch(); };
   const complete = (id: string)                                                    => { const o = completeManufacturingOrder(id);  fetch(); return o; };
   return { orders, add, edit, remove, complete, refresh: fetch };
+}
+
+export function useRPVouchers() {
+  const [vouchers, setVouchers] = useState<RPVoucher[]>([]);
+  const fetch = useCallback(() => setVouchers(getRPVouchers()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add    = (d: Parameters<typeof createRPVoucher>[0])              => { const v = createRPVoucher(d);    fetch(); return v; };
+  const edit   = (id: string, u: Parameters<typeof updateRPVoucher>[1]) => { const v = updateRPVoucher(id, u); fetch(); return v; };
+  const remove = (id: string)                                             => { deleteRPVoucher(id);              fetch(); };
+  const post   = (id: string)                                             => { const je = postRPVoucherJE(id);   fetch(); return je; };
+  return { vouchers, add, edit, remove, post, refresh: fetch };
 }
