@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown,
   Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil,
@@ -51,23 +52,28 @@ function emptyRow(): Row {
   return { id: crypto.randomUUID(), ledgerId: "", narration: "", debit: "", credit: "" };
 }
 
-// ─── Ledger Dropdown ─────────────────────────────────────────────────────────
+// ─── Ledger Dropdown (viewport-fixed via portal) ─────────────────────────────
+// Renders into document.body so it is never clipped by overflow:auto containers
+// and never buried under sticky table headers.
 
 function LedgerDropdown({
   accounts,
   value,
+  anchor,
   onChange,
   onClose,
-  openUp,
 }: {
   accounts: Account[];
   value: string;
+  anchor: DOMRect;
   onChange: (id: string) => void;
   onClose: () => void;
-  openUp: boolean;
 }) {
-  const [q, setQ] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [q, setQ]       = useState("");
+  const inputRef        = useRef<HTMLInputElement>(null);
+  const panelRef        = useRef<HTMLDivElement>(null);
+  const PANEL_HEIGHT    = 340; // max panel height (px)
+  const PANEL_WIDTH     = 300;
 
   const ledgers = useMemo(
     () => accounts.filter(a => a.accountType === "Ledger" && a.isActive),
@@ -82,10 +88,45 @@ function LedgerDropdown({
     );
   }, [ledgers, q]);
 
+  // Auto-focus search on open
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  return (
-    <div className={`absolute z-50 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} left-0 w-80 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xl overflow-hidden`}>
+  // Close on outside mousedown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [onClose]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  // Decide open direction and compute fixed coords
+  const spaceBelow = window.innerHeight - anchor.bottom;
+  const openUp     = spaceBelow < PANEL_HEIGHT && anchor.top > PANEL_HEIGHT;
+
+  // Clamp left so panel doesn't overflow viewport right edge
+  const rawLeft = anchor.left;
+  const left    = Math.min(rawLeft, window.innerWidth - PANEL_WIDTH - 8);
+
+  const posStyle: React.CSSProperties = openUp
+    ? { position: "fixed", left, bottom: window.innerHeight - anchor.top + 4, width: Math.max(anchor.width, PANEL_WIDTH), zIndex: 9999 }
+    : { position: "fixed", left, top: anchor.bottom + 4, width: Math.max(anchor.width, PANEL_WIDTH), zIndex: 9999 };
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={posStyle}
+      className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xl overflow-hidden"
+    >
       <div className="p-2 border-b border-gray-100 dark:border-zinc-800">
         <div className="relative">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -98,32 +139,35 @@ function LedgerDropdown({
           />
         </div>
       </div>
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-72 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="px-4 py-6 text-center text-[12px] text-gray-400">No ledgers found</div>
         ) : (
           filtered.map(a => {
-            const trail = buildTrail(accounts, a);
+            const trail      = buildTrail(accounts, a);
             const isSelected = a.id === value;
             return (
               <button
                 key={a.id}
-                onClick={() => { onChange(a.id); onClose(); }}
+                onMouseDown={e => { e.preventDefault(); onChange(a.id); onClose(); }}
                 className={`w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors ${isSelected ? "bg-blue-50 dark:bg-blue-950/20" : ""}`}
               >
                 <div className={`text-[12px] font-semibold ${isSelected ? "text-blue-600" : "text-gray-900 dark:text-gray-100"}`}>
                   <span className="font-mono text-[10px] text-gray-400 mr-1.5">{a.code}</span>
                   {a.name}
                 </div>
-                <div className="text-[10px] text-gray-400 dark:text-zinc-500 blur-[0.4px] opacity-70 mt-0.5 truncate">
-                  {trail}
-                </div>
+                {trail && (
+                  <div className="text-[10px] text-gray-400 dark:text-zinc-500 opacity-70 mt-0.5 truncate">
+                    {trail}
+                  </div>
+                )}
               </button>
             );
           })
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -145,9 +189,8 @@ export default function JournalEntryPage() {
   const [rows, setRows] = useState<Row[]>(() => Array.from({ length: 10 }, emptyRow));
 
   // ── Active cell & ledger dropdown ─────────────────────────────────────────
-  const [openLedger, setOpenLedger]   = useState<string | null>(null); // rowId
-  const [ledgerOpenUp, setOpenUp]     = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [openLedger,    setOpenLedger]    = useState<string | null>(null); // rowId
+  const [dropdownAnchor, setDropdownAnchor] = useState<DOMRect | null>(null);
 
   // ── Editing existing entry ────────────────────────────────────────────────
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -180,16 +223,6 @@ export default function JournalEntryPage() {
     setRef(nextRef(entries));
   }, [entries]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenLedger(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   // ── Row helpers ───────────────────────────────────────────────────────────
   const setRow = useCallback(<K extends keyof Row>(id: string, key: K, val: Row[K]) => {
@@ -346,13 +379,13 @@ export default function JournalEntryPage() {
           {/* ── Excel grid ──────────────────────────────────────────────────── */}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse" style={{ minWidth: 720 }}>
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700">
-                  <th className="w-9 px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">#</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ minWidth: 260 }}>Ledger</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Narration</th>
-                  <th className="w-32 px-3 py-2 text-right text-[10px] font-bold text-blue-500 uppercase tracking-wider">Dr.</th>
-                  <th className="w-32 px-3 py-2 text-right text-[10px] font-bold text-orange-500 uppercase tracking-wider">Cr.</th>
+                  <th className="w-9 px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">#</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ minWidth: 260 }}>Account / Ledger</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Narration</th>
+                  <th className="w-32 px-3 py-2.5 text-right text-[10px] font-bold text-blue-500 uppercase tracking-wider">Dr.</th>
+                  <th className="w-32 px-3 py-2.5 text-right text-[10px] font-bold text-orange-500 uppercase tracking-wider">Cr.</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -371,12 +404,11 @@ export default function JournalEntryPage() {
                       <td className="px-3 py-1 text-[11px] text-gray-400 font-mono align-top pt-3">{idx + 1}</td>
 
                       {/* Ledger */}
-                      <td className="px-2 py-1 align-top relative" ref={isOpen ? dropdownRef : undefined}>
+                      <td className="px-2 py-1 align-top">
                         <button
                           onClick={(e) => {
-                            if (isOpen) { setOpenLedger(null); return; }
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setOpenUp(window.innerHeight - rect.bottom < 300);
+                            if (isOpen) { setOpenLedger(null); setDropdownAnchor(null); return; }
+                            setDropdownAnchor(e.currentTarget.getBoundingClientRect());
                             setOpenLedger(row.id);
                           }}
                           className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors ${
@@ -405,13 +437,13 @@ export default function JournalEntryPage() {
                             </div>
                           )}
                         </button>
-                        {isOpen && (
+                        {isOpen && dropdownAnchor && (
                           <LedgerDropdown
                             accounts={accounts}
                             value={row.ledgerId}
+                            anchor={dropdownAnchor}
                             onChange={id => setRow(row.id, "ledgerId", id)}
-                            onClose={() => setOpenLedger(null)}
-                            openUp={ledgerOpenUp}
+                            onClose={() => { setOpenLedger(null); setDropdownAnchor(null); }}
                           />
                         )}
                       </td>
