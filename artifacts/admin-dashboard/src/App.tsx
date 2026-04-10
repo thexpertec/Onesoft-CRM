@@ -43,6 +43,7 @@ import JournalEntryPage from "@/pages/journal-entry";
 import BalanceSheetPage from "@/pages/balance-sheet";
 import LedgerReportPage from "@/pages/ledger-report";
 import PlsReportPage from "@/pages/pls-report";
+import ExpenseReportPage from "@/pages/expense-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
 import SaleReturnPage from "@/pages/sale-return";
 import SalesAgentsPage from "@/pages/sales-agents";
@@ -146,6 +147,7 @@ function Router() {
               <Route path="/balance-sheet" component={BalanceSheetPage} />
               <Route path="/ledger-report" component={LedgerReportPage} />
               <Route path="/pls-report" component={PlsReportPage} />
+              <Route path="/expense-report" component={ExpenseReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
               <Route path="/sale-return" component={SaleReturnPage} />
               <Route path="/settings" component={SettingsPage} />
