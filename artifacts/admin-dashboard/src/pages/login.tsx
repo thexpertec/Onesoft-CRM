@@ -141,21 +141,28 @@ export default function Login() {
                       type="button"
                       onClick={() => doLogin(t.adminUsername, t.adminPassword)}
                       disabled={loading}
-                      className="group w-full text-left rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 px-4 py-3 transition-all"
+                      className="group relative w-full text-left rounded-xl border border-white/10 bg-white/5 px-4 py-3 cursor-pointer transition-all duration-200 hover:scale-[1.025] hover:bg-white/12 hover:border-violet-400/50 hover:shadow-[0_0_20px_rgba(139,92,246,0.25)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]} flex items-center justify-center flex-shrink-0`}>
-                          <FlaskConical size={13} className="text-white" />
+                        <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]} flex items-center justify-center flex-shrink-0 shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-200`}>
+                          <FlaskConical size={14} className="text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-semibold text-white truncate">{t.name}</p>
-                          <p className="text-[11px] text-white/45">
-                            Login: <span className="text-white/65 font-mono">{t.adminUsername}</span>
-                            {t.plan && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-white/10 text-white/50 text-[10px] capitalize">{t.plan}</span>}
+                          <p className="text-[13px] font-semibold text-white group-hover:text-white truncate">{t.name}</p>
+                          <p className="text-[11px] text-white/45 group-hover:text-white/60 transition-colors">
+                            Login: <span className="text-white/65 font-mono group-hover:text-white/80">{t.adminUsername}</span>
+                            {t.plan && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-white/10 group-hover:bg-violet-500/20 text-white/50 group-hover:text-violet-300 text-[10px] capitalize transition-all">{t.plan}</span>}
                           </p>
                         </div>
-                        <ChevronRight size={13} className="text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {loading
+                            ? <div className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />
+                            : <ChevronRight size={15} className="text-white/30 group-hover:text-violet-400 group-hover:translate-x-1 transition-all duration-200" />
+                          }
+                        </div>
                       </div>
+                      {/* Hover glow layer */}
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-600/0 to-indigo-600/0 group-hover:from-violet-600/5 group-hover:to-indigo-600/5 transition-all duration-200 pointer-events-none" />
                     </button>
                   ))}
                 </div>
