@@ -30,8 +30,11 @@ function isDebitNormal(head: string): boolean {
 
 function balanceLabel(balance: number, debitNormal: boolean): string {
   if (balance === 0) return "—";
+  // Running balance is always stored as (sum of debits) - (sum of credits).
+  // Debit-normal  (Assets, Expense):        positive running = DR  ✓, negative = CR
+  // Credit-normal (Liabilities, Revenue, Equity): negative running = CR ✓, positive = DR
   if (debitNormal) return balance > 0 ? "DR" : "CR";
-  return balance < 0 ? "DR" : "CR";
+  return balance < 0 ? "CR" : "DR";
 }
 
 function absBalance(balance: number, debitNormal: boolean): number {
@@ -423,7 +426,7 @@ export default function LedgerReportPage() {
                       {openingBalance > 0 ? fmtN(openingBalance) : ""}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
-                      {openingBalance < 0 ? fmtN(openingBalance) : ""}
+                      {openingBalance < 0 ? fmtN(Math.abs(openingBalance)) : ""}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <BalanceCell balance={openingBalance} debitNormal={debitNormal} />
