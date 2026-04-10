@@ -1,8 +1,11 @@
 /** ─────────────────────────────────────────────────────────────────────────────
  *  DEMO SEED — Premier Furnishings Ltd.
- *  Writes realistic demo data directly to localStorage under the tenant prefix.
+ *  Writes realistic demo data to localStorage AND persists it to the PostgreSQL
+ *  KV store so that any browser / logged-in session sees the demo data.
  *  Safe to run multiple times (idempotent — clears old demo data first).
  * ──────────────────────────────────────────────────────────────────────────── */
+
+import { kvPut, kvDeleteNamespace } from "./api";
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";
 export const DEMO_TENANT_SLUG = "premier-demo";
@@ -14,11 +17,16 @@ const iso  = (daysAgo = 0): string => {
 const ymd  = (daysAgo = 0): string => iso(daysAgo).slice(0, 10);
 const gput = (key: string, data: unknown) =>
   localStorage.setItem(key, JSON.stringify(data));
-/** Returns a `put(baseKey, data)` scoped to a specific tenant prefix. */
+
+/** Returns a `put(baseKey, data)` scoped to a specific tenant prefix.
+ *  Writes to localStorage immediately AND fires a DB write (fire-and-forget). */
 function makePut(tenantId: string) {
-  const pfx = `t:${tenantId}:`;
-  return (baseKey: string, data: unknown) =>
+  const pfx  = `t:${tenantId}:`;
+  const ns   = `t:${tenantId}`;
+  return (baseKey: string, data: unknown) => {
     localStorage.setItem(`${pfx}${baseKey}`, JSON.stringify(data));
+    kvPut(ns, baseKey, data).catch(() => { /* silently ignore network errors */ });
+  };
 }
 
 // ── public helpers ────────────────────────────────────────────────────────────
@@ -37,7 +45,7 @@ export function clearDemoTenant(): void {
   clearTenantData(DEMO_TENANT_ID);
 }
 
-/** Remove ALL localStorage keys belonging to any given tenant. */
+/** Remove ALL localStorage keys belonging to any given tenant AND wipe the DB namespace. */
 export function clearTenantData(tenantId: string): void {
   const pfx = `t:${tenantId}:`;
   const toRemove: string[] = [];
@@ -46,6 +54,8 @@ export function clearTenantData(tenantId: string): void {
     if (k?.startsWith(pfx)) toRemove.push(k);
   }
   toRemove.forEach(k => localStorage.removeItem(k));
+  // Also wipe the DB namespace so the next login doesn't pull stale data
+  kvDeleteNamespace(`t:${tenantId}`).catch(() => { /* silently ignore */ });
 }
 
 /** Returns true when demo data has already been loaded into a tenant. */
