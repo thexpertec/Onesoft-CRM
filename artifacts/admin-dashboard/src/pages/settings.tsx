@@ -968,12 +968,15 @@ export default function SettingsPage() {
                         <span className="text-[13px] font-semibold text-foreground">Sales Revenue Account</span>
                         <span className="text-[11px] text-muted-foreground">— credited on every sale (Revenue / Income head)</span>
                       </div>
-                      <Select value={form.accSalesRevenue} onValueChange={v => set("accSalesRevenue", v)}>
+                      <Select
+                        value={form.accSalesRevenue || "__none__"}
+                        onValueChange={v => set("accSalesRevenue", v === "__none__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-9 text-[13px]">
                           <SelectValue placeholder="Select revenue account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None (disable auto-journaling) —</SelectItem>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None (disable auto-journaling) —</SelectItem>
                           {ledgerAccounts
                             .filter(a => a.head === "Revenue / Income")
                             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -993,12 +996,15 @@ export default function SettingsPage() {
                         <span className="text-[13px] font-semibold text-foreground">Cash Account</span>
                         <span className="text-[11px] text-muted-foreground">— debited for Cash payment method (Assets head)</span>
                       </div>
-                      <Select value={form.accCash} onValueChange={v => set("accCash", v)}>
+                      <Select
+                        value={form.accCash || "__none__"}
+                        onValueChange={v => set("accCash", v === "__none__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-9 text-[13px]">
                           <SelectValue placeholder="Select cash account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None —</SelectItem>
                           {ledgerAccounts
                             .filter(a => a.head === "Assets")
                             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -1018,12 +1024,15 @@ export default function SettingsPage() {
                         <span className="text-[13px] font-semibold text-foreground">Bank / Card Account</span>
                         <span className="text-[11px] text-muted-foreground">— debited for Card, Bank Transfer & Cheque (Assets head)</span>
                       </div>
-                      <Select value={form.accBank} onValueChange={v => set("accBank", v)}>
+                      <Select
+                        value={form.accBank || "__none__"}
+                        onValueChange={v => set("accBank", v === "__none__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-9 text-[13px]">
                           <SelectValue placeholder="Select bank account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None —</SelectItem>
                           {ledgerAccounts
                             .filter(a => a.head === "Assets")
                             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -1043,12 +1052,15 @@ export default function SettingsPage() {
                         <span className="text-[13px] font-semibold text-foreground">Accounts Receivable</span>
                         <span className="text-[11px] text-muted-foreground">— debited for Credit / On-Credit sales (Assets head)</span>
                       </div>
-                      <Select value={form.accReceivable} onValueChange={v => set("accReceivable", v)}>
+                      <Select
+                        value={form.accReceivable || "__none__"}
+                        onValueChange={v => set("accReceivable", v === "__none__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-9 text-[13px]">
                           <SelectValue placeholder="Select receivable account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None —</SelectItem>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None —</SelectItem>
                           {ledgerAccounts
                             .filter(a => a.head === "Assets")
                             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -1068,12 +1080,15 @@ export default function SettingsPage() {
                         <span className="text-[13px] font-semibold text-foreground">VAT Payable Account <span className="text-muted-foreground font-normal">(optional)</span></span>
                         <span className="text-[11px] text-muted-foreground">— credited with VAT collected when tax &gt; 0 (Liabilities head)</span>
                       </div>
-                      <Select value={form.accVatPayable} onValueChange={v => set("accVatPayable", v)}>
+                      <Select
+                        value={form.accVatPayable || "__none__"}
+                        onValueChange={v => set("accVatPayable", v === "__none__" ? "" : v)}
+                      >
                         <SelectTrigger className="h-9 text-[13px]">
                           <SelectValue placeholder="Select VAT payable account… (optional)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" className="text-[13px] text-muted-foreground">— None (VAT not separately tracked) —</SelectItem>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None (VAT not separately tracked) —</SelectItem>
                           {ledgerAccounts
                             .filter(a => a.head === "Liabilities")
                             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
