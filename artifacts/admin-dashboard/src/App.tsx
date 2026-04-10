@@ -44,6 +44,7 @@ import BalanceSheetPage from "@/pages/balance-sheet";
 import LedgerReportPage from "@/pages/ledger-report";
 import PlsReportPage from "@/pages/pls-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
+import SaleReturnPage from "@/pages/sale-return";
 import SalesAgentsPage from "@/pages/sales-agents";
 import RawMaterialsPage from "@/pages/raw-materials";
 import ManufacturingPage from "@/pages/manufacturing";
@@ -146,6 +147,7 @@ function Router() {
               <Route path="/ledger-report" component={LedgerReportPage} />
               <Route path="/pls-report" component={PlsReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
+              <Route path="/sale-return" component={SaleReturnPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>

@@ -2434,7 +2434,7 @@ export const ALL_STORE_KEYS = [
   "admin-leads", "admin-req-docs", "admin-customers", "admin-suppliers",
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
-  "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
+  "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
   "admin-settings", "admin-journal-entries", "admin-stock-ledger",
 ] as const;
 
@@ -2445,7 +2445,7 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
   Products:             ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
   Stock:                ["admin-stock"],
   Purchases:            ["admin-purchase-orders"],
-  Sales:                ["admin-sales", "admin-invoices"],
+  Sales:                ["admin-sales", "admin-invoices", "admin-sale-returns"],
   Documents:            ["admin-req-docs"],
   HRM:                  ["admin-hrm-staff", "admin-hrm-roles"],
   Users:                ["admin-users"],

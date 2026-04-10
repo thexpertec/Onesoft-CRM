@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard,
+  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -199,6 +199,7 @@ const OTHER_NAV: NavItem[] = [
     items: [
       { label: "All Sales",     href: "/sales",         icon: Receipt,      desc: "Sales & POS terminal"          },
       { label: "New Sale",      href: "/sales/new",     icon: Plus,         desc: "Open POS terminal"             },
+      { label: "Sale Returns",  href: "/sale-return",   icon: Undo2,        desc: "Process refunds & credit notes" },
       { label: "Invoices",      href: "/invoices",      icon: FileText,     desc: "Invoice management"            },
       { label: "Calc Invoice",  href: "/calc-invoice",   icon: Calculator,   desc: "Calculation-based invoicing"   },
       { label: "Sales Agents",  href: "/sales-agents",   icon: Users2,        desc: "Agent management & commissions" },
@@ -244,7 +245,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
-const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents"];
+const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents", "/sale-return"];
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
@@ -795,8 +796,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Sales & Purchases</p>
                 {[
                   ...(isModuleAllowed("sales") ? [
-                    { href: "/sales",     label: "All Sales",  icon: Receipt  },
-                    { href: "/sales/new", label: "New Sale",   icon: Plus     },
+                    { href: "/sales",        label: "All Sales",    icon: Receipt  },
+                    { href: "/sales/new",    label: "New Sale",     icon: Plus     },
+                    { href: "/sale-return",  label: "Sale Returns", icon: Undo2    },
                   ] : []),
                   ...((isModuleAllowed("sales") || isModuleAllowed("invoices")) ? [
                     { href: "/invoices",      label: "Invoices",      icon: FileText   },
@@ -1045,6 +1047,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Sales */}
           <SidebarLink href="/sales"        icon={Receipt}     label="Sales"     active={location.startsWith("/sales")}        navigate={navigate} titleFull="Sales / POS" />
+          <SidebarLink href="/sale-return"  icon={Undo2}       label="Returns"   active={location.startsWith("/sale-return")}  navigate={navigate} titleFull="Sale Returns" />
 
           <SidebarDivider />
 
