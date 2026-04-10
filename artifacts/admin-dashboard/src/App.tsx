@@ -41,6 +41,7 @@ import ModuleGroupsPage from "@/pages/module-groups";
 import ChartOfAccountsPage from "@/pages/chart-of-accounts";
 import JournalEntryPage from "@/pages/journal-entry";
 import BalanceSheetPage from "@/pages/balance-sheet";
+import LedgerReportPage from "@/pages/ledger-report";
 import SalesAgentsPage from "@/pages/sales-agents";
 import RawMaterialsPage from "@/pages/raw-materials";
 import ManufacturingPage from "@/pages/manufacturing";
@@ -140,6 +141,7 @@ function Router() {
               <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
               <Route path="/journal-entry" component={JournalEntryPage} />
               <Route path="/balance-sheet" component={BalanceSheetPage} />
+              <Route path="/ledger-report" component={LedgerReportPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>

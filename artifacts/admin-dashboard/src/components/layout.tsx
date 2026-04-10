@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical, Wallet,
+  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -216,8 +216,9 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "accounts", label: "Accounts", icon: BookOpen,
     items: [
-      { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,      desc: "Account hierarchy & ledgers"   },
-      { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList, desc: "Double-entry bookkeeping"       },
+      { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,        desc: "Account hierarchy & ledgers"   },
+      { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList,   desc: "Double-entry bookkeeping"       },
+      { label: "Ledger Report",     href: "/ledger-report",     icon: FileBarChart,    desc: "Account statement & balance"   },
       { label: "Balance Sheet",     href: "/balance-sheet",     icon: LayoutDashboard, desc: "Assets, Liabilities & Equity" },
     ],
   },
@@ -245,7 +246,7 @@ const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice"
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet"];
+const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
