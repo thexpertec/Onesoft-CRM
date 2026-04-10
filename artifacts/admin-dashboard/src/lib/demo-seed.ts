@@ -6,17 +6,20 @@
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";
 export const DEMO_TENANT_SLUG = "premier-demo";
-const PFX = `t:${DEMO_TENANT_ID}:`;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const iso  = (daysAgo = 0): string => {
   const d = new Date(); d.setDate(d.getDate() - daysAgo); return d.toISOString();
 };
 const ymd  = (daysAgo = 0): string => iso(daysAgo).slice(0, 10);
-const put  = (baseKey: string, data: unknown) =>
-  localStorage.setItem(`${PFX}${baseKey}`, JSON.stringify(data));
 const gput = (key: string, data: unknown) =>
   localStorage.setItem(key, JSON.stringify(data));
+/** Returns a `put(baseKey, data)` scoped to a specific tenant prefix. */
+function makePut(tenantId: string) {
+  const pfx = `t:${tenantId}:`;
+  return (baseKey: string, data: unknown) =>
+    localStorage.setItem(`${pfx}${baseKey}`, JSON.stringify(data));
+}
 
 // ── public helpers ────────────────────────────────────────────────────────────
 export function isDemoSeeded(): boolean {
@@ -31,19 +34,29 @@ export function clearDemoTenant(): void {
     const t: { id: string }[] = JSON.parse(localStorage.getItem("admin-tenants") || "[]");
     gput("admin-tenants", t.filter(x => x.id !== DEMO_TENANT_ID));
   } catch { /* ignore */ }
+  clearTenantData(DEMO_TENANT_ID);
+}
+
+/** Remove ALL localStorage keys belonging to any given tenant. */
+export function clearTenantData(tenantId: string): void {
+  const pfx = `t:${tenantId}:`;
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k?.startsWith(PFX)) toRemove.push(k);
+    if (k?.startsWith(pfx)) toRemove.push(k);
   }
   toRemove.forEach(k => localStorage.removeItem(k));
 }
 
+/** Returns true when demo data has already been loaded into a tenant. */
+export function isTenantDataSeeded(tenantId: string): boolean {
+  return localStorage.getItem(`t:${tenantId}:admin-products`) !== null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
+/** Creates the "Premier Furnishings" demo tenant and loads all demo data into it. */
 export function seedDemoTenant(): string {
   clearDemoTenant();
-
-  // ── 1. TENANT ──────────────────────────────────────────────────────────────
   const tenant = {
     id: DEMO_TENANT_ID,
     name: "Premier Furnishings Ltd.",
@@ -60,10 +73,19 @@ export function seedDemoTenant(): string {
     const existing: { id: string }[] = JSON.parse(localStorage.getItem("admin-tenants") || "[]");
     gput("admin-tenants", [...existing.filter(x => x.id !== DEMO_TENANT_ID), tenant]);
   } catch { gput("admin-tenants", [tenant]); }
+  seedDataIntoTenant(DEMO_TENANT_ID, "Premier Furnishings Ltd.");
+  return DEMO_TENANT_ID;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+/** Load full demo data into ANY existing tenant without touching its tenant record. */
+export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furnishings Ltd."): void {
+  clearTenantData(tenantId);
+  const put = makePut(tenantId);
 
   // ── 2. SETTINGS ────────────────────────────────────────────────────────────
   put("admin-settings", {
-    companyName: "Premier Furnishings Ltd.",
+    companyName,
     companyTagline: "Quality Furniture for Every Space",
     logoBase64: "",
     emailHull: "info@premierfurnishings.co.uk",
@@ -606,6 +628,4 @@ export function seedDemoTenant(): string {
     "David Clarke", "Lucy Hargreaves", "Ahmed Malik", "Rachel Foster",
     "Tom Blackwood", "Sophie Barker", "Marcus Webb", "Claire Hughes",
   ]);
-
-  return DEMO_TENANT_ID;
 }

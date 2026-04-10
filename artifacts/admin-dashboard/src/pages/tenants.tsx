@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import {
   seedDemoTenant, clearDemoTenant, isDemoSeeded, DEMO_TENANT_ID,
+  seedDataIntoTenant, clearTenantData, isTenantDataSeeded,
 } from "@/lib/demo-seed";
 import {
   Tenant, TenantStatus, TenantPlan,
@@ -338,6 +339,7 @@ export default function TenantsPage() {
   const [statsCache,  setStatsCache]  = useState<Record<string, Record<string, number>>>({});
   const [demoSeeded,  setDemoSeeded]  = useState(() => isDemoSeeded());
   const [demoLoading, setDemoLoading] = useState(false);
+  const [seedingId,   setSeedingId]   = useState<string | null>(null);
 
   const reload = () => {
     setTenants(getTenants());
@@ -372,6 +374,33 @@ export default function TenantsPage() {
     }
     reload();
     toast({ title: "Demo data removed", variant: "destructive" });
+  }
+
+  function handleLoadDemoInto(tenant: Tenant) {
+    setSeedingId(tenant.id);
+    setTimeout(() => {
+      try {
+        seedDataIntoTenant(tenant.id, tenant.name);
+        reload();
+        toast({
+          title: "Demo data loaded!",
+          description: `${tenant.name} now has full sample data across all modules.`,
+        });
+        switchTenant(tenant.id);
+        navigate("/");
+      } catch (e) {
+        toast({ title: "Seed failed", description: String(e), variant: "destructive" });
+      } finally {
+        setSeedingId(null);
+      }
+    }, 50);
+  }
+
+  function handleClearDemoFrom(tenant: Tenant) {
+    clearTenantData(tenant.id);
+    if (currentTenantId === tenant.id) switchTenant(null);
+    reload();
+    toast({ title: `Demo data cleared from "${tenant.name}"`, variant: "destructive" });
   }
 
   const filtered = useMemo(() =>
@@ -537,6 +566,8 @@ export default function TenantsPage() {
             const PlanIcon   = planMeta.icon;
             const stats      = statsCache[t.id];
             const isActive   = currentTenantId === t.id;
+            const isSeeded   = isTenantDataSeeded(t.id);
+            const isSeeding  = seedingId === t.id;
 
             return (
               <div
@@ -649,6 +680,33 @@ export default function TenantsPage() {
                   >
                     <Trash2 size={13} />
                   </Button>
+                </div>
+
+                {/* Demo data row */}
+                <div className="pt-2.5">
+                  {isSeeded ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-7 gap-1.5 text-[11px] text-orange-500 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800"
+                      onClick={() => handleClearDemoFrom(t)}
+                    >
+                      <X size={11} /> Remove Demo Data
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isSeeding}
+                      className="w-full h-7 gap-1.5 text-[11px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-800"
+                      onClick={() => handleLoadDemoInto(t)}
+                    >
+                      {isSeeding
+                        ? <><RefreshCw size={10} className="animate-spin" /> Loading…</>
+                        : <><FlaskConical size={11} /> Load Demo Data</>
+                      }
+                    </Button>
+                  )}
                 </div>
               </div>
             );
