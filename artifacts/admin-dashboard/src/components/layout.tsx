@@ -743,110 +743,192 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile nav drawer */}
-        {mobileOpen && (
-          <div className="md:hidden border-t border-gray-100 dark:border-border bg-white dark:bg-card px-4 pb-4 pt-2">
-            <div className="space-y-0.5">
-              {/* Dashboard */}
-              <Link href="/"
-                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  location === "/" ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                <LayoutDashboard size={16} /> Dashboard
-              </Link>
+      </div>
 
-              {/* CRM group */}
-              {allowedCrmColumns.length > 0 && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">CRM</p>
-                {allowedCrmColumns.map(col => (
-                  <Link key={col.href} href={col.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      location.startsWith(col.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                    <col.icon size={16} /> {col.label}
-                  </Link>
-                ))}
-              </div>}
+      {/* ═══ MOBILE SLIDE-IN DRAWER (fixed overlay, replaces inline dropdown) ═══ */}
+      {/* Backdrop */}
+      <div
+        className={`md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+        onClick={() => setMobileOpen(false)}
+      />
+      {/* Drawer panel */}
+      <div className={`md:hidden fixed inset-y-0 left-0 z-50 w-[78vw] max-w-[320px] bg-white dark:bg-zinc-900 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 dark:border-zinc-800 shrink-0">
+          <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2">
+            <img src={logoUrl} alt="Onesoft" className="h-6 dark:brightness-0 dark:invert" />
+          </Link>
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
 
-              {/* Products & Stock group */}
-              {(isModuleAllowed("products") || isModuleAllowed("stock")) && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Products & Stock</p>
-                {[
-                  ...(isModuleAllowed("products") ? [
-                    { href: "/products",        label: "Products",       icon: Package           },
-                    { href: "/product-groups",  label: "Product Groups",  icon: Layers            },
-                    { href: "/brands",          label: "Brands",          icon: Bookmark          },
-                    { href: "/categories",      label: "Categories",      icon: FolderOpen        },
-                    { href: "/attributes",      label: "Attributes",      icon: SlidersHorizontal },
-                    { href: "/units",           label: "Units",           icon: Ruler             },
-                  ] : []),
-                  ...(isModuleAllowed("stock") ? [
-                    { href: "/stock",       label: "All Stock",   icon: Boxes },
-                    { href: "/stock/holds", label: "Stock Holds", icon: Lock  },
-                  ] : []),
-                ].map(item => (
-                  <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                    <item.icon size={16} /> {item.label}
-                  </Link>
-                ))}
-              </div>}
-
-              {/* Sales & Purchases group */}
-              {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">Sales & Purchases</p>
-                {[
-                  ...(isModuleAllowed("sales") ? [
-                    { href: "/sales",        label: "All Sales",    icon: Receipt  },
-                    { href: "/sales/new",    label: "New Sale",     icon: Plus     },
-                    { href: "/sale-return",  label: "Sale Returns", icon: Undo2    },
-                  ] : []),
-                  ...((isModuleAllowed("sales") || isModuleAllowed("invoices")) ? [
-                    { href: "/invoices",      label: "Invoices",      icon: FileText   },
-                    { href: "/calc-invoice",  label: "Calc Invoice",  icon: Calculator },
-                  ] : []),
-                  ...((isModuleAllowed("sales") || isModuleAllowed("sales_agents")) ? [
-                    { href: "/sales-agents",  label: "Sales Agents",  icon: Users2     },
-                  ] : []),
-                  ...(isModuleAllowed("purchases") ? [
-                    { href: "/purchases", label: "Purchases",  icon: ShoppingCart },
-                  ] : []),
-                ].map(item => (
-                  <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                    <item.icon size={16} /> {item.label}
-                  </Link>
-                ))}
-              </div>}
-
-              {/* Documents */}
-              {isModuleAllowed("documents") && <Link href="/documents"
-                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  location.startsWith("/documents") ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                <FileText size={16} /> Documents
-              </Link>}
-
-              {/* HRM group — uses same hrmItems computed above */}
-              {hrmItems.length > 0 && <div className="pt-1 pb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-1">HRM</p>
-                {hrmItems.map(item => (
-                  <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      location.startsWith(item.href) ? "bg-blue-50 text-blue-600" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
-                    <item.icon size={16} /> {item.label}
-                  </Link>
-                ))}
-              </div>}
-            </div>
-
-            <div className="pt-2 mt-2 border-t border-gray-100">
-              <button onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
-                <LogOut size={16} /> Sign Out
-              </button>
-            </div>
+        {/* User pill */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800 shrink-0">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : "bg-blue-500"}`}>
+            {userInitials}
           </div>
-        )}
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate">{currentUser?.fullName || currentUser?.username}</p>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">{isSuperAdmin ? "Super Admin" : isStaff ? "Staff Member" : "Admin"}</p>
+          </div>
+        </div>
+
+        {/* Nav links — scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+          {/* Helper: nav link */}
+          {(() => {
+            const NavLink = ({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) => {
+              const isActive = href === "/" ? location === "/" : location.startsWith(href);
+              return (
+                <Link
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl text-[13px] font-medium transition-colors active:scale-[0.98] ${
+                    isActive
+                      ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Icon size={17} className="shrink-0" />
+                  {label}
+                </Link>
+              );
+            };
+            const SectionLabel = ({ label }: { label: string }) => (
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-600 px-3 pt-3 pb-1">{label}</p>
+            );
+            return (
+              <div className="space-y-0.5">
+                <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
+
+                {allowedCrmColumns.length > 0 && <>
+                  <SectionLabel label="CRM" />
+                  {allowedCrmColumns.map(col => <NavLink key={col.href} href={col.href} icon={col.icon} label={col.label} />)}
+                </>}
+
+                {(isModuleAllowed("products") || isModuleAllowed("stock")) && <>
+                  <SectionLabel label="Products & Stock" />
+                  {isModuleAllowed("products") && <>
+                    <NavLink href="/products"       icon={Package}           label="Products" />
+                    <NavLink href="/product-groups" icon={Layers}            label="Product Groups" />
+                    <NavLink href="/brands"         icon={Bookmark}          label="Brands" />
+                    <NavLink href="/categories"     icon={FolderOpen}        label="Categories" />
+                    <NavLink href="/attributes"     icon={SlidersHorizontal} label="Attributes" />
+                    <NavLink href="/units"          icon={Ruler}             label="Units" />
+                  </>}
+                  {isModuleAllowed("stock") && <>
+                    <NavLink href="/stock"       icon={Boxes} label="All Stock" />
+                    <NavLink href="/stock/holds" icon={Lock}  label="Stock Holds" />
+                    <NavLink href="/raw-materials" icon={FlaskConical} label="Raw Materials" />
+                  </>}
+                </>}
+
+                {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <>
+                  <SectionLabel label="Sales & Purchases" />
+                  {isModuleAllowed("sales") && <>
+                    <NavLink href="/sales"       icon={Receipt} label="All Sales" />
+                    <NavLink href="/sales/new"   icon={Plus}    label="New Sale" />
+                    <NavLink href="/sale-return" icon={Undo2}   label="Sale Returns" />
+                  </>}
+                  {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
+                    <NavLink href="/invoices"     icon={FileText}   label="Invoices" />
+                    <NavLink href="/calc-invoice" icon={Calculator} label="Calc Invoice" />
+                  </>}
+                  {(isModuleAllowed("sales") || isModuleAllowed("sales_agents")) && <NavLink href="/sales-agents" icon={Users2} label="Sales Agents" />}
+                  {isModuleAllowed("purchases") && <NavLink href="/purchases" icon={ShoppingCart} label="Purchase Orders" />}
+                </>}
+
+                {isModuleAllowed("documents") && <>
+                  <SectionLabel label="Documents" />
+                  <NavLink href="/documents" icon={FileText} label="All Documents" />
+                </>}
+
+                {hrmItems.length > 0 && <>
+                  <SectionLabel label="HRM" />
+                  {hrmItems.map(item => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />)}
+                </>}
+
+                {isModuleAllowed("manufacturing") && <>
+                  <SectionLabel label="Manufacturing" />
+                  <NavLink href="/raw-materials"    icon={FlaskConical}  label="Raw Materials" />
+                  <NavLink href="/manufacturing"    icon={Factory}       label="Manufacturing" />
+                  <NavLink href="/production-guide" icon={ClipboardList} label="Production Guide" />
+                </>}
+
+                <SectionLabel label="Accounts" />
+                <NavLink href="/chart-of-accounts" icon={Landmark}     label="Chart of Accounts" />
+                <NavLink href="/journal-entry"     icon={ClipboardList} label="Journal Entry" />
+                <NavLink href="/balance-sheet"     icon={FileBarChart}  label="Balance Sheet" />
+                <NavLink href="/ledger-report"     icon={BookOpen}      label="Ledger Report" />
+                <NavLink href="/pls-report"        icon={TrendingUp}    label="P&L Statement" />
+                <NavLink href="/receipt-payment"   icon={CreditCard}    label="Receipt & Payment" />
+
+                {isSuperAdmin && <>
+                  <SectionLabel label="Admin" />
+                  <NavLink href="/settings" icon={Settings}     label="Settings" />
+                  <NavLink href="/users"    icon={KeyRound}     label="Users" />
+                  <NavLink href="/tenants"  icon={Building2}    label="Tenants" />
+                </>}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Drawer footer */}
+        <div className="shrink-0 border-t border-gray-100 dark:border-zinc-800 px-3 py-3 space-y-1">
+          <button
+            onClick={() => { toggleTheme(); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+          >
+            {theme === "dark" ? <Sun size={16} className="shrink-0" /> : <Moon size={16} className="shrink-0" />}
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
+          <button
+            onClick={() => { setMobileOpen(false); logout(); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+          >
+            <LogOut size={16} className="shrink-0" /> Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* ═══ MOBILE BOTTOM TAB BAR ══════════════════════════════════════════════ */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white dark:bg-zinc-900 border-t border-gray-200 dark:border-zinc-800" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div className="flex items-stretch h-[60px]">
+          {[
+            { href: "/",          label: "Home",      icon: LayoutDashboard, exact: true },
+            { href: "/sales/new", label: "New Sale",  icon: Plus,            exact: false },
+            { href: "/invoices",  label: "Invoices",  icon: FileText,        exact: false },
+            { href: "/purchases", label: "Purchases", icon: ShoppingCart,    exact: false },
+          ].map(tab => {
+            const isActive = tab.exact ? location === "/" : location.startsWith(tab.href.split("?")[0]);
+            return (
+              <button
+                key={tab.href}
+                onClick={() => { navigate(tab.href); setMobileOpen(false); }}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors active:bg-gray-50 dark:active:bg-zinc-800 ${
+                  isActive ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-zinc-500"
+                }`}
+              >
+                <tab.icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                <span className="text-[9.5px] font-medium leading-none">{tab.label}</span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setMobileOpen(v => !v)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors active:bg-gray-50 dark:active:bg-zinc-800 ${
+              mobileOpen ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-zinc-500"
+            }`}
+          >
+            <Menu size={20} strokeWidth={mobileOpen ? 2.5 : 1.8} />
+            <span className="text-[9.5px] font-medium leading-none">More</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Global search dialog ─────────────────────────────────────────────── */}
@@ -1032,7 +1114,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
 
           <main className="flex-1">
-            <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-6 md:py-8">
+            <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
               {children}
             </div>
           </main>
