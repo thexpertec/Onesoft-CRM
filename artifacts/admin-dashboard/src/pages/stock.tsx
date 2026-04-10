@@ -97,27 +97,6 @@ export default function StockPage() {
   const [subEditVal,     setSubEditVal]     = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // ── Product groups (non-holds view) ──
-  const productGroups = useMemo(() => {
-    if (isHoldsView) return [];
-    const map = new Map<string, StockItem[]>();
-    filtered.forEach(item => {
-      const key = item.productName.trim().toLowerCase() + "||" + item.sku.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(item);
-    });
-    return [...map.entries()].map(([key, items]) => ({
-      key,
-      productName: items[0].productName,
-      sku: items[0].sku,
-      unit: items[0].unit,
-      totalQty: items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0),
-      stockTypes: [...new Set(items.map(i => i.stockType))] as StockType[],
-      isLow: items.some(isLowStock),
-      items,
-    }));
-  }, [filtered, isHoldsView]);
-
   // Reset filters when switching views
   useEffect(() => { setTypeFilter("All"); setCustomerFilter("All"); setSearch(""); setActiveCell(null); }, [isHoldsView]);
 
@@ -162,6 +141,27 @@ export default function StockPage() {
     lowStock: stock.filter(isLowStock).length,
     holds: stock.filter(s => s.stockType === "Not For Sale").length,
   }), [stock]);
+
+  // ── Product groups (non-holds view) — must be after `filtered` ──
+  const productGroups = useMemo(() => {
+    if (isHoldsView) return [];
+    const map = new Map<string, StockItem[]>();
+    filtered.forEach(item => {
+      const key = item.productName.trim().toLowerCase() + "||" + item.sku.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(item);
+    });
+    return [...map.entries()].map(([key, items]) => ({
+      key,
+      productName: items[0].productName,
+      sku: items[0].sku,
+      unit: items[0].unit,
+      totalQty: items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0),
+      stockTypes: [...new Set(items.map(i => i.stockType))] as StockType[],
+      isLow: items.some(isLowStock),
+      items,
+    }));
+  }, [filtered, isHoldsView]);
 
   // ── cell commit ──
   const commitCell = useCallback((id: string, field: string, value: string) => {
