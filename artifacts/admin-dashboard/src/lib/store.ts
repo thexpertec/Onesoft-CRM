@@ -700,6 +700,7 @@ export type Tenant = {
   status:         TenantStatus;
   plan:           TenantPlan;
   moduleGroupId?: string;
+  isDemo?:        boolean;
   createdAt:      string;
   updatedAt:      string;
 };

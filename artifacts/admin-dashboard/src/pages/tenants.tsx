@@ -59,6 +59,7 @@ const blankForm = (): Omit<Tenant, "id" | "createdAt" | "updatedAt"> => ({
   status:        "trial",
   plan:          "starter",
   moduleGroupId: undefined,
+  isDemo:        false,
 });
 
 // ─── Tenant form modal ────────────────────────────────────────────────────────
@@ -202,6 +203,31 @@ function TenantModal({
                 className="h-10 text-sm"
               />
             </div>
+
+            {/* Demo Tenant toggle */}
+            <button
+              type="button"
+              onClick={() => patch("isDemo", !form.isDemo)}
+              className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                form.isDemo
+                  ? "border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/30"
+                  : "border-dashed border-gray-200 dark:border-zinc-700 bg-transparent hover:bg-gray-50 dark:hover:bg-zinc-900/40"
+              }`}
+            >
+              {/* pill switch */}
+              <div className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${form.isDemo ? "bg-violet-500" : "bg-gray-200 dark:bg-zinc-700"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${form.isDemo ? "left-[18px]" : "left-0.5"}`} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-[13px] font-semibold leading-none ${form.isDemo ? "text-violet-700 dark:text-violet-300" : "text-gray-600 dark:text-gray-400"}`}>
+                  This is a Demo Tenant
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {form.isDemo ? "\"Load Demo Data\" will be available on this tenant's card" : "Toggle on to allow loading sample data into this tenant"}
+                </div>
+              </div>
+              <FlaskConical size={15} className={`ml-auto flex-shrink-0 ${form.isDemo ? "text-violet-500" : "text-gray-300 dark:text-zinc-600"}`} />
+            </button>
           </div>
 
           {/* ── RIGHT: Access & Credentials ───────────────────────────────── */}
@@ -601,6 +627,11 @@ export default function TenantsPage() {
                     <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dot}`} />
                     {statusMeta.label}
                   </span>
+                  {t.isDemo && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800">
+                      <FlaskConical size={9} /> Demo
+                    </span>
+                  )}
                   <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${planMeta.color}`}>
                     <PlanIcon size={9} /> {planMeta.label}
                   </span>
@@ -682,32 +713,34 @@ export default function TenantsPage() {
                   </Button>
                 </div>
 
-                {/* Demo data row */}
-                <div className="pt-2.5">
-                  {isSeeded ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full h-7 gap-1.5 text-[11px] text-orange-500 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800"
-                      onClick={() => handleClearDemoFrom(t)}
-                    >
-                      <X size={11} /> Remove Demo Data
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={isSeeding}
-                      className="w-full h-7 gap-1.5 text-[11px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-800"
-                      onClick={() => handleLoadDemoInto(t)}
-                    >
-                      {isSeeding
-                        ? <><RefreshCw size={10} className="animate-spin" /> Loading…</>
-                        : <><FlaskConical size={11} /> Load Demo Data</>
-                      }
-                    </Button>
-                  )}
-                </div>
+                {/* Demo data row — only visible on demo-flagged tenants */}
+                {t.isDemo && (
+                  <div className="pt-2.5">
+                    {isSeeded ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full h-7 gap-1.5 text-[11px] text-orange-500 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800"
+                        onClick={() => handleClearDemoFrom(t)}
+                      >
+                        <X size={11} /> Remove Demo Data
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={isSeeding}
+                        className="w-full h-7 gap-1.5 text-[11px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-800"
+                        onClick={() => handleLoadDemoInto(t)}
+                      >
+                        {isSeeding
+                          ? <><RefreshCw size={10} className="animate-spin" /> Loading…</>
+                          : <><FlaskConical size={11} /> Load Demo Data</>
+                        }
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
