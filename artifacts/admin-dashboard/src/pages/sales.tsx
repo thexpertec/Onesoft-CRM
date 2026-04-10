@@ -8,7 +8,7 @@ import {
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
   deductStockForSale, restoreStockForSale, getSettings, autoPostSaleJE,
 } from "@/lib/store";
-import { printSaleInvoice } from "@/lib/print-invoice";
+import { buildSaleReceiptHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
@@ -113,6 +113,133 @@ function ProductThumbnail({ product, size = "full" }: { product: Product; size?:
   return (
     <div className={`${size === "full" ? "w-full h-full" : "w-9 h-9"} ${bg} flex items-center justify-center rounded-lg`}>
       <span className={`${size === "full" ? "text-3xl" : "text-base"} font-bold text-white/80`}>{letter}</span>
+    </div>
+  );
+}
+
+// ─── Sale Complete Modal ──────────────────────────────────────────────────────
+function SaleCompleteModal({
+  sale,
+  onNewSale,
+  onClose,
+}: {
+  sale: Sale;
+  onNewSale: () => void;
+  onClose: () => void;
+}) {
+  const settings = getSettings();
+  const sym = getSettingsCurrencySymbol();
+
+  const subtotal    = sale.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
+  const discAmt     = discountTotal(sale.items);
+  const afterDisc   = subtotal - discAmt;
+  const taxRate     = parseFloat(sale.taxRate || "0") || 0;
+  const taxAmt      = afterDisc * taxRate / 100;
+  const total       = afterDisc + taxAmt;
+  const paid        = parseFloat(sale.amountPaid || "0") || 0;
+  const change      = Math.max(0, paid - total);
+  const balance     = Math.max(0, total - paid);
+  const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
+
+  function handlePrint() {
+    try { printReceiptHtml(buildSaleReceiptHtml(sale, settings)); } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="relative bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+
+        {/* ── Success header ── */}
+        <div className="bg-emerald-500 text-white px-6 py-5 text-center shrink-0">
+          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-2">
+            <Check size={26} className="text-white" />
+          </div>
+          <h2 className="text-xl font-bold">Sale Complete!</h2>
+          <p className="text-emerald-100 text-sm mt-0.5">{sale.saleNumber} · {sale.saleDate}</p>
+        </div>
+
+        {/* ── Receipt summary ── */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3 text-sm">
+          {/* Customer / Payment */}
+          <div className="flex justify-between text-gray-700 dark:text-gray-300">
+            <span className="font-medium">Customer</span>
+            <span>{sale.customer || "Walk-in"}</span>
+          </div>
+          <div className="flex justify-between text-gray-700 dark:text-gray-300">
+            <span className="font-medium">Payment</span>
+            <span>{sale.paymentMethod}</span>
+          </div>
+
+          <hr className="border-dashed border-gray-200 dark:border-zinc-700" />
+
+          {/* Items */}
+          <div className="space-y-1.5">
+            {sale.items.map(item => (
+              <div key={item.id} className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span className="truncate max-w-[60%]">{item.productName || "—"} <span className="text-gray-400">×{item.qty}</span></span>
+                <span className="font-mono shrink-0">{fmt(lineTotal(item))}</span>
+              </div>
+            ))}
+          </div>
+
+          <hr className="border-dashed border-gray-200 dark:border-zinc-700" />
+
+          {/* Totals */}
+          <div className="space-y-1">
+            {discAmt > 0 && (
+              <div className="flex justify-between text-red-500 text-xs">
+                <span>Discount</span><span>−{fmt(discAmt)}</span>
+              </div>
+            )}
+            {taxRate > 0 && (
+              <div className="flex justify-between text-gray-500 text-xs">
+                <span>Tax ({taxRate}%)</span><span>{fmt(taxAmt)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-base text-gray-900 dark:text-gray-100">
+              <span>Total</span><span>{fmt(total)}</span>
+            </div>
+            {paid > 0 && (
+              <div className="flex justify-between text-emerald-600 text-sm">
+                <span>Paid</span><span>{fmt(paid)}</span>
+              </div>
+            )}
+            {change > 0.005 && (
+              <div className="flex justify-between text-blue-600 font-semibold">
+                <span>Change</span><span>{fmt(change)}</span>
+              </div>
+            )}
+            {balance > 0.005 && (
+              <div className="flex justify-between text-orange-600 font-semibold">
+                <span>Balance Due</span><span>{fmt(balance)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Action buttons ── */}
+        <div className="px-5 py-4 border-t border-gray-100 dark:border-zinc-800 flex gap-2 shrink-0">
+          <button
+            onClick={handlePrint}
+            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors"
+          >
+            <Printer size={15} /> Print
+          </button>
+          <button
+            onClick={onNewSale}
+            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-colors"
+          >
+            <Plus size={15} /> New Sale
+          </button>
+          <button
+            onClick={onClose}
+            className="h-10 px-4 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 font-semibold text-sm transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1168,10 +1295,11 @@ export default function SalesPage() {
   const tableRef = useRef<HTMLDivElement>(null);
 
   // ── POS state ──
-  const [detailId,    setDetailId]   = useState<string | null>(null);
-  const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
-  const [priceMode,   setPriceMode]  = useState<"retail" | "wholesale">("retail");
-  const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string } | null>(null);
+  const [detailId,               setDetailId]               = useState<string | null>(null);
+  const [localItems,             setLocalItems]             = useState<SaleItem[]>([]);
+  const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale">("retail");
+  const [localMeta,              setLocalMeta]              = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string } | null>(null);
+  const [completedSaleForReceipt, setCompletedSaleForReceipt] = useState<Sale | null>(null);
 
   // Refs so callbacks always see latest values without stale-closure issues
   const localItemsRef = useRef<SaleItem[]>(localItems);
@@ -1400,10 +1528,9 @@ export default function SalesPage() {
 
     toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
 
-    // Open print invoice window
-    try { printSaleInvoice(completedSale, getSettings()); } catch { /* ignore popup blockers */ }
-
+    // Close POS and show the in-page Sale Complete overlay (no popup blocker issues)
     closePOS();
+    setCompletedSaleForReceipt(completedSale);
   };
 
   // ── List filtering ──
@@ -1789,6 +1916,19 @@ export default function SalesPage() {
           )}
         </ExcelGridShell>
       </div>
+
+      {/* ── Sale Complete overlay ─────────────────────────────────────────── */}
+      {completedSaleForReceipt && (
+        <SaleCompleteModal
+          sale={completedSaleForReceipt}
+          onNewSale={() => {
+            setCompletedSaleForReceipt(null);
+            const draft = addSale(blankSale());
+            openDetailDirect(draft);
+          }}
+          onClose={() => setCompletedSaleForReceipt(null)}
+        />
+      )}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>

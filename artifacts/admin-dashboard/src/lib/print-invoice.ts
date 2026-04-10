@@ -53,7 +53,7 @@ const W = 32;          // character width of the receipt
 const SEP  = "─".repeat(W);
 const DSEP = "═".repeat(W);
 
-export function printSaleInvoice(sale: Sale, settings: AppSettings): void {
+export function buildSaleReceiptHtml(sale: Sale, settings: AppSettings): string {
   const sym = currencySymbol(settings.currency || "GBP");
   const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
 
@@ -348,10 +348,50 @@ export function printSaleInvoice(sale: Sale, settings: AppSettings): void {
 </body>
 </html>`;
 
-  const win = window.open("", "_blank", "width=460,height=680,scrollbars=yes,resizable=yes");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    win.focus();
+  return html;
+}
+
+/**
+ * Print a receipt using a hidden iframe (no popup needed — bypasses popup blockers).
+ * Falls back to window.open if iframe printing fails.
+ */
+export function printReceiptHtml(html: string): void {
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;z-index:-9999;top:-9999px;left:-9999px;width:460px;height:680px;border:none;visibility:hidden;";
+  document.body.appendChild(iframe);
+
+  const iWin = iframe.contentWindow;
+  if (!iWin) {
+    document.body.removeChild(iframe);
+    // Fallback
+    const win = window.open("", "_blank", "width=460,height=680");
+    if (win) { win.document.write(html); win.document.close(); }
+    return;
   }
+
+  iWin.document.open();
+  iWin.document.write(html);
+  iWin.document.close();
+
+  const doPrint = () => {
+    try {
+      iWin.focus();
+      iWin.print();
+    } catch {
+      // Fallback to popup if iframe print is blocked
+      const win = window.open("", "_blank", "width=460,height=680");
+      if (win) { win.document.write(html); win.document.close(); }
+    }
+    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ok */ } }, 3000);
+  };
+
+  if (iWin.document.readyState === "complete") {
+    setTimeout(doPrint, 300);
+  } else {
+    iframe.addEventListener("load", () => setTimeout(doPrint, 300), { once: true });
+  }
+}
+
+export function printSaleInvoice(sale: Sale, settings: AppSettings): void {
+  printReceiptHtml(buildSaleReceiptHtml(sale, settings));
 }
