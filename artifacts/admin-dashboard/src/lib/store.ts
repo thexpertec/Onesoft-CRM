@@ -1805,6 +1805,19 @@ export const createRawMaterial = (data: Omit<RawMaterial, "id" | "rmCode" | "cre
   const rm: RawMaterial = { ...data, id: crypto.randomUUID(), rmCode: nextRMCode(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(RM_KEY, [...getRawMaterials(), rm]);
   addActivity({ action: "created", entity: "RawMaterial", entityName: rm.name });
+  // Record opening-balance ledger entry if initial stock > 0
+  const initQty = parseFloat(rm.currentStock) || 0;
+  if (initQty > 0) {
+    batchLedger([{
+      entityType: "raw-material", entityId: rm.id, entityName: rm.name,
+      date:      new Date().toISOString().slice(0, 10),
+      txType:    "opening-balance",
+      reference: "MANUAL",
+      qtyBefore: 0, qtyChange: initQty, qtyAfter: initQty,
+      unit:      rm.unit,
+      notes:     "Opening balance",
+    }]);
+  }
   return rm;
 };
 
@@ -1812,9 +1825,27 @@ export const updateRawMaterial = (id: string, updates: Partial<Omit<RawMaterial,
   const rms = getRawMaterials();
   const i = rms.findIndex(r => r.id === id);
   if (i === -1) throw new Error("Raw material not found");
-  rms[i] = { ...rms[i], ...updates, updatedAt: new Date().toISOString() };
+  const prev = rms[i];
+  rms[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
   setStored(RM_KEY, rms);
   addActivity({ action: "updated", entity: "RawMaterial", entityName: rms[i].name });
+  // Record a manual-adjustment ledger entry whenever currentStock changes
+  if ("currentStock" in updates && updates.currentStock !== undefined) {
+    const before = parseFloat(prev.currentStock) || 0;
+    const after  = parseFloat(updates.currentStock) || 0;
+    const delta  = after - before;
+    if (delta !== 0) {
+      batchLedger([{
+        entityType: "raw-material", entityId: id, entityName: rms[i].name,
+        date:      new Date().toISOString().slice(0, 10),
+        txType:    "manual-adjustment",
+        reference: "MANUAL",
+        qtyBefore: before, qtyChange: delta, qtyAfter: after,
+        unit:      rms[i].unit,
+        notes:     "Manual stock adjustment",
+      }]);
+    }
+  }
   return rms[i];
 };
 
@@ -2592,28 +2623,44 @@ export function seedDefaultCoaAccounts(): void {
     setStored(SHAREHOLDERS_KEY, shareholdersPatched);
   }
 
-  // ── Backfill stock ledger: create opening-balance entries for items with no history ─
-  const allStockItems = getStock();
+  // ── Backfill stock ledger: opening-balance for items/RMs with no history ──────
+  const allStockItems  = getStock();
+  const allRMs         = getRawMaterials();
   const existingLedger = getStockLedger();
   const itemsWithHistory = new Set(existingLedger.map(e => e.entityId));
   const today = new Date().toISOString().slice(0, 10);
   const openingEntries: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+  // Product stock items
   for (const si of allStockItems) {
     if (!itemsWithHistory.has(si.id)) {
       const qty = parseFloat(si.quantity) || 0;
       if (qty > 0) {
         openingEntries.push({
           entityType: "product", entityId: si.id, entityName: si.productName,
-          date:      today,
-          txType:    "opening-balance",
-          reference: "MANUAL",
+          date: today, txType: "opening-balance", reference: "MANUAL",
           qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
-          unit:      si.unit,
-          notes:     `Opening balance — ${si.store}`,
+          unit: si.unit, notes: `Opening balance — ${si.store}`,
         });
       }
     }
   }
+
+  // Raw materials
+  for (const rm of allRMs) {
+    if (!itemsWithHistory.has(rm.id)) {
+      const qty = parseFloat(rm.currentStock) || 0;
+      if (qty > 0) {
+        openingEntries.push({
+          entityType: "raw-material", entityId: rm.id, entityName: rm.name,
+          date: today, txType: "opening-balance", reference: "MANUAL",
+          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+          unit: rm.unit, notes: "Opening balance",
+        });
+      }
+    }
+  }
+
   if (openingEntries.length > 0) batchLedger(openingEntries);
 
   // ── Auto-populate accounting settings (only fills missing mappings) ────────
