@@ -388,8 +388,8 @@ export const getSuppliers = (): Supplier[] => getStored<Supplier>(SUPPLIERS_KEY)
 
 export const createSupplier = (data: Omit<Supplier, "id" | "createdAt" | "updatedAt">): Supplier => {
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
-    parentId:    SYS_ACCS.AP_GROUP,
-    parentCode:  "2100",
+    parentId:    SYS_ACCS.AP_TRADE,
+    parentCode:  "2111",
     name:        data.company + (data.contactPerson ? ` (${data.contactPerson})` : ""),
     head:        "Liabilities",
     subType:     "Payable",
@@ -1314,11 +1314,18 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       .filter(it => it.itemType === "raw-material")
       .reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
     const poTotal = inventoryTotal + rmTotal;
+    // Look up the supplier's subsidiary ledger to credit the correct payable account
+    const allSuppliers = getSuppliers();
+    const supplierRec = allSuppliers.find(s =>
+      s.company === order.supplier ||
+      s.contactPerson === order.supplier
+    );
     const je = autoPostPurchaseJE({
-      poNumber:  order.poNumber,
-      supplier:  order.supplier || "Supplier",
-      date:      today,
-      total:     poTotal,
+      poNumber:         order.poNumber,
+      supplier:         order.supplier || "Supplier",
+      date:             today,
+      total:            poTotal,
+      supplierLedgerId: supplierRec?.ledgerAccountId,
     });
     pos[i] = { ...pos[i], status: "Received", jeId: je?.id, updatedAt: new Date().toISOString() };
   } else {
@@ -2293,8 +2300,8 @@ export const SYS_ACCS = {
   // Liabilities — root + sub-groups
   LIAB_ROOT:          "sys-2000r",  // root Liabilities group (2000)
   CURRENT_LIAB:       "sys-2000",   // Current Liabilities group (2100) — child of LIAB_ROOT
-  AP_GROUP:           "sys-2100",   // Accounts Payable GROUP (2110) — parent for per-supplier ledgers
-  AP_TRADE:           "sys-2101",   // Trade Payables LEDGER (2111)
+  AP_GROUP:           "sys-2100",   // Accounts Payable GROUP (2110)
+  AP_TRADE:           "sys-2101",   // Trade Payables GROUP (2111) — parent for per-supplier ledgers
   VAT_PAYABLE:        "sys-2200",   // VAT / Tax Payable (2120)
   ACCRUED_EXP:        "sys-2130",   // Accrued Expenses (2130)
   NON_CURRENT_LIAB:   "sys-2200g",  // Non-Current Liabilities group (2200) — child of LIAB_ROOT
@@ -2347,7 +2354,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // Current Liabilities
   { id: SYS_ACCS.CURRENT_LIAB,       code: "2100", name: "Current Liabilities",        head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Current Liability", description: "Obligations due within 12 months" },
   { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
-  { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "General trade payables ledger" },
+  { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Trade payables — subsidiary ledgers per supplier" },
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid" },
   // Non-Current Liabilities
@@ -2454,7 +2461,38 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1) {
+  // ── Migrate sys-2101 (Trade Payables) from Ledger to Group ───────────────────
+  const apTradeIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.AP_TRADE && a.accountType === "Ledger");
+  if (apTradeIdx !== -1) {
+    workingAccounts[apTradeIdx] = {
+      ...workingAccounts[apTradeIdx],
+      accountType: "Group",
+      description: "Trade payables — subsidiary ledgers per supplier",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ── Migrate existing supplier subsidiary ledgers from AP_GROUP → AP_TRADE ────
+  // Any COA account whose id appears in a supplier's ledgerAccountId and whose
+  // parentId is still AP_GROUP should be moved under AP_TRADE.
+  const suppliersForMigration = getStored<{ ledgerAccountId?: string }>(SUPPLIERS_KEY);
+  const supplierLedgerIds = new Set(
+    suppliersForMigration.map(s => s.ledgerAccountId).filter(Boolean) as string[]
+  );
+  let supplierLedgersMoved = false;
+  workingAccounts = workingAccounts.map(acc => {
+    if (supplierLedgerIds.has(acc.id) && acc.parentId === SYS_ACCS.AP_GROUP) {
+      supplierLedgersMoved = true;
+      // Recode from "2110-NNN" pattern to "2111-NNN" keeping the sequence number
+      const newCode = acc.code.startsWith("2110-")
+        ? `2111-${acc.code.slice(5)}`
+        : acc.code;
+      return { ...acc, parentId: SYS_ACCS.AP_TRADE, code: newCode, updatedAt: new Date().toISOString() };
+    }
+    return acc;
+  });
+
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || supplierLedgersMoved) {
     const sk = tenantKey(COA_KEY);
     localStorage.setItem(sk, JSON.stringify(workingAccounts));
     _apiWrite(sk, workingAccounts);
@@ -2481,14 +2519,14 @@ export function seedDefaultCoaAccounts(): void {
     setStored(CUSTOMERS_KEY, customersPatched);
   }
 
-  // Suppliers → AP Group
+  // Suppliers → Trade Payables Group (AP_TRADE)
   const suppliers = getStored<{ id: string; company: string; contactPerson?: string; ledgerAccountId?: string }>(SUPPLIERS_KEY);
   let suppliersUpdated = false;
   const suppliersPatched = suppliers.map(s => {
     if (s.ledgerAccountId) return s;
     const lid = createSubsidiaryLedger({
-      parentId:    SYS_ACCS.AP_GROUP,
-      parentCode:  "2110",
+      parentId:    SYS_ACCS.AP_TRADE,
+      parentCode:  "2111",
       name:        s.company + (s.contactPerson ? ` (${s.contactPerson})` : ""),
       head:        "Liabilities",
       subType:     "Payable",
@@ -2529,9 +2567,13 @@ export function seedDefaultCoaAccounts(): void {
   if (!s.accBank)         mappingUpdates.accBank         = SYS_ACCS.BANK;
   if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
   if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
-  if (!s.accCogs)              mappingUpdates.accCogs             = SYS_ACCS.COGS;
-  if (!s.accInventory)         mappingUpdates.accInventory        = SYS_ACCS.INVENTORY;
-  if (!s.accPurchasePayable)   mappingUpdates.accPurchasePayable  = SYS_ACCS.AP_TRADE;
+  if (!s.accCogs)         mappingUpdates.accCogs         = SYS_ACCS.COGS;
+  if (!s.accInventory)    mappingUpdates.accInventory    = SYS_ACCS.INVENTORY;
+  // AP_TRADE is now a Group — clear accPurchasePayable if it still points to it
+  // (the JE now uses supplier-specific subsidiary ledgers directly)
+  if (s.accPurchasePayable === SYS_ACCS.AP_TRADE) {
+    mappingUpdates.accPurchasePayable = "";
+  }
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
   }
@@ -2840,14 +2882,17 @@ export function autoPostSaleJE(params: {
  * Returns null if required COA accounts are not yet configured in Settings.
  */
 export function autoPostPurchaseJE(params: {
-  poNumber: string;
-  supplier: string;
-  date:     string;   // YYYY-MM-DD
-  total:    number;
+  poNumber:         string;
+  supplier:         string;
+  date:             string;   // YYYY-MM-DD
+  total:            number;
+  supplierLedgerId?: string;  // specific supplier's subsidiary ledger (preferred)
 }): JournalEntry | null {
   if (params.total <= 0) return null;
   const s = getSettings();
-  if (!s.accInventory || !s.accPurchasePayable) return null;
+  // Use supplier-specific ledger first, then fall back to the general payable setting
+  const creditLedgerId = params.supplierLedgerId || s.accPurchasePayable;
+  if (!s.accInventory || !creditLedgerId) return null;
 
   const narration = `Purchase Receipt – ${params.poNumber} – ${params.supplier}`;
   const lines: JournalEntryLine[] = [
@@ -2860,7 +2905,7 @@ export function autoPostPurchaseJE(params: {
     },
     {
       id:        crypto.randomUUID(),
-      ledgerId:  s.accPurchasePayable,
+      ledgerId:  creditLedgerId,
       narration,
       debit:     0,
       credit:    params.total,

@@ -253,7 +253,17 @@ export default function PurchasesPage() {
       const today = new Date().toISOString().slice(0, 10);
       const total = localItems.reduce((s, i) => s + lineTotal(i), 0);
       if (total <= 0) { toast({ title: "Cannot post: total is zero", variant: "destructive" }); return; }
-      const je = autoPostPurchaseJE({ poNumber: detailPo.poNumber, supplier: detailPo.supplier || "Supplier", date: today, total });
+      const allSuppliers = getSuppliers();
+      const supplierRec = allSuppliers.find(s =>
+        s.company === detailPo.supplier || s.contactPerson === detailPo.supplier
+      );
+      const je = autoPostPurchaseJE({
+        poNumber:         detailPo.poNumber,
+        supplier:         detailPo.supplier || "Supplier",
+        date:             today,
+        total,
+        supplierLedgerId: supplierRec?.ledgerAccountId,
+      });
       if (!je) { toast({ title: "Accounting not configured — set Inventory & Payable accounts in Settings → Accounting", variant: "destructive" }); return; }
       updatePurchaseOrder(detailPoId, { jeId: je.id });
       toast({ title: "Accounting re-posted", description: `JE ${je.reference} created for ${detailPo.poNumber}` });
