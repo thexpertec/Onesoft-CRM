@@ -29,6 +29,7 @@ import {
   getPurchaseOrders, getSales, getModuleGroupById, ModuleId,
   getActivities, clearActivities, ActivityEntry, ActivityAction,
 } from "@/lib/store";
+import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
 // ─── Activity Log helpers ─────────────────────────────────────────────────────
@@ -261,6 +262,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
   const { isSuperAdmin, isStaff, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
+  useDemoReset();
 
   const [mobileOpen,       setMobileOpen]       = useState(false);
   const [searchOpen,       setSearchOpen]       = useState(false);

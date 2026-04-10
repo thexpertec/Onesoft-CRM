@@ -452,6 +452,7 @@ export default function TenantsPage() {
     setTimeout(() => {
       try {
         seedDataIntoTenant(tenant.id, tenant.name);
+        updateTenant(tenant.id, { demoLastReset: new Date().toISOString() });
         reload();
         toast({
           title: "Demo data loaded!",
@@ -761,6 +762,13 @@ export default function TenantsPage() {
                 {/* Demo data row — only visible on demo-flagged tenants */}
                 {t.isDemo && (
                   <div className="pt-2.5">
+                  {/* countdown chip */}
+                  {isSeeded && t.demoResetInterval ? (
+                    <div className="flex items-center gap-1.5 mb-2 text-[10px] text-violet-500 dark:text-violet-400 font-medium">
+                      <RefreshCw size={9} className={nextResetLabel(t.demoLastReset, t.demoResetInterval) === "Resetting soon…" ? "animate-spin" : ""} />
+                      {nextResetLabel(t.demoLastReset, t.demoResetInterval)}
+                    </div>
+                  ) : null}
                     {isSeeded ? (
                       <Button
                         size="sm"
