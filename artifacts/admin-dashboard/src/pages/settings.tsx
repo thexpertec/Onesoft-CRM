@@ -4,7 +4,7 @@ import {
   Save, Upload, Download, Trash2, RefreshCw,
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
-  FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info,
+  FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
   AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
+  clearAccountingLedger,
 } from "@/lib/store";
 import { CURRENCIES } from "@/lib/currencies";
 
@@ -109,6 +110,60 @@ function ModuleResetRow({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+// ─── Accounting Ledger reset row ──────────────────────────────────────────────
+function LedgerResetRow({ onReset }: { onReset: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/10 px-4 py-3 flex items-center justify-between gap-4">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300">Reset All Ledger Balances to Zero</p>
+        </div>
+        <p className="text-[12px] text-amber-700/80 dark:text-amber-400/70 leading-relaxed">
+          Deletes every journal entry and sets all account opening balances to 0.00.
+          The Chart of Accounts (accounts and groups) will be kept intact — only the values are cleared.
+        </p>
+      </div>
+      <button
+        onClick={() => setConfirm(true)}
+        className="flex-shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-amber-700 hover:text-red-700 dark:text-amber-300 dark:hover:text-red-400 px-3 py-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 border border-amber-300 hover:border-red-300 dark:border-amber-700 dark:hover:border-red-700 transition-colors"
+      >
+        <RotateCcw size={13} />
+        Reset to Zero
+      </button>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertTriangle size={18} /> Reset Accounting Ledger to Zero?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>This will permanently:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>Delete <strong>all journal entries</strong> (POS, invoices, purchases, and manual)</li>
+                  <li>Set <strong>all account opening balances to £0</strong></li>
+                </ul>
+                <p className="font-medium text-foreground">The Chart of Accounts structure is preserved. This cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => { setConfirm(false); onReset(); }}
+            >
+              Yes, Reset All Ledger Values to Zero
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -1224,6 +1279,20 @@ export default function SettingsPage() {
                     Backup includes: leads, customers, suppliers, products, stock, purchases, sales, documents, HRM staff, roles, users, and settings.
                   </p>
                 </div>
+
+                {/* Accounting Ledger Reset */}
+                {isSuperAdmin && (
+                  <div>
+                    <SectionHeader
+                      title="Reset Accounting Ledger"
+                      desc="Reset all account balances to zero. Journal entries are deleted and all opening balances are set to 0. The Chart of Accounts structure is preserved."
+                    />
+                    <LedgerResetRow onReset={() => {
+                      clearAccountingLedger();
+                      toast({ title: "Accounting ledger reset to zero", description: "All journal entries deleted and opening balances set to 0." });
+                    }} />
+                  </div>
+                )}
 
                 {/* Per-module reset */}
                 {isSuperAdmin && (

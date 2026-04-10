@@ -2162,21 +2162,41 @@ export const ALL_STORE_KEYS = [
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
   "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
-  "admin-settings",
+  "admin-settings", "admin-journal-entries", "admin-stock-ledger",
 ] as const;
 
 export type StoreKey = typeof ALL_STORE_KEYS[number];
 
 export const MODULE_KEYS: Record<string, StoreKey[]> = {
-  CRM:        ["admin-leads", "admin-customers", "admin-suppliers"],
-  Products:   ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
-  Stock:      ["admin-stock"],
-  Purchases:  ["admin-purchase-orders"],
-  Sales:      ["admin-sales", "admin-invoices"],
-  Documents:  ["admin-req-docs"],
-  HRM:        ["admin-hrm-staff", "admin-hrm-roles"],
-  Users:      ["admin-users"],
+  CRM:                  ["admin-leads", "admin-customers", "admin-suppliers"],
+  Products:             ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
+  Stock:                ["admin-stock"],
+  Purchases:            ["admin-purchase-orders"],
+  Sales:                ["admin-sales", "admin-invoices"],
+  Documents:            ["admin-req-docs"],
+  HRM:                  ["admin-hrm-staff", "admin-hrm-roles"],
+  Users:                ["admin-users"],
+  "Stock Ledger History": ["admin-stock-ledger"],
 };
+
+/**
+ * Resets the accounting ledger to zero:
+ *  1. Deletes all journal entries.
+ *  2. Resets every COA account's opening balance to 0.
+ * The Chart of Accounts structure (accounts, groups) is preserved.
+ */
+export function clearAccountingLedger(): void {
+  // 1 — wipe journal entries
+  const jeKey = tenantKey(JE_KEY);
+  localStorage.removeItem(jeKey);
+  _apiWrite(jeKey, []);
+
+  // 2 — reset opening balances to 0 on all COA accounts
+  const coaKey = tenantKey(COA_KEY);
+  const accounts = getAccounts().map(a => ({ ...a, openingBalance: 0 }));
+  localStorage.setItem(coaKey, JSON.stringify(accounts));
+  _apiWrite(coaKey, accounts);
+}
 
 export const addTeamMember = (name: string): string[] => {
   const current = getTeamMembers();
