@@ -972,31 +972,195 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Active-tenant banner (superadmin viewing a tenant) ───────────────── */}
-      {isSuperAdmin && currentTenantId && currentTenant && (
-        <div className="sticky top-0 z-30 bg-amber-500 text-white px-5 md:px-8 py-2 flex items-center gap-3 shadow-sm">
-          <Globe size={14} className="flex-shrink-0" />
-          <span className="text-[13px] font-semibold flex-1">
-            Viewing as: <span className="font-bold">{currentTenant.name}</span>
-            <span className="ml-2 text-amber-100 font-normal text-[11px]">
-              — all data reads &amp; writes are scoped to this tenant
-            </span>
-          </span>
-          <button
-            onClick={() => switchTenant(null)}
-            className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
-          >
-            <X size={12} /> Exit Tenant View
-          </button>
-        </div>
-      )}
+      {/* ── Three-column body: left sidebar | content | right sidebar ── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
-      {/* ── Main content ─────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-[1600px] mx-auto px-5 md:px-8 py-6 md:py-8">
-          {children}
+        {/* ═══ LEFT SIDEBAR — module shortcuts ═══════════════════════════════ */}
+        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-1.5 scrollbar-none">
+
+          {/* ── Dashboard ─────────────────────────────────────────────────── */}
+          <SidebarLink href="/"       icon={LayoutDashboard} label="Dashboard" active={location === "/"} navigate={navigate} />
+
+          {/* ── CRM ───────────────────────────────────────────────────────── */}
+          {allowedCrmColumns.length > 0 && <>
+            <SidebarDivider />
+            {isModuleAllowed("crm_leads")     && <SidebarLink href="/leads"     icon={Users}      label="Leads"     active={location.startsWith("/leads")}     navigate={navigate} />}
+            {isModuleAllowed("crm_customers") && <SidebarLink href="/customers" icon={UserCheck}  label="Customers" active={location.startsWith("/customers")} navigate={navigate} />}
+            {isModuleAllowed("crm_suppliers") && <SidebarLink href="/suppliers" icon={Truck}      label="Suppliers" active={location.startsWith("/suppliers")} navigate={navigate} />}
+          </>}
+
+          {/* ── Products & Stock ──────────────────────────────────────────── */}
+          {(isModuleAllowed("products") || isModuleAllowed("stock")) && <>
+            <SidebarDivider />
+            {isModuleAllowed("products") && <>
+              <SidebarLink href="/products"       icon={Package}   label="Products"   active={location.startsWith("/products")}       navigate={navigate} />
+              <SidebarLink href="/product-groups" icon={Layers}    label="Grp."       active={location.startsWith("/product-groups")} navigate={navigate} titleFull="Product Groups" />
+              <SidebarLink href="/brands"         icon={Bookmark}  label="Brands"     active={location.startsWith("/brands")}         navigate={navigate} />
+              <SidebarLink href="/categories"     icon={FolderOpen}label="Categ."     active={location.startsWith("/categories")}     navigate={navigate} titleFull="Categories" />
+              <SidebarLink href="/attributes"     icon={SlidersHorizontal} label="Attr." active={location.startsWith("/attributes")} navigate={navigate} titleFull="Attributes" />
+              <SidebarLink href="/units"          icon={Ruler}     label="Units"      active={location.startsWith("/units")}          navigate={navigate} />
+              <SidebarLink href="/media"          icon={ImageIcon} label="Media"      active={location.startsWith("/media")}          navigate={navigate} />
+            </>}
+            {isModuleAllowed("stock") && <>
+              <SidebarLink href="/stock"       icon={Boxes} label="Stock"  active={location === "/stock" || (location.startsWith("/stock") && !location.includes("holds"))} navigate={navigate} />
+              <SidebarLink href="/stock/holds" icon={Lock}  label="Holds"  active={location.includes("/stock/holds")} navigate={navigate} titleFull="Stock Holds" />
+            </>}
+          </>}
+
+          {/* ── Sales & Purchases ─────────────────────────────────────────── */}
+          {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <>
+            <SidebarDivider />
+            {isModuleAllowed("sales")                                   && <SidebarLink href="/sales"        icon={Receipt}     label="Sales"     active={location.startsWith("/sales")}        navigate={navigate} />}
+            {(isModuleAllowed("sales") || isModuleAllowed("invoices"))  && <SidebarLink href="/invoices"     icon={FileText}    label="Invoices"  active={location.startsWith("/invoices")}     navigate={navigate} />}
+            {(isModuleAllowed("sales") || isModuleAllowed("invoices"))  && <SidebarLink href="/calc-invoice" icon={Calculator}  label="Calc Inv." active={location.startsWith("/calc-invoice")} navigate={navigate} titleFull="Calc Invoice" />}
+            {isModuleAllowed("sales")                                   && <SidebarLink href="/sales-agents" icon={Users2}      label="Agents"    active={location.startsWith("/sales-agents")} navigate={navigate} titleFull="Sales Agents" />}
+            {isModuleAllowed("purchases")                               && <SidebarLink href="/purchases"    icon={ShoppingCart}label="Purchases" active={location.startsWith("/purchases")}    navigate={navigate} />}
+          </>}
+
+          {/* ── Documents ─────────────────────────────────────────────────── */}
+          {isModuleAllowed("documents") && <>
+            <SidebarDivider />
+            <SidebarLink href="/documents" icon={FileText} label="Docs" active={location.startsWith("/documents")} navigate={navigate} titleFull="Documents" />
+          </>}
+
+          {/* ── Accounts ──────────────────────────────────────────────────── */}
+          <SidebarDivider />
+          <SidebarLink href="/chart-of-accounts" icon={BookOpen}       label="CoA"     active={location.startsWith("/chart-of-accounts")} navigate={navigate} titleFull="Chart of Accounts" />
+          <SidebarLink href="/journal-entry"     icon={ClipboardList}  label="Journal" active={location.startsWith("/journal-entry")}     navigate={navigate} titleFull="Journal Entry" />
+          <SidebarLink href="/balance-sheet"     icon={LayoutDashboard}label="Balance" active={location.startsWith("/balance-sheet")}     navigate={navigate} titleFull="Balance Sheet" />
+
+          {/* ── Manufacturing ─────────────────────────────────────────────── */}
+          <SidebarDivider />
+          <SidebarLink href="/production-guide" icon={ArrowRight}   label="Guide"    active={location.startsWith("/production-guide")} navigate={navigate} titleFull="Workflow Guide" />
+          <SidebarLink href="/raw-materials"    icon={FlaskConical} label="Raw Mtl." active={location.startsWith("/raw-materials")}    navigate={navigate} titleFull="Raw Materials" />
+          <SidebarLink href="/manufacturing"    icon={Factory}      label="Mfg."     active={location === "/manufacturing"}           navigate={navigate} titleFull="Mfg. Orders" />
+
+          {/* ── Investments ───────────────────────────────────────────────── */}
+          <SidebarDivider />
+          <SidebarLink href="/shareholders"     icon={Landmark}    label="Shares"    active={location.startsWith("/shareholders")}     navigate={navigate} titleFull="Shareholders" />
+          <SidebarLink href="/investment-plans" icon={TrendingUp}  label="Invest."   active={location.startsWith("/investment-plans")} navigate={navigate} titleFull="Investment Plans" />
+
+          {/* ── HRM ───────────────────────────────────────────────────────── */}
+          {hrmItems.length > 0 && <>
+            <SidebarDivider />
+            {isModuleAllowed("hrm_staff") && <SidebarLink href="/staff"  icon={Users2}      label="Staff"   active={location.startsWith("/staff")} navigate={navigate} />}
+            {isModuleAllowed("hrm_roles") && <SidebarLink href="/roles"  icon={KeyRound}    label="Roles"   active={location.startsWith("/roles")} navigate={navigate} />}
+            {!isStaff && isSuperAdmin && !currentTenantId && <>
+              <SidebarLink href="/users"         icon={Shield}          label="Users"   active={location.startsWith("/users")}         navigate={navigate} titleFull="Admin Accounts" />
+              <SidebarLink href="/tenants"       icon={Globe}           label="Tenants" active={location.startsWith("/tenants")}       navigate={navigate} />
+              <SidebarLink href="/module-groups" icon={LayoutDashboard} label="Modules" active={location.startsWith("/module-groups")} navigate={navigate} titleFull="Module Groups" />
+            </>}
+          </>}
+
+          {/* ── Settings ──────────────────────────────────────────────────── */}
+          {isModuleAllowed("settings") && <>
+            <SidebarDivider />
+            <SidebarLink href="/settings" icon={Settings} label="Settings" active={location.startsWith("/settings")} navigate={navigate} />
+          </>}
+        </nav>
+
+        {/* ═══ CENTER CONTENT ════════════════════════════════════════════════ */}
+        <div className="flex flex-col flex-1 min-w-0 overflow-y-auto bg-gray-50 dark:bg-background">
+
+          {/* Active-tenant banner */}
+          {isSuperAdmin && currentTenantId && currentTenant && (
+            <div className="bg-amber-500 text-white px-5 py-2 flex items-center gap-3 shadow-sm flex-shrink-0">
+              <Globe size={14} className="flex-shrink-0" />
+              <span className="text-[13px] font-semibold flex-1">
+                Viewing as: <span className="font-bold">{currentTenant.name}</span>
+                <span className="ml-2 text-amber-100 font-normal text-[11px]">
+                  — all data reads &amp; writes are scoped to this tenant
+                </span>
+              </span>
+              <button
+                onClick={() => switchTenant(null)}
+                className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
+              >
+                <X size={12} /> Exit Tenant View
+              </button>
+            </div>
+          )}
+
+          <main className="flex-1">
+            <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-6 md:py-8">
+              {children}
+            </div>
+          </main>
         </div>
-      </main>
+
+        {/* ═══ RIGHT SIDEBAR — quick-add shortcuts ═══════════════════════════ */}
+        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-1.5 scrollbar-none">
+          <div className="px-1 py-1 mb-1">
+            <p className="text-[8px] font-bold uppercase tracking-widest text-center text-gray-300 dark:text-muted-foreground/50 leading-tight">Quick<br/>Add</p>
+          </div>
+          <SidebarAction icon={UserPlus}     label="New Lead"    onClick={() => navigate("/leads")}         navigate={navigate} color="text-blue-500" />
+          <SidebarAction icon={UserCheck}    label="Customer"    onClick={() => navigate("/customers")}     navigate={navigate} color="text-emerald-500" />
+          <SidebarAction icon={Truck}        label="Supplier"    onClick={() => navigate("/suppliers")}     navigate={navigate} color="text-violet-500" />
+          <SidebarDivider />
+          <SidebarAction icon={Boxes}        label="Stock Item"  onClick={() => navigate("/stock")}         navigate={navigate} color="text-cyan-500" />
+          <SidebarAction icon={ShoppingCart} label="Purchase"    onClick={() => navigate("/purchases")}     navigate={navigate} color="text-orange-500" />
+          <SidebarDivider />
+          <SidebarAction icon={Receipt}      label="New Sale"    onClick={() => navigate("/sales/new")}     navigate={navigate} color="text-green-500" />
+          <SidebarAction icon={FileText}     label="Invoice"     onClick={() => navigate("/invoices")}      navigate={navigate} color="text-indigo-500" />
+          <SidebarAction icon={Calculator}   label="Calc Inv."   onClick={() => navigate("/calc-invoice")}  navigate={navigate} color="text-pink-500" />
+          <SidebarDivider />
+          <SidebarAction icon={FilePlus}     label="Document"    onClick={() => navigate("/documents/new")} navigate={navigate} color="text-amber-500" />
+          <SidebarDivider />
+          <SidebarAction icon={FlaskConical} label="Raw Mtl."    onClick={() => navigate("/raw-materials")} navigate={navigate} color="text-teal-500" />
+          <SidebarAction icon={Factory}      label="Mfg Order"   onClick={() => navigate("/manufacturing")} navigate={navigate} color="text-rose-500" />
+          <SidebarDivider />
+          <div className="mt-auto pt-2">
+            <SidebarAction icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "Light" : "Dark"} onClick={toggleTheme} navigate={navigate} color="text-gray-400" />
+          </div>
+        </nav>
+
+      </div>
     </div>
+  );
+}
+
+// ─── Sidebar helpers ──────────────────────────────────────────────────────────
+function SidebarDivider() {
+  return <div className="mx-3 my-1 h-px bg-gray-100 dark:bg-border shrink-0" />;
+}
+
+function SidebarLink({
+  href, icon: Icon, label, active, navigate, titleFull,
+}: {
+  href: string; icon: React.ElementType; label: string;
+  active: boolean; navigate: (to: string) => void; titleFull?: string;
+}) {
+  return (
+    <button
+      title={titleFull || label}
+      onClick={() => navigate(href)}
+      className={`flex flex-col items-center justify-center w-full py-2 px-1 gap-0.5 transition-colors shrink-0 group
+        ${active
+          ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"
+          : "text-gray-400 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted/40 hover:text-gray-700 dark:hover:text-foreground"
+        }`}
+    >
+      <Icon size={15} />
+      <span className="text-[8.5px] font-medium leading-none truncate w-full text-center px-0.5 mt-0.5">{label}</span>
+    </button>
+  );
+}
+
+function SidebarAction({
+  icon: Icon, label, onClick, color, navigate: _nav,
+}: {
+  icon: React.ElementType; label: string;
+  onClick: () => void; color?: string; navigate: (to: string) => void;
+}) {
+  return (
+    <button
+      title={label}
+      onClick={onClick}
+      className="flex flex-col items-center justify-center w-full py-2 px-1 gap-0.5 transition-colors shrink-0
+        text-gray-400 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted/40 group"
+    >
+      <Icon size={15} className={`group-hover:${color || "text-blue-500"} transition-colors`} />
+      <span className="text-[8.5px] font-medium leading-none truncate w-full text-center px-0.5 mt-0.5 group-hover:text-gray-600 dark:group-hover:text-foreground">{label}</span>
+    </button>
   );
 }
