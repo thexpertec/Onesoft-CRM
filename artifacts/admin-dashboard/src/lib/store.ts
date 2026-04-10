@@ -1449,6 +1449,19 @@ export const getStock = (): StockItem[] => getStored<StockItem>(STOCK_KEY);
 export const createStockItem = (data: Omit<StockItem, "id" | "createdAt" | "updatedAt">): StockItem => {
   const item: StockItem = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(STOCK_KEY, [...getStock(), item]);
+  // Record opening-balance ledger entry if initial qty > 0
+  const initQty = parseFloat(item.quantity) || 0;
+  if (initQty > 0) {
+    batchLedger([{
+      entityType: "product", entityId: item.id, entityName: item.productName,
+      date:      new Date().toISOString().slice(0, 10),
+      txType:    "opening-balance",
+      reference: "MANUAL",
+      qtyBefore: 0, qtyChange: initQty, qtyAfter: initQty,
+      unit:      item.unit,
+      notes:     `Opening balance — ${item.store}`,
+    }]);
+  }
   return item;
 };
 
@@ -1456,8 +1469,26 @@ export const updateStockItem = (id: string, updates: Partial<Omit<StockItem, "id
   const items = getStock();
   const i = items.findIndex(s => s.id === id);
   if (i === -1) throw new Error("Stock item not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  const prev = items[i];
+  items[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
   setStored(STOCK_KEY, items);
+  // Record a manual-adjustment ledger entry whenever quantity changes
+  if ("quantity" in updates && updates.quantity !== undefined) {
+    const before = parseFloat(prev.quantity) || 0;
+    const after  = parseFloat(updates.quantity) || 0;
+    const delta  = after - before;
+    if (delta !== 0) {
+      batchLedger([{
+        entityType: "product", entityId: id, entityName: items[i].productName,
+        date:      new Date().toISOString().slice(0, 10),
+        txType:    "manual-adjustment",
+        reference: "MANUAL",
+        qtyBefore: before, qtyChange: delta, qtyAfter: after,
+        unit:      items[i].unit,
+        notes:     `Manual quantity adjustment — ${items[i].store}`,
+      }]);
+    }
+  }
   return items[i];
 };
 
@@ -1472,7 +1503,8 @@ export type LedgerTxType =
   | "sale-refund"
   | "mfg-input"
   | "mfg-output"
-  | "manual-adjustment";
+  | "manual-adjustment"
+  | "opening-balance";
 
 export const LEDGER_TX_LABELS: Record<LedgerTxType, string> = {
   "purchase-receipt": "Purchase Receipt",
@@ -1481,6 +1513,7 @@ export const LEDGER_TX_LABELS: Record<LedgerTxType, string> = {
   "mfg-input":        "Mfg. Consumed",
   "mfg-output":       "Mfg. Produced",
   "manual-adjustment":"Manual Adjustment",
+  "opening-balance":  "Opening Balance",
 };
 
 export type StockLedgerEntry = {
@@ -2558,6 +2591,30 @@ export function seedDefaultCoaAccounts(): void {
   if (shareholdersUpdated) {
     setStored(SHAREHOLDERS_KEY, shareholdersPatched);
   }
+
+  // ── Backfill stock ledger: create opening-balance entries for items with no history ─
+  const allStockItems = getStock();
+  const existingLedger = getStockLedger();
+  const itemsWithHistory = new Set(existingLedger.map(e => e.entityId));
+  const today = new Date().toISOString().slice(0, 10);
+  const openingEntries: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+  for (const si of allStockItems) {
+    if (!itemsWithHistory.has(si.id)) {
+      const qty = parseFloat(si.quantity) || 0;
+      if (qty > 0) {
+        openingEntries.push({
+          entityType: "product", entityId: si.id, entityName: si.productName,
+          date:      today,
+          txType:    "opening-balance",
+          reference: "MANUAL",
+          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+          unit:      si.unit,
+          notes:     `Opening balance — ${si.store}`,
+        });
+      }
+    }
+  }
+  if (openingEntries.length > 0) batchLedger(openingEntries);
 
   // ── Auto-populate accounting settings (only fills missing mappings) ────────
   const s = getSettings();
