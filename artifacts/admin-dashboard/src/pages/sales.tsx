@@ -358,6 +358,7 @@ function POSView({
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
+  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
 
   // ── Quick-add customer dialog ────────────────────────────────────────────
   const [qaOpen,  setQaOpen]  = useState(false);
@@ -823,7 +824,7 @@ function POSView({
                       <Save size={13} /> Save Draft
                     </button>
                     <button
-                      onClick={() => onSetStatus("Cancelled")}
+                      onClick={() => setVoidConfirmOpen(true)}
                       className="h-9 px-3 rounded-xl border-2 border-red-100 dark:border-red-900/50 text-[12px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-1.5 transition-colors"
                     >
                       <Ban size={13} /> Void
@@ -1092,6 +1093,24 @@ function POSView({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {/* ── Void confirm ─────────────────────────────────────────────────────── */}
+    <AlertDialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Void this sale?</AlertDialogTitle>
+          <AlertDialogDescription>This sale will be marked as Cancelled. This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-600 hover:bg-red-700"
+            onClick={() => { onSetStatus("Cancelled"); setVoidConfirmOpen(false); }}
+          >
+            Void Sale
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }

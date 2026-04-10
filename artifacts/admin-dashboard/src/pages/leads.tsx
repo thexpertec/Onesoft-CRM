@@ -200,6 +200,7 @@ function LeadDetailSheet({
   const [isEditing, setIsEditing] = useState(false);
 
   // ── Call log state ─────────────────────────────────────────────────────────
+  const [deleteLogId, setDeleteLogId] = useState<string | null>(null);
   const [newCallOpen, setNewCallOpen] = useState(false);
   const [callDate, setCallDate]       = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [callTime, setCallTime]       = useState(() => format(new Date(), "HH:mm"));
@@ -612,7 +613,7 @@ function LeadDetailSheet({
                           {log.notes && <p className="text-[13px] text-foreground mt-1 whitespace-pre-wrap">{log.notes}</p>}
                         </div>
                         {canEdit && (
-                          <button onClick={() => deleteCallLog(log.id)} className="text-muted-foreground/40 hover:text-red-500 transition-colors flex-shrink-0" title="Delete log">
+                          <button onClick={() => setDeleteLogId(log.id)} className="text-muted-foreground/40 hover:text-red-500 transition-colors flex-shrink-0" title="Delete log">
                             <X size={12} />
                           </button>
                         )}
@@ -695,6 +696,25 @@ function LeadDetailSheet({
           </div>
         )}
       </div>
+
+      {/* ── Delete call log confirm ──────────────────────────────────────────── */}
+      <AlertDialog open={!!deleteLogId} onOpenChange={o => !o && setDeleteLogId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete call log?</AlertDialogTitle>
+            <AlertDialogDescription>This call log entry will be permanently removed. This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => { if (deleteLogId) { deleteCallLog(deleteLogId); setDeleteLogId(null); } }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

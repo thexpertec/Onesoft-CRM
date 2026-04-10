@@ -8,6 +8,7 @@ import { useAccounts } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { Account, JournalEntry } from "@/lib/store";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -217,6 +218,7 @@ export default function JournalEntryPage() {
   // ── Saved entries panel ───────────────────────────────────────────────────
   const [showSaved, setShowSaved] = useState(true);
   const [viewEntry, setViewEntry] = useState<string | null>(null);
+  const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
 
   // Reset reference when entries change
   useEffect(() => {
@@ -667,7 +669,7 @@ export default function JournalEntryPage() {
                               </button>
                               <button
                                 title="Delete entry"
-                                onClick={ev => { ev.stopPropagation(); removeEntry(e.id); if (viewEntry === e.id) setViewEntry(null); if (editingEntryId === e.id) clearAll(); }}
+                                onClick={ev => { ev.stopPropagation(); setDeleteJeId(e.id); }}
                                 className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                               >
                                 <Trash2 size={12} />
@@ -743,6 +745,31 @@ export default function JournalEntryPage() {
           </div>
         )}
       </div>
+
+      {/* ── Delete JE confirm ─────────────────────────────────────────────────── */}
+      <AlertDialog open={!!deleteJeId} onOpenChange={o => !o && setDeleteJeId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete journal entry?</AlertDialogTitle>
+            <AlertDialogDescription>This journal entry will be permanently removed. This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (!deleteJeId) return;
+                removeEntry(deleteJeId);
+                if (viewEntry === deleteJeId) setViewEntry(null);
+                if (editingEntryId === deleteJeId) clearAll();
+                setDeleteJeId(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

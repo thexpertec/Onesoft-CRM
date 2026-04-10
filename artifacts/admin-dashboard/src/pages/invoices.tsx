@@ -296,7 +296,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, defa
   );
   const [items, setItems]       = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
-  const [deleteOpen, setDeleteOpen]   = useState(false);
+  const [deleteOpen, setDeleteOpen]         = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
   const [addDocOpen, setAddDocOpen]   = useState(false);
 
@@ -461,13 +463,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, defa
           </button>
         )}
         {(s === "Paid" || s === "Partial") && (
-          <button onClick={() => onStatusChange(inv.id, "Draft")}
+          <button onClick={() => setRevertConfirmOpen(true)}
             className="h-11 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-2 transition-colors">
             <RotateCcw size={15}/> Revert to Draft
           </button>
         )}
         {(s !== "Cancelled") && (
-          <button onClick={() => onStatusChange(inv.id, "Cancelled")}
+          <button onClick={() => setCancelConfirmOpen(true)}
             className="h-11 rounded-xl border-2 border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-2 transition-colors">
             <Ban size={15}/> Cancel
           </button>
@@ -1050,6 +1052,47 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, defa
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => { onDelete(invoice!.id); onClose(); }} className="bg-red-600 hover:bg-red-700">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel invoice confirm */}
+      <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice "{invoice?.invoiceNumber}" will be marked as Cancelled. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => { if (invoice) onStatusChange(invoice.id, "Cancelled"); setCancelConfirmOpen(false); }}
+            >
+              Cancel Invoice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revert to draft confirm */}
+      <AlertDialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert to Draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice "{invoice?.invoiceNumber}" will be reverted to Draft status. Any recorded payments will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (invoice) onStatusChange(invoice.id, "Draft"); setRevertConfirmOpen(false); }}
+            >
+              Revert to Draft
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
