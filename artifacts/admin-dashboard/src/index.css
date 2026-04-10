@@ -494,3 +494,9 @@
   margin: 1rem 0;
 }
 .ProseMirror.resize-cursor { cursor: col-resize; }
+
+@keyframes gradshift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}

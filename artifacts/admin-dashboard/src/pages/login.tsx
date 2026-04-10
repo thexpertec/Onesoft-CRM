@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Lock, Eye, EyeOff, ShieldCheck, Users2,
-  FlaskConical, CheckCircle2, Sparkles, ChevronRight,
+  FlaskConical, CheckCircle2, Sparkles, ChevronRight, Zap,
 } from "lucide-react";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import { getTenants, Tenant } from "@/lib/store";
@@ -29,6 +29,81 @@ const CARD_GRADIENTS = [
   "from-pink-600 to-rose-600",
   "from-blue-500 to-cyan-600",
 ];
+
+function OneDemoButton({
+  demos,
+  onLogin,
+  loading,
+}: {
+  demos: Tenant[];
+  onLogin: (u: string, p: string) => void;
+  loading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleClick = () => {
+    if (demos.length === 1) {
+      onLogin(demos[0].adminUsername, demos[0].adminPassword);
+    } else {
+      setOpen(v => !v);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative mt-1">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={loading}
+        className="group relative w-full h-11 rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_0_1px_rgba(139,92,246,0.4)] hover:shadow-[0_0_18px_rgba(139,92,246,0.45)]"
+      >
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-indigo-600 to-violet-600 bg-[length:200%_100%] group-hover:animate-[gradshift_1.5s_linear_infinite]" />
+        {/* Shimmer sweep */}
+        <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12" />
+        <span className="relative flex items-center justify-center gap-2 font-bold text-white text-[13px] tracking-wide uppercase">
+          <Zap size={14} className="fill-white" />
+          One Click
+          <span className="mx-0.5 text-violet-200">|</span>
+          Demo Login
+          {demos.length > 1 && <ChevronRight size={13} className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`} />}
+        </span>
+      </button>
+
+      {/* Dropdown for multiple demos */}
+      {open && demos.length > 1 && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 rounded-xl border border-violet-100 dark:border-violet-900 bg-white dark:bg-zinc-900 shadow-xl overflow-hidden">
+          {demos.map((t, i) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => { setOpen(false); onLogin(t.adminUsername, t.adminPassword); }}
+              className="group w-full flex items-center gap-3 px-4 py-3 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors border-b border-gray-50 dark:border-zinc-800 last:border-0"
+            >
+              <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]} flex items-center justify-center flex-shrink-0`}>
+                <FlaskConical size={12} className="text-white" />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-foreground truncate">{t.name}</p>
+                <p className="text-[11px] text-gray-400 dark:text-muted-foreground font-mono">{t.adminUsername}</p>
+              </div>
+              <ChevronRight size={13} className="text-violet-400 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
@@ -280,6 +355,10 @@ export default function Login() {
                 <Lock className="mr-2 h-3.5 w-3.5" />
                 {loading ? "Signing in…" : "Sign In"}
               </Button>
+
+              {demoTenants.length > 0 && (
+                <OneDemoButton demos={demoTenants} onLogin={doLogin} loading={loading} />
+              )}
             </form>
           </div>
 
