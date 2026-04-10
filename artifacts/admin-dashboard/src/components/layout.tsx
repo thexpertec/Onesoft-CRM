@@ -8,7 +8,7 @@ import {
   ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical,
+  Landmark, TrendingUp, ClipboardList, Calculator, Factory, FlaskConical, Wallet,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -975,88 +975,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Three-column body: left sidebar | content | right sidebar ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ═══ LEFT SIDEBAR — module shortcuts ═══════════════════════════════ */}
-        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-1.5 scrollbar-none">
+        {/* ═══ LEFT SIDEBAR — people & products ══════════════════════════════ */}
+        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
 
-          {/* ── Dashboard ─────────────────────────────────────────────────── */}
-          <SidebarLink href="/"       icon={LayoutDashboard} label="Dashboard" active={location === "/"} navigate={navigate} />
+          {/* CRM */}
+          <SidebarLink href="/leads"       icon={Users}      label="Leads"     active={location.startsWith("/leads")}       navigate={navigate} titleFull="Leads" />
+          <SidebarLink href="/customers"   icon={UserCheck}  label="Customers" active={location.startsWith("/customers")}   navigate={navigate} titleFull="Customers" />
+          <SidebarLink href="/suppliers"   icon={Truck}      label="Suppliers" active={location.startsWith("/suppliers")}   navigate={navigate} titleFull="Suppliers" />
+          <SidebarLink href="/sales-agents"icon={Users2}     label="Agents"    active={location.startsWith("/sales-agents")}navigate={navigate} titleFull="Sales Agents" />
 
-          {/* ── CRM ───────────────────────────────────────────────────────── */}
-          {allowedCrmColumns.length > 0 && <>
-            <SidebarDivider />
-            {isModuleAllowed("crm_leads")     && <SidebarLink href="/leads"     icon={Users}      label="Leads"     active={location.startsWith("/leads")}     navigate={navigate} />}
-            {isModuleAllowed("crm_customers") && <SidebarLink href="/customers" icon={UserCheck}  label="Customers" active={location.startsWith("/customers")} navigate={navigate} />}
-            {isModuleAllowed("crm_suppliers") && <SidebarLink href="/suppliers" icon={Truck}      label="Suppliers" active={location.startsWith("/suppliers")} navigate={navigate} />}
-          </>}
-
-          {/* ── Products & Stock ──────────────────────────────────────────── */}
-          {(isModuleAllowed("products") || isModuleAllowed("stock")) && <>
-            <SidebarDivider />
-            {isModuleAllowed("products") && <>
-              <SidebarLink href="/products"       icon={Package}   label="Products"   active={location.startsWith("/products")}       navigate={navigate} />
-              <SidebarLink href="/product-groups" icon={Layers}    label="Grp."       active={location.startsWith("/product-groups")} navigate={navigate} titleFull="Product Groups" />
-              <SidebarLink href="/brands"         icon={Bookmark}  label="Brands"     active={location.startsWith("/brands")}         navigate={navigate} />
-              <SidebarLink href="/categories"     icon={FolderOpen}label="Categ."     active={location.startsWith("/categories")}     navigate={navigate} titleFull="Categories" />
-              <SidebarLink href="/attributes"     icon={SlidersHorizontal} label="Attr." active={location.startsWith("/attributes")} navigate={navigate} titleFull="Attributes" />
-              <SidebarLink href="/units"          icon={Ruler}     label="Units"      active={location.startsWith("/units")}          navigate={navigate} />
-              <SidebarLink href="/media"          icon={ImageIcon} label="Media"      active={location.startsWith("/media")}          navigate={navigate} />
-            </>}
-            {isModuleAllowed("stock") && <>
-              <SidebarLink href="/stock"       icon={Boxes} label="Stock"  active={location === "/stock" || (location.startsWith("/stock") && !location.includes("holds"))} navigate={navigate} />
-              <SidebarLink href="/stock/holds" icon={Lock}  label="Holds"  active={location.includes("/stock/holds")} navigate={navigate} titleFull="Stock Holds" />
-            </>}
-          </>}
-
-          {/* ── Sales & Purchases ─────────────────────────────────────────── */}
-          {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <>
-            <SidebarDivider />
-            {isModuleAllowed("sales")                                   && <SidebarLink href="/sales"        icon={Receipt}     label="Sales"     active={location.startsWith("/sales")}        navigate={navigate} />}
-            {(isModuleAllowed("sales") || isModuleAllowed("invoices"))  && <SidebarLink href="/invoices"     icon={FileText}    label="Invoices"  active={location.startsWith("/invoices")}     navigate={navigate} />}
-            {(isModuleAllowed("sales") || isModuleAllowed("invoices"))  && <SidebarLink href="/calc-invoice" icon={Calculator}  label="Calc Inv." active={location.startsWith("/calc-invoice")} navigate={navigate} titleFull="Calc Invoice" />}
-            {isModuleAllowed("sales")                                   && <SidebarLink href="/sales-agents" icon={Users2}      label="Agents"    active={location.startsWith("/sales-agents")} navigate={navigate} titleFull="Sales Agents" />}
-            {isModuleAllowed("purchases")                               && <SidebarLink href="/purchases"    icon={ShoppingCart}label="Purchases" active={location.startsWith("/purchases")}    navigate={navigate} />}
-          </>}
-
-          {/* ── Documents ─────────────────────────────────────────────────── */}
-          {isModuleAllowed("documents") && <>
-            <SidebarDivider />
-            <SidebarLink href="/documents" icon={FileText} label="Docs" active={location.startsWith("/documents")} navigate={navigate} titleFull="Documents" />
-          </>}
-
-          {/* ── Accounts ──────────────────────────────────────────────────── */}
           <SidebarDivider />
-          <SidebarLink href="/chart-of-accounts" icon={BookOpen}       label="CoA"     active={location.startsWith("/chart-of-accounts")} navigate={navigate} titleFull="Chart of Accounts" />
-          <SidebarLink href="/journal-entry"     icon={ClipboardList}  label="Journal" active={location.startsWith("/journal-entry")}     navigate={navigate} titleFull="Journal Entry" />
-          <SidebarLink href="/balance-sheet"     icon={LayoutDashboard}label="Balance" active={location.startsWith("/balance-sheet")}     navigate={navigate} titleFull="Balance Sheet" />
 
-          {/* ── Manufacturing ─────────────────────────────────────────────── */}
+          {/* HRM */}
+          <SidebarLink href="/staff"       icon={Building2}  label="Staff"     active={location.startsWith("/staff")}       navigate={navigate} titleFull="Staff / HRM" />
+
           <SidebarDivider />
-          <SidebarLink href="/production-guide" icon={ArrowRight}   label="Guide"    active={location.startsWith("/production-guide")} navigate={navigate} titleFull="Workflow Guide" />
-          <SidebarLink href="/raw-materials"    icon={FlaskConical} label="Raw Mtl." active={location.startsWith("/raw-materials")}    navigate={navigate} titleFull="Raw Materials" />
-          <SidebarLink href="/manufacturing"    icon={Factory}      label="Mfg."     active={location === "/manufacturing"}           navigate={navigate} titleFull="Mfg. Orders" />
 
-          {/* ── Investments ───────────────────────────────────────────────── */}
+          {/* Products & stock */}
+          <SidebarLink href="/products"    icon={Package}    label="Products"  active={location.startsWith("/products")}    navigate={navigate} titleFull="Products" />
+          <SidebarLink href="/stock"       icon={Boxes}      label="Stock"     active={location.startsWith("/stock")}       navigate={navigate} titleFull="Stock" />
+          <SidebarLink href="/raw-materials" icon={FlaskConical} label="Raw Mtl." active={location.startsWith("/raw-materials")} navigate={navigate} titleFull="Raw Materials" />
+
           <SidebarDivider />
-          <SidebarLink href="/shareholders"     icon={Landmark}    label="Shares"    active={location.startsWith("/shareholders")}     navigate={navigate} titleFull="Shareholders" />
-          <SidebarLink href="/investment-plans" icon={TrendingUp}  label="Invest."   active={location.startsWith("/investment-plans")} navigate={navigate} titleFull="Investment Plans" />
 
-          {/* ── HRM ───────────────────────────────────────────────────────── */}
-          {hrmItems.length > 0 && <>
-            <SidebarDivider />
-            {isModuleAllowed("hrm_staff") && <SidebarLink href="/staff"  icon={Users2}      label="Staff"   active={location.startsWith("/staff")} navigate={navigate} />}
-            {isModuleAllowed("hrm_roles") && <SidebarLink href="/roles"  icon={KeyRound}    label="Roles"   active={location.startsWith("/roles")} navigate={navigate} />}
-            {!isStaff && isSuperAdmin && !currentTenantId && <>
-              <SidebarLink href="/users"         icon={Shield}          label="Users"   active={location.startsWith("/users")}         navigate={navigate} titleFull="Admin Accounts" />
-              <SidebarLink href="/tenants"       icon={Globe}           label="Tenants" active={location.startsWith("/tenants")}       navigate={navigate} />
-              <SidebarLink href="/module-groups" icon={LayoutDashboard} label="Modules" active={location.startsWith("/module-groups")} navigate={navigate} titleFull="Module Groups" />
-            </>}
-          </>}
-
-          {/* ── Settings ──────────────────────────────────────────────────── */}
-          {isModuleAllowed("settings") && <>
-            <SidebarDivider />
-            <SidebarLink href="/settings" icon={Settings} label="Settings" active={location.startsWith("/settings")} navigate={navigate} />
-          </>}
+          {/* Manufacturing */}
+          <SidebarLink href="/manufacturing" icon={Factory} label="Mfg." active={location.startsWith("/manufacturing") || location.startsWith("/production-guide")} navigate={navigate} titleFull="Manufacturing" />
         </nav>
 
         {/* ═══ CENTER CONTENT ════════════════════════════════════════════════ */}
@@ -1089,29 +1032,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* ═══ RIGHT SIDEBAR — quick-add shortcuts ═══════════════════════════ */}
-        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-1.5 scrollbar-none">
-          <div className="px-1 py-1 mb-1">
-            <p className="text-[8px] font-bold uppercase tracking-widest text-center text-gray-300 dark:text-muted-foreground/50 leading-tight">Quick<br/>Add</p>
-          </div>
-          <SidebarAction icon={UserPlus}     label="New Lead"    onClick={() => navigate("/leads")}         navigate={navigate} color="text-blue-500" />
-          <SidebarAction icon={UserCheck}    label="Customer"    onClick={() => navigate("/customers")}     navigate={navigate} color="text-emerald-500" />
-          <SidebarAction icon={Truck}        label="Supplier"    onClick={() => navigate("/suppliers")}     navigate={navigate} color="text-violet-500" />
+        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
+          {/* Purchases */}
+          <SidebarLink href="/purchases"    icon={ShoppingCart} label="Purchase" active={location.startsWith("/purchases")}    navigate={navigate} titleFull="Purchase Orders" />
+
           <SidebarDivider />
-          <SidebarAction icon={Boxes}        label="Stock Item"  onClick={() => navigate("/stock")}         navigate={navigate} color="text-cyan-500" />
-          <SidebarAction icon={ShoppingCart} label="Purchase"    onClick={() => navigate("/purchases")}     navigate={navigate} color="text-orange-500" />
+
+          {/* Sales */}
+          <SidebarLink href="/sales"        icon={Receipt}     label="Sales"     active={location.startsWith("/sales")}        navigate={navigate} titleFull="Sales / POS" />
+
           <SidebarDivider />
-          <SidebarAction icon={Receipt}      label="New Sale"    onClick={() => navigate("/sales/new")}     navigate={navigate} color="text-green-500" />
-          <SidebarAction icon={FileText}     label="Invoice"     onClick={() => navigate("/invoices")}      navigate={navigate} color="text-indigo-500" />
-          <SidebarAction icon={Calculator}   label="Calc Inv."   onClick={() => navigate("/calc-invoice")}  navigate={navigate} color="text-pink-500" />
+
+          {/* Invoicing */}
+          <SidebarLink href="/invoices"     icon={FileText}    label="Invoice"   active={location.startsWith("/invoices")}     navigate={navigate} titleFull="Invoices" />
+          <SidebarLink href="/calc-invoice" icon={Calculator}  label="Calc Inv." active={location.startsWith("/calc-invoice")} navigate={navigate} titleFull="Calc Invoice" />
+
           <SidebarDivider />
-          <SidebarAction icon={FilePlus}     label="Document"    onClick={() => navigate("/documents/new")} navigate={navigate} color="text-amber-500" />
-          <SidebarDivider />
-          <SidebarAction icon={FlaskConical} label="Raw Mtl."    onClick={() => navigate("/raw-materials")} navigate={navigate} color="text-teal-500" />
-          <SidebarAction icon={Factory}      label="Mfg Order"   onClick={() => navigate("/manufacturing")} navigate={navigate} color="text-rose-500" />
-          <SidebarDivider />
-          <div className="mt-auto pt-2">
-            <SidebarAction icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "Light" : "Dark"} onClick={toggleTheme} navigate={navigate} color="text-gray-400" />
-          </div>
+
+          {/* Accounting */}
+          <SidebarLink href="/journal-entry?mode=expense" icon={Wallet}       label="Expense"  active={false}                                   navigate={navigate} titleFull="Record Expense" />
+          <SidebarLink href="/journal-entry"              icon={ClipboardList}label="Journal"  active={location.startsWith("/journal-entry")}   navigate={navigate} titleFull="Journal Entry" />
         </nav>
 
       </div>
