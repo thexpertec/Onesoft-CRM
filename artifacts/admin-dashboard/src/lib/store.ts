@@ -2469,7 +2469,20 @@ export function updateAccount(id: string, updates: Partial<Omit<Account, "id" | 
 }
 
 export function deleteAccount(id: string): void {
-  _saveAccounts(getAccounts().filter(a => a.id !== id));
+  const all = getAccounts();
+
+  // Guard 1 — has child accounts
+  if (all.some(a => a.parentId === id)) {
+    throw new Error("This account has child accounts. Remove or reassign them first.");
+  }
+
+  // Guard 2 — has journal entry lines posted to it
+  const entries = getJournalEntries();
+  if (entries.some(je => je.lines.some(l => l.ledgerId === id))) {
+    throw new Error("This account has journal entries posted to it and cannot be deleted.");
+  }
+
+  _saveAccounts(all.filter(a => a.id !== id));
 }
 
 // ─── Journal Entry ────────────────────────────────────────────────────────────

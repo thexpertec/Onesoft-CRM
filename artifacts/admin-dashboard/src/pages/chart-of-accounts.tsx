@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES } from "@/lib/store";
+import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries } from "@/lib/store";
 import { useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -706,6 +706,18 @@ export default function ChartOfAccountsPage() {
   const hasChildren = (id: string) => accounts.some(a => (a.parentId ?? null) === id);
   const accountToDelete = accounts.find(a => a.id === deleteId);
 
+  const deleteBlockReason: string | null = useMemo(() => {
+    if (!deleteId) return null;
+    if (hasChildren(deleteId))
+      return "This account has child accounts. Remove or reassign all children before deleting.";
+    const entries = getJournalEntries();
+    const hasEntries = entries.some(je => je.lines.some(l => l.ledgerId === deleteId));
+    if (hasEntries)
+      return "This account has journal entries or amounts posted to it. Accounts with recorded transactions cannot be deleted.";
+    return null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteId, accounts]);
+
   // ── Edit parent options ───────────────────────────────────────────────────────
   const editParentOptions = useMemo(() => {
     if (!editForm || !editingId) return [];
@@ -1125,7 +1137,7 @@ export default function ChartOfAccountsPage() {
                       </div>
                       <div className="w-20 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3 opacity-0 group-hover:opacity-100">
                         <button onClick={e => { e.stopPropagation(); openEdit(acc); }} className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50"><Pencil size={13} /></button>
-                        <button onClick={e => { e.stopPropagation(); if (hasChildren(acc.id)) { toast({ title: "Cannot delete — has children", variant: "destructive" }); } else { setDeleteId(acc.id); } }} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
+                        <button onClick={e => { e.stopPropagation(); setDeleteId(acc.id); }} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
                       </div>
                     </div>
                   );
@@ -1711,15 +1723,39 @@ export default function ChartOfAccountsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{accountToDelete?.code} — {accountToDelete?.name}" will be permanently removed. This cannot be undone.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  <span className="font-semibold text-foreground">{accountToDelete?.code} — {accountToDelete?.name}</span>
+                </p>
+                {deleteBlockReason ? (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                    <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                    <span>{deleteBlockReason}</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    This account will be permanently removed. This cannot be undone.
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => { if (deleteId) { removeAccount(deleteId); toast({ title: "Account deleted" }); setDeleteId(null); } }}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!!deleteBlockReason}
+              onClick={() => {
+                if (!deleteId) return;
+                try {
+                  removeAccount(deleteId);
+                  toast({ title: "Account deleted" });
+                  setDeleteId(null);
+                } catch (e: unknown) {
+                  toast({ title: "Cannot delete account", description: (e as Error).message, variant: "destructive" });
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Delete
             </AlertDialogAction>
