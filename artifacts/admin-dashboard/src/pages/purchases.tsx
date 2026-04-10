@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePurchaseOrders } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, getSuppliers, getProducts, getRawMaterials, receivePurchaseOrder } from "@/lib/store";
+import { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, getSuppliers, getProducts, getRawMaterials, receivePurchaseOrder, autoPostPurchaseJE, updatePurchaseOrder } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, Plus, Search, X, Save, Trash2, Eye, Package, ReceiptText, Truck, AlertCircle, FileDown } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
@@ -237,9 +237,26 @@ export default function PurchasesPage() {
   const handleReceiveOrder = () => {
     if (!detailPoId) return;
     try {
+      // Flush any unsaved field edits to the store before processing
+      saveItems(localItems);
       receivePurchaseOrder(detailPoId);
       toast({ title: "Order received — stock updated", description: "Raw material quantities and product stock have been updated." });
       setDetailPoId(null);
+    } catch (e: unknown) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    }
+  };
+
+  const handleRepostAccounting = () => {
+    if (!detailPoId || !detailPo) return;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const total = localItems.reduce((s, i) => s + lineTotal(i), 0);
+      if (total <= 0) { toast({ title: "Cannot post: total is zero", variant: "destructive" }); return; }
+      const je = autoPostPurchaseJE({ poNumber: detailPo.poNumber, supplier: detailPo.supplier || "Supplier", date: today, total });
+      if (!je) { toast({ title: "Accounting not configured — set Inventory & Payable accounts in Settings → Accounting", variant: "destructive" }); return; }
+      updatePurchaseOrder(detailPoId, { jeId: je.id });
+      toast({ title: "Accounting re-posted", description: `JE ${je.reference} created for ${detailPo.poNumber}` });
     } catch (e: unknown) {
       toast({ title: (e as Error).message, variant: "destructive" });
     }
@@ -767,11 +784,17 @@ export default function PurchasesPage() {
                     <Truck size={13} /> Mark as Received — Update Stock
                   </Button>
                 )}
-                {detailPo?.status === "Received" && (
+                {detailPo?.status === "Received" && detailPo.jeId && (
                   <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-                    Received — Stock Updated
+                    Received — Stock &amp; Accounts Updated
                   </span>
+                )}
+                {detailPo?.status === "Received" && !detailPo.jeId && (
+                  <Button size="sm" variant="outline" className="border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
+                    onClick={handleRepostAccounting}>
+                    <ReceiptText size={13} /> Re-post Accounting
+                  </Button>
                 )}
                 <Button size="sm" variant="outline" onClick={() => setDetailPoId(null)}>Close</Button>
               </div>

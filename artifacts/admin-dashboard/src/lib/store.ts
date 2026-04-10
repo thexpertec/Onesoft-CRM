@@ -1255,9 +1255,12 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
 
       const sku = product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-");
 
-      // Consolidate: find existing Available stock entry in Warehouse for this SKU
+      // Consolidate: find existing For-Sale stock entry in any Warehouse location for this SKU
+      // Searches "Warehouse A" first, then legacy "Warehouse" for backward-compat
       const allStocks = getStock();
-      const si = allStocks.findIndex(s => s.sku === sku && s.store === "Warehouse" && s.stockType === "For Sale");
+      const RECEIVE_STORE = "Warehouse A";
+      let si = allStocks.findIndex(s => s.sku === sku && s.store === RECEIVE_STORE && s.stockType === "For Sale");
+      if (si === -1) si = allStocks.findIndex(s => s.sku === sku && s.store === "Warehouse" && s.stockType === "For Sale");
       let stockId: string;
       if (si >= 0) {
         // Add to existing batch
@@ -1273,11 +1276,11 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
           unit: allStocks[si].unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
         });
       } else {
-        // Create new stock entry
+        // Create new stock entry under the standard receiving warehouse
         const newStock = createStockItem({
           productName:  item.productName,
           sku,
-          store:        "Warehouse",
+          store:        RECEIVE_STORE,
           stockType:    "For Sale",
           quantity:     item.qty,
           minLevel:     "0",
