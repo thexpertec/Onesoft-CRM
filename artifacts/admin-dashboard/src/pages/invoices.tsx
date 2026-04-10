@@ -1109,6 +1109,11 @@ export function InvoiceFormPage() {
         inv.items, inv.taxRate, amountPaid ?? inv.amountPaid ?? "0",
         inv.shippingFee, inv.handlingFee,
       );
+      const allProducts = getProducts();
+      const costTotal = inv.items.reduce((sum, item) => {
+        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
+        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+      }, 0);
       const je = autoPostSaleJE({
         source:        "Invoice",
         reference:     inv.invoiceNumber,
@@ -1118,6 +1123,7 @@ export function InvoiceFormPage() {
         subtotal,
         taxAmount,
         grandTotal,
+        costTotal:     parseFloat(costTotal.toFixed(2)),
       });
       if (je) updates.jeId = je.id;
     }

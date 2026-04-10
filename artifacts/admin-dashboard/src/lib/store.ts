@@ -2030,6 +2030,8 @@ export type AppSettings = {
   accBank:              string;   // DR for Card / Bank Transfer / Cheque payments
   accReceivable:        string;   // DR for Credit / On-Credit sales
   accVatPayable:        string;   // CR for VAT collected (optional)
+  accCogs:              string;   // DR for Cost of Goods Sold (optional)
+  accInventory:         string;   // CR for Inventory reduced on sale (optional)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2066,6 +2068,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accBank:              "",
   accReceivable:        "",
   accVatPayable:        "",
+  accCogs:              "",
+  accInventory:         "",
 };
 
 export function getSettings(): AppSettings {
@@ -2299,6 +2303,8 @@ export function seedDefaultCoaAccounts(): void {
   if (!s.accBank)         mappingUpdates.accBank         = SYS_ACCS.BANK;
   if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
   if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
+  if (!s.accCogs)         mappingUpdates.accCogs         = SYS_ACCS.COGS;
+  if (!s.accInventory)    mappingUpdates.accInventory    = SYS_ACCS.INVENTORY;
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
   }
@@ -2497,6 +2503,7 @@ export function autoPostSaleJE(params: {
   subtotal:      number;    // net of tax
   taxAmount:     number;    // VAT / tax collected
   grandTotal:    number;    // subtotal + taxAmount
+  costTotal?:    number;    // total cost of goods sold (for COGS/Inventory entry)
 }): JournalEntry | null {
   const s = getSettings();
 
@@ -2521,6 +2528,7 @@ export function autoPostSaleJE(params: {
 
   const narration = `${params.source} – ${params.reference} – ${params.customer}`;
 
+  // ── Revenue / Cash side ──────────────────────────────────────────────────
   const lines: JournalEntryLine[] = [
     {
       id: crypto.randomUUID(),
@@ -2549,14 +2557,38 @@ export function autoPostSaleJE(params: {
     });
   }
 
+  // ── COGS / Inventory side ────────────────────────────────────────────────
+  // DR Cost of Goods Sold / CR Inventory — only when both accounts are
+  // configured and there is a non-zero cost to recognise.
+  const costTotal = params.costTotal ?? 0;
+  if (costTotal > 0 && s.accCogs && s.accInventory) {
+    lines.push({
+      id: crypto.randomUUID(),
+      ledgerId:  s.accCogs,
+      narration: `COGS – ${params.reference}`,
+      debit:  costTotal,
+      credit: 0,
+    });
+    lines.push({
+      id: crypto.randomUUID(),
+      ledgerId:  s.accInventory,
+      narration: `Inventory reduction – ${params.reference}`,
+      debit:  0,
+      credit: costTotal,
+    });
+  }
+
+  const totalDebit  = parseFloat((params.grandTotal + costTotal).toFixed(2));
+  const totalCredit = parseFloat((params.grandTotal + costTotal).toFixed(2));
+
   return createJournalEntry({
     date:        params.date,
     reference:   `AUTO-${params.reference}`,
     description: `${params.source} Sale: ${params.reference} – ${params.customer}`,
     lines,
     status:      "posted",
-    totalDebit:  params.grandTotal,
-    totalCredit: params.grandTotal,
+    totalDebit,
+    totalCredit,
     isBalanced:  true,
   });
 }

@@ -1280,6 +1280,10 @@ export default function SalesPage() {
       const subtotal  = saleTotal(localItems);
       const taxPct    = Math.max(0, parseFloat(localMeta.taxRate ?? "0") || 0);
       const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+      const costTotal = localItems.reduce((sum, item) => {
+        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
+        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+      }, 0);
       const je = autoPostSaleJE({
         source:        "POS",
         reference:     detailSale?.saleNumber || "",
@@ -1289,6 +1293,7 @@ export default function SalesPage() {
         subtotal,
         taxAmount,
         grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+        costTotal:     parseFloat(costTotal.toFixed(2)),
       });
       if (je) jeId = je.id;
     }
@@ -1318,6 +1323,10 @@ export default function SalesPage() {
       const subtotal  = saleTotal(localItems);
       const taxPct    = Math.max(0, parseFloat(taxRate) || 0);
       const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+      const costTotal = localItems.reduce((sum, item) => {
+        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
+        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+      }, 0);
       const je = autoPostSaleJE({
         source:        "POS",
         reference:     detailSale?.saleNumber || "",
@@ -1327,6 +1336,7 @@ export default function SalesPage() {
         subtotal,
         taxAmount,
         grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+        costTotal:     parseFloat(costTotal.toFixed(2)),
       });
       if (je) jeId = je.id;
     }
