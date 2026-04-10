@@ -2,8 +2,11 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
-  Crown, Zap, Rocket, Shield, Search, Layers,
+  Crown, Zap, Rocket, Shield, Search, Layers, FlaskConical, RefreshCw,
 } from "lucide-react";
+import {
+  seedDemoTenant, clearDemoTenant, isDemoSeeded, DEMO_TENANT_ID,
+} from "@/lib/demo-seed";
 import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, createTenant, updateTenant, deleteTenant,
@@ -333,8 +336,43 @@ export default function TenantsPage() {
   const [editing,     setEditing]     = useState<Tenant | null>(null);
   const [deleteId,    setDeleteId]    = useState<string | null>(null);
   const [statsCache,  setStatsCache]  = useState<Record<string, Record<string, number>>>({});
+  const [demoSeeded,  setDemoSeeded]  = useState(() => isDemoSeeded());
+  const [demoLoading, setDemoLoading] = useState(false);
 
-  const reload = () => setTenants(getTenants());
+  const reload = () => {
+    setTenants(getTenants());
+    setDemoSeeded(isDemoSeeded());
+  };
+
+  function handleLoadDemo() {
+    setDemoLoading(true);
+    setTimeout(() => {
+      try {
+        const tenantId = seedDemoTenant();
+        reload();
+        toast({
+          title: "Demo data loaded!",
+          description: `Premier Furnishings Ltd. is ready. Switch to it below to explore all modules.`,
+        });
+        // Auto-switch into the demo tenant
+        switchTenant(tenantId);
+        navigate("/");
+      } catch (e) {
+        toast({ title: "Seed failed", description: String(e), variant: "destructive" });
+      } finally {
+        setDemoLoading(false);
+      }
+    }, 50);
+  }
+
+  function handleClearDemo() {
+    clearDemoTenant();
+    if (currentTenantId === DEMO_TENANT_ID) {
+      switchTenant(null);
+    }
+    reload();
+    toast({ title: "Demo data removed", variant: "destructive" });
+  }
 
   const filtered = useMemo(() =>
     tenants.filter(t =>
@@ -410,7 +448,7 @@ export default function TenantsPage() {
             Manage client organisations — each tenant has isolated data and their own login.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {currentTenantId && (
             <Button
               variant="outline"
@@ -418,6 +456,27 @@ export default function TenantsPage() {
               className="h-9 gap-1.5 text-[13px] border-amber-300 text-amber-700 hover:bg-amber-50"
             >
               <X size={14} /> Exit Tenant View
+            </Button>
+          )}
+          {demoSeeded ? (
+            <Button
+              variant="outline"
+              onClick={handleClearDemo}
+              className="h-9 gap-1.5 text-[13px] border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
+            >
+              <Trash2 size={14} /> Remove Demo
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={handleLoadDemo}
+              disabled={demoLoading}
+              className="h-9 gap-1.5 text-[13px] border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/30"
+            >
+              {demoLoading
+                ? <><RefreshCw size={13} className="animate-spin" /> Loading…</>
+                : <><FlaskConical size={14} /> Load Demo Data</>
+              }
             </Button>
           )}
           <Button
