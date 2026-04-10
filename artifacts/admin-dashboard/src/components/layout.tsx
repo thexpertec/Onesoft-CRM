@@ -219,6 +219,7 @@ const OTHER_NAV: NavItem[] = [
       { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,        desc: "Account hierarchy & ledgers"   },
       { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList,   desc: "Double-entry bookkeeping"       },
       { label: "Ledger Report",     href: "/ledger-report",     icon: FileBarChart,    desc: "Account statement & balance"   },
+      { label: "P&L Statement",     href: "/pls-report",        icon: TrendingUp,      desc: "Profit & Loss by period"       },
       { label: "Balance Sheet",     href: "/balance-sheet",     icon: LayoutDashboard, desc: "Assets, Liabilities & Equity" },
     ],
   },
@@ -246,7 +247,7 @@ const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice"
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report"];
+const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
