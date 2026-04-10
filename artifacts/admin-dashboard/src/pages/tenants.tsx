@@ -208,25 +208,19 @@ function TenantModal({
             <button
               type="button"
               onClick={() => patch("isDemo", !form.isDemo)}
-              className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+              className={`w-full flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all ${
                 form.isDemo
                   ? "border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/30"
                   : "border-dashed border-gray-200 dark:border-zinc-700 bg-transparent hover:bg-gray-50 dark:hover:bg-zinc-900/40"
               }`}
             >
-              {/* pill switch */}
-              <div className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${form.isDemo ? "bg-violet-500" : "bg-gray-200 dark:bg-zinc-700"}`}>
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${form.isDemo ? "left-[18px]" : "left-0.5"}`} />
+              <div className={`relative w-8 h-[18px] rounded-full flex-shrink-0 transition-colors ${form.isDemo ? "bg-violet-500" : "bg-gray-200 dark:bg-zinc-700"}`}>
+                <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${form.isDemo ? "left-[18px]" : "left-[2px]"}`} />
               </div>
-              <div className="min-w-0">
-                <div className={`text-[13px] font-semibold leading-none ${form.isDemo ? "text-violet-700 dark:text-violet-300" : "text-gray-600 dark:text-gray-400"}`}>
-                  This is a Demo Tenant
-                </div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
-                  {form.isDemo ? "\"Load Demo Data\" will be available on this tenant's card" : "Toggle on to allow loading sample data into this tenant"}
-                </div>
-              </div>
-              <FlaskConical size={15} className={`ml-auto flex-shrink-0 ${form.isDemo ? "text-violet-500" : "text-gray-300 dark:text-zinc-600"}`} />
+              <span className={`text-[12px] font-semibold flex-1 ${form.isDemo ? "text-violet-700 dark:text-violet-300" : "text-gray-500 dark:text-gray-400"}`}>
+                This is a Demo Tenant
+              </span>
+              <FlaskConical size={13} className={`flex-shrink-0 ${form.isDemo ? "text-violet-500" : "text-gray-300 dark:text-zinc-600"}`} />
             </button>
           </div>
 
