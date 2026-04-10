@@ -1109,6 +1109,7 @@ export type PurchaseOrder = {
   status: PurchaseOrderStatus;
   notes: string;
   items: PurchaseOrderItem[];
+  jeId?: string;          // auto-posted journal entry ID (set on receipt, prevents duplicates)
   createdAt: string;
   updatedAt: string;
 };
@@ -1228,33 +1229,77 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
         allProducts[pi] = { ...allProducts[pi], purchasePrice: item.unitPrice, updatedAt: new Date().toISOString() };
       }
 
-      const newStock = createStockItem({
-        productName:  item.productName,
-        sku:          product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-"),
-        store:        "Warehouse",
-        stockType:    "Available",
-        quantity:     item.qty,
-        minLevel:     "0",
-        unit:         item.unit || product?.unit || "",
-        holdCustomer: "",
-        holdReason:   "",
-        notes:        `Received via ${order.poNumber}`,
-      });
-      ledger.push({
-        entityType: "product", entityId: newStock.id, entityName: newStock.productName,
-        date: today, txType: "purchase-receipt", reference: order.poNumber,
-        qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
-        unit: newStock.unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
-      });
+      const sku = product?.sku || item.productName.toLowerCase().replace(/\s+/g, "-");
+
+      // Consolidate: find existing Available stock entry in Warehouse for this SKU
+      const allStocks = getStock();
+      const si = allStocks.findIndex(s => s.sku === sku && s.store === "Warehouse" && s.stockType === "For Sale");
+      let stockId: string;
+      if (si >= 0) {
+        // Add to existing batch
+        const prev = parseFloat(allStocks[si].quantity) || 0;
+        const next = prev + qty;
+        allStocks[si] = { ...allStocks[si], quantity: String(next), notes: `Last received via ${order.poNumber}`, updatedAt: new Date().toISOString() };
+        setStored(STOCK_KEY, allStocks);
+        stockId = allStocks[si].id;
+        ledger.push({
+          entityType: "product", entityId: stockId, entityName: allStocks[si].productName,
+          date: today, txType: "purchase-receipt", reference: order.poNumber,
+          qtyBefore: prev, qtyChange: qty, qtyAfter: next,
+          unit: allStocks[si].unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
+        });
+      } else {
+        // Create new stock entry
+        const newStock = createStockItem({
+          productName:  item.productName,
+          sku,
+          store:        "Warehouse",
+          stockType:    "For Sale",
+          quantity:     item.qty,
+          minLevel:     "0",
+          unit:         item.unit || product?.unit || "",
+          holdCustomer: "",
+          holdReason:   "",
+          notes:        `Received via ${order.poNumber}`,
+        });
+        stockId = newStock.id;
+        ledger.push({
+          entityType: "product", entityId: stockId, entityName: newStock.productName,
+          date: today, txType: "purchase-receipt", reference: order.poNumber,
+          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+          unit: newStock.unit, notes: `Received via ${order.poNumber} · Supplier: ${order.supplier}`,
+        });
+      }
     }
   });
 
   setStored(PRODUCTS_KEY, allProducts);
   setStored(RM_KEY, rms);
   batchLedger(ledger);
-  pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
+
+  // ── Auto-post purchase journal entry ─────────────────────────────────────
+  // Only post if not already posted (jeId guard prevents duplicates)
+  if (!order.jeId) {
+    const inventoryTotal = order.items
+      .filter(it => it.itemType !== "raw-material")
+      .reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    const rmTotal = order.items
+      .filter(it => it.itemType === "raw-material")
+      .reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    const poTotal = inventoryTotal + rmTotal;
+    const je = autoPostPurchaseJE({
+      poNumber:  order.poNumber,
+      supplier:  order.supplier || "Supplier",
+      date:      today,
+      total:     poTotal,
+    });
+    pos[i] = { ...pos[i], status: "Received", jeId: je?.id, updatedAt: new Date().toISOString() };
+  } else {
+    pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
+  }
+
   setStored(PURCHASE_ORDERS_KEY, pos);
-  addActivity({ action: "status_changed", entity: "Purchase Order", entityName: order.poNumber, detail: "Received — stock updated" });
+  addActivity({ action: "status_changed", entity: "Purchase Order", entityName: order.poNumber, detail: "Received — stock & accounts updated" });
   return pos[i];
 };
 
@@ -1849,7 +1894,7 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
       productName:  out.productName,
       sku:          product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-"),
       store:        "Manufacturing",
-      stockType:    "Available",
+      stockType:    "For Sale",
       quantity:     out.qty,
       minLevel:     "0",
       unit:         out.unit || product?.unit || "",
@@ -2032,6 +2077,7 @@ export type AppSettings = {
   accVatPayable:        string;   // CR for VAT collected (optional)
   accCogs:              string;   // DR for Cost of Goods Sold (optional)
   accInventory:         string;   // CR for Inventory reduced on sale (optional)
+  accPurchasePayable:   string;   // CR for Accounts Payable on purchase receipt (optional)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2070,6 +2116,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accVatPayable:        "",
   accCogs:              "",
   accInventory:         "",
+  accPurchasePayable:   "",
 };
 
 export function getSettings(): AppSettings {
@@ -2303,8 +2350,9 @@ export function seedDefaultCoaAccounts(): void {
   if (!s.accBank)         mappingUpdates.accBank         = SYS_ACCS.BANK;
   if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
   if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
-  if (!s.accCogs)         mappingUpdates.accCogs         = SYS_ACCS.COGS;
-  if (!s.accInventory)    mappingUpdates.accInventory    = SYS_ACCS.INVENTORY;
+  if (!s.accCogs)              mappingUpdates.accCogs             = SYS_ACCS.COGS;
+  if (!s.accInventory)         mappingUpdates.accInventory        = SYS_ACCS.INVENTORY;
+  if (!s.accPurchasePayable)   mappingUpdates.accPurchasePayable  = SYS_ACCS.AP_TRADE;
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
   }
@@ -2480,7 +2528,7 @@ export function deleteJournalEntry(id: string): void {
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
 }
 
-// ─── Auto-journal for Sales & Invoices ────────────────────────────────────────
+// ─── Auto-journal for Sales, Invoices & Purchases ─────────────────────────────
 
 /**
  * Automatically creates a posted, balanced Journal Entry when a POS sale
@@ -2589,6 +2637,52 @@ export function autoPostSaleJE(params: {
     status:      "posted",
     totalDebit,
     totalCredit,
+    isBalanced:  true,
+  });
+}
+
+/**
+ * Auto-posts a journal entry when a Purchase Order is received.
+ *   DR Inventory / Stock  = PO total value
+ *   CR Accounts Payable   = PO total value
+ * Returns null if required COA accounts are not yet configured in Settings.
+ */
+export function autoPostPurchaseJE(params: {
+  poNumber: string;
+  supplier: string;
+  date:     string;   // YYYY-MM-DD
+  total:    number;
+}): JournalEntry | null {
+  if (params.total <= 0) return null;
+  const s = getSettings();
+  if (!s.accInventory || !s.accPurchasePayable) return null;
+
+  const narration = `Purchase Receipt – ${params.poNumber} – ${params.supplier}`;
+  const lines: JournalEntryLine[] = [
+    {
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accInventory,
+      narration: `Stock received – ${params.poNumber}`,
+      debit:     params.total,
+      credit:    0,
+    },
+    {
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accPurchasePayable,
+      narration,
+      debit:     0,
+      credit:    params.total,
+    },
+  ];
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `AUTO-${params.poNumber}`,
+    description: `Purchase Receipt: ${params.poNumber} – ${params.supplier}`,
+    lines,
+    status:      "posted",
+    totalDebit:  params.total,
+    totalCredit: params.total,
     isBalanced:  true,
   });
 }

@@ -1157,6 +1157,34 @@ export default function SettingsPage() {
                       </Select>
                     </div>
 
+                    {/* ── Purchase Payable Account ── */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 text-[11px] font-bold">CR</span>
+                        <span className="text-[13px] font-semibold text-foreground">Purchase Payable Account <span className="text-muted-foreground font-normal">(optional)</span></span>
+                        <span className="text-[11px] text-muted-foreground">— credited when a Purchase Order is received (Liabilities head)</span>
+                      </div>
+                      <Select
+                        value={form.accPurchasePayable || "__none__"}
+                        onValueChange={v => set("accPurchasePayable", v === "__none__" ? "" : v)}
+                      >
+                        <SelectTrigger className="h-9 text-[13px]">
+                          <SelectValue placeholder="Select accounts payable account… (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__" className="text-[13px] text-muted-foreground">— None (purchases not tracked in accounts) —</SelectItem>
+                          {ledgerAccounts
+                            .filter(a => a.head === "Liabilities")
+                            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                            .map(a => (
+                              <SelectItem key={a.id} value={a.id} className="text-[13px]">
+                                {a.code} — {a.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                   </div>
                 )}
               </div>
