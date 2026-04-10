@@ -2252,34 +2252,42 @@ const COA_KEY = "admin-chart-of-accounts";
 // These IDs are pre-defined (not UUIDs) so they are stable across sessions and
 // can be referenced directly for accounting mappings and subsidiary ledgers.
 export const SYS_ACCS = {
-  // Assets
-  CURRENT_ASSETS:   "sys-1000",
-  AR_GROUP:         "sys-1100",  // Accounts Receivable GROUP (parent for per-customer ledgers)
-  AR_TRADE:         "sys-1101",  // Trade Receivables LEDGER (used in accounting settings)
-  CASH:             "sys-1200",  // Cash in Hand
-  BANK:             "sys-1210",  // Bank Account
-  INVENTORY:        "sys-1300",  // Inventory / Stock
-  // Liabilities
-  CURRENT_LIAB:     "sys-2000",
-  AP_GROUP:         "sys-2100",  // Accounts Payable GROUP (parent for per-supplier ledgers)
-  AP_TRADE:         "sys-2101",  // Trade Payables LEDGER (used in journal entries)
-  VAT_PAYABLE:      "sys-2200",  // VAT / Tax Payable
+  // Assets — root + sub-groups
+  ASSETS_ROOT:        "sys-1000r",  // root Assets group (1000)
+  CURRENT_ASSETS:     "sys-1000",   // Current Assets group (1100) — child of ASSETS_ROOT
+  AR_GROUP:           "sys-1100",   // Accounts Receivable GROUP (1130) — parent for per-customer ledgers
+  AR_TRADE:           "sys-1101",   // Trade Receivables LEDGER (1131)
+  CASH:               "sys-1200",   // Cash in Hand (1110)
+  BANK:               "sys-1210",   // Bank Account (1120)
+  INVENTORY:          "sys-1300",   // Inventory / Stock (1140)
+  NON_CURRENT_ASSETS: "sys-1200g",  // Non-Current Assets group (1200) — child of ASSETS_ROOT
+  PPE:                "sys-1210g",  // Property, Plant & Equipment (1210)
+  ACCUM_DEPR:         "sys-1220g",  // Accumulated Depreciation (1220, contra asset)
+  // Liabilities — root + sub-groups
+  LIAB_ROOT:          "sys-2000r",  // root Liabilities group (2000)
+  CURRENT_LIAB:       "sys-2000",   // Current Liabilities group (2100) — child of LIAB_ROOT
+  AP_GROUP:           "sys-2100",   // Accounts Payable GROUP (2110) — parent for per-supplier ledgers
+  AP_TRADE:           "sys-2101",   // Trade Payables LEDGER (2111)
+  VAT_PAYABLE:        "sys-2200",   // VAT / Tax Payable (2120)
+  ACCRUED_EXP:        "sys-2130",   // Accrued Expenses (2130)
+  NON_CURRENT_LIAB:   "sys-2200g",  // Non-Current Liabilities group (2200) — child of LIAB_ROOT
+  LT_LOANS:           "sys-2210",   // Long-term Loans / Borrowings (2210)
   // Revenue / Income
-  REVENUE_GROUP:    "sys-3000",
-  SALES_REVENUE:    "sys-3100",  // Main sales revenue ledger
-  OTHER_INCOME:     "sys-3200",  // Other income
+  REVENUE_GROUP:      "sys-3000",   // Revenue root (3000)
+  SALES_REVENUE:      "sys-3100",   // Main sales revenue ledger (3100)
+  OTHER_INCOME:       "sys-3200",   // Other income (3200)
   // Expense
-  EXPENSES_GROUP:   "sys-4000",
-  COGS:             "sys-4100",  // Cost of Goods Sold
-  SALARY_GROUP:     "sys-4200",  // Salary & Wages GROUP (parent for per-staff ledgers)
-  COMMISSION_GROUP: "sys-4300",  // Sales Commission GROUP (parent for per-agent ledgers)
-  OFFICE_EXP:       "sys-4400",  // Office & Administration
-  UTILITIES:        "sys-4500",  // Utility Bills
-  PURCHASE_EXP:     "sys-4600",  // Purchase / COGS
+  EXPENSES_GROUP:     "sys-4000",   // Operating Expenses root (4000)
+  COGS:               "sys-4100",   // Cost of Goods Sold (4100)
+  SALARY_GROUP:       "sys-4200",   // Salary & Wages GROUP (4200)
+  COMMISSION_GROUP:   "sys-4300",   // Sales Commission GROUP (4300)
+  OFFICE_EXP:         "sys-4400",   // Office & Administration (4400)
+  UTILITIES:          "sys-4500",   // Utility Bills (4500)
+  PURCHASE_EXP:       "sys-4600",   // Purchases (4600)
   // Equity
-  EQUITY_GROUP:     "sys-5000",
-  OWNERS_CAPITAL:   "sys-5100",  // Owner's Capital / Share Capital
-  RETAINED_EARN:    "sys-5200",  // Retained Earnings
+  EQUITY_GROUP:       "sys-5000",   // Capital & Equity root (5000)
+  OWNERS_CAPITAL:     "sys-5100",   // Owner's Capital / Share Capital (5100)
+  RETAINED_EARN:      "sys-5200",   // Retained Earnings (5200)
 } as const;
 
 type SysAccDef = {
@@ -2289,34 +2297,60 @@ type SysAccDef = {
 };
 
 const SYSTEM_ACCOUNTS: SysAccDef[] = [
-  // ── Assets ──
-  { id: SYS_ACCS.CURRENT_ASSETS,   code: "1000", name: "Current Assets",          head: "Assets",           accountType: "Group",  parentId: null,                    subType: "Current Asset",    description: "Short-term assets" },
-  { id: SYS_ACCS.AR_GROUP,         code: "1100", name: "Accounts Receivable",      head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Receivable",       description: "Amounts owed by customers & buyers" },
-  { id: SYS_ACCS.AR_TRADE,         code: "1101", name: "Trade Receivables",         head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,       subType: "Receivable",       description: "General trade receivables ledger" },
-  { id: SYS_ACCS.CASH,             code: "1200", name: "Cash in Hand",             head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Cash",             description: "Physical cash on premises" },
-  { id: SYS_ACCS.BANK,             code: "1210", name: "Bank Account",             head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Bank",             description: "Business bank account" },
-  { id: SYS_ACCS.INVENTORY,        code: "1300", name: "Inventory / Stock",        head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Inventory",        description: "Stock & inventory value" },
-  // ── Liabilities ──
-  { id: SYS_ACCS.CURRENT_LIAB,     code: "2000", name: "Current Liabilities",      head: "Liabilities",      accountType: "Group",  parentId: null,                    subType: "Current Liability", description: "Short-term obligations" },
-  { id: SYS_ACCS.AP_GROUP,         code: "2100", name: "Accounts Payable",         head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,   subType: "Payable",          description: "Amounts owed to suppliers" },
-  { id: SYS_ACCS.AP_TRADE,         code: "2101", name: "Trade Payables",            head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,       subType: "Payable",          description: "General trade payables ledger" },
-  { id: SYS_ACCS.VAT_PAYABLE,      code: "2200", name: "VAT Payable",              head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,   subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
-  // ── Revenue ──
-  { id: SYS_ACCS.REVENUE_GROUP,    code: "3000", name: "Revenue",                  head: "Revenue / Income", accountType: "Group",  parentId: null,                    subType: "Revenue",          description: "Income from business operations" },
-  { id: SYS_ACCS.SALES_REVENUE,    code: "3100", name: "Sales Revenue",            head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,  subType: "Sales",            description: "Revenue from product and service sales" },
-  { id: SYS_ACCS.OTHER_INCOME,     code: "3200", name: "Other Income",             head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,  subType: "Other Income",     description: "Miscellaneous or non-operating income" },
-  // ── Expenses ──
-  { id: SYS_ACCS.EXPENSES_GROUP,   code: "4000", name: "Operating Expenses",       head: "Expense",          accountType: "Group",  parentId: null,                    subType: "Expense",          description: "Day-to-day business expenditure" },
-  { id: SYS_ACCS.COGS,             code: "4100", name: "Cost of Goods Sold",       head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "COGS",             description: "Direct cost of goods or services sold" },
-  { id: SYS_ACCS.SALARY_GROUP,     code: "4200", name: "Salary & Wages",           head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Payroll",          description: "Employee salaries and wages" },
-  { id: SYS_ACCS.COMMISSION_GROUP, code: "4300", name: "Sales Commission",         head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Commission",       description: "Commission paid to sales agents" },
-  { id: SYS_ACCS.OFFICE_EXP,       code: "4400", name: "Office & Admin Expenses",  head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Admin",            description: "Office supplies, rent, admin costs" },
-  { id: SYS_ACCS.UTILITIES,        code: "4500", name: "Utility Bills",            head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Utilities",        description: "Electricity, gas, water, internet" },
-  { id: SYS_ACCS.PURCHASE_EXP,     code: "4600", name: "Purchases",               head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Purchases",        description: "Goods purchased for resale or use" },
-  // ── Equity ──
-  { id: SYS_ACCS.EQUITY_GROUP,     code: "5000", name: "Capital & Equity",         head: "Equity",           accountType: "Group",  parentId: null,                    subType: "Equity",           description: "Owner's equity in the business" },
-  { id: SYS_ACCS.OWNERS_CAPITAL,   code: "5100", name: "Owner's Capital",          head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,   subType: "Capital",          description: "Funds invested by owners / shareholders" },
-  { id: SYS_ACCS.RETAINED_EARN,    code: "5200", name: "Retained Earnings",        head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,   subType: "Retained",         description: "Accumulated profits retained in the business" },
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ASSETS  (IAS 1 — Current / Non-Current split)
+  // ─────────────────────────────────────────────────────────────────────────────
+  { id: SYS_ACCS.ASSETS_ROOT,        code: "1000", name: "Assets",                    head: "Assets",           accountType: "Group",  parentId: null,                         subType: "Asset",            description: "All assets of the business" },
+  // Current Assets
+  { id: SYS_ACCS.CURRENT_ASSETS,     code: "1100", name: "Current Assets",             head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Current Asset",    description: "Assets expected to be realised within 12 months" },
+  { id: SYS_ACCS.CASH,               code: "1110", name: "Cash in Hand",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Cash",             description: "Physical cash on premises" },
+  { id: SYS_ACCS.BANK,               code: "1120", name: "Bank Account",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Bank",             description: "Business bank account" },
+  { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
+  { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "General trade receivables ledger" },
+  { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value" },
+  // Non-Current Assets
+  { id: SYS_ACCS.NON_CURRENT_ASSETS, code: "1200", name: "Non-Current Assets",         head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Non-Current Asset", description: "Assets held for long-term use (over 12 months)" },
+  { id: SYS_ACCS.PPE,                code: "1210", name: "Property, Plant & Equipment",head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_ASSETS,  subType: "Fixed Asset",      description: "Tangible long-term assets — land, buildings, machinery" },
+  { id: SYS_ACCS.ACCUM_DEPR,         code: "1220", name: "Accumulated Depreciation",   head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_ASSETS,  subType: "Contra Asset",     description: "Cumulative depreciation on fixed assets (credit balance)" },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LIABILITIES  (IAS 1 — Current / Non-Current split)
+  // ─────────────────────────────────────────────────────────────────────────────
+  { id: SYS_ACCS.LIAB_ROOT,          code: "2000", name: "Liabilities",               head: "Liabilities",      accountType: "Group",  parentId: null,                         subType: "Liability",        description: "All obligations of the business" },
+  // Current Liabilities
+  { id: SYS_ACCS.CURRENT_LIAB,       code: "2100", name: "Current Liabilities",        head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Current Liability", description: "Obligations due within 12 months" },
+  { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
+  { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "General trade payables ledger" },
+  { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
+  { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid" },
+  // Non-Current Liabilities
+  { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
+  { id: SYS_ACCS.LT_LOANS,           code: "2210", name: "Long-term Loans",            head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_LIAB,    subType: "Loan",             description: "Bank loans and borrowings due after 12 months" },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // REVENUE / INCOME  (codes 3xxx — same as original system)
+  // ─────────────────────────────────────────────────────────────────────────────
+  { id: SYS_ACCS.REVENUE_GROUP,      code: "3000", name: "Revenue",                    head: "Revenue / Income", accountType: "Group",  parentId: null,                         subType: "Revenue",          description: "Income from business operations" },
+  { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales" },
+  { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income" },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // EXPENSES  (codes 4xxx — same as original system)
+  // ─────────────────────────────────────────────────────────────────────────────
+  { id: SYS_ACCS.EXPENSES_GROUP,     code: "4000", name: "Operating Expenses",         head: "Expense",          accountType: "Group",  parentId: null,                         subType: "Expense",          description: "Day-to-day business expenditure" },
+  { id: SYS_ACCS.COGS,               code: "4100", name: "Cost of Goods Sold",         head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "COGS",             description: "Direct cost of goods or services sold" },
+  { id: SYS_ACCS.SALARY_GROUP,       code: "4200", name: "Salary & Wages",             head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Payroll",          description: "Employee salaries and wages" },
+  { id: SYS_ACCS.COMMISSION_GROUP,   code: "4300", name: "Sales Commission",           head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Commission",       description: "Commission paid to sales agents" },
+  { id: SYS_ACCS.OFFICE_EXP,         code: "4400", name: "Office & Admin Expenses",    head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Admin",            description: "Office supplies, rent, admin costs" },
+  { id: SYS_ACCS.UTILITIES,          code: "4500", name: "Utility Bills",              head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Utilities",        description: "Electricity, gas, water, internet" },
+  { id: SYS_ACCS.PURCHASE_EXP,       code: "4600", name: "Purchases",                  head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Purchases",        description: "Goods purchased for resale or use" },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // EQUITY  (codes 5xxx — same as original system)
+  // ─────────────────────────────────────────────────────────────────────────────
+  { id: SYS_ACCS.EQUITY_GROUP,       code: "5000", name: "Capital & Equity",           head: "Equity",           accountType: "Group",  parentId: null,                         subType: "Equity",           description: "Owner's equity in the business" },
+  { id: SYS_ACCS.OWNERS_CAPITAL,     code: "5100", name: "Owner's Capital",            head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Capital",          description: "Funds invested by owners / shareholders" },
+  { id: SYS_ACCS.RETAINED_EARN,      code: "5200", name: "Retained Earnings",          head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Retained",         description: "Accumulated profits retained in the business" },
 ];
 
 /**
@@ -2355,11 +2389,37 @@ export function seedDefaultCoaAccounts(): void {
     });
   }
 
-  if (toAdd.length > 0) {
-    const updated = [...existing, ...toAdd];
+  // ── Migration: restructure existing accounts to IFRS-compliant hierarchy ────
+  // Detect old structure: sys-1000 (Current Assets) still has parentId = null
+  const needsMigration = existing.some(a => a.id === SYS_ACCS.CURRENT_ASSETS && a.parentId === null);
+  const migrations: Array<{ id: string; updates: Partial<Account> }> = needsMigration ? [
+    // Assets: wire Current Assets under the new Assets root
+    { id: SYS_ACCS.CURRENT_ASSETS, updates: { parentId: SYS_ACCS.ASSETS_ROOT, code: "1100" } },
+    { id: SYS_ACCS.AR_GROUP,       updates: { code: "1130" } },
+    { id: SYS_ACCS.AR_TRADE,       updates: { code: "1131" } },
+    { id: SYS_ACCS.CASH,           updates: { code: "1110" } },
+    { id: SYS_ACCS.BANK,           updates: { code: "1120" } },
+    { id: SYS_ACCS.INVENTORY,      updates: { code: "1140" } },
+    // Liabilities: wire Current Liabilities under the new Liabilities root
+    { id: SYS_ACCS.CURRENT_LIAB,   updates: { parentId: SYS_ACCS.LIAB_ROOT, code: "2100" } },
+    { id: SYS_ACCS.AP_GROUP,       updates: { code: "2110" } },
+    { id: SYS_ACCS.AP_TRADE,       updates: { code: "2111" } },
+    { id: SYS_ACCS.VAT_PAYABLE,    updates: { code: "2120" } },
+  ] : [];
+
+  let workingAccounts = [...existing, ...toAdd];
+
+  if (migrations.length > 0) {
+    workingAccounts = workingAccounts.map(acc => {
+      const m = migrations.find(mg => mg.id === acc.id);
+      return m ? { ...acc, ...m.updates, updatedAt: new Date().toISOString() } : acc;
+    });
+  }
+
+  if (toAdd.length > 0 || migrations.length > 0) {
     const sk = tenantKey(COA_KEY);
-    localStorage.setItem(sk, JSON.stringify(updated));
-    _apiWrite(sk, updated);
+    localStorage.setItem(sk, JSON.stringify(workingAccounts));
+    _apiWrite(sk, workingAccounts);
   }
 
   // ── Auto-populate accounting settings (only fills missing mappings) ────────

@@ -32,6 +32,46 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 Key files: `src/lib/store.ts`, `src/hooks/use-data.ts`, `src/components/editable-cell.tsx`, `src/components/layout.tsx`
 
+### Chart of Accounts — IFRS/IAS-1 Hierarchy (as of April 2026)
+
+Accounts are seeded by `seedDefaultCoaAccounts()` (called on every login). The migration in that function auto-upgrades existing tenants on next login.
+
+```
+1000  Assets (root)
+  1100  Current Assets
+    1110  Cash
+    1120  Bank
+    1130  Accounts Receivable (group)
+    1131  Trade Receivables
+    1140  Inventory
+  1200  Non-Current Assets
+    1210  Property, Plant & Equipment
+    1220  Accumulated Depreciation (contra-asset)
+2000  Liabilities (root)
+  2100  Current Liabilities
+    2110  Accounts Payable (group)
+    2111  Trade Payables
+    2120  VAT Payable
+    2130  Accrued Expenses
+  2200  Non-Current Liabilities
+    2210  Long-term Loans
+3000  Revenue / Income
+  3100  Sales Revenue
+  3200  Other Income
+4000  Operating Expenses
+  4100  COGS
+  4200  Salary & Wages
+  4300  Sales Commission
+  4400  Office & Admin Expenses
+  4500  Utility Bills
+  4600  Purchases
+5000  Capital & Equity
+  5100  Owner's Capital
+  5200  Retained Earnings
+```
+
+System account ID constants live in `SYS_ACCS` (see `store.ts`). New root IDs: `ASSETS_ROOT="sys-1000r"`, `NON_CURRENT_ASSETS="sys-1200g"`, `LIAB_ROOT="sys-2000r"`, `NON_CURRENT_LIAB="sys-2200g"`.
+
 Default credentials: superadmin `admin` / `Onesoft@2024` (sessionStorage key `onesoft-admin-auth`)
 
 ### Multi-tenant & Module Groups System
