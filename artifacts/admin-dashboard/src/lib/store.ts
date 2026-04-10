@@ -699,10 +699,12 @@ export type Tenant = {
   contactEmail:   string;
   status:         TenantStatus;
   plan:           TenantPlan;
-  moduleGroupId?: string;
-  isDemo?:        boolean;
-  createdAt:      string;
-  updatedAt:      string;
+  moduleGroupId?:      string;
+  isDemo?:             boolean;
+  demoResetInterval?:  number;  // minutes; 0 / undefined = never
+  demoLastReset?:      string;  // ISO timestamp of last seed
+  createdAt:           string;
+  updatedAt:           string;
 };
 
 const TENANTS_KEY = "admin-tenants";

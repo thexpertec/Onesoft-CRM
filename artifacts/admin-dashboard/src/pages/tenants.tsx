@@ -50,16 +50,39 @@ function slugify(name: string) {
 }
 
 // ─── Blank form ───────────────────────────────────────────────────────────────
+const RESET_INTERVALS = [
+  { value: 0,    label: "Never"      },
+  { value: 15,   label: "15 minutes" },
+  { value: 30,   label: "30 minutes" },
+  { value: 60,   label: "1 hour"     },
+  { value: 120,  label: "2 hours"    },
+  { value: 240,  label: "4 hours"    },
+  { value: 480,  label: "8 hours"    },
+  { value: 1440, label: "24 hours"   },
+];
+
+function nextResetLabel(lastReset: string | undefined, intervalMins: number | undefined): string {
+  if (!intervalMins) return "";
+  const lastMs = lastReset ? new Date(lastReset).getTime() : 0;
+  const remaining = lastMs + intervalMins * 60_000 - Date.now();
+  if (remaining <= 0) return "Resetting soon…";
+  const mins  = Math.floor(remaining / 60_000);
+  const hours = Math.floor(mins / 60);
+  const m     = mins % 60;
+  return hours > 0 ? `Resets in ${hours}h ${m}m` : `Resets in ${m}m`;
+}
+
 const blankForm = (): Omit<Tenant, "id" | "createdAt" | "updatedAt"> => ({
-  name:          "",
-  slug:          "",
-  adminUsername: "",
-  adminPassword: "",
-  contactEmail:  "",
-  status:        "trial",
-  plan:          "starter",
-  moduleGroupId: undefined,
-  isDemo:        false,
+  name:               "",
+  slug:               "",
+  adminUsername:      "",
+  adminPassword:      "",
+  contactEmail:       "",
+  status:             "trial",
+  plan:               "starter",
+  moduleGroupId:      undefined,
+  isDemo:             false,
+  demoResetInterval:  0,
 });
 
 // ─── Tenant form modal ────────────────────────────────────────────────────────
@@ -204,24 +227,52 @@ function TenantModal({
               />
             </div>
 
-            {/* Demo Tenant toggle */}
-            <button
-              type="button"
-              onClick={() => patch("isDemo", !form.isDemo)}
-              className={`w-full flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all ${
-                form.isDemo
-                  ? "border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/30"
-                  : "border-dashed border-gray-200 dark:border-zinc-700 bg-transparent hover:bg-gray-50 dark:hover:bg-zinc-900/40"
-              }`}
-            >
-              <div className={`relative w-8 h-[18px] rounded-full flex-shrink-0 transition-colors ${form.isDemo ? "bg-violet-500" : "bg-gray-200 dark:bg-zinc-700"}`}>
-                <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${form.isDemo ? "left-[18px]" : "left-[2px]"}`} />
-              </div>
-              <span className={`text-[12px] font-semibold flex-1 ${form.isDemo ? "text-violet-700 dark:text-violet-300" : "text-gray-500 dark:text-gray-400"}`}>
-                This is a Demo Tenant
-              </span>
-              <FlaskConical size={13} className={`flex-shrink-0 ${form.isDemo ? "text-violet-500" : "text-gray-300 dark:text-zinc-600"}`} />
-            </button>
+            {/* Demo Tenant toggle + interval */}
+            <div className={`rounded-lg border transition-all overflow-hidden ${
+              form.isDemo
+                ? "border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/20"
+                : "border-dashed border-gray-200 dark:border-zinc-700"
+            }`}>
+              {/* Toggle row */}
+              <button
+                type="button"
+                onClick={() => patch("isDemo", !form.isDemo)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+              >
+                <div className={`relative w-8 h-[18px] rounded-full flex-shrink-0 transition-colors ${form.isDemo ? "bg-violet-500" : "bg-gray-200 dark:bg-zinc-700"}`}>
+                  <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${form.isDemo ? "left-[18px]" : "left-[2px]"}`} />
+                </div>
+                <span className={`text-[12px] font-semibold flex-1 ${form.isDemo ? "text-violet-700 dark:text-violet-300" : "text-gray-500 dark:text-gray-400"}`}>
+                  This is a Demo Tenant
+                </span>
+                <FlaskConical size={13} className={`flex-shrink-0 ${form.isDemo ? "text-violet-500" : "text-gray-300 dark:text-zinc-600"}`} />
+              </button>
+
+              {/* Interval row — only when demo is ON */}
+              {form.isDemo && (
+                <div className="flex items-center gap-2 px-3 pb-2.5 pt-0.5 border-t border-violet-100 dark:border-violet-900/40">
+                  <RefreshCw size={11} className="text-violet-400 flex-shrink-0" />
+                  <span className="text-[11px] text-violet-600 dark:text-violet-400 font-medium flex-shrink-0">
+                    Auto-reset every
+                  </span>
+                  <Select
+                    value={String(form.demoResetInterval ?? 0)}
+                    onValueChange={v => patch("demoResetInterval", Number(v))}
+                  >
+                    <SelectTrigger className="h-6 text-[11px] border-violet-200 dark:border-violet-800 bg-white dark:bg-zinc-900 px-2 rounded-md flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESET_INTERVALS.map(o => (
+                        <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── RIGHT: Access & Credentials ───────────────────────────────── */}
