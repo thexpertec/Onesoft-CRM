@@ -432,6 +432,7 @@ export type Shareholder = {
   phone: string;
   city: string;
   address: string;
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Owner's Capital
   createdAt: string;
   updatedAt: string;
 };
@@ -441,9 +442,18 @@ const SHAREHOLDERS_KEY = "admin-shareholders";
 export const getShareholders = (): Shareholder[] => getStored<Shareholder>(SHAREHOLDERS_KEY);
 
 export const createShareholder = (data: Omit<Shareholder, "id" | "createdAt" | "updatedAt">): Shareholder => {
+  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
+    parentId:    SYS_ACCS.OWNERS_CAPITAL,
+    parentCode:  "5100",
+    name:        data.name,
+    head:        "Equity",
+    subType:     "Capital",
+    description: `Capital account for ${data.name}`,
+  });
   const item: Shareholder = {
     ...data,
     id: crypto.randomUUID(),
+    ledgerAccountId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -458,6 +468,20 @@ export const updateShareholder = (id: string, updates: Partial<Omit<Shareholder,
   if (i === -1) throw new Error("Shareholder not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(SHAREHOLDERS_KEY, items);
+  // Sync COA ledger name if the shareholder's name changed
+  if (updates.name && items[i].ledgerAccountId) {
+    const accounts = (() => {
+      try { return JSON.parse(localStorage.getItem(tenantKey(COA_KEY)) || "[]") as Account[]; }
+      catch { return [] as Account[]; }
+    })();
+    const idx = accounts.findIndex(a => a.id === items[i].ledgerAccountId);
+    if (idx !== -1) {
+      accounts[idx] = { ...accounts[idx], name: updates.name, updatedAt: new Date().toISOString() };
+      const sk = tenantKey(COA_KEY);
+      localStorage.setItem(sk, JSON.stringify(accounts));
+      _apiWrite(sk, accounts);
+    }
+  }
   addActivity({ action: "updated", entity: "Shareholder", entityName: items[i].name });
   return items[i];
 };
@@ -2349,7 +2373,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // EQUITY  (codes 5xxx — same as original system)
   // ─────────────────────────────────────────────────────────────────────────────
   { id: SYS_ACCS.EQUITY_GROUP,       code: "5000", name: "Capital & Equity",           head: "Equity",           accountType: "Group",  parentId: null,                         subType: "Equity",           description: "Owner's equity in the business" },
-  { id: SYS_ACCS.OWNERS_CAPITAL,     code: "5100", name: "Owner's Capital",            head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Capital",          description: "Funds invested by owners / shareholders" },
+  { id: SYS_ACCS.OWNERS_CAPITAL,     code: "5100", name: "Owner's Capital",            head: "Equity",           accountType: "Group",  parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Capital",          description: "Funds invested by owners / shareholders (subsidiary ledgers per owner)" },
   { id: SYS_ACCS.RETAINED_EARN,      code: "5200", name: "Retained Earnings",          head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Retained",         description: "Accumulated profits retained in the business" },
 ];
 
@@ -2416,10 +2440,82 @@ export function seedDefaultCoaAccounts(): void {
     });
   }
 
-  if (toAdd.length > 0 || migrations.length > 0) {
+  // ── Migrate sys-5100 from Ledger to Group (so owner subsidiary ledgers work) ─
+  const ownersCapitalIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OWNERS_CAPITAL && a.accountType === "Ledger");
+  if (ownersCapitalIdx !== -1) {
+    workingAccounts[ownersCapitalIdx] = {
+      ...workingAccounts[ownersCapitalIdx],
+      accountType: "Group",
+      description: "Funds invested by owners / shareholders (subsidiary ledgers per owner)",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1) {
     const sk = tenantKey(COA_KEY);
     localStorage.setItem(sk, JSON.stringify(workingAccounts));
     _apiWrite(sk, workingAccounts);
+  }
+
+  // ── Backfill subsidiary ledgers for existing entities ────────────────────────
+  // Customers → AR Group
+  const customers = getStored<{ id: string; name: string; company?: string; ledgerAccountId?: string }>(CUSTOMERS_KEY);
+  let customersUpdated = false;
+  const customersPatched = customers.map(c => {
+    if (c.ledgerAccountId) return c;
+    const lid = createSubsidiaryLedger({
+      parentId:    SYS_ACCS.AR_GROUP,
+      parentCode:  "1130",
+      name:        c.name + (c.company ? ` (${c.company})` : ""),
+      head:        "Assets",
+      subType:     "Receivable",
+      description: `Accounts receivable ledger for ${c.name}`,
+    });
+    customersUpdated = true;
+    return { ...c, ledgerAccountId: lid };
+  });
+  if (customersUpdated) {
+    setStored(CUSTOMERS_KEY, customersPatched);
+  }
+
+  // Suppliers → AP Group
+  const suppliers = getStored<{ id: string; company: string; contactPerson?: string; ledgerAccountId?: string }>(SUPPLIERS_KEY);
+  let suppliersUpdated = false;
+  const suppliersPatched = suppliers.map(s => {
+    if (s.ledgerAccountId) return s;
+    const lid = createSubsidiaryLedger({
+      parentId:    SYS_ACCS.AP_GROUP,
+      parentCode:  "2110",
+      name:        s.company + (s.contactPerson ? ` (${s.contactPerson})` : ""),
+      head:        "Liabilities",
+      subType:     "Payable",
+      description: `Accounts payable ledger for ${s.company}`,
+    });
+    suppliersUpdated = true;
+    return { ...s, ledgerAccountId: lid };
+  });
+  if (suppliersUpdated) {
+    setStored(SUPPLIERS_KEY, suppliersPatched);
+  }
+
+  // Shareholders → Owner's Capital Group
+  const shareholders = getStored<{ id: string; name: string; ledgerAccountId?: string }>(SHAREHOLDERS_KEY);
+  let shareholdersUpdated = false;
+  const shareholdersPatched = shareholders.map(sh => {
+    if (sh.ledgerAccountId) return sh;
+    const lid = createSubsidiaryLedger({
+      parentId:    SYS_ACCS.OWNERS_CAPITAL,
+      parentCode:  "5100",
+      name:        sh.name,
+      head:        "Equity",
+      subType:     "Capital",
+      description: `Capital account for ${sh.name}`,
+    });
+    shareholdersUpdated = true;
+    return { ...sh, ledgerAccountId: lid };
+  });
+  if (shareholdersUpdated) {
+    setStored(SHAREHOLDERS_KEY, shareholdersPatched);
   }
 
   // ── Auto-populate accounting settings (only fills missing mappings) ────────

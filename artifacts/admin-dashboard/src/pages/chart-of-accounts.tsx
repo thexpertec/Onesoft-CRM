@@ -800,6 +800,15 @@ export default function ChartOfAccountsPage() {
               <GitBranch size={8} /> Group
             </span>
           ) : null}
+          {/* Auto-linked subsidiary ledger indicator */}
+          {isLedger && /^[0-9]+-[0-9]{3}$/.test(acc.code) && (
+            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800">
+              {acc.subType === "Receivable" ? "Customer"
+                : acc.subType === "Payable" ? "Supplier"
+                : acc.subType === "Capital" ? "Owner"
+                : "Linked"}
+            </span>
+          )}
         </div>
 
         {/* Opening balance + Dr/Cr (ledgers only) */}
