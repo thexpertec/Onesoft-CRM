@@ -357,6 +357,7 @@ function POSView({
   const { stock } = useStock();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
+  const [priceMode,     setPriceMode]     = useState<"retail" | "wholesale">("retail");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
 
@@ -930,6 +931,25 @@ function POSView({
               )}
             </div>
 
+            {/* Retail / Wholesale toggle */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
+              <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
+                <button
+                  onClick={() => setPriceMode("retail")}
+                  className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                >
+                  Retail
+                </button>
+                <button
+                  onClick={() => setPriceMode("wholesale")}
+                  className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                >
+                  Wholesale
+                </button>
+              </div>
+            </div>
+
             {/* Category pills */}
             {allCats.length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
@@ -1015,8 +1035,8 @@ function POSView({
                           {product.name}
                         </div>
                         <div className="flex items-center justify-between gap-1">
-                          <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                            {getSettingsCurrencySymbol()}{parseFloat(product.price || "0").toFixed(2)}
+                          <span className={`text-[12px] font-bold font-mono ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {getSettingsCurrencySymbol()}{parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : product.price) || "0").toFixed(2)}
                           </span>
                           {product.category && (
                             <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[44px] ${catColor}`}>
@@ -1247,6 +1267,9 @@ export default function SalesPage() {
   // ── Add product from right panel ──
   const handleAddProductFromCatalogue = useCallback((product: Product) => {
     const current = localItemsRef.current;
+    const resolvedPrice = priceMode === "wholesale" && product.wholesalePrice
+      ? product.wholesalePrice
+      : product.price || "0.00";
     const existing = current.find(i => i.sku === product.sku);
     if (existing) {
       const next = current.map(i =>
@@ -1261,12 +1284,12 @@ export default function SalesPage() {
         productName: product.name,
         sku: product.sku,
         unit: product.unit || "pcs",
-        unitPrice: product.price || "0.00",
+        unitPrice: resolvedPrice,
       };
       saveItems([...current, item]);
       toast({ title: `${product.name} added` });
     }
-  }, [saveItems, toast]);
+  }, [saveItems, toast, priceMode]);
 
   const handleItemFieldChange = (itemId: string, field: keyof SaleItem, value: string) => {
     setLocalItems(prev => prev.map(i => i.id === itemId ? { ...i, [field]: value } : i));
