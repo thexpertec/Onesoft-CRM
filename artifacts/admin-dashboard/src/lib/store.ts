@@ -1423,6 +1423,180 @@ export const deleteSale = (id: string): void => {
   addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
 };
 
+// ─── Sale Returns ─────────────────────────────────────────────────────────────
+export const SR_KEY = "admin-sale-returns";
+
+export type SaleReturnItem = {
+  id:          string;
+  productName: string;
+  sku:         string;
+  unit:        string;
+  qty:         string;
+  unitPrice:   string;
+  discount:    string;
+  costPrice?:  string;
+};
+
+export type SaleReturnStatus = "draft" | "posted";
+
+export type SaleReturn = {
+  id:                 string;
+  returnNumber:       string;       // SR-202604-001
+  originalSaleNumber: string;       // SAL-202604-001
+  originalSaleId:     string;
+  date:               string;       // YYYY-MM-DD
+  customer:           string;
+  refundMethod:       SalePayment;
+  items:              SaleReturnItem[];
+  subtotal:           number;
+  taxAmount:          number;
+  grandTotal:         number;
+  reason:             string;
+  notes:              string;
+  status:             SaleReturnStatus;
+  jeId?:              string;
+  createdAt:          string;
+  updatedAt:          string;
+};
+
+const nextSaleReturnNumber = (): string => {
+  const existing = getStored<SaleReturn>(SR_KEY);
+  const ym = new Date().toISOString().slice(0, 7).replace("-", "");
+  const prefix = `SR-${ym}-`;
+  const nums = existing
+    .filter(r => r.returnNumber.startsWith(prefix))
+    .map(r => parseInt(r.returnNumber.slice(prefix.length)) || 0);
+  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${String(next).padStart(3, "0")}`;
+};
+
+export const getSaleReturns = (): SaleReturn[] => getStored<SaleReturn>(SR_KEY);
+
+export const createSaleReturn = (data: Omit<SaleReturn, "id" | "returnNumber" | "createdAt" | "updatedAt">): SaleReturn => {
+  const sr: SaleReturn = {
+    ...data,
+    id:           crypto.randomUUID(),
+    returnNumber: nextSaleReturnNumber(),
+    createdAt:    new Date().toISOString(),
+    updatedAt:    new Date().toISOString(),
+  };
+  setStored(SR_KEY, [...getSaleReturns(), sr]);
+  addActivity({ action: "created", entity: "Sale Return", entityName: sr.returnNumber });
+  return sr;
+};
+
+export const updateSaleReturn = (id: string, updates: Partial<Omit<SaleReturn, "id" | "returnNumber" | "createdAt">>): SaleReturn => {
+  const all = getSaleReturns();
+  const i = all.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Sale Return not found");
+  all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SR_KEY, all);
+  return all[i];
+};
+
+export const deleteSaleReturn = (id: string): void => {
+  const sr = getSaleReturns().find(r => r.id === id);
+  setStored(SR_KEY, getSaleReturns().filter(r => r.id !== id));
+  addActivity({ action: "deleted", entity: "Sale Return", entityName: sr?.returnNumber || id });
+};
+
+/**
+ * Auto-posts a reversal journal entry for a Sale Return.
+ *   DR  Sales Revenue           = grandTotal  (reverses the revenue)
+ *   CR  Cash / Bank / AR        = grandTotal  (refund outflow)
+ *   DR  Inventory / Stock       = costTotal   (restores inventory value)
+ *   CR  Cost of Goods Sold      = costTotal   (reverses COGS)
+ */
+export function autoPostSaleReturnJE(params: {
+  returnNumber:  string;
+  originalRef:   string;
+  customer:      string;
+  date:          string;
+  refundMethod:  SalePayment;
+  subtotal:      number;
+  taxAmount:     number;
+  grandTotal:    number;
+  costTotal?:    number;
+}): JournalEntry | null {
+  const s = getSettings();
+  if (!s.accSalesRevenue) return null;
+
+  const isCredit = params.refundMethod === "Credit";
+  const isCash   = params.refundMethod === "Cash";
+  let creditAccId: string;
+  if (isCredit) {
+    if (!s.accReceivable) return null;
+    creditAccId = s.accReceivable;
+  } else if (isCash) {
+    if (!s.accCash) return null;
+    creditAccId = s.accCash;
+  } else {
+    if (!s.accBank) return null;
+    creditAccId = s.accBank;
+  }
+
+  const narration = `Sale Return ${params.returnNumber} – ${params.customer} (orig: ${params.originalRef})`;
+  const costTotal = params.costTotal ?? 0;
+
+  const lines: JournalEntryLine[] = [
+    {
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accSalesRevenue,
+      narration: `Revenue reversal – ${params.returnNumber}`,
+      debit:     params.grandTotal,
+      credit:    0,
+    },
+    {
+      id:        crypto.randomUUID(),
+      ledgerId:  creditAccId,
+      narration,
+      debit:     0,
+      credit:    params.grandTotal,
+    },
+  ];
+
+  if (params.taxAmount > 0 && s.accVatPayable) {
+    lines.push({
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accVatPayable,
+      narration: `VAT reversal – ${params.returnNumber}`,
+      debit:     params.taxAmount,
+      credit:    0,
+    });
+  }
+
+  if (costTotal > 0 && s.accCogs && s.accInventory) {
+    lines.push({
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accInventory,
+      narration: `Inventory restore – ${params.returnNumber}`,
+      debit:     costTotal,
+      credit:    0,
+    });
+    lines.push({
+      id:        crypto.randomUUID(),
+      ledgerId:  s.accCogs,
+      narration: `COGS reversal – ${params.returnNumber}`,
+      debit:     0,
+      credit:    costTotal,
+    });
+  }
+
+  const totalDebit  = parseFloat((params.grandTotal + costTotal).toFixed(2));
+  const totalCredit = parseFloat((params.grandTotal + costTotal).toFixed(2));
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `AUTO-${params.returnNumber}`,
+    description: `Sale Return: ${params.returnNumber} – ${params.customer}`,
+    lines,
+    status:      "posted",
+    totalDebit,
+    totalCredit,
+    isBalanced:  true,
+  });
+}
+
 // ─── Stock Tracking ───────────────────────────────────────────────────────────
 export const STOCK_TYPES = ["For Sale", "Not For Sale", "Business Asset"] as const;
 export type StockType = typeof STOCK_TYPES[number];
