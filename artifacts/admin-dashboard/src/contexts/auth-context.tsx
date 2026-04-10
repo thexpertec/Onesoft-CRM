@@ -14,6 +14,7 @@ import {
   getActiveTenantId,
   syncAllFromServer,
   setActivityUser,
+  seedDefaultCoaAccounts,
 } from "@/lib/store";
 
 const AUTH_KEY     = "onesoft-admin-auth";
@@ -112,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setIsSyncing(true);
     syncAllFromServer(resolvedTenantId).finally(() => {
+      // Seed default COA + auto-link accounting settings on every login
+      seedDefaultCoaAccounts();
       // After sync, re-read the user in case their record was updated in DB
       const refreshed = getAdminUserById(userId);
       if (refreshed) setCurrentUser(refreshed);
@@ -155,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsSyncing(true);
       try {
         await syncAllFromServer(tenant.id);
+        seedDefaultCoaAccounts();
       } finally {
         setIsSyncing(false);
       }
@@ -214,7 +218,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sync that tenant's data from DB
     if (tenantId) {
       setIsSyncing(true);
-      syncAllFromServer(tenantId).finally(() => setIsSyncing(false));
+      syncAllFromServer(tenantId).finally(() => {
+        seedDefaultCoaAccounts();
+        setIsSyncing(false);
+      });
     }
   };
 

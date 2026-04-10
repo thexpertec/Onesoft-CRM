@@ -291,6 +291,7 @@ export type Customer = {
   currency: string;
   notes: string;
   tags: string[];
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Receivable
   createdAt: string;
   updatedAt: string;
 };
@@ -301,8 +302,17 @@ export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY)
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
 export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "updatedAt">): Customer => {
+  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
+    parentId:   SYS_ACCS.AR_GROUP,
+    parentCode: "1100",
+    name:       data.name + (data.company ? ` (${data.company})` : ""),
+    head:       "Assets",
+    subType:    "Receivable",
+    description: `Receivable account for customer: ${data.name}`,
+  });
   const newCustomer: Customer = {
     ...data,
+    ledgerAccountId,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -367,6 +377,7 @@ export type Supplier = {
   currency: string;
   notes: string;
   tags: string[];
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Payable
   createdAt: string;
   updatedAt: string;
 };
@@ -376,8 +387,17 @@ const SUPPLIERS_KEY = "admin-suppliers";
 export const getSuppliers = (): Supplier[] => getStored<Supplier>(SUPPLIERS_KEY);
 
 export const createSupplier = (data: Omit<Supplier, "id" | "createdAt" | "updatedAt">): Supplier => {
+  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
+    parentId:    SYS_ACCS.AP_GROUP,
+    parentCode:  "2100",
+    name:        data.company + (data.contactPerson ? ` (${data.contactPerson})` : ""),
+    head:        "Liabilities",
+    subType:     "Payable",
+    description: `Payable account for supplier: ${data.company}`,
+  });
   const item: Supplier = {
     ...data,
+    ledgerAccountId,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1585,11 +1605,12 @@ export type SalesAgent = {
   region:         string;   // territory / area they cover
   commissionRate: string;   // percentage e.g. "5"
   targetAmount:   string;   // monthly sales target (in base currency)
-  status:         SalesAgentStatus;
-  joinDate:       string;   // YYYY-MM-DD
-  notes:          string;
-  createdAt:      string;
-  updatedAt:      string;
+  status:           SalesAgentStatus;
+  joinDate:         string;   // YYYY-MM-DD
+  notes:            string;
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Sales Commission
+  createdAt:        string;
+  updatedAt:        string;
 };
 
 const SALES_AGENTS_KEY = "admin-sales-agents";
@@ -1608,8 +1629,17 @@ const nextAgentCode = (): string => {
 };
 
 export const createSalesAgent = (data: Omit<SalesAgent, "id" | "agentCode" | "createdAt" | "updatedAt">): SalesAgent => {
+  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
+    parentId:    SYS_ACCS.COMMISSION_GROUP,
+    parentCode:  "4300",
+    name:        data.name,
+    head:        "Expense",
+    subType:     "Commission",
+    description: `Commission ledger for sales agent: ${data.name}`,
+  });
   const agent: SalesAgent = {
     ...data,
+    ledgerAccountId,
     id:        crypto.randomUUID(),
     agentCode: nextAgentCode(),
     createdAt: new Date().toISOString(),
@@ -1862,6 +1892,7 @@ export type Staff = {
   username?: string;
   password?: string;
   loginEnabled?: boolean;
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Salary & Wages
   createdAt: string;
   updatedAt: string;
 };
@@ -1871,7 +1902,15 @@ const STAFF_KEY = "admin-hrm-staff";
 export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
 
 export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
-  const item: Staff = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
+    parentId:    SYS_ACCS.SALARY_GROUP,
+    parentCode:  "4200",
+    name:        data.name + (data.designation ? ` — ${data.designation}` : ""),
+    head:        "Expense",
+    subType:     "Payroll",
+    description: `Salary ledger for staff member: ${data.name}`,
+  });
+  const item: Staff = { ...data, ledgerAccountId, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(STAFF_KEY, [...getStaff(), item]);
   return item;
 };
@@ -2137,6 +2176,186 @@ export type Account = {
 };
 
 const COA_KEY = "admin-chart-of-accounts";
+
+// ─── System / Default account stable IDs ──────────────────────────────────────
+// These IDs are pre-defined (not UUIDs) so they are stable across sessions and
+// can be referenced directly for accounting mappings and subsidiary ledgers.
+export const SYS_ACCS = {
+  // Assets
+  CURRENT_ASSETS:   "sys-1000",
+  AR_GROUP:         "sys-1100",  // Accounts Receivable GROUP (parent for per-customer ledgers)
+  AR_TRADE:         "sys-1101",  // Trade Receivables LEDGER (used in accounting settings)
+  CASH:             "sys-1200",  // Cash in Hand
+  BANK:             "sys-1210",  // Bank Account
+  INVENTORY:        "sys-1300",  // Inventory / Stock
+  // Liabilities
+  CURRENT_LIAB:     "sys-2000",
+  AP_GROUP:         "sys-2100",  // Accounts Payable GROUP (parent for per-supplier ledgers)
+  AP_TRADE:         "sys-2101",  // Trade Payables LEDGER (used in journal entries)
+  VAT_PAYABLE:      "sys-2200",  // VAT / Tax Payable
+  // Revenue / Income
+  REVENUE_GROUP:    "sys-3000",
+  SALES_REVENUE:    "sys-3100",  // Main sales revenue ledger
+  OTHER_INCOME:     "sys-3200",  // Other income
+  // Expense
+  EXPENSES_GROUP:   "sys-4000",
+  COGS:             "sys-4100",  // Cost of Goods Sold
+  SALARY_GROUP:     "sys-4200",  // Salary & Wages GROUP (parent for per-staff ledgers)
+  COMMISSION_GROUP: "sys-4300",  // Sales Commission GROUP (parent for per-agent ledgers)
+  OFFICE_EXP:       "sys-4400",  // Office & Administration
+  UTILITIES:        "sys-4500",  // Utility Bills
+  PURCHASE_EXP:     "sys-4600",  // Purchase / COGS
+  // Equity
+  EQUITY_GROUP:     "sys-5000",
+  OWNERS_CAPITAL:   "sys-5100",  // Owner's Capital / Share Capital
+  RETAINED_EARN:    "sys-5200",  // Retained Earnings
+} as const;
+
+type SysAccDef = {
+  id: string; code: string; name: string;
+  head: AccountHead; accountType: AccountKind;
+  parentId: string | null; subType: string; description: string;
+};
+
+const SYSTEM_ACCOUNTS: SysAccDef[] = [
+  // ── Assets ──
+  { id: SYS_ACCS.CURRENT_ASSETS,   code: "1000", name: "Current Assets",          head: "Assets",           accountType: "Group",  parentId: null,                    subType: "Current Asset",    description: "Short-term assets" },
+  { id: SYS_ACCS.AR_GROUP,         code: "1100", name: "Accounts Receivable",      head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Receivable",       description: "Amounts owed by customers & buyers" },
+  { id: SYS_ACCS.AR_TRADE,         code: "1101", name: "Trade Receivables",         head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,       subType: "Receivable",       description: "General trade receivables ledger" },
+  { id: SYS_ACCS.CASH,             code: "1200", name: "Cash in Hand",             head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Cash",             description: "Physical cash on premises" },
+  { id: SYS_ACCS.BANK,             code: "1210", name: "Bank Account",             head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Bank",             description: "Business bank account" },
+  { id: SYS_ACCS.INVENTORY,        code: "1300", name: "Inventory / Stock",        head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Inventory",        description: "Stock & inventory value" },
+  // ── Liabilities ──
+  { id: SYS_ACCS.CURRENT_LIAB,     code: "2000", name: "Current Liabilities",      head: "Liabilities",      accountType: "Group",  parentId: null,                    subType: "Current Liability", description: "Short-term obligations" },
+  { id: SYS_ACCS.AP_GROUP,         code: "2100", name: "Accounts Payable",         head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,   subType: "Payable",          description: "Amounts owed to suppliers" },
+  { id: SYS_ACCS.AP_TRADE,         code: "2101", name: "Trade Payables",            head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,       subType: "Payable",          description: "General trade payables ledger" },
+  { id: SYS_ACCS.VAT_PAYABLE,      code: "2200", name: "VAT Payable",              head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,   subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
+  // ── Revenue ──
+  { id: SYS_ACCS.REVENUE_GROUP,    code: "3000", name: "Revenue",                  head: "Revenue / Income", accountType: "Group",  parentId: null,                    subType: "Revenue",          description: "Income from business operations" },
+  { id: SYS_ACCS.SALES_REVENUE,    code: "3100", name: "Sales Revenue",            head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,  subType: "Sales",            description: "Revenue from product and service sales" },
+  { id: SYS_ACCS.OTHER_INCOME,     code: "3200", name: "Other Income",             head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,  subType: "Other Income",     description: "Miscellaneous or non-operating income" },
+  // ── Expenses ──
+  { id: SYS_ACCS.EXPENSES_GROUP,   code: "4000", name: "Operating Expenses",       head: "Expense",          accountType: "Group",  parentId: null,                    subType: "Expense",          description: "Day-to-day business expenditure" },
+  { id: SYS_ACCS.COGS,             code: "4100", name: "Cost of Goods Sold",       head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "COGS",             description: "Direct cost of goods or services sold" },
+  { id: SYS_ACCS.SALARY_GROUP,     code: "4200", name: "Salary & Wages",           head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Payroll",          description: "Employee salaries and wages" },
+  { id: SYS_ACCS.COMMISSION_GROUP, code: "4300", name: "Sales Commission",         head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Commission",       description: "Commission paid to sales agents" },
+  { id: SYS_ACCS.OFFICE_EXP,       code: "4400", name: "Office & Admin Expenses",  head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Admin",            description: "Office supplies, rent, admin costs" },
+  { id: SYS_ACCS.UTILITIES,        code: "4500", name: "Utility Bills",            head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Utilities",        description: "Electricity, gas, water, internet" },
+  { id: SYS_ACCS.PURCHASE_EXP,     code: "4600", name: "Purchases",               head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP, subType: "Purchases",        description: "Goods purchased for resale or use" },
+  // ── Equity ──
+  { id: SYS_ACCS.EQUITY_GROUP,     code: "5000", name: "Capital & Equity",         head: "Equity",           accountType: "Group",  parentId: null,                    subType: "Equity",           description: "Owner's equity in the business" },
+  { id: SYS_ACCS.OWNERS_CAPITAL,   code: "5100", name: "Owner's Capital",          head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,   subType: "Capital",          description: "Funds invested by owners / shareholders" },
+  { id: SYS_ACCS.RETAINED_EARN,    code: "5200", name: "Retained Earnings",        head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,   subType: "Retained",         description: "Accumulated profits retained in the business" },
+];
+
+/**
+ * Seeds system (default) accounts into the COA if they don't already exist,
+ * then auto-populates the accounting settings mappings if not yet configured.
+ * Safe to call multiple times — existing accounts/settings are never overwritten.
+ */
+export function seedDefaultCoaAccounts(): void {
+  const existing = (() => {
+    try {
+      const raw = localStorage.getItem(tenantKey(COA_KEY));
+      return raw ? (JSON.parse(raw) as Account[]) : [];
+    } catch { return []; }
+  })();
+
+  const existingIds = new Set(existing.map(a => a.id));
+  const now = new Date().toISOString();
+  const toAdd: Account[] = [];
+
+  for (const def of SYSTEM_ACCOUNTS) {
+    if (existingIds.has(def.id)) continue;   // already seeded
+    toAdd.push({
+      id:             def.id,
+      code:           def.code,
+      name:           def.name,
+      head:           def.head,
+      accountType:    def.accountType,
+      parentId:       def.parentId,
+      subType:        def.subType,
+      description:    def.description,
+      openingBalance: 0,
+      paymentType:    null,
+      isActive:       true,
+      createdAt:      now,
+      updatedAt:      now,
+    });
+  }
+
+  if (toAdd.length > 0) {
+    const updated = [...existing, ...toAdd];
+    const sk = tenantKey(COA_KEY);
+    localStorage.setItem(sk, JSON.stringify(updated));
+    _apiWrite(sk, updated);
+  }
+
+  // ── Auto-populate accounting settings (only fills missing mappings) ────────
+  const s = getSettings();
+  const mappingUpdates: Partial<AppSettings> = {};
+  if (!s.accSalesRevenue) mappingUpdates.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
+  if (!s.accCash)         mappingUpdates.accCash         = SYS_ACCS.CASH;
+  if (!s.accBank)         mappingUpdates.accBank         = SYS_ACCS.BANK;
+  if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
+  if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
+  if (Object.keys(mappingUpdates).length > 0) {
+    saveSettings({ ...s, ...mappingUpdates });
+  }
+}
+
+/**
+ * Generates the next sequential sub-code for subsidiary ledgers under a parent.
+ * Only counts children that already use the "{parentCode}-NNN" pattern so that
+ * fixed-code system accounts (e.g. 1101 under parent 1100) do not skew the numbering.
+ * E.g.  parent code "1100" → subsidiary codes "1100-001", "1100-002", …
+ */
+function nextSubCode(parentCode: string, existing: Account[], parentId: string): string {
+  const prefix = `${parentCode}-`;
+  const children = existing.filter(a => a.parentId === parentId && a.code.startsWith(prefix));
+  const max = children
+    .map(a => parseInt(a.code.slice(prefix.length)) || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+/**
+ * Creates a subsidiary Ledger account under a system parent group.
+ * Returns the new account ID. Safe to call during entity creation.
+ */
+function createSubsidiaryLedger(params: {
+  parentId: string; parentCode: string;
+  name: string; head: AccountHead; subType: string; description: string;
+}): string {
+  const existing = (() => {
+    try {
+      const raw = localStorage.getItem(tenantKey(COA_KEY));
+      return raw ? (JSON.parse(raw) as Account[]) : [];
+    } catch { return []; }
+  })();
+  const code = nextSubCode(params.parentCode, existing, params.parentId);
+  const now = new Date().toISOString();
+  const account: Account = {
+    id:             crypto.randomUUID(),
+    code,
+    name:           params.name,
+    head:           params.head,
+    accountType:    "Ledger",
+    parentId:       params.parentId,
+    subType:        params.subType,
+    description:    params.description,
+    openingBalance: 0,
+    paymentType:    null,
+    isActive:       true,
+    createdAt:      now,
+    updatedAt:      now,
+  };
+  const updated = [...existing, account];
+  const sk = tenantKey(COA_KEY);
+  localStorage.setItem(sk, JSON.stringify(updated));
+  _apiWrite(sk, updated);
+  return account.id;
+}
 
 // IDs of the original seed accounts — used to wipe them on first load after this change
 const LEGACY_SEED_IDS = new Set([
