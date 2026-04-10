@@ -222,6 +222,7 @@ const OTHER_NAV: NavItem[] = [
       { label: "Receipt & Payment",  href: "/receipt-payment",    icon: CreditCard,      desc: "Record cash/bank transactions"    },
       { label: "Ledger Report",      href: "/ledger-report",      icon: FileBarChart,    desc: "Account statement & balance"     },
       { label: "P&L Statement",      href: "/pls-report",         icon: TrendingUp,      desc: "Profit & Loss by period"         },
+      { label: "Income Report",       href: "/income-report",      icon: TrendingUp,      desc: "Revenue by source & date"        },
       { label: "Expense Report",     href: "/expense-report",     icon: TrendingDown,    desc: "All expenses by category & date" },
       { label: "Balance Sheet",      href: "/balance-sheet",      icon: LayoutDashboard, desc: "Assets, Liabilities & Equity"   },
     ],
@@ -250,7 +251,7 @@ const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice"
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report"];
+const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
@@ -866,6 +867,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <NavLink href="/balance-sheet"     icon={FileBarChart}  label="Balance Sheet" />
                 <NavLink href="/ledger-report"     icon={BookOpen}      label="Ledger Report" />
                 <NavLink href="/pls-report"        icon={TrendingUp}    label="P&L Statement" />
+                <NavLink href="/income-report"     icon={TrendingUp}    label="Income Report" />
                 <NavLink href="/expense-report"    icon={TrendingDown}  label="Expense Report" />
                 <NavLink href="/receipt-payment"   icon={CreditCard}    label="Receipt & Payment" />
 
