@@ -929,7 +929,8 @@ export type Product = {
   unit: string;
   purchasePrice?: string;    // Purchase price (from supplier)
   costPrice?: string;        // Cost price per unit (internal cost including overheads)
-  price: string;             // Sale price per unit
+  price: string;             // Retail sale price per unit
+  wholesalePrice?: string;   // Wholesale price per unit
   description: string;
   status: ProductStatus;
   condition?: ProductCondition; // Physical condition of the product

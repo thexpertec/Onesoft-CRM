@@ -17,7 +17,7 @@ import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
-type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "status" | "condition" | "description";
+type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -34,16 +34,19 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", condition: "", description: "",
+  name: "", sku: "", brand: "", category: "", unit: "",
+  purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
+  retailProfit: "", wholesaleProfit: "",
+  status: "Active", condition: "", description: "",
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
-const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "condition", "description"];
-const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "status", "condition", "description"];
+const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "wholesalePrice", "status", "condition", "description"];
+const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "retailPrice", "wholesalePrice", "status", "condition", "description"];
 
 function downloadTemplate() {
   const sample = [
-    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "600.00", "750.00", "999.00", "Active", "New", "Cloud-based CRM solution",
+    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "600.00", "750.00", "999.00", "799.00", "Active", "New", "Cloud-based CRM solution",
   ];
   const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -84,7 +87,7 @@ function parseCSV(text: string): ImportRow[] {
 
   return lines.slice(1).map((line, i) => {
     const cells = parseLine(line);
-    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", status: "Active", condition: "", description: "" };
+    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", wholesalePrice: "", retailProfit: "", wholesaleProfit: "", status: "Active", condition: "", description: "" };
     CSV_HEADERS.forEach(f => {
       const ci = colMap[f];
       row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci] : "";
@@ -150,7 +153,8 @@ export default function ProductsPage() {
     try {
       addProduct({
         name: formData.name, sku: formData.sku, brand: formData.brand, category: formData.category,
-        unit: formData.unit, purchasePrice: formData.purchasePrice, costPrice: formData.costPrice, price: formData.price,
+        unit: formData.unit, purchasePrice: formData.purchasePrice, costPrice: formData.costPrice,
+        price: formData.price, wholesalePrice: formData.wholesalePrice,
         status: (formData.status as Product["status"]) || "Active",
         condition: (formData.condition as Product["condition"]) || undefined,
         description: formData.description,
@@ -232,7 +236,8 @@ export default function ProductsPage() {
     valid.forEach(r => {
       const payload = {
         name: r.name, sku: r.sku, brand: r.brand, category: r.category,
-        unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice, price: r.price,
+        unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
+        price: r.price, wholesalePrice: r.wholesalePrice,
         status: (r.status as Product["status"]) || "Active",
         condition: (r.condition as Product["condition"]) || undefined,
         description: r.description,
@@ -274,11 +279,13 @@ export default function ProductsPage() {
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
     { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
-    { field: "purchasePrice", label: `Purchase (${sym})`,   minW: 120, type: "text"                                                                },
-    { field: "costPrice",     label: `Cost (${sym})`,       minW: 110, type: "text"                                                                },
-    { field: "price",         label: `Sale (${sym})`,       minW: 110, type: "text"                                                                },
-    { field: "profit",        label: `Profit (${sym})`,     minW: 110, type: "readonly"                                                            },
-    { field: "stock",         label: "Stock",               minW: 90,  type: "readonly"                                                            },
+    { field: "purchasePrice",   label: `Purchase (${sym})`,         minW: 120, type: "text"     },
+    { field: "costPrice",       label: `Cost (${sym})`,             minW: 110, type: "text"     },
+    { field: "price",           label: `Retail Price (${sym})`,     minW: 125, type: "text"     },
+    { field: "retailProfit",    label: `Retail Profit (${sym})`,    minW: 125, type: "readonly" },
+    { field: "wholesalePrice",  label: `Wholesale (${sym})`,        minW: 120, type: "text"     },
+    { field: "wholesaleProfit", label: `Wholesale Profit (${sym})`, minW: 140, type: "readonly" },
+    { field: "stock",           label: "Stock",                     minW: 90,  type: "readonly" },
     { field: "status",      label: "Status",             minW: 120, type: "select",
       options: ["Active", "Inactive", "Draft"],
       optionColors: STATUS_COLORS,
@@ -293,7 +300,7 @@ export default function ProductsPage() {
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
   const filtered = products
-    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(p => statusFilter === "All" || p.status === statusFilter)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -353,7 +360,8 @@ export default function ProductsPage() {
     try {
       addProduct({
         name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
-        unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice, price: newRow.price,
+        unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice,
+        price: newRow.price, wholesalePrice: newRow.wholesalePrice,
         status: (newRow.status as Product["status"]) || "Active",
         condition: (newRow.condition as Product["condition"]) || undefined,
         description: newRow.description,
@@ -410,10 +418,21 @@ export default function ProductsPage() {
                 { header: "Brand",           key: "brand",         width: 16 },
                 { header: "Category",        key: "category",      width: 20 },
                 { header: "Unit",            key: "unit",          width: 10 },
-                { header: "Purchase Price",  key: "purchasePrice", width: 16 },
-                { header: "Cost Price",      key: "costPrice",     width: 14 },
-                { header: "Sale Price",      key: "price",         width: 14 },
-                { header: "Status",          key: "status",        width: 12 },
+                { header: "Purchase Price",     key: "purchasePrice",   width: 16 },
+                { header: "Cost Price",        key: "costPrice",       width: 14 },
+                { header: "Retail Price",      key: "price",           width: 14 },
+                { header: "Retail Profit",     key: "retailProfit",    width: 14, getValue: (r: Product) => {
+                    const cost = parseFloat(r.costPrice ?? ""); const retail = parseFloat(r.price ?? "");
+                    return (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(2) : "";
+                  }
+                },
+                { header: "Wholesale Price",   key: "wholesalePrice",  width: 16 },
+                { header: "Wholesale Profit",  key: "wholesaleProfit", width: 17, getValue: (r: Product) => {
+                    const cost = parseFloat(r.costPrice ?? ""); const ws = parseFloat(r.wholesalePrice ?? "");
+                    return (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(2) : "";
+                  }
+                },
+                { header: "Status",            key: "status",          width: 12 },
                 { header: "Condition",       key: "condition",     width: 14 },
                 { header: "Description",     key: "description",   width: 40 },
               ]);
@@ -635,17 +654,21 @@ export default function ProductsPage() {
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
-                  // Compute profit for the readonly profit column
+                  // Compute readonly profit columns
                   let rawVal: string;
-                  if (c.field === "profit") {
-                    const cost = parseFloat(prod.costPrice ?? "");
-                    const sale = parseFloat(prod.price ?? "");
-                    rawVal = (!isNaN(cost) && !isNaN(sale)) ? (sale - cost).toFixed(2) : "";
+                  const cost = parseFloat(prod.costPrice ?? "");
+                  if (c.field === "retailProfit") {
+                    const retail = parseFloat(prod.price ?? "");
+                    rawVal = (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(2) : "";
+                  } else if (c.field === "wholesaleProfit") {
+                    const ws = parseFloat(prod.wholesalePrice ?? "");
+                    rawVal = (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(2) : "";
                   } else {
                     rawVal = String((prod as unknown as Record<string, string>)[c.field] ?? "");
                   }
-                  // Color the profit cell: green positive, red negative, muted zero/empty
-                  const profitColor = c.field === "profit" && rawVal !== ""
+                  // Color profit cells: green positive, red negative, muted zero/empty
+                  const isProfitCol = c.field === "retailProfit" || c.field === "wholesaleProfit";
+                  const profitColor = isProfitCol && rawVal !== ""
                     ? (parseFloat(rawVal) > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium"
                       : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
                       : "text-muted-foreground")
@@ -679,7 +702,7 @@ export default function ProductsPage() {
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
                       onClick={() => !isA && isAuthenticated && c.type !== "readonly" && setActiveCell({ id: prod.id, col: ci })}>
-                      {c.field === "profit" ? (
+                      {isProfitCol ? (
                         <div className={`w-full h-full flex items-center px-3 text-[12px] truncate select-none ${rawVal ? profitColor : "text-muted-foreground/40"}`}>
                           {rawVal || "—"}
                         </div>
@@ -821,28 +844,86 @@ export default function ProductsPage() {
               )}
             </div>
 
-            {/* Purchase Price */}
-            <div className="space-y-1">
-              <label className="text-[12px] font-semibold text-foreground">Purchase Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
-                onChange={e => patchForm("purchasePrice", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
-            </div>
+            {/* Pricing section — spans all 3 columns */}
+            <div className="col-span-3 rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">Pricing</p>
+              <div className="grid grid-cols-3 gap-4">
 
-            {/* Cost Price */}
-            <div className="space-y-1">
-              <label className="text-[12px] font-semibold text-foreground">Cost Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.costPrice}
-                onChange={e => patchForm("costPrice", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
-            </div>
+                {/* Purchase Price */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-foreground">Purchase Price ({sym})</label>
+                  <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
+                    onChange={e => patchForm("purchasePrice", e.target.value)}
+                    placeholder="0.00" className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground">Price paid to supplier</p>
+                </div>
 
-            {/* Sale Price */}
-            <div className="space-y-1">
-              <label className="text-[12px] font-semibold text-foreground">Sale Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.price}
-                onChange={e => patchForm("price", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
+                {/* Cost Price */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-foreground">Cost Price ({sym})</label>
+                  <Input type="number" min="0" step="0.01" value={formData.costPrice}
+                    onChange={e => patchForm("costPrice", e.target.value)}
+                    placeholder="0.00" className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground">Total internal cost incl. overheads</p>
+                </div>
+
+                {/* Empty spacer */}
+                <div />
+
+                {/* Retail Price */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-foreground">Retail Price ({sym})</label>
+                  <Input type="number" min="0" step="0.01" value={formData.price}
+                    onChange={e => patchForm("price", e.target.value)}
+                    placeholder="0.00" className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground">Standard retail / sale price</p>
+                </div>
+
+                {/* Retail Profit (computed) */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-muted-foreground">Retail Profit ({sym})</label>
+                  {(() => {
+                    const cost = parseFloat(formData.costPrice); const retail = parseFloat(formData.price);
+                    const profit = (!isNaN(cost) && !isNaN(retail)) ? retail - cost : null;
+                    return (
+                      <div className={`h-9 flex items-center px-3 rounded-md border border-dashed border-border bg-background text-sm font-medium
+                        ${profit === null ? "text-muted-foreground/40" : profit > 0 ? "text-emerald-600 dark:text-emerald-400" : profit < 0 ? "text-red-500" : "text-muted-foreground"}`}>
+                        {profit !== null ? profit.toFixed(2) : "—"}
+                      </div>
+                    );
+                  })()}
+                  <p className="text-[10px] text-muted-foreground">Retail Price − Cost Price</p>
+                </div>
+
+                {/* Empty spacer */}
+                <div />
+
+                {/* Wholesale Price */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-foreground">Wholesale Price ({sym})</label>
+                  <Input type="number" min="0" step="0.01" value={formData.wholesalePrice}
+                    onChange={e => patchForm("wholesalePrice", e.target.value)}
+                    placeholder="0.00" className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground">Price for bulk / wholesale buyers</p>
+                </div>
+
+                {/* Wholesale Profit (computed) */}
+                <div className="space-y-1">
+                  <label className="text-[12px] font-semibold text-muted-foreground">Wholesale Profit ({sym})</label>
+                  {(() => {
+                    const cost = parseFloat(formData.costPrice); const ws = parseFloat(formData.wholesalePrice);
+                    const profit = (!isNaN(cost) && !isNaN(ws)) ? ws - cost : null;
+                    return (
+                      <div className={`h-9 flex items-center px-3 rounded-md border border-dashed border-border bg-background text-sm font-medium
+                        ${profit === null ? "text-muted-foreground/40" : profit > 0 ? "text-emerald-600 dark:text-emerald-400" : profit < 0 ? "text-red-500" : "text-muted-foreground"}`}>
+                        {profit !== null ? profit.toFixed(2) : "—"}
+                      </div>
+                    );
+                  })()}
+                  <p className="text-[10px] text-muted-foreground">Wholesale Price − Cost Price</p>
+                </div>
+
+              </div>
             </div>
 
             {/* Condition */}
@@ -1058,12 +1139,14 @@ export default function ProductsPage() {
         const prod = viewProdId ? products.find(p => p.id === viewProdId) ?? null : null;
         if (!prod) return null;
 
-        const sym = getSettingsCurrencySymbol();
-        const purchaseP = parseFloat(prod.purchasePrice ?? "") || 0;
-        const costP     = parseFloat(prod.costPrice     ?? "") || 0;
-        const saleP     = parseFloat(prod.price         ?? "") || 0;
-        const margin    = costP > 0 && saleP > 0 ? ((saleP - costP) / saleP * 100) : null;
-        const profit    = saleP > 0 && costP > 0 ? saleP - costP : null;
+        const sym          = getSettingsCurrencySymbol();
+        const purchaseP    = parseFloat(prod.purchasePrice   ?? "") || 0;
+        const costP        = parseFloat(prod.costPrice       ?? "") || 0;
+        const retailP      = parseFloat(prod.price           ?? "") || 0;
+        const wholesaleP   = parseFloat(prod.wholesalePrice  ?? "") || 0;
+        const retailProfit = retailP > 0 && costP > 0 ? retailP - costP : null;
+        const wsProfit     = wholesaleP > 0 && costP > 0 ? wholesaleP - costP : null;
+        const margin       = costP > 0 && retailP > 0 ? ((retailP - costP) / retailP * 100) : null;
 
         // Stock for this product
         const stockEntries = getStock().filter(s =>
@@ -1153,23 +1236,23 @@ export default function ProductsPage() {
                 {/* Price Cards */}
                 <div>
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Pricing</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[
-                      { label: "Purchase", value: purchaseP, icon: <ShoppingCart size={14} /> },
-                      { label: "Cost",     value: costP,     icon: <Boxes size={14} /> },
-                      { label: "Sale",     value: saleP,     icon: <ReceiptText size={14} /> },
-                      { label: "Profit",   value: profit,    icon: profit !== null && profit > 0 ? <TrendingUp size={14} /> : profit !== null && profit < 0 ? <TrendingDown size={14} /> : <Minus size={14} />, isProfit: true },
+                      { label: "Purchase Price",    value: purchaseP,   icon: <ShoppingCart size={14} />, isProfit: false, sub: null },
+                      { label: "Cost Price",        value: costP,       icon: <Boxes size={14} />,        isProfit: false, sub: null },
+                      { label: "Retail Price",      value: retailP,     icon: <ReceiptText size={14} />,  isProfit: false, sub: null },
+                      { label: "Retail Profit",     value: retailProfit, icon: retailProfit !== null && retailProfit > 0 ? <TrendingUp size={14} /> : retailProfit !== null && retailProfit < 0 ? <TrendingDown size={14} /> : <Minus size={14} />, isProfit: true, sub: margin !== null ? `${margin.toFixed(1)}% margin` : null },
+                      { label: "Wholesale Price",   value: wholesaleP,  icon: <ShoppingCart size={14} />, isProfit: false, sub: null },
+                      { label: "Wholesale Profit",  value: wsProfit,    icon: wsProfit !== null && wsProfit > 0 ? <TrendingUp size={14} /> : wsProfit !== null && wsProfit < 0 ? <TrendingDown size={14} /> : <Minus size={14} />, isProfit: true, sub: null },
                     ].map(card => (
                       <div key={card.label} className="bg-muted/40 rounded-xl p-3 space-y-1">
                         <div className="flex items-center gap-1.5 text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
                           {card.icon} {card.label}
                         </div>
                         <p className={`text-[15px] font-bold ${card.isProfit ? (card.value === null ? "text-muted-foreground" : (card.value as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : (card.value as number) < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground") : ""}`}>
-                          {card.value === null || (card.value as number) === 0 && card.label !== "Profit" ? "—" : `${sym}${(card.value as number).toFixed(2)}`}
+                          {card.value === null || (card.value as number) === 0 && !card.isProfit ? "—" : card.value !== null ? `${sym}${(card.value as number).toFixed(2)}` : "—"}
                         </p>
-                        {card.label === "Profit" && margin !== null && (
-                          <p className="text-[10px] text-muted-foreground">{margin.toFixed(1)}% margin</p>
-                        )}
+                        {card.sub && <p className="text-[10px] text-muted-foreground">{card.sub}</p>}
                       </div>
                     ))}
                   </div>
