@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account } from "@/lib/store";
+import { Account, getSettings } from "@/lib/store";
 import {
-  BookOpen, Printer, Search, ChevronDown,
+  BookOpen, Printer, FileDown, Search, ChevronDown,
   TrendingUp, TrendingDown, BarChart3, Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -215,34 +215,302 @@ export default function LedgerReportPage() {
   const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
   const closingBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance;
 
-  // ── Print ──────────────────────────────────────────────────────────────────
+  // ── Professional Print / PDF ────────────────────────────────────────────────
 
   function handlePrint() {
-    const content = printRef.current;
-    if (!content) return;
-    const win = window.open("", "_blank", "width=900,height=700");
+    if (!account) return;
+    const s = getSettings();
+    const generatedAt = new Date().toLocaleString();
+
+    // ── helper to format balance for print ──
+    const pLabel = (bal: number): string => {
+      if (bal === 0) return "—";
+      return debitNormal ? (bal > 0 ? "DR" : "CR") : (bal < 0 ? "CR" : "DR");
+    };
+    const pAbs = (bal: number): string =>
+      Math.abs(bal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const pNum = (n: number): string =>
+      n === 0 ? "" : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Build rows HTML
+    let rowsHtml = "";
+
+    // Opening row
+    const obLabel = pLabel(openingBalance);
+    rowsHtml += `
+      <tr class="special-row">
+        <td>${from}</td>
+        <td></td>
+        <td><span class="tag tag-bf">B/F</span> <strong>Opening Balance</strong></td>
+        <td class="num">${openingBalance > 0 ? pNum(openingBalance) : ""}</td>
+        <td class="num">${openingBalance < 0 ? pAbs(openingBalance) : ""}</td>
+        <td class="num">
+          ${openingBalance === 0 ? "—" : `${pAbs(openingBalance)} <span class="bal-badge ${obLabel === "DR" ? "badge-dr" : "badge-cr"}">${obLabel}</span>`}
+        </td>
+      </tr>`;
+
+    // Transaction rows
+    if (rows.length === 0) {
+      rowsHtml += `<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:20px">No transactions in selected period</td></tr>`;
+    }
+    rows.forEach((r, i) => {
+      const bLabel = pLabel(r.balance);
+      rowsHtml += `
+        <tr class="${i % 2 === 1 ? "alt-row" : ""}">
+          <td>${r.date}</td>
+          <td><span class="ref">${r.reference}</span></td>
+          <td>
+            <div class="desc">${r.description}</div>
+            ${r.narration && r.narration !== r.description ? `<div class="narr">${r.narration}</div>` : ""}
+          </td>
+          <td class="num dr-amt">${r.debit > 0 ? pNum(r.debit) : "—"}</td>
+          <td class="num cr-amt">${r.credit > 0 ? pNum(r.credit) : "—"}</td>
+          <td class="num">
+            ${r.balance === 0 ? "—" : `${pAbs(r.balance)} <span class="bal-badge ${bLabel === "DR" ? "badge-dr" : "badge-cr"}">${bLabel}</span>`}
+          </td>
+        </tr>`;
+    });
+
+    // Totals row
+    if (rows.length > 0) {
+      rowsHtml += `
+        <tr class="total-row">
+          <td colspan="3"><strong>Period Totals</strong></td>
+          <td class="num dr-amt"><strong>${pNum(totalDebit)}</strong></td>
+          <td class="num cr-amt"><strong>${pNum(totalCredit)}</strong></td>
+          <td></td>
+        </tr>`;
+    }
+
+    // Closing row
+    const cbLabel = pLabel(closingBalance);
+    rowsHtml += `
+      <tr class="closing-row">
+        <td>${to}</td>
+        <td></td>
+        <td><span class="tag tag-cf">C/F</span> <strong>Closing Balance</strong></td>
+        <td class="num">${closingBalance > 0 ? pNum(closingBalance) : ""}</td>
+        <td class="num">${closingBalance < 0 ? pAbs(closingBalance) : ""}</td>
+        <td class="num">
+          ${closingBalance === 0 ? "—" : `${pAbs(closingBalance)} <span class="bal-badge ${cbLabel === "DR" ? "badge-dr" : "badge-cr"}">${cbLabel}</span>`}
+        </td>
+      </tr>`;
+
+    // Company info parts
+    const addresses = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
+    const phones    = [s.phoneHull, s.phoneIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
+    const emails    = [s.emailHull, s.emailIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
+
+    // Summary cards (after table)
+    const obAbs = Math.abs(debitNormal ? openingBalance : -openingBalance);
+    const cbAbs = Math.abs(debitNormal ? closingBalance : -closingBalance);
+    const summaryHtml = `
+      <div class="summary-section">
+        <div class="summary-title">Summary</div>
+        <div class="summary-grid">
+          <div class="s-card">
+            <div class="s-label">Opening Balance</div>
+            <div class="s-value">${sym} ${obAbs.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+              ${openingBalance !== 0 ? `<span class="bal-badge ${obLabel === "DR" ? "badge-dr" : "badge-cr"}">${obLabel}</span>` : ""}
+            </div>
+          </div>
+          <div class="s-card s-card-dr">
+            <div class="s-label">Total Debits</div>
+            <div class="s-value s-dr">${sym} ${totalDebit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          </div>
+          <div class="s-card s-card-cr">
+            <div class="s-label">Total Credits</div>
+            <div class="s-value s-cr">${sym} ${totalCredit.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          </div>
+          <div class="s-card s-card-close">
+            <div class="s-label">Closing Balance</div>
+            <div class="s-value">${sym} ${cbAbs.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+              ${closingBalance !== 0 ? `<span class="bal-badge ${cbLabel === "DR" ? "badge-dr" : "badge-cr"}">${cbLabel}</span>` : ""}
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Ledger Report – ${account.name}</title>
+  <style>
+    @page { size: A4; margin: 14mm 15mm 18mm 15mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; }
+
+    /* ── Company Header ── */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 3px solid #1e3a8a; margin-bottom: 14px; }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo { width: 52px; height: 52px; object-fit: contain; border-radius: 6px; }
+    .logo-placeholder { width: 52px; height: 52px; background: #1e3a8a; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .logo-initials { color: white; font-size: 18px; font-weight: 900; }
+    .co-name { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.3px; line-height: 1.1; }
+    .co-tag  { font-size: 10px; color: #6b7280; margin-top: 3px; }
+    .header-right { text-align: right; font-size: 10px; color: #6b7280; line-height: 1.8; }
+    .header-right strong { color: #374151; }
+
+    /* ── Report Title Band ── */
+    .title-band { background: #f0f4ff; border-left: 4px solid #1e3a8a; padding: 10px 14px; border-radius: 0 6px 6px 0; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .report-title { font-size: 18px; font-weight: 800; color: #1e3a8a; }
+    .report-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
+    .generated { font-size: 9px; color: #9ca3af; text-align: right; }
+
+    /* ── Account & Period Info ── */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+    .info-block { padding: 9px 12px; }
+    .info-block:not(:last-child) { border-right: 1px solid #e5e7eb; }
+    .info-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; margin-bottom: 3px; }
+    .info-value { font-size: 12px; font-weight: 700; color: #111; }
+    .info-sub   { font-size: 10px; color: #6b7280; margin-top: 1px; }
+    .badge-head { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 9px; font-weight: 700; background: #dbeafe; color: #1e40af; }
+    .badge-normal-dr { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 9px; font-weight: 700; background: #d1fae5; color: #065f46; }
+    .badge-normal-cr { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 9px; font-weight: 700; background: #fee2e2; color: #991b1b; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px; }
+    thead tr { background: #1e3a8a; color: #fff; }
+    thead th { padding: 8px 10px; text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+    thead th.num { text-align: right; }
+    tbody td { padding: 6.5px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .alt-row td { background: #f9fafb; }
+    .special-row td, .closing-row td { background: #eef2ff !important; font-weight: 600; }
+    .closing-row td { border-top: 2px solid #1e3a8a; }
+    .total-row td { background: #f0fdf4 !important; border-top: 2px solid #bbf7d0; border-bottom: 2px solid #bbf7d0; font-weight: 700; }
+    .ref { color: #1e3a8a; font-family: 'Courier New', monospace; font-weight: 700; font-size: 10.5px; }
+    .desc { font-size: 11px; color: #111; }
+    .narr { font-size: 9.5px; color: #6b7280; margin-top: 1px; }
+    .dr-amt { color: #065f46; font-weight: 600; }
+    .cr-amt { color: #991b1b; font-weight: 600; }
+    .tag { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 800; letter-spacing: 0.3px; margin-right: 4px; }
+    .tag-bf { background: #e5e7eb; color: #4b5563; }
+    .tag-cf { background: #dbeafe; color: #1e40af; }
+    .bal-badge { display: inline-block; padding: 0px 5px; border-radius: 3px; font-size: 8.5px; font-weight: 800; letter-spacing: 0.3px; margin-left: 3px; }
+    .badge-dr { background: #d1fae5; color: #065f46; }
+    .badge-cr { background: #fee2e2; color: #991b1b; }
+
+    /* ── Summary Section ── */
+    .summary-section { margin-top: 16px; }
+    .summary-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .s-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; }
+    .s-card-dr { border-color: #bbf7d0; background: #f0fdf4; }
+    .s-card-cr { border-color: #fecaca; background: #fff5f5; }
+    .s-card-close { border-color: #bfdbfe; background: #eff6ff; }
+    .s-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 4px; }
+    .s-value { font-size: 14px; font-weight: 800; color: #111; }
+    .s-dr { color: #065f46; }
+    .s-cr { color: #991b1b; }
+
+    /* ── Footer ── */
+    .footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; }
+    .print-bar { display: flex; justify-content: center; gap: 12px; padding: 14px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+    .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-primary { background: #1e3a8a; color: white; }
+    .btn-secondary { background: white; color: #374151; border: 1px solid #d1d5db; }
+    @media print {
+      .print-bar { display: none; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Print toolbar (hidden on actual print) -->
+  <div class="print-bar">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+  </div>
+
+  <div style="padding: 16px 18px;">
+
+    <!-- Company Header -->
+    <div class="header">
+      <div class="header-left">
+        ${s.logoBase64
+          ? `<img class="logo" src="${s.logoBase64}" alt="Logo" />`
+          : `<div class="logo-placeholder"><div class="logo-initials">${(s.companyName || "O").charAt(0)}</div></div>`}
+        <div>
+          <div class="co-name">${s.companyName || "Onesoft"}</div>
+          <div class="co-tag">${s.companyTagline || ""}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        ${addresses ? `<div>${addresses}</div>` : ""}
+        ${phones    ? `<div><strong>Tel:</strong> ${phones}</div>` : ""}
+        ${emails    ? `<div><strong>Email:</strong> ${emails}</div>` : ""}
+        ${s.website ? `<div><strong>Web:</strong> ${s.website}</div>` : ""}
+        ${s.vatNumber ? `<div><strong>VAT No:</strong> ${s.vatNumber}</div>` : ""}
+        ${s.companyRegistration ? `<div><strong>Reg No:</strong> ${s.companyRegistration}</div>` : ""}
+      </div>
+    </div>
+
+    <!-- Report Title -->
+    <div class="title-band">
+      <div>
+        <div class="report-title">Ledger Report</div>
+        <div class="report-sub">Account Statement with Running Balance</div>
+      </div>
+      <div class="generated">Generated: ${generatedAt}</div>
+    </div>
+
+    <!-- Account & Period Info -->
+    <div class="info-grid">
+      <div class="info-block">
+        <div class="info-label">Account</div>
+        <div class="info-value">${account.name}</div>
+        <div class="info-sub">Code: <strong>${account.code}</strong></div>
+      </div>
+      <div class="info-block">
+        <div class="info-label">Classification</div>
+        <div class="info-value">
+          <span class="badge-head">${account.head}</span>&nbsp;
+          <span class="${debitNormal ? "badge-normal-dr" : "badge-normal-cr"}">${debitNormal ? "Debit Normal" : "Credit Normal"}</span>
+        </div>
+        <div class="info-sub">${account.subType || account.accountType}</div>
+      </div>
+      <div class="info-block">
+        <div class="info-label">Report Period</div>
+        <div class="info-value">${from} &rarr; ${to}</div>
+        <div class="info-sub">Status: <strong>${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}</strong> &nbsp;&middot;&nbsp; ${rows.length} transaction${rows.length !== 1 ? "s" : ""}</div>
+      </div>
+    </div>
+
+    <!-- Ledger Table -->
+    <table>
+      <thead>
+        <tr>
+          <th style="width:90px">Date</th>
+          <th style="width:90px">Ref #</th>
+          <th>Description / Narration</th>
+          <th class="num" style="width:110px">Debit (${sym})</th>
+          <th class="num" style="width:110px">Credit (${sym})</th>
+          <th class="num" style="width:130px">Balance (${sym})</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+
+    <!-- Summary after table -->
+    ${summaryHtml}
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>${s.companyName || "Onesoft"} &nbsp;&middot;&nbsp; Ledger Report &nbsp;&middot;&nbsp; ${account.name} (${account.code})</span>
+      <span>All amounts in ${sym} &nbsp;&middot;&nbsp; Running balance: positive = DR (debit-normal), negative = CR (credit-normal)</span>
+    </div>
+
+  </div>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=1000,height=800");
     if (!win) return;
-    win.document.write(`
-      <html><head><title>Ledger Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 13px; color: #111; margin: 24px; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        p  { margin: 2px 0; color: #555; font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-        th { background: #f3f4f6; text-align: left; padding: 7px 10px; font-size: 12px; border-bottom: 2px solid #e5e7eb; }
-        td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
-        tr.opening td, tr.closing td { background: #f8fafc; font-weight: 700; }
-        tr.total td { background: #f0f9ff; font-weight: 700; border-top: 2px solid #bae6fd; }
-        .num { text-align: right; font-variant-numeric: tabular-nums; }
-        .dr { color: #059669; } .cr { color: #dc2626; }
-        .badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background:#e0f2fe; color: #0369a1; }
-      </style></head><body>
-      ${content.innerHTML}
-      </body></html>
-    `);
+    win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 400);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -293,6 +561,10 @@ export default function LedgerReportPage() {
         <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" onClick={handlePrint} disabled={!accountId}>
             <Printer size={14} className="mr-1.5" /> Print
+          </Button>
+          <Button size="sm" onClick={handlePrint} disabled={!accountId}
+            className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <FileDown size={14} className="mr-1.5" /> Export PDF
           </Button>
         </div>
       </div>
