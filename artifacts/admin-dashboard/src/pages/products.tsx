@@ -746,30 +746,39 @@ export default function ProductsPage() {
 
       {/* ── Add Product Form Dialog ─────────────────────────────────────────── */}
       <Dialog open={formOpen} onOpenChange={v => !v && closeForm()}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package size={17} className="text-primary" />
-              Add New Product
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="w-[min(96vw,860px)] max-w-none p-0 overflow-hidden gap-0">
 
-          <div className="grid grid-cols-2 gap-4 py-2">
-            {/* Row 1: Name + SKU */}
-            <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <label className="text-[13px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
+          {/* Header */}
+          <div className="flex items-center gap-3 px-7 py-4 border-b border-border">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Package size={17} className="text-primary" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-foreground leading-tight">Add New Product</h2>
+              <p className="text-[11px] text-muted-foreground">All fields except Name are optional</p>
+            </div>
+          </div>
+
+          {/* Body — 3-column grid */}
+          <div className="px-7 py-5 grid grid-cols-3 gap-x-5 gap-y-3.5">
+
+            {/* Product Name — 2 cols */}
+            <div className="space-y-1 col-span-2">
+              <label className="text-[12px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
               <Input value={formData.name} onChange={e => patchForm("name", e.target.value)}
                 placeholder="e.g. Oak Dining Table" className="h-9 text-sm" autoFocus />
             </div>
-            <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <label className="text-[13px] font-semibold text-foreground">SKU</label>
+
+            {/* SKU — 1 col */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">SKU</label>
               <Input value={formData.sku} onChange={e => patchForm("sku", e.target.value)}
                 placeholder="e.g. ODT-001" className="h-9 text-sm" />
             </div>
 
-            {/* Row 2: Brand + Category */}
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Brand</label>
+            {/* Brand */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Brand</label>
               {brandOptions.length > 0 ? (
                 <select value={formData.brand} onChange={e => patchForm("brand", e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
@@ -781,8 +790,10 @@ export default function ProductsPage() {
                   placeholder="Brand name" className="h-9 text-sm" />
               )}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Category</label>
+
+            {/* Category */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Category</label>
               {categoryOptions.length > 0 ? (
                 <select value={formData.category} onChange={e => patchForm("category", e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
@@ -795,9 +806,9 @@ export default function ProductsPage() {
               )}
             </div>
 
-            {/* Row 3: Unit + Status */}
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Unit</label>
+            {/* Unit */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Unit</label>
               {unitOptions.length > 0 ? (
                 <select value={formData.unit} onChange={e => patchForm("unit", e.target.value)}
                   className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
@@ -809,8 +820,34 @@ export default function ProductsPage() {
                   placeholder="pcs / kg / m²" className="h-9 text-sm" />
               )}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Condition</label>
+
+            {/* Purchase Price */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Purchase Price ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
+                onChange={e => patchForm("purchasePrice", e.target.value)}
+                placeholder="0.00" className="h-9 text-sm" />
+            </div>
+
+            {/* Cost Price */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Cost Price ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.costPrice}
+                onChange={e => patchForm("costPrice", e.target.value)}
+                placeholder="0.00" className="h-9 text-sm" />
+            </div>
+
+            {/* Sale Price */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Sale Price ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.price}
+                onChange={e => patchForm("price", e.target.value)}
+                placeholder="0.00" className="h-9 text-sm" />
+            </div>
+
+            {/* Condition */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Condition</label>
               <select value={formData.condition} onChange={e => patchForm("condition", e.target.value)}
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                 <option value="">— none —</option>
@@ -818,51 +855,32 @@ export default function ProductsPage() {
               </select>
             </div>
 
-            {/* Row 4: Prices */}
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Purchase Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
-                onChange={e => patchForm("purchasePrice", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Cost Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.costPrice}
-                onChange={e => patchForm("costPrice", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
-            </div>
-
-            {/* Row 5: Sale Price + Status */}
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Sale Price ({sym})</label>
-              <Input type="number" min="0" step="0.01" value={formData.price}
-                onChange={e => patchForm("price", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-foreground">Status</label>
+            {/* Status */}
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Status</label>
               <select value={formData.status} onChange={e => patchForm("status", e.target.value)}
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                 {["Active","Inactive","Draft"].map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
 
-            {/* Row 6: Description full width */}
-            <div className="space-y-1.5 col-span-2">
-              <label className="text-[13px] font-semibold text-foreground">Description</label>
+            {/* Description — full width */}
+            <div className="space-y-1 col-span-3">
+              <label className="text-[12px] font-semibold text-foreground">Description</label>
               <textarea value={formData.description} onChange={e => patchForm("description", e.target.value)}
-                placeholder="Optional product description…" rows={3}
+                placeholder="Optional product description…" rows={2}
                 className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
             </div>
           </div>
 
-          <DialogFooter className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={closeForm} className="flex-1">Cancel</Button>
-            <Button onClick={submitForm} disabled={formSaving} className="flex-1">
+          {/* Footer */}
+          <div className="flex gap-3 px-7 py-4 border-t border-border bg-muted/20">
+            <Button variant="outline" onClick={closeForm} className="flex-1 h-10">Cancel</Button>
+            <Button onClick={submitForm} disabled={formSaving} className="flex-1 h-10 font-semibold">
               <Plus size={14} className="mr-1.5" />
               {formSaving ? "Adding…" : "Add Product"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
