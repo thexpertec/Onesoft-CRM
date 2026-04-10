@@ -344,6 +344,8 @@ interface POSViewProps {
   onSaveItems: (items: SaleItem[]) => void;
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
+  priceMode: "retail" | "wholesale";
+  onPriceModeChange: (mode: "retail" | "wholesale") => void;
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
   onAddCustomer: (name: string, phone: string, email: string) => void;
@@ -352,12 +354,12 @@ interface POSViewProps {
 function POSView({
   sale, localItems, localMeta, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
-  onSaveItems, onDeleteItem, onAddProduct, onSetStatus, onComplete, onAddCustomer,
+  onSaveItems, onDeleteItem, onAddProduct, priceMode, onPriceModeChange,
+  onSetStatus, onComplete, onAddCustomer,
 }: POSViewProps) {
   const { stock } = useStock();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
-  const [priceMode,     setPriceMode]     = useState<"retail" | "wholesale">("retail");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
 
@@ -936,13 +938,13 @@ function POSView({
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
               <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
                 <button
-                  onClick={() => setPriceMode("retail")}
+                  onClick={() => onPriceModeChange("retail")}
                   className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
                 >
                   Retail
                 </button>
                 <button
-                  onClick={() => setPriceMode("wholesale")}
+                  onClick={() => onPriceModeChange("wholesale")}
                   className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
                 >
                   Wholesale
@@ -1168,6 +1170,7 @@ export default function SalesPage() {
   // ── POS state ──
   const [detailId,    setDetailId]   = useState<string | null>(null);
   const [localItems,  setLocalItems] = useState<SaleItem[]>([]);
+  const [priceMode,   setPriceMode]  = useState<"retail" | "wholesale">("retail");
   const [localMeta,   setLocalMeta]  = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string } | null>(null);
 
   // Refs so callbacks always see latest values without stale-closure issues
@@ -1513,6 +1516,8 @@ export default function SalesPage() {
         onSaveItems={saveItems}
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
+        priceMode={priceMode}
+        onPriceModeChange={setPriceMode}
         onSetStatus={setStatus}
         onComplete={handleComplete}
         onAddCustomer={(name, phone, email) => {
