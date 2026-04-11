@@ -4,7 +4,7 @@ import { useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { StockItem, StockType, STOCK_TYPES, getProducts, getCustomers, getEntityLedger, StockLedgerEntry, LEDGER_TX_LABELS } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown, History, ChevronDown, ChevronRight, MapPin } from "lucide-react";
+import { Boxes, Lock, Plus, Search, X, Save, Trash2, AlertTriangle, FileDown, History } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,9 +92,6 @@ export default function StockPage() {
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
   const [historyItemId,  setHistoryItemId]  = useState<string | null>(null);
-  const [expandedKeys,   setExpandedKeys]   = useState<Set<string>>(() => new Set());
-  const [subEditCell,    setSubEditCell]    = useState<{ id: string; field: string } | null>(null);
-  const [subEditVal,     setSubEditVal]     = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Reset filters when switching views
@@ -142,26 +139,6 @@ export default function StockPage() {
     holds: stock.filter(s => s.stockType === "Not For Sale").length,
   }), [stock]);
 
-  // ── Product groups (non-holds view) — must be after `filtered` ──
-  const productGroups = useMemo(() => {
-    if (isHoldsView) return [];
-    const map = new Map<string, StockItem[]>();
-    filtered.forEach(item => {
-      const key = item.productName.trim().toLowerCase() + "||" + item.sku.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(item);
-    });
-    return [...map.entries()].map(([key, items]) => ({
-      key,
-      productName: items[0].productName,
-      sku: items[0].sku,
-      unit: items[0].unit,
-      totalQty: items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0),
-      stockTypes: [...new Set(items.map(i => i.stockType))] as StockType[],
-      isLow: items.some(isLowStock),
-      items,
-    }));
-  }, [filtered, isHoldsView]);
 
   // ── cell commit ──
   const commitCell = useCallback((id: string, field: string, value: string) => {
@@ -222,19 +199,6 @@ export default function StockPage() {
     setDeleteId(null);
   };
 
-  const commitSubEdit = useCallback(() => {
-    if (!subEditCell || subEditVal === undefined) return;
-    commitCell(subEditCell.id, subEditCell.field, subEditVal);
-    setSubEditCell(null);
-  }, [subEditCell, subEditVal, commitCell]);
-
-  const toggleExpand = useCallback((key: string) => {
-    setExpandedKeys(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  }, []);
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -371,229 +335,12 @@ export default function StockPage() {
           </div>
         )}
         <div className="text-[12px] text-muted-foreground self-center ml-auto">
-          {isHoldsView
-            ? `${filtered.length} of ${counts.holds}`
-            : `${productGroups.length} product${productGroups.length !== 1 ? "s" : ""} · ${filtered.length} location${filtered.length !== 1 ? "s" : ""}`}
+          {`${filtered.length} item${filtered.length !== 1 ? "s" : ""}`}
         </div>
       </div>
 
-      {/* ── Grouped Products View (non-holds) ── */}
-      {!isHoldsView && (
-        <div className="space-y-3">
-          {/* New entry card */}
-          {isAuthenticated && newRow && (
-            <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">New Stock Entry</span>
-                <span className="text-[11px] text-muted-foreground">— fill in the details below</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-                {[
-                  { field: "productName", label: "Product", type: "combo", opts: productComboOpts },
-                  { field: "store",       label: "Store / Location", type: "combo", opts: storeComboOpts },
-                  { field: "unit",        label: "Unit", type: "combo", opts: unitComboOpts },
-                  { field: "minLevel",    label: "Min Level", type: "number" },
-                  { field: "notes",       label: "Notes", type: "text" },
-                ].map(f => (
-                  <div key={f.field} className={f.field === "notes" ? "sm:col-span-2" : ""}>
-                    <label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">{f.label}</label>
-                    {f.type === "combo" ? (
-                      <Combobox
-                        value={newRow[f.field] ?? ""} placeholder={`Select ${f.label}…`}
-                        onChange={v => setNewRow(r => r ? { ...r, [f.field]: v } : r)}
-                        options={f.opts!}
-                        className="w-full"
-                        inputClassName="w-full border border-border rounded-md px-3 py-1.5 text-[13px] bg-background outline-none focus:ring-2 ring-blue-500"
-                      />
-                    ) : (
-                      <Input type={f.type === "number" ? "number" : "text"}
-                        value={newRow[f.field] ?? ""} placeholder={f.label}
-                        onChange={e => setNewRow(r => r ? { ...r, [f.field]: e.target.value } : r)}
-                        className="h-8 text-[13px]" />
-                    )}
-                  </div>
-                ))}
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Stock Type</label>
-                  <select
-                    value={newRow.stockType ?? "For Sale"}
-                    onChange={e => setNewRow(r => r ? { ...r, stockType: e.target.value } : r)}
-                    className="w-full border border-border rounded-md px-3 py-1.5 text-[13px] bg-background outline-none focus:ring-2 ring-blue-500 h-8">
-                    {STOCK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Initial Qty</label>
-                  <div className="w-full border border-border rounded-md px-3 py-1.5 text-[13px] bg-muted/40 text-gray-400 italic h-8 flex items-center">
-                    0 — set via PO <Lock size={10} className="ml-auto text-gray-300" />
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={commitNewRow} className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"><Save size={12} /> Save Entry</Button>
-                <Button size="sm" variant="outline" onClick={() => { setNewRow(null); setNewRowActive(null); }} className="gap-1"><X size={12} /> Cancel</Button>
-              </div>
-            </div>
-          )}
-
-          {/* Grouped table */}
-          {productGroups.length === 0 ? (
-            <div className="rounded-xl border border-border py-16 text-center text-muted-foreground text-sm">
-              {search || typeFilter !== "All" ? "No stock items match your filters." : "No stock items yet. Click Add Stock to begin."}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <table className="w-full text-[13px]">
-                <thead className="bg-muted/60 sticky top-0 z-10">
-                  <tr className="border-b border-border">
-                    <th className="w-8 text-center px-2 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">#</th>
-                    <th className="px-4 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Product / Service</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wide">SKU</th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Total Stock</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Unit</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Types</th>
-                    <th className="px-3 py-2.5 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Locations</th>
-                    <th className="px-3 py-2.5 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wide w-20">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productGroups.map((group, gi) => {
-                    const isExpanded = expandedKeys.has(group.key);
-                    return (
-                      <React.Fragment key={group.key}>
-                        {/* ── Product header row ── */}
-                        <tr
-                          className={`border-b border-border transition-colors cursor-pointer
-                            ${group.isLow ? "bg-red-50/40 dark:bg-red-950/10 hover:bg-red-50/60" : gi % 2 === 0 ? "bg-white dark:bg-card hover:bg-blue-50/30 dark:hover:bg-blue-950/10" : "bg-gray-50/50 dark:bg-muted/10 hover:bg-blue-50/30 dark:hover:bg-blue-950/10"}`}
-                          onClick={() => toggleExpand(group.key)}>
-                          <td className="text-center px-2 py-3 text-[11px] text-muted-foreground font-mono select-none">
-                            {group.isLow ? <AlertTriangle size={12} className="mx-auto text-red-400" /> : gi + 1}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              {isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0" /> : <ChevronRight size={14} className="text-muted-foreground/50 shrink-0" />}
-                              <div>
-                                <div className="font-semibold text-[13px] text-foreground">{group.productName || "—"}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-[12px] text-muted-foreground font-mono">{group.sku || "—"}</td>
-                          <td className="px-3 py-3 text-right">
-                            <span className={`font-bold tabular-nums text-[15px] ${group.totalQty === 0 ? "text-red-500" : group.isLow ? "text-amber-600" : "text-emerald-600"}`}>
-                              {group.totalQty.toLocaleString()}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 text-[12px] text-muted-foreground">{group.unit}</td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {group.stockTypes.map(t => (
-                                <span key={t} className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${TYPE_BG[t]}`}>{t}</span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                              <MapPin size={11} /> {group.items.length}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1">
-                              <button title="Stock History"
-                                onClick={() => setHistoryItemId(group.items[0].id)}
-                                className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
-                                <History size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* ── Per-store sub-rows ── */}
-                        {isExpanded && (
-                          <>
-                            {/* Sub-header */}
-                            <tr className="bg-blue-50/60 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/30">
-                              <td></td>
-                              <td className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Store / Location</td>
-                              <td className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Stock Type</td>
-                              <td className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 text-right">Qty</td>
-                              <td className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Min Level</td>
-                              <td colSpan={2} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Notes</td>
-                              <td className="px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Del</td>
-                            </tr>
-                            {group.items.map((item, si) => {
-                              const low = isLowStock(item);
-                              const mkEdit = (field: string, val: string) => (
-                                <div className="w-full h-full min-h-[32px] flex items-center px-2 cursor-text rounded hover:bg-white/60 dark:hover:bg-white/5 transition-colors"
-                                  onClick={() => { setSubEditCell({ id: item.id, field }); setSubEditVal(val); }}>
-                                  {subEditCell?.id === item.id && subEditCell.field === field ? (
-                                    field === "stockType" ? (
-                                      <select autoFocus value={subEditVal}
-                                        onChange={e => setSubEditVal(e.target.value)}
-                                        onBlur={commitSubEdit}
-                                        className="w-full bg-white dark:bg-card border border-blue-400 rounded px-1 py-0.5 text-[12px] outline-none">
-                                        {STOCK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                      </select>
-                                    ) : (
-                                      <input autoFocus type={field === "minLevel" ? "number" : "text"}
-                                        value={subEditVal}
-                                        onChange={e => setSubEditVal(e.target.value)}
-                                        onBlur={commitSubEdit}
-                                        onKeyDown={e => { if (e.key === "Enter") commitSubEdit(); if (e.key === "Escape") setSubEditCell(null); }}
-                                        className="w-full bg-white dark:bg-card border border-blue-400 rounded px-2 py-0.5 text-[12px] outline-none" />
-                                    )
-                                  ) : (
-                                    <span className={`text-[12px] ${!val ? "text-gray-300 italic" : "text-foreground"}`}>{val || "—"}</span>
-                                  )}
-                                </div>
-                              );
-                              return (
-                                <tr key={item.id} className={`border-b border-gray-100 dark:border-border/50 ${low ? "bg-red-50/20" : si % 2 === 0 ? "bg-white/80 dark:bg-card/50" : "bg-gray-50/30 dark:bg-muted/5"} hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors`}>
-                                  <td className="w-8 text-center py-2">
-                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-300 dark:bg-blue-600 mt-0.5" />
-                                  </td>
-                                  <td className="px-4 py-1">{mkEdit("store", item.store)}</td>
-                                  <td className="px-3 py-1">
-                                    {mkEdit("stockType", item.stockType)}
-                                  </td>
-                                  <td className="px-3 py-1 text-right">
-                                    <span className={`font-mono font-semibold tabular-nums text-[13px] pr-2 ${low ? "text-red-500" : "text-foreground"}`}>
-                                      {parseFloat(item.quantity) || 0}
-                                      {low && <AlertTriangle size={10} className="inline ml-1 text-red-400" />}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-1">{mkEdit("minLevel", item.minLevel)}</td>
-                                  <td colSpan={2} className="px-3 py-1">{mkEdit("notes", item.notes)}</td>
-                                  <td className="px-3 py-1 text-center">
-                                    <div className="flex items-center justify-center gap-0.5">
-                                      <button title="Stock History" onClick={() => setHistoryItemId(item.id)}
-                                        className="p-1 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
-                                        <History size={12} />
-                                      </button>
-                                      {isAuthenticated && (
-                                        <button title="Delete" onClick={() => setDeleteId(item.id)}
-                                          className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
-                                          <Trash2 size={12} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Grid — Holds view only */}
-      {isHoldsView && <div ref={tableRef}>
+      {/* Grid */}
+      <div ref={tableRef}>
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="stock">
 
           {/* ── New row ── */}
@@ -791,7 +538,7 @@ export default function StockPage() {
             </td></tr>
           )}
         </ExcelGridShell>
-      </div>}
+      </div>
 
       {/* ── Stock Ledger History Dialog ── */}
       {(() => {
