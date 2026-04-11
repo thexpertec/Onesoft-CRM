@@ -1274,6 +1274,7 @@ export default function SalesPage() {
   const { toast } = useToast();
 
   const products          = useMemo(() => getProducts(), []);
+  const allProducts       = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
   const customerComboOpts = useMemo<ComboOption[]>(() =>
     customers.map(c => ({
       value: c.name,
@@ -1485,52 +1486,58 @@ export default function SalesPage() {
   const handleComplete = (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => {
     if (!detailId || !localMeta) return;
 
-    // Deduct stock only if not already done (avoids double-deduction on re-payment)
-    if (!(detailSale?.stockDeducted ?? false)) {
-      deductStockForSale(localItems, detailSale?.saleNumber || "");
-    }
+    try {
+      // Deduct stock only if not already done (avoids double-deduction on re-payment)
+      if (!(detailSale?.stockDeducted ?? false)) {
+        deductStockForSale(localItems, detailSale?.saleNumber || "");
+      }
 
-    // Auto-post journal entry (only once — skip if already linked)
-    let jeId: string | undefined = detailSale?.jeId;
-    if (!jeId) {
-      const subtotal  = saleTotal(localItems);
-      const taxPct    = Math.max(0, parseFloat(taxRate) || 0);
-      const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
-      const costTotal = localItems.reduce((sum, item) => {
-        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
-        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
-      }, 0);
-      const je = autoPostSaleJE({
-        source:        "POS",
-        reference:     detailSale?.saleNumber || "",
-        customer:      localMeta.customer || "Walk-in",
-        date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+      // Auto-post journal entry (only once — skip if already linked)
+      let jeId: string | undefined = detailSale?.jeId;
+      if (!jeId) {
+        const subtotal  = saleTotal(localItems);
+        const taxPct    = Math.max(0, parseFloat(taxRate) || 0);
+        const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+        const costTotal = allProducts.length > 0
+          ? localItems.reduce((sum, item) => {
+              const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
+              return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+            }, 0)
+          : 0;
+        const je = autoPostSaleJE({
+          source:        "POS",
+          reference:     detailSale?.saleNumber || "",
+          customer:      localMeta.customer || "Walk-in",
+          date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+          paymentMethod,
+          subtotal,
+          taxAmount,
+          grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+          costTotal:     parseFloat(costTotal.toFixed(2)),
+        });
+        if (je) jeId = je.id;
+      }
+
+      const completedSale = editSale(detailId, {
+        ...localMeta,
         paymentMethod,
-        subtotal,
-        taxAmount,
-        grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
-        costTotal:     parseFloat(costTotal.toFixed(2)),
+        status: "Completed",
+        items: localItems,
+        amountPaid,
+        taxRate,
+        paidAt: new Date().toISOString(),
+        stockDeducted: true,
+        ...(jeId ? { jeId } : {}),
       });
-      if (je) jeId = je.id;
+
+      toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
+
+      // Close POS and show the in-page Sale Complete overlay
+      closePOS();
+      setCompletedSaleForReceipt(completedSale);
+    } catch (err) {
+      toast({ title: "Error completing sale", description: String(err), variant: "destructive" });
     }
-
-    const completedSale = editSale(detailId, {
-      ...localMeta,
-      paymentMethod,
-      status: "Completed",
-      items: localItems,
-      amountPaid,
-      taxRate,
-      paidAt: new Date().toISOString(),
-      stockDeducted: true,
-      ...(jeId ? { jeId } : {}),
-    });
-
-    toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
-
-    // Close POS and show the in-page Sale Complete overlay (no popup blocker issues)
-    closePOS();
-    setCompletedSaleForReceipt(completedSale);
   };
 
   // ── List filtering ──
