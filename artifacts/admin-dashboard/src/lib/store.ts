@@ -1709,9 +1709,10 @@ export type StockLedgerEntry = {
 
 const LEDGER_KEY = "admin-stock-ledger";
 
-export const getStockLedger     = (): StockLedgerEntry[] => getStored<StockLedgerEntry>(LEDGER_KEY);
-export const getEntityLedger    = (entityId: string) => getStockLedger().filter(e => e.entityId === entityId);
-export const clearEntityLedger  = (entityId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.entityId !== entityId));
+export const getStockLedger        = (): StockLedgerEntry[] => getStored<StockLedgerEntry>(LEDGER_KEY);
+export const getEntityLedger       = (entityId: string) => getStockLedger().filter(e => e.entityId === entityId);
+export const clearEntityLedger     = (entityId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.entityId !== entityId));
+export const deleteStockLedgerEntry = (entryId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.id !== entryId));
 
 function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
   if (entries.length === 0) return;
@@ -2885,45 +2886,10 @@ export function seedDefaultCoaAccounts(): void {
     setStored(SHAREHOLDERS_KEY, shareholdersPatched);
   }
 
-  // ── Backfill stock ledger: opening-balance for items/RMs with no history ──────
-  const allStockItems  = getStock();
-  const allRMs         = getRawMaterials();
-  const existingLedger = getStockLedger();
-  const itemsWithHistory = new Set(existingLedger.map(e => e.entityId));
-  const today = new Date().toISOString().slice(0, 10);
-  const openingEntries: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
-
-  // Product stock items
-  for (const si of allStockItems) {
-    if (!itemsWithHistory.has(si.id)) {
-      const qty = parseFloat(si.quantity) || 0;
-      if (qty > 0) {
-        openingEntries.push({
-          entityType: "product", entityId: si.id, entityName: si.productName,
-          date: today, txType: "opening-balance", reference: "MANUAL",
-          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
-          unit: si.unit, notes: `Opening balance — ${si.store}`,
-        });
-      }
-    }
-  }
-
-  // Raw materials
-  for (const rm of allRMs) {
-    if (!itemsWithHistory.has(rm.id)) {
-      const qty = parseFloat(rm.currentStock) || 0;
-      if (qty > 0) {
-        openingEntries.push({
-          entityType: "raw-material", entityId: rm.id, entityName: rm.name,
-          date: today, txType: "opening-balance", reference: "MANUAL",
-          qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
-          unit: rm.unit, notes: "Opening balance",
-        });
-      }
-    }
-  }
-
-  if (openingEntries.length > 0) batchLedger(openingEntries);
+  // NOTE: Automatic "opening-balance" backfill was removed.
+  // Stock ledger entries are created only by real transactions (PO receipts, sales, etc.)
+  // or via addManualLedgerEntry(). Automatic backfill caused double-counting when the
+  // stock qty was set but the corresponding ledger entry had not yet been synced to the server.
 
   // ── Auto-populate accounting settings (only fills missing mappings) ────────
   const s = getSettings();

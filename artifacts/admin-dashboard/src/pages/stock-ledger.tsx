@@ -1,13 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
-  getStock, getStockLedger,
+  getStock, getStockLedger, deleteStockLedgerEntry,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
   TrendingUp, TrendingDown, Package, BarChart3,
-  Filter, X,
+  Filter, X, Trash2, AlertTriangle,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -122,8 +122,19 @@ export default function StockLedgerPage() {
   const [toDate,    setToDate]    = useState(today());
   const [txFilter,  setTxFilter]  = useState<"__all__" | LedgerTxType>("__all__");
 
-  const stocks  = useMemo(() => getStock(), []);
-  const ledger  = useMemo(() => getStockLedger(), []);
+  // Delete confirmation
+  const [deleteId,  setDeleteId]  = useState<string | null>(null);
+  const [revision,  setRevision]  = useState(0);  // bump to force re-read
+
+  const stocks  = useMemo(() => getStock(), [revision]);       // eslint-disable-line react-hooks/exhaustive-deps
+  const ledger  = useMemo(() => getStockLedger(), [revision]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDelete = useCallback(() => {
+    if (!deleteId) return;
+    deleteStockLedgerEntry(deleteId);
+    setDeleteId(null);
+    setRevision(r => r + 1);
+  }, [deleteId]);
 
   // Product options (deduplicated by id)
   const productOpts = useMemo(() =>
@@ -159,6 +170,19 @@ export default function StockLedgerPage() {
   const totalIn  = useMemo(() => filtered.filter(r => r.qtyChange > 0).reduce((s, r) => s + r.qtyChange, 0), [filtered]);
   const totalOut = useMemo(() => filtered.filter(r => r.qtyChange < 0).reduce((s, r) => s + Math.abs(r.qtyChange), 0), [filtered]);
   const closingQty = openingQty + totalIn - totalOut;
+
+  // Cumulative running balance for each filtered row (recalculated — never trust stored qtyAfter)
+  const filteredWithBalance = useMemo(() => {
+    let running = openingQty;
+    return filtered.map(r => {
+      running += r.qtyChange;
+      return { ...r, displayBalance: running };
+    });
+  }, [filtered, openingQty]);
+
+  // Actual stock quantity vs ledger closing (reconciliation)
+  const actualQty   = selectedStock ? (parseFloat(selectedStock.quantity) || 0) : null;
+  const hasGap      = actualQty !== null && Math.abs(actualQty - closingQty) > 0.001;
 
   const unit = selectedStock?.unit || "";
 
@@ -343,6 +367,20 @@ export default function StockLedgerPage() {
             )}
           </div>
 
+          {/* Reconciliation warning */}
+          {hasGap && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-sm">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-500"/>
+              <div>
+                <span className="font-semibold text-amber-700 dark:text-amber-400">Ledger mismatch detected — </span>
+                <span className="text-amber-700 dark:text-amber-400">
+                  Ledger closing balance is <strong>{closingQty.toLocaleString(undefined, {maximumFractionDigits:3})} {unit}</strong> but actual stock shows <strong>{actualQty!.toLocaleString(undefined, {maximumFractionDigits:3})} {unit}</strong>.
+                  A duplicate or phantom entry may exist. Delete the incorrect row below to reconcile.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Ledger table */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
@@ -374,6 +412,7 @@ export default function StockLedgerPage() {
                       <th className="text-right px-4 py-3 font-semibold text-red-500">Qty Out</th>
                       <th className="text-right px-4 py-3 font-semibold">Balance</th>
                       <th className="text-left px-4 py-3 font-semibold">Notes</th>
+                      <th className="w-8 px-2 py-3"/>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
@@ -386,11 +425,11 @@ export default function StockLedgerPage() {
                       <td className="px-4 py-2.5 text-right text-sm font-bold text-gray-700 dark:text-zinc-300">
                         {openingQty.toLocaleString(undefined, { maximumFractionDigits: 3 })} {unit}
                       </td>
-                      <td className="px-4 py-2.5"/>
+                      <td className="px-4 py-2.5" colSpan={2}/>
                     </tr>
 
-                    {filtered.map((row, idx) => (
-                      <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors">
+                    {filteredWithBalance.map((row, idx) => (
+                      <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors group">
                         <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-600">{idx + 1}</td>
                         <td className="px-4 py-2.5 whitespace-nowrap text-gray-700 dark:text-zinc-300 font-medium text-xs">
                           {new Date(row.date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}
@@ -425,13 +464,22 @@ export default function StockLedgerPage() {
                           ) : <span className="text-gray-300 dark:text-zinc-700">—</span>}
                         </td>
                         <td className="px-4 py-2.5 text-right">
-                          <span className={`font-bold text-sm ${row.qtyAfter <= 0 ? "text-red-500" : row.qtyAfter < 5 ? "text-amber-500" : "text-gray-800 dark:text-zinc-100"}`}>
-                            {row.qtyAfter.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                          <span className={`font-bold text-sm ${row.displayBalance <= 0 ? "text-red-500" : row.displayBalance < 5 ? "text-amber-500" : "text-gray-800 dark:text-zinc-100"}`}>
+                            {row.displayBalance.toLocaleString(undefined, { maximumFractionDigits: 3 })}
                             {unit && <span className="text-xs font-normal text-gray-400 dark:text-zinc-500 ml-1">{unit}</span>}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-zinc-400 max-w-[160px] truncate">
                           {row.notes || "—"}
+                        </td>
+                        <td className="px-2 py-2.5 text-center">
+                          <button
+                            onClick={() => setDeleteId(row.id)}
+                            title="Delete this entry"
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
+                          >
+                            <Trash2 size={12}/>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -453,7 +501,7 @@ export default function StockLedgerPage() {
                           {unit && <span className="text-xs font-normal text-gray-400 dark:text-zinc-500 ml-1">{unit}</span>}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5"/>
+                      <td className="px-4 py-2.5" colSpan={2}/>
                     </tr>
                   </tbody>
                 </table>
@@ -462,6 +510,37 @@ export default function StockLedgerPage() {
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-zinc-700 p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center">
+                <Trash2 size={18} className="text-red-500"/>
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 dark:text-zinc-100">Delete ledger entry?</p>
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">This permanently removes this transaction from the ledger.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                Delete Entry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
