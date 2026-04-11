@@ -603,31 +603,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           </div>
         </div>
 
-        {/* Right — quick actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          {!isNew && s === "Draft" && (
-            <button
-              onClick={() => onStatusChange(inv!.id, "Sent")}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
-            >
-              <Send size={13}/> Send
-            </button>
-          )}
-          {!isNew && (
-            <button
-              onClick={() => { try { printInvoice(invoice); } catch { /* blocked */ } }}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg border border-gray-200 dark:border-zinc-700 transition-colors"
-            >
-              <Printer size={13}/> Print
-            </button>
-          )}
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none transition-colors"
-          >
-            <Save size={13}/> {isNew ? "Create Invoice" : "Save"}
-          </button>
-        </div>
       </div>
 
       {/* ══ Body ═══════════════════════════════════════════════════════════════ */}
@@ -835,16 +810,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </div>
                     </div>
 
-                    {/* Collect Payment button */}
-                    {(s !== "Paid" && s !== "Cancelled") && (
-                      <button
-                        onClick={() => setCollectPayOpen(true)}
-                        className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-md shadow-emerald-200 dark:shadow-none mb-4"
-                      >
-                        <DollarSign size={14}/> Collect Payment
-                      </button>
-                    )}
-
                     {/* Payment history */}
                     {savedHistory.length > 0 ? (
                       <div className="space-y-2">
@@ -907,14 +872,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </button>
                     )}
                   </div>
-                  {!isNew && (
-                    <button
-                      onClick={() => setDeleteOpen(true)}
-                      className="w-full h-9 mt-1 rounded-lg border border-red-100 dark:border-red-900/50 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 size={12}/> Delete Invoice
-                    </button>
-                  )}
                 </div>
               )}
             </div>
