@@ -3,7 +3,7 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { useInvoices } from "@/hooks/use-data";
 import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
-  SaleItem, SalePayment, SALE_PAYMENTS, ItemStatus, ITEM_STATUSES,
+  SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
   getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
@@ -34,11 +34,6 @@ const STATUS_STYLE: Record<InvoiceStatus, { bg: string; dot: string; label: stri
   Cancelled: { bg: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",          dot: "bg-zinc-400",    label: "Cancelled" },
 };
 
-const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
-  Reserved:  "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
-  Delivered: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800",
-  Pending:   "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
-};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const today = () => new Date().toISOString().slice(0, 10);
@@ -60,7 +55,7 @@ const blankItem = (): SaleItem => ({
   id: crypto.randomUUID(),
   productName: "", sku: "", qty: "1", unit: "",
   unitPrice: "", discount: "0", notes: "",
-  itemStatus: "Reserved",
+  itemStatus: "Delivered",
 });
 
 const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => {
@@ -545,13 +540,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     ));
   };
 
-  const cycleStatus = (id: string) => {
-    setItems(prev => prev.map(i => {
-      if (i.id !== id) return i;
-      const next = ITEM_STATUSES[(ITEM_STATUSES.indexOf(i.itemStatus) + 1) % ITEM_STATUSES.length];
-      return { ...i, itemStatus: next };
-    }));
-  };
 
   const addItem    = () => setItems(p => [...p, blankItem()]);
   const removeItem = (id: string) => setItems(p => p.filter(i => i.id !== id));
@@ -892,7 +880,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div className="px-4 py-3 space-y-2">
                   {items.map((item, idx) => (
                     <div key={item.id} className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-700">
-                      {/* Row 1: product name + status + delete */}
+                      {/* Row 1: product name + delete */}
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-xs font-bold text-gray-400 w-5 shrink-0">{idx + 1}.</span>
                         <div className="flex-1">
@@ -905,11 +893,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                           />
                         </div>
-                        <button onClick={() => cycleStatus(item.id)}
-                          className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${ITEM_STATUS_STYLE[item.itemStatus]}`}
-                          title="Click to cycle status">
-                          {item.itemStatus}
-                        </button>
                         <button onClick={() => removeItem(item.id)} className="shrink-0 p-1 text-gray-400 hover:text-red-500 rounded transition-colors">
                           <X size={14}/>
                         </button>

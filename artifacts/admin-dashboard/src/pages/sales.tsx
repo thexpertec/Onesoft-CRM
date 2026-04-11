@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useSales, useCustomers, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  Sale, SaleItem, SaleStatus, SalePayment, ItemStatus, ITEM_STATUSES,
+  Sale, SaleItem, SaleStatus, SalePayment,
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
   deductStockForSale, restoreStockForSale, getSettings, autoPostSaleJE,
@@ -35,11 +35,6 @@ const STATUS_BG: Record<SaleStatus, string> = {
   Cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
-const ITEM_STATUS_STYLE: Record<ItemStatus, string> = {
-  Reserved:  "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50",
-  Delivered: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50",
-  Pending:   "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50",
-};
 
 const PAYMENT_ICON: Record<SalePayment, React.ReactNode> = {
   Cash:            <Banknote size={12} className="text-emerald-500" />,
@@ -67,7 +62,7 @@ const subTotal = (items: SaleItem[]): number =>
 
 const blankSaleItem = (): SaleItem => ({
   id: crypto.randomUUID(), productName: "", sku: "", qty: "1",
-  unit: "pcs", unitPrice: "0.00", discount: "0", notes: "", itemStatus: "Reserved",
+  unit: "pcs", unitPrice: "0.00", discount: "0", notes: "", itemStatus: "Delivered",
 });
 
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
@@ -805,19 +800,6 @@ function POSView({
                               </span>
                             );
                           })()}
-                          {/* Item delivery status — clickable pill cycles through states */}
-                          <button
-                            title="Click to change delivery status"
-                            onClick={() => {
-                              const cur = (item.itemStatus as ItemStatus) || "Reserved";
-                              const next = ITEM_STATUSES[(ITEM_STATUSES.indexOf(cur) + 1) % ITEM_STATUSES.length];
-                              onItemChange(item.id, "itemStatus", next);
-                              onItemBlur();
-                            }}
-                            className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md cursor-pointer select-none transition-colors ${ITEM_STATUS_STYLE[(item.itemStatus as ItemStatus) || "Reserved"]}`}
-                          >
-                            {item.itemStatus || "Reserved"}
-                          </button>
                         </div>
                       </div>
 
