@@ -903,6 +903,25 @@ export default function SettingsPage() {
                   />
                 </div>
 
+                <div className={`flex items-center justify-between py-3 px-4 rounded-lg border transition-colors ${
+                  form.allowNegativeStock
+                    ? "bg-gray-50 dark:bg-muted/30 border-gray-100 dark:border-border"
+                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                }`}>
+                  <div>
+                    <p className="text-[13px] font-medium text-gray-700 dark:text-gray-300">Allow Selling on Zero / Negative Stock</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {form.allowNegativeStock
+                        ? "Products can be sold even when no stock is available (overselling allowed)"
+                        : "POS will block adding a product to cart when its stock quantity is 0 or below"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.allowNegativeStock}
+                    onCheckedChange={v => set("allowNegativeStock", v)}
+                  />
+                </div>
+
                 <SectionHeader title="Receipt Content" desc="Text printed at the top and bottom of receipts." />
                 <div className="grid gap-4">
                   <Field label="Receipt Header" hint="Leave blank to use company name automatically.">

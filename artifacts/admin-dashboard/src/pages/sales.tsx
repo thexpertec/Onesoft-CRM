@@ -562,6 +562,9 @@ function POSView({
     return m;
   }, [stock]);
 
+  // Whether overselling is allowed (read once per render; Settings.allowNegativeStock)
+  const allowNegativeStock = useMemo(() => getSettings().allowNegativeStock !== false, []);
+
   const qtyChange = (itemId: string, delta: number) => {
     const item = localItems.find(i => i.id === itemId);
     if (!item) return;
@@ -1111,27 +1114,46 @@ function POSView({
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
                   const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
-                  const inCart   = cartQtyMap[product.sku] || 0;
-                  const stockQty = stockMap[product.sku] ?? null;
-                  const lowStock = stockQty !== null && stockQty <= 5;
+                  const inCart       = cartQtyMap[product.sku] || 0;
+                  const stockQty     = stockMap[product.sku] ?? null;
+                  const availableQty = (stockQty ?? 0) - inCart;
+                  const lowStock     = stockQty !== null && stockQty > 0 && stockQty <= 5;
+                  // Card is blocked if: sale not draft  OR  (overselling disabled AND no available stock)
+                  const stockBlocked = !allowNegativeStock && stockQty !== null && availableQty <= 0;
+                  const isDisabled   = !isDraft || stockBlocked;
                   return (
                     <button
                       key={product.id}
-                      disabled={!isDraft}
+                      disabled={isDisabled}
                       onClick={() => onAddProduct(product)}
-                      title={isDraft ? `Add ${product.name}` : `Sale is ${sale.status}`}
+                      title={
+                        !isDraft          ? `Sale is ${sale.status}`
+                        : stockBlocked    ? `${product.name} — out of stock (overselling disabled)`
+                        : `Add ${product.name}`
+                      }
                       className={`group relative text-left bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden flex flex-col transition-all ${
-                        isDraft
-                          ? inCart > 0
-                            ? "border-blue-300 dark:border-blue-700 hover:border-blue-400 hover:shadow-sm cursor-pointer active:scale-[0.98]"
-                            : "border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm cursor-pointer active:scale-[0.98]"
-                          : "border-gray-100 dark:border-zinc-800 opacity-40 cursor-not-allowed"
+                        !isDraft
+                          ? "border-gray-100 dark:border-zinc-800 opacity-40 cursor-not-allowed"
+                          : stockBlocked
+                            ? "border-red-200 dark:border-red-900 opacity-60 cursor-not-allowed"
+                            : inCart > 0
+                              ? "border-blue-300 dark:border-blue-700 hover:border-blue-400 hover:shadow-sm cursor-pointer active:scale-[0.98]"
+                              : "border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm cursor-pointer active:scale-[0.98]"
                       }`}
                     >
                       {/* In-cart badge */}
-                      {inCart > 0 && (
+                      {inCart > 0 && !stockBlocked && (
                         <div className="absolute top-1.5 right-1.5 z-10 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
                           {inCart}
+                        </div>
+                      )}
+
+                      {/* Blocked overlay — shown when overselling is disabled & stock exhausted */}
+                      {stockBlocked && (
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-50/80 dark:bg-red-950/60 rounded-xl">
+                          <div className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide text-center px-1 leading-tight">
+                            No Stock
+                          </div>
                         </div>
                       )}
 
@@ -1380,6 +1402,31 @@ export default function SalesPage() {
 
   // ── Add product from right panel ──
   const handleAddProductFromCatalogue = useCallback((product: Product) => {
+    const settings = getSettings();
+    const allowNeg = settings.allowNegativeStock !== false; // default true
+
+    // ── Stock guard ──────────────────────────────────────────────────────────
+    if (!allowNeg) {
+      // Sum stock across all stock-items with this SKU
+      const available = getStock()
+        .filter(s => s.sku === product.sku)
+        .reduce((sum, s) => sum + (parseFloat(s.quantity) || 0), 0);
+
+      // Count qty already in cart for this SKU
+      const inCart = localItemsRef.current
+        .filter(i => i.sku === product.sku)
+        .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
+
+      if (available - inCart <= 0) {
+        toast({
+          title: "Out of stock",
+          description: `${product.name} has no available stock. Overselling is disabled in Settings.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const current = localItemsRef.current;
     const resolvedPrice = priceMode === "wholesale" && product.wholesalePrice
       ? product.wholesalePrice

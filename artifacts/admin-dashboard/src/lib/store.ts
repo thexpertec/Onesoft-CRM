@@ -2439,6 +2439,8 @@ export type AppSettings = {
   accCogs:              string;   // DR for Cost of Goods Sold (optional)
   accInventory:         string;   // CR for Inventory reduced on sale (optional)
   accPurchasePayable:   string;   // CR for Accounts Payable on purchase receipt (optional)
+  // ── Inventory behaviour ──
+  allowNegativeStock:   boolean;  // if false, POS blocks selling when stock qty <= 0
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2478,6 +2480,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accCogs:              "",
   accInventory:         "",
   accPurchasePayable:   "",
+  allowNegativeStock:   true,
 };
 
 export function getSettings(): AppSettings {
