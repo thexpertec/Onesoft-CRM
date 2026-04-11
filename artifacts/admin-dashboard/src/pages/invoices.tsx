@@ -1214,10 +1214,13 @@ export function InvoiceFormPage() {
     if (id) {
       editInvoice(id, { ...data });
       toast({ title: "Invoice updated" });
+      const backUrl = data.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
+      navigate(backUrl);
     } else {
       const inv = addInvoice(data);
       toast({ title: "Invoice created", description: inv.invoiceNumber });
-      navigate(`/invoices/${inv.id}`);
+      const backUrl = inv.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
+      navigate(backUrl);
     }
   }, [editInvoice, addInvoice, toast, navigate]);
 
