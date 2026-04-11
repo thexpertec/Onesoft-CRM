@@ -1362,8 +1362,12 @@ export function InvoiceFormPage() {
 export default function InvoicesPage() {
   const { invoices } = useInvoices();
   const [, navigate] = useLocation();
+  const rawSearch    = useSearch();
 
-  const [typeFilter,   setTypeFilter]   = useState<"sale" | "purchase">("sale");
+  // Derive type from ?type= URL param so sidebar links work correctly
+  const typeFilter: "sale" | "purchase" =
+    new URLSearchParams(rawSearch).get("type") === "purchase" ? "purchase" : "sale";
+
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
   const [search,       setSearch]       = useState("");
 
@@ -1418,7 +1422,7 @@ export default function InvoicesPage() {
         {/* ── Type Tabs (top level) ── */}
         <div className="flex items-center gap-2 mb-4">
           <button
-            onClick={() => { setTypeFilter("sale"); setStatusFilter("All"); }}
+            onClick={() => { navigate("/invoices?type=sale"); setStatusFilter("All"); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border-2 ${
               typeFilter === "sale"
                 ? "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-none"
@@ -1432,7 +1436,7 @@ export default function InvoicesPage() {
             }`}>{saleCount}</span>
           </button>
           <button
-            onClick={() => { setTypeFilter("purchase"); setStatusFilter("All"); }}
+            onClick={() => { navigate("/invoices?type=purchase"); setStatusFilter("All"); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors border-2 ${
               typeFilter === "purchase"
                 ? "border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200 dark:shadow-none"
