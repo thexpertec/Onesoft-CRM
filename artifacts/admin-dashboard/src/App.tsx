@@ -21,6 +21,7 @@ import SalesPage from "@/pages/sales";
 import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
 import CalcInvoicePage from "@/pages/calc-invoice";
 import StockPage from "@/pages/stock";
+import StockLedgerPage from "@/pages/stock-ledger";
 import StaffPage from "@/pages/staff";
 import HrmRolesPage from "@/pages/hrm-roles";
 import CustomersPage from "@/pages/customers";
@@ -137,6 +138,7 @@ function Router() {
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock/holds" component={StockPage} />
               <Route path="/stock" component={StockPage} />
+              <Route path="/stock-ledger" component={StockLedgerPage} />
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
               <Route path="/users" component={UsersPage} />

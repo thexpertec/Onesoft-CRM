@@ -190,8 +190,9 @@ const OTHER_NAV: NavItem[] = [
       { label: "Units",           href: "/units",           icon: Ruler,             desc: "Measurement units"    },
       { label: "Media Library", href: "/media",       icon: ImageIcon,         desc: "Product images"       },
       { label: "Stock",         divider: true },
-      { label: "All Stock",     href: "/stock",       icon: Boxes,             desc: "Product quantities & levels"   },
-      { label: "Stock Holds",   href: "/stock/holds", icon: Lock,              desc: "Reserved (Not For Sale) items" },
+      { label: "All Stock",     href: "/stock",         icon: Boxes,             desc: "Product quantities & levels"   },
+      { label: "Stock Holds",   href: "/stock/holds",   icon: Lock,              desc: "Reserved (Not For Sale) items" },
+      { label: "Stock Ledger",  href: "/stock-ledger",  icon: BookOpen,          desc: "Movement history per product"  },
     ],
   },
   {
@@ -819,8 +820,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <NavLink href="/units"          icon={Ruler}             label="Units" />
                   </>}
                   {isModuleAllowed("stock") && <>
-                    <NavLink href="/stock"       icon={Boxes} label="All Stock" />
-                    <NavLink href="/stock/holds" icon={Lock}  label="Stock Holds" />
+                    <NavLink href="/stock"         icon={Boxes}     label="All Stock" />
+                    <NavLink href="/stock/holds"   icon={Lock}      label="Stock Holds" />
+                    <NavLink href="/stock-ledger"  icon={BookOpen}  label="Stock Ledger" />
                     <NavLink href="/raw-materials" icon={FlaskConical} label="Raw Materials" />
                   </>}
                 </>}
