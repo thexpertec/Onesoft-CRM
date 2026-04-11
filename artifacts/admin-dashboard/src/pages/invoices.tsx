@@ -594,7 +594,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       </div>
 
       {/* ══ Body ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex-1 px-4 md:px-6 py-5 pb-20 md:pb-6">
+      <div className="flex-1 px-4 md:px-6 py-5 pb-24 md:pb-24">
         <div className="max-w-7xl mx-auto space-y-5">
 
           {/* Two-column grid */}
@@ -1064,7 +1064,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       </div>{/* /body */}
 
       {/* ══ BOTTOM STICKY ACTION BAR ════════════════════════════════════════ */}
-      <div className="sticky bottom-0 z-20 shrink-0 px-4 md:px-6 py-3 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-t border-gray-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+      <div className="fixed bottom-0 left-0 right-0 md:left-[54px] md:right-[54px] z-30 px-4 md:px-6 py-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border-t border-gray-200 dark:border-zinc-800 flex items-center justify-between gap-3">
 
         {/* Left — danger zone */}
         {!isNew && (
