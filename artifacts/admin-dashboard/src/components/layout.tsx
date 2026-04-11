@@ -203,8 +203,7 @@ const OTHER_NAV: NavItem[] = [
       { label: "Invoices",      href: "/invoices",      icon: FileText,     desc: "Invoice management"            },
       { label: "Calc Invoice",  href: "/calc-invoice",   icon: Calculator,   desc: "Calculation-based invoicing"   },
       { label: "Sales Agents",  href: "/sales-agents",   icon: Users2,        desc: "Agent management & commissions" },
-      { label: "Purchases",     divider: true },
-      { label: "All Purchase Orders", href: "/purchases", icon: ShoppingCart, desc: "Supplier procurement" },
+      { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Purchase invoicing & stock updates" },
     ],
   },
   {
@@ -247,7 +246,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
-const SALES_ROUTES       = ["/sales", "/invoices", "/purchases", "/calc-invoice", "/sales-agents", "/sale-return"];
+const SALES_ROUTES       = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return"];
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
@@ -258,7 +257,7 @@ const QUICK_ADD: SubItem[] = [
   { label: "New Customer",       href: "/customers",     icon: UserCheck   },
   { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
   { label: "Add Stock Item",     href: "/stock",         icon: Boxes       },
-  { label: "New Purchase Order", href: "/purchases",     icon: ShoppingCart},
+  { label: "Purchase Invoice",   href: "/invoices?type=purchase", icon: ShoppingCart},
   { label: "New Sale",           href: "/sales/new",     icon: Receipt     },
   { label: "New Document",       href: "/documents/new", icon: FilePlus    },
 ];
@@ -397,7 +396,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         case "crm":       return allowedCrmColumns.length > 0;
         case "products":  return isModuleAllowed("products");
         case "stock":     return isModuleAllowed("stock");
-        case "purchases": return isModuleAllowed("purchases");
         case "sales":     return isModuleAllowed("sales") || isModuleAllowed("invoices");
         case "documents": return isModuleAllowed("documents");
         case "accounts":  return true; // Chart of Accounts — always visible, standalone
