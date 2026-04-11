@@ -26,7 +26,7 @@ import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
 import {
   getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff,
-  getPurchaseOrders, getSales, getModuleGroupById, ModuleId,
+  getSales, getModuleGroupById, ModuleId,
   getActivities, clearActivities, ActivityEntry, ActivityAction,
 } from "@/lib/store";
 import { useDemoReset } from "@/hooks/use-demo-reset";
@@ -433,8 +433,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q)).slice(0, 4),
     staff:     getStaff().filter(s =>
       s.name?.toLowerCase().includes(q) || s.department?.toLowerCase().includes(q) || s.designation?.toLowerCase().includes(q)).slice(0, 4),
-    purchases: getPurchaseOrders().filter(p =>
-      p.poNumber?.toLowerCase().includes(q) || p.supplier?.toLowerCase().includes(q) || p.notes?.toLowerCase().includes(q)).slice(0, 4),
     sales:     getSales().filter(s =>
       s.saleNumber?.toLowerCase().includes(q) || s.customer?.toLowerCase().includes(q) || s.notes?.toLowerCase().includes(q)).slice(0, 4),
     docs:      getDocs().filter(d =>
@@ -444,8 +442,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const hasResults = searchResults &&
     (searchResults.leads.length + searchResults.customers.length +
      searchResults.suppliers.length + searchResults.products.length +
-     searchResults.staff.length + searchResults.purchases.length +
-     searchResults.sales.length + searchResults.docs.length) > 0;
+     searchResults.staff.length + searchResults.sales.length +
+     searchResults.docs.length) > 0;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col">
@@ -827,7 +825,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </>}
                 </>}
 
-                {(isModuleAllowed("sales") || isModuleAllowed("invoices") || isModuleAllowed("purchases")) && <>
+                {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
                   <SectionLabel label="Sales & Purchases" />
                   {isModuleAllowed("sales") && <>
                     <NavLink href="/sales"       icon={Receipt} label="All Sales" />
@@ -835,11 +833,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <NavLink href="/sale-return" icon={Undo2}   label="Sale Returns" />
                   </>}
                   {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
-                    <NavLink href="/invoices"     icon={FileText}   label="Invoices" />
-                    <NavLink href="/calc-invoice" icon={Calculator} label="Calc Invoice" />
+                    <NavLink href="/invoices"               icon={FileText}     label="Invoices" />
+                    <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
+                    <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
                   </>}
                   {(isModuleAllowed("sales") || isModuleAllowed("sales_agents")) && <NavLink href="/sales-agents" icon={Users2} label="Sales Agents" />}
-                  {isModuleAllowed("purchases") && <NavLink href="/purchases" icon={ShoppingCart} label="Purchase Orders" />}
                 </>}
 
                 {isModuleAllowed("documents") && <>
@@ -905,7 +903,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             { href: "/",          label: "Home",      icon: LayoutDashboard, exact: true },
             { href: "/sales/new", label: "New Sale",  icon: Plus,            exact: false },
             { href: "/invoices",  label: "Invoices",  icon: FileText,        exact: false },
-            { href: "/purchases", label: "Purchases", icon: ShoppingCart,    exact: false },
+            { href: "/invoices?type=purchase", label: "Purchases", icon: ShoppingCart, exact: false },
           ].map(tab => {
             const isActive = tab.exact ? location === "/" : location.startsWith(tab.href.split("?")[0]);
             return (
@@ -1021,18 +1019,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   ))}
                 </CommandGroup>
               ) : null}
-              {hasQuery && searchResults?.purchases.length ? (
-                <CommandGroup heading="Purchase Orders">
-                  {searchResults.purchases.map(p => (
-                    <CommandItem key={p.id} className="text-[13px] gap-2 cursor-pointer"
-                      onSelect={() => { navigate("/purchases"); setSearchOpen(false); setSearchQuery(""); }}>
-                      <ShoppingCart size={13} className="text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium">{p.poNumber}</span>
-                      {p.supplier && <span className="text-muted-foreground text-[11px]">· {p.supplier}</span>}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
               {hasQuery && searchResults?.sales.length ? (
                 <CommandGroup heading="Sales">
                   {searchResults.sales.map(s => (
@@ -1124,8 +1110,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ═══ RIGHT SIDEBAR — quick-add shortcuts ═══════════════════════════ */}
         <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
-          {/* Purchases */}
-          <SidebarLink href="/purchases"    icon={ShoppingCart} label="Purchase" active={location.startsWith("/purchases")}    navigate={navigate} titleFull="Purchase Orders" />
+          {/* Purchase Invoices */}
+          <SidebarLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase" active={location.startsWith("/invoices") && location.includes("type=purchase")} navigate={navigate} titleFull="Purchase Invoices" />
 
           <SidebarDivider />
 
