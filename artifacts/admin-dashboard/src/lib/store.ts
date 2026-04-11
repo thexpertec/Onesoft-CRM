@@ -1777,6 +1777,86 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
   batchLedger(ledger);
 };
 
+/** Add stock when a purchase invoice is paid / partially paid. Creates a new
+ *  stock record for the SKU if one doesn't already exist. */
+export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void => {
+  const stocks = getStock();
+  const today  = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+  items.forEach(item => {
+    if (!item.sku) return;
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0) return;
+
+    const i = stocks.findIndex(s => s.sku === item.sku);
+    if (i >= 0) {
+      // Stock record exists — increment quantity
+      const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+      stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
+      ledger.push({
+        entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+        date: today, txType: "purchase-receipt", reference,
+        qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
+        unit: stocks[i].unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
+      });
+    } else {
+      // No stock record yet — create one
+      const newItem: StockItem = {
+        id:          crypto.randomUUID(),
+        productId:   "",
+        productName: item.productName || item.sku,
+        sku:         item.sku,
+        quantity:    String(qty),
+        unit:        item.unit || "pcs",
+        location:    "",
+        minStock:    "0",
+        notes:       `Auto-created from purchase ${reference}`,
+        createdAt:   new Date().toISOString(),
+        updatedAt:   new Date().toISOString(),
+      };
+      stocks.push(newItem);
+      ledger.push({
+        entityType: "product", entityId: newItem.id, entityName: newItem.productName,
+        date: today, txType: "purchase-receipt", reference,
+        qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
+        unit: newItem.unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
+      });
+    }
+  });
+
+  setStored(STOCK_KEY, stocks);
+  batchLedger(ledger);
+};
+
+/** Reverse a purchase receipt — removes the stock that was added when the
+ *  invoice was paid (e.g. when reverted to Draft or Cancelled). */
+export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void => {
+  const stocks = getStock();
+  const today  = new Date().toISOString().slice(0, 10);
+  const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+  items.forEach(item => {
+    if (!item.sku) return;
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0) return;
+    const i = stocks.findIndex(s => s.sku === item.sku);
+    if (i < 0) return;
+    const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+    const deduct  = Math.min(current, qty);
+    stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+    if (deduct > 0) ledger.push({
+      entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+      date: today, txType: "sale-refund", reference,
+      qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+      unit: stocks[i].unit, notes: reference ? `Purchase Reversal ${reference}` : "Purchase Reversal",
+    });
+  });
+
+  setStored(STOCK_KEY, stocks);
+  batchLedger(ledger);
+};
+
 // ─── Invoices (standalone, separate from POS Sales) ──────────────────────────
 export const INVOICE_STATUSES  = ["Draft", "Sent", "Paid", "Partial", "Overdue", "Cancelled"] as const;
 export type InvoiceStatus = typeof INVOICE_STATUSES[number];

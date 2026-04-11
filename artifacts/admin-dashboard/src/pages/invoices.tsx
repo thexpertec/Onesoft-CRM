@@ -7,6 +7,7 @@ import {
   PaymentRecord, LegalDocument, InvoiceDoc,
   getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
+  receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, getJournalEntries,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -1229,11 +1230,19 @@ export function InvoiceFormPage() {
       if (!inv.paidAt) updates.paidAt = new Date().toISOString();
     }
     if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
-      deductStockForSale(inv.items, inv.invoiceNumber);
+      if (inv.invoiceType === "purchase") {
+        receiveStockForPurchase(inv.items, inv.invoiceNumber);
+      } else {
+        deductStockForSale(inv.items, inv.invoiceNumber);
+      }
       updates.stockDeducted = true;
     }
     if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
-      restoreStockForSale(inv.items, inv.invoiceNumber);
+      if (inv.invoiceType === "purchase") {
+        reverseStockForPurchase(inv.items, inv.invoiceNumber);
+      } else {
+        restoreStockForSale(inv.items, inv.invoiceNumber);
+      }
       updates.stockDeducted = false;
       updates.paidAt = "";
     }
@@ -1282,9 +1291,13 @@ export function InvoiceFormPage() {
       paidAt:         inv.paidAt || new Date().toISOString(),
     };
 
-    // Deduct stock once
+    // Update stock once — add for purchases, deduct for sales
     if (!inv.stockDeducted) {
-      deductStockForSale(inv.items, inv.invoiceNumber);
+      if (inv.invoiceType === "purchase") {
+        receiveStockForPurchase(inv.items, inv.invoiceNumber);
+      } else {
+        deductStockForSale(inv.items, inv.invoiceNumber);
+      }
       updates.stockDeducted = true;
     }
 
