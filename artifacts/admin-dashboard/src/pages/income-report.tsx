@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettings } from "@/lib/store";
+import { printIncomeReport } from "@/lib/print-income-report";
 import {
   TrendingUp, Calendar, Printer, Filter, X, Search,
   BarChart3, FileText, Wallet, AlertTriangle, BadgeDollarSign,
@@ -189,8 +191,27 @@ export default function IncomeReportPage() {
             All posted revenue transactions grouped by income source
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 print:hidden shrink-0">
-          <Printer size={14} /> Print
+        <Button
+          variant="outline" size="sm"
+          className="gap-1.5 shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400"
+          onClick={() => {
+            const activeSrc  = revenueAccounts.find(a => a.id === srcFilter);
+            printIncomeReport({
+              settings:       getSettings(),
+              from, to,
+              sources,
+              allLines,
+              grandTotal,
+              avgPerEntry,
+              topSource,
+              filteredLines,
+              filteredTotal,
+              srcFilterName:  activeSrc?.name,
+              searchQuery:    search || undefined,
+            });
+          }}
+        >
+          <Printer size={14} /> Print Report
         </Button>
       </div>
 
