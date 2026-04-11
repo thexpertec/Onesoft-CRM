@@ -1789,7 +1789,10 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    const i = stocks.findIndex(s => s.sku === item.sku);
+    // Prefer a "For Sale" record; fall back to any record with this SKU
+    let i = stocks.findIndex(s => s.sku === item.sku && s.stockType === "For Sale");
+    if (i < 0) i = stocks.findIndex(s => s.sku === item.sku);
+
     if (i >= 0) {
       // Stock record exists — increment quantity
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
@@ -1801,19 +1804,21 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void
         unit: stocks[i].unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
       });
     } else {
-      // No stock record yet — create one
+      // No stock record yet — create one with all required fields
       const newItem: StockItem = {
-        id:          crypto.randomUUID(),
-        productId:   "",
-        productName: item.productName || item.sku,
-        sku:         item.sku,
-        quantity:    String(qty),
-        unit:        item.unit || "pcs",
-        location:    "",
-        minStock:    "0",
-        notes:       `Auto-created from purchase ${reference}`,
-        createdAt:   new Date().toISOString(),
-        updatedAt:   new Date().toISOString(),
+        id:           crypto.randomUUID(),
+        productName:  item.productName || item.sku,
+        sku:          item.sku,
+        store:        "Warehouse",
+        stockType:    "For Sale",
+        quantity:     String(qty),
+        minLevel:     "0",
+        unit:         item.unit || "pcs",
+        holdCustomer: "",
+        holdReason:   "",
+        notes:        `Auto-created from purchase ${reference}`,
+        createdAt:    new Date().toISOString(),
+        updatedAt:    new Date().toISOString(),
       };
       stocks.push(newItem);
       ledger.push({
@@ -1840,14 +1845,16 @@ export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void
     if (!item.sku) return;
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
-    const i = stocks.findIndex(s => s.sku === item.sku);
+    // Mirror the same lookup priority used when receiving
+    let i = stocks.findIndex(s => s.sku === item.sku && s.stockType === "For Sale");
+    if (i < 0) i = stocks.findIndex(s => s.sku === item.sku);
     if (i < 0) return;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, qty);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
     if (deduct > 0) ledger.push({
       entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-      date: today, txType: "sale-refund", reference,
+      date: today, txType: "purchase-receipt", reference,
       qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
       unit: stocks[i].unit, notes: reference ? `Purchase Reversal ${reference}` : "Purchase Reversal",
     });
