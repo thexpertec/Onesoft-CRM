@@ -606,7 +606,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       </div>
 
       {/* ══ Body ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex-1 px-4 md:px-6 py-5">
+      <div className="flex-1 px-4 md:px-6 py-5 pb-20 md:pb-6">
         <div className="max-w-7xl mx-auto space-y-5">
 
           {/* Two-column grid */}
@@ -1079,6 +1079,66 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
         </div>{/* /max-w-7xl */}
       </div>{/* /body */}
+
+      {/* ══ BOTTOM STICKY ACTION BAR ════════════════════════════════════════ */}
+      <div className="sticky bottom-0 z-20 shrink-0 px-4 md:px-6 py-3 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-t border-gray-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+
+        {/* Left — danger zone */}
+        {!isNew && (
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/50 text-sm font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+          >
+            <Trash2 size={14}/> Delete
+          </button>
+        )}
+        {isNew && <div />}
+
+        {/* Right — primary actions */}
+        <div className="flex items-center gap-2">
+          {/* Send — only when existing draft */}
+          {!isNew && s === "Draft" && (
+            <button
+              onClick={() => onStatusChange(inv!.id, "Sent")}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+            >
+              <Send size={14}/> Send
+            </button>
+          )}
+
+          {/* Print — only existing invoice */}
+          {!isNew && (
+            <button
+              onClick={() => { try { printInvoice(invoice); } catch { /* blocked */ } }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors"
+            >
+              <Printer size={14}/> Print
+            </button>
+          )}
+
+          {/* Collect Payment — existing, not fully paid/cancelled */}
+          {!isNew && s !== "Paid" && s !== "Cancelled" && (
+            <button
+              onClick={() => setCollectPayOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+            >
+              <DollarSign size={14}/> Collect Payment
+            </button>
+          )}
+
+          {/* Save / Create — always visible */}
+          <button
+            onClick={handleSave}
+            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-colors ${
+              invoiceType === "purchase"
+                ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
+                : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none"
+            }`}
+          >
+            <Save size={14}/> {isNew ? "Create Invoice" : "Save"}
+          </button>
+        </div>
+      </div>
 
       {/* ── Collect Payment Modal ─────────────────────────────────────────── */}
       {!isNew && (
