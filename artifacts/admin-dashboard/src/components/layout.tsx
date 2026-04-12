@@ -1180,7 +1180,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* HRM */}
           <SidebarLink href="/staff"        icon={Building2}     label="Staff"     active={location.startsWith("/staff")}        navigate={navigate} titleFull="Staff / HRM"  color="rose" />
-          <SidebarLink href="/hrm-roles"    icon={KeyRound}      label="Roles"     active={location.startsWith("/hrm-roles")}   navigate={navigate} titleFull="HRM Roles"    color="pink" />
+          <SidebarLink href="/roles"        icon={KeyRound}      label="Roles"     active={location.startsWith("/roles")}       navigate={navigate} titleFull="HRM Roles"    color="pink" />
 
           <SidebarDivider />
 
