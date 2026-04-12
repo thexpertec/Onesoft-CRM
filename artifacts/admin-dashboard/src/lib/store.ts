@@ -1355,7 +1355,8 @@ export type SaleItem = {
   qty: string;
   unit: string;
   unitPrice: string;
-  discount: string;    // percentage 0-100
+  discount: string;        // value — interpreted as % or flat amount depending on discountType
+  discountType?: "pct" | "amt"; // "pct" = percentage (default), "amt" = flat amount
   notes: string;
   itemStatus: ItemStatus; // per-line delivery status
 };

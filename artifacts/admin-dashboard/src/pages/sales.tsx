@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
-  ArrowLeft, Minus, Package, ChevronDown, Lock, Printer,
+  ArrowLeft, Package, ChevronDown, Lock, Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,21 +48,26 @@ const lineTotal = (item: SaleItem): number => {
   const q = parseFloat(item.qty) || 0;
   const p = parseFloat(item.unitPrice) || 0;
   const d = parseFloat(item.discount) || 0;
+  if (item.discountType === "amt") return Math.max(0, q * p - d);
   return q * p * (1 - d / 100);
 };
 
+const lineDiscAmt = (item: SaleItem): number => {
+  const q = parseFloat(item.qty) || 0;
+  const p = parseFloat(item.unitPrice) || 0;
+  const d = parseFloat(item.discount) || 0;
+  if (item.discountType === "amt") return Math.min(d, q * p);
+  return q * p * (d / 100);
+};
+
 const saleTotal    = (items: SaleItem[]): number => items.reduce((s, i) => s + lineTotal(i), 0);
-const discountTotal = (items: SaleItem[]): number =>
-  items.reduce((s, i) => {
-    const q = parseFloat(i.qty) || 0, p = parseFloat(i.unitPrice) || 0, d = parseFloat(i.discount) || 0;
-    return s + q * p * (d / 100);
-  }, 0);
+const discountTotal = (items: SaleItem[]): number => items.reduce((s, i) => s + lineDiscAmt(i), 0);
 const subTotal = (items: SaleItem[]): number =>
   items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
 
 const blankSaleItem = (): SaleItem => ({
   id: crypto.randomUUID(), productName: "", sku: "", qty: "1",
-  unit: "pcs", unitPrice: "0.00", discount: "0", notes: "", itemStatus: "Delivered",
+  unit: "pcs", unitPrice: "0.00", discount: "0", discountType: "pct", notes: "", itemStatus: "Delivered",
 });
 
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
@@ -565,14 +570,6 @@ function POSView({
   // Whether overselling is allowed (read once per render; Settings.allowNegativeStock)
   const allowNegativeStock = useMemo(() => getSettings().allowNegativeStock !== false, []);
 
-  const qtyChange = (itemId: string, delta: number) => {
-    const item = localItems.find(i => i.id === itemId);
-    if (!item) return;
-    const next = Math.max(0, (parseFloat(item.qty) || 0) + delta);
-    const newItems = localItems.map(i => i.id === itemId ? { ...i, qty: String(next) } : i);
-    onSaveItems(newItems);
-  };
-
   return (
     <>
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 dark:bg-zinc-950 overflow-hidden">
@@ -806,33 +803,30 @@ function POSView({
                         </div>
                       </div>
 
-                      {/* Qty stepper */}
-                      <div className="shrink-0 flex items-center">
+                      {/* Qty — plain input, no +/- buttons */}
+                      <div className="shrink-0 w-[58px]">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Qty</div>
                         {isDraft ? (
-                          <div className="flex items-center border-2 border-gray-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-                            <button
-                              onClick={() => qtyChange(item.id, -1)}
-                              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 hover:text-gray-700 transition-colors"
-                            >
-                              <Minus size={13} />
-                            </button>
-                            <input
-                              type="number" min="0"
-                              value={item.qty}
-                              onChange={e => onItemChange(item.id, "qty", e.target.value)}
-                              onBlur={onItemBlur}
-                              className="w-12 h-9 text-center text-[15px] font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-zinc-800 outline-none border-x-2 border-gray-200 dark:border-zinc-700 focus:bg-blue-50 dark:focus:bg-blue-950/20"
-                            />
-                            <button
-                              onClick={() => qtyChange(item.id, 1)}
-                              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 transition-colors"
-                            >
-                              <Plus size={13} />
-                            </button>
-                          </div>
+                          <input
+                            type="number" min="0"
+                            value={item.qty}
+                            onChange={e => onItemChange(item.id, "qty", e.target.value)}
+                            onBlur={onItemBlur}
+                            className="w-full text-[15px] font-bold text-center text-gray-800 dark:text-gray-100 bg-transparent outline-none border-b-2 border-gray-200 dark:border-zinc-700 focus:border-blue-400 dark:focus:border-blue-500 transition-colors pb-0.5"
+                          />
                         ) : (
-                          <span className="text-[15px] font-bold text-gray-600 dark:text-gray-300 w-14 text-center">×{item.qty}</span>
+                          <span className="text-[15px] font-bold text-gray-600 dark:text-gray-300 block text-center">×{item.qty}</span>
                         )}
+                      </div>
+
+                      {/* Cost price (read-only) */}
+                      <div className="shrink-0 w-[78px]">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Cost {sym}</div>
+                        <div className="text-[14px] font-semibold text-right text-gray-400 dark:text-zinc-500 tabular-nums pb-0.5 border-b-2 border-transparent">
+                          {parseFloat(prod?.costPrice ?? "0") > 0
+                            ? parseFloat(prod?.costPrice ?? "0").toFixed(2)
+                            : <span className="text-gray-200 dark:text-zinc-700">—</span>}
+                        </div>
                       </div>
 
                       {/* Unit price */}
@@ -848,11 +842,28 @@ function POSView({
                         />
                       </div>
 
-                      {/* Discount */}
-                      <div className="shrink-0 w-[62px]">
-                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Disc %</div>
+                      {/* Discount — toggle between % and flat amount */}
+                      <div className="shrink-0 w-[82px]">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold flex items-center gap-1">
+                          Disc
+                          {isDraft && (
+                            <button
+                              type="button"
+                              onClick={() => onItemChange(item.id, "discountType" as keyof SaleItem,
+                                (item.discountType ?? "pct") === "pct" ? "amt" : "pct"
+                              )}
+                              className="inline-flex items-center px-1 py-0 rounded text-[9px] font-bold bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-600 dark:hover:text-blue-400 transition-colors leading-tight"
+                              title="Toggle % / amount"
+                            >
+                              {(item.discountType ?? "pct") === "pct" ? "%" : sym}
+                            </button>
+                          )}
+                          {!isDraft && <span className="text-[9px]">{(item.discountType ?? "pct") === "pct" ? "%" : sym}</span>}
+                        </div>
                         <input
-                          type="number" min="0" max="100"
+                          type="number" min="0"
+                          max={(item.discountType ?? "pct") === "pct" ? "100" : undefined}
+                          step={(item.discountType ?? "pct") === "pct" ? "1" : "0.01"}
                           value={item.discount}
                           onChange={e => onItemChange(item.id, "discount", e.target.value)}
                           onBlur={onItemBlur}
@@ -866,9 +877,9 @@ function POSView({
                         <div className="text-[18px] font-extrabold font-mono tabular-nums text-gray-900 dark:text-gray-100 leading-tight">
                           {sym}{lineTotal(item).toFixed(2)}
                         </div>
-                        {parseFloat(item.discount) > 0 && (
+                        {lineDiscAmt(item) > 0 && (
                           <div className="text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 font-mono">
-                            −{sym}{((parseFloat(item.qty)||0)*(parseFloat(item.unitPrice)||0)*(parseFloat(item.discount)||0)/100).toFixed(2)}
+                            −{sym}{lineDiscAmt(item).toFixed(2)}
                           </div>
                         )}
                       </div>
