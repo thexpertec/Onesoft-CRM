@@ -510,7 +510,8 @@ function POSView({
   const [catFilter,     setCatFilter]     = useState("All");
   const [prodSort,      setProdSort]      = useState("listing");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
-  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
 
   // ── Quick-add customer dialog ────────────────────────────────────────────
   const [qaOpen,  setQaOpen]  = useState(false);
@@ -999,18 +1000,32 @@ function POSView({
                   >
                     {isCredit ? <><CreditCard size={17} /> Issue on Credit</> : <><Check size={17} /> Complete &amp; Pay</>}
                   </button>
-                  <div className="flex gap-2">
+                  {/* ── Secondary actions row ── */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Hold / Save Draft */}
                     <button
                       onClick={onClose}
-                      className="flex-1 h-9 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors"
+                      className="h-9 rounded-xl border-2 border-blue-200 dark:border-blue-800/60 text-[12px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors"
+                      title="Save as Draft and return to list"
                     >
-                      <Save size={13} /> Save Draft
+                      <Save size={13} /> Hold
                     </button>
+                    {/* Cancel sale */}
                     <button
-                      onClick={() => setVoidConfirmOpen(true)}
-                      className="h-9 px-3 rounded-xl border-2 border-red-100 dark:border-red-900/50 text-[12px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-1.5 transition-colors"
+                      onClick={() => setCancelConfirmOpen(true)}
+                      className="h-9 rounded-xl border-2 border-red-200 dark:border-red-900/60 text-[12px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors"
+                      title="Cancel this sale"
                     >
-                      <Ban size={13} /> Void
+                      <Ban size={13} /> Cancel
+                    </button>
+                    {/* Reset cart */}
+                    <button
+                      onClick={() => setResetConfirmOpen(true)}
+                      disabled={localItems.length === 0}
+                      className="h-9 rounded-xl border-2 border-amber-200 dark:border-amber-800/60 text-[12px] font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Clear all items from cart"
+                    >
+                      <RotateCcw size={13} /> Reset
                     </button>
                   </div>
                 </>
@@ -1334,20 +1349,43 @@ function POSView({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    {/* ── Void confirm ─────────────────────────────────────────────────────── */}
-    <AlertDialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
+    {/* ── Cancel confirm ───────────────────────────────────────────────────── */}
+    <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Void this sale?</AlertDialogTitle>
-          <AlertDialogDescription>This sale will be marked as Cancelled. This action cannot be undone.</AlertDialogDescription>
+          <AlertDialogTitle>Cancel this sale?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This sale will be marked as <strong>Cancelled</strong>. You can view it in the sales list but it will no longer be editable from the POS.
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>Go back</AlertDialogCancel>
           <AlertDialogAction
             className="bg-red-600 hover:bg-red-700"
-            onClick={() => { onSetStatus("Cancelled"); setVoidConfirmOpen(false); }}
+            onClick={() => { onSetStatus("Cancelled"); setCancelConfirmOpen(false); onClose(); }}
           >
-            Void Sale
+            Yes, Cancel Sale
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* ── Reset (clear cart) confirm ────────────────────────────────────────── */}
+    <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reset cart?</AlertDialogTitle>
+          <AlertDialogDescription>
+            All items in the cart will be removed. Customer, agent and payment details will be kept. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Go back</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-amber-600 hover:bg-amber-700"
+            onClick={() => { onSaveItems([]); setResetConfirmOpen(false); }}
+          >
+            Yes, Clear Cart
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
