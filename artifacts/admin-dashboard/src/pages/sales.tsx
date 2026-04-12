@@ -1251,7 +1251,7 @@ function POSView({
                   const inCart       = cartQtyMap[product.sku] || 0;
                   const stockQty     = stockMap[product.sku] ?? null;
                   const availableQty = (stockQty ?? 0) - inCart;
-                  const lowStock     = stockQty !== null && stockQty > 0 && stockQty <= 5;
+                  const lowStock     = stockQty !== null && availableQty > 0 && availableQty <= 5;
                   // Card is blocked if: sale not draft  OR  (overselling disabled AND no available stock)
                   const stockBlocked = !allowNegativeStock && stockQty !== null && availableQty <= 0;
                   const isDisabled   = !isDraft || stockBlocked;
@@ -1311,16 +1311,18 @@ function POSView({
                             </span>
                           )}
                         </div>
-                        {/* Stock qty — read-only pill, colour-coded */}
+                        {/* Stock qty — read-only pill, colour-coded (uses availableQty = stock − in-cart) */}
                         <div className="flex items-center justify-between mt-0.5">
                           {stockQty === null ? (
-                            <span className="text-[9px] text-gray-300 dark:text-zinc-700 tabular-nums">No stock</span>
-                          ) : stockQty === 0 ? (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 tabular-nums">Out of stock</span>
+                            <span className="text-[9px] text-gray-300 dark:text-zinc-700 tabular-nums">No record</span>
+                          ) : availableQty < 0 ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 tabular-nums">⚠ {availableQty}</span>
+                          ) : availableQty === 0 ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 tabular-nums">0 left</span>
                           ) : lowStock ? (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 tabular-nums">⚠ {stockQty} left</span>
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 tabular-nums">⚠ {availableQty} left</span>
                           ) : (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 tabular-nums">{stockQty} in stock</span>
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 tabular-nums">{availableQty} in stock</span>
                           )}
                         </div>
                       </div>
