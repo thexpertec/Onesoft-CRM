@@ -71,6 +71,26 @@ const blankSaleItem = (): SaleItem => ({
   unit: "pcs", unitPrice: "0.00", discount: "0", discountType: "pct", notes: "", itemStatus: "Delivered",
 });
 
+const CHIP_COLORS: Record<string, string> = {
+  violet:  "bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800",
+  emerald: "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+  blue:    "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  amber:   "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+  teal:    "bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+  rose:    "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+};
+
+function Chip({ label, onRemove, color = "blue" }: { label: string; onRemove: () => void; color?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${CHIP_COLORS[color] ?? CHIP_COLORS.blue}`}>
+      {label}
+      <button onClick={onRemove} className="opacity-60 hover:opacity-100 ml-0.5">
+        <X size={9} />
+      </button>
+    </span>
+  );
+}
+
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
   customer: "", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
@@ -1900,8 +1920,27 @@ export default function SalesPage() {
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search sale#, customer…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
+          <Input placeholder="Search sale#, customer, agent…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+
+        {/* Advanced Filters toggle */}
+        <Button size="sm" variant={advOpen || advActiveCount > 0 ? "default" : "outline"}
+          className={`h-8 gap-1.5 text-[12px] ${advOpen || advActiveCount > 0 ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}`}
+          onClick={() => setAdvOpen(v => !v)}>
+          <SlidersHorizontal size={13} />
+          Filters
+          {advActiveCount > 0 && (
+            <span className="ml-0.5 bg-white/25 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{advActiveCount}</span>
+          )}
+          {advOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        </Button>
+
+        {advActiveCount > 0 && (
+          <button onClick={clearAdvFilters} className="h-8 px-2 text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors font-medium">
+            <X size={11} className="inline mr-0.5" />Clear all
+          </button>
+        )}
+
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 font-medium">1 unsaved sale</span>
@@ -1911,6 +1950,124 @@ export default function SalesPage() {
         )}
         <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {sales.length}</div>
       </div>
+
+      {/* Advanced Filter Panel */}
+      {advOpen && (
+        <div className="bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/50 rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={13} className="text-indigo-500" />
+              <span className="text-[12px] font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">Advanced Filters</span>
+              {advActiveCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full">{advActiveCount} active</span>
+              )}
+            </div>
+            {advActiveCount > 0 && (
+              <button onClick={clearAdvFilters} className="text-[11px] text-indigo-500 hover:text-indigo-700 font-semibold flex items-center gap-1">
+                <X size={10} /> Reset all
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+
+            {/* Area */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <MapPin size={10} className="text-violet-500" /> Area (Agent)
+              </label>
+              <select value={filterArea} onChange={e => setFilterArea(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">All Areas</option>
+                {agentAreaOpts.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+
+            {/* Customer */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <UserCheck size={10} className="text-emerald-500" /> Customer
+              </label>
+              <select value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">All Customers</option>
+                {customerOpts.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {/* Sales Agent */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <Users2 size={10} className="text-blue-500" /> Sales Agent
+              </label>
+              <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">All Agents</option>
+                {agentOpts.map(a => <option key={a.id} value={a.name}>{a.name} ({a.code})</option>)}
+              </select>
+            </div>
+
+            {/* Payment Mode */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <Wallet size={10} className="text-amber-500" /> Payment Mode
+              </label>
+              <select value={filterPayMode} onChange={e => setFilterPayMode(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">All Modes</option>
+                {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+
+            {/* Payment Status */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <BadgeCheck size={10} className="text-teal-500" /> Payment Status
+              </label>
+              <select value={filterPayStatus} onChange={e => setFilterPayStatus(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">All Statuses</option>
+                <option value="paid">Paid in Full</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial Payment</option>
+                <option value="overdue">Overdue (On Credit)</option>
+              </select>
+            </div>
+
+            {/* Date From */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <Calendar size={10} className="text-rose-500" /> Date From
+              </label>
+              <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+
+            {/* Date To */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <Calendar size={10} className="text-rose-500" /> Date To
+              </label>
+              <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+
+          </div>
+
+          {/* Active filter chips */}
+          {advActiveCount > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-indigo-200 dark:border-indigo-800/40">
+              {filterArea     && <Chip label={`Area: ${filterArea}`}       onRemove={() => setFilterArea("")} color="violet" />}
+              {filterCustomer && <Chip label={`Customer: ${filterCustomer}`} onRemove={() => setFilterCustomer("")} color="emerald" />}
+              {filterAgent    && <Chip label={`Agent: ${filterAgent}`}     onRemove={() => setFilterAgent("")} color="blue" />}
+              {filterPayMode  && <Chip label={`Mode: ${filterPayMode}`}    onRemove={() => setFilterPayMode("")} color="amber" />}
+              {filterPayStatus && <Chip label={`Pay: ${filterPayStatus}`}  onRemove={() => setFilterPayStatus("")} color="teal" />}
+              {filterDateFrom && <Chip label={`From: ${filterDateFrom}`}   onRemove={() => setFilterDateFrom("")} color="rose" />}
+              {filterDateTo   && <Chip label={`To: ${filterDateTo}`}       onRemove={() => setFilterDateTo("")} color="rose" />}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid */}
       <div ref={tableRef}>
