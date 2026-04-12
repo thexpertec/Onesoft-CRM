@@ -230,11 +230,13 @@ export function ExcelGridShell({
   totalMinW,
   tableId,
   children,
+  extraLeadingCol,
 }: {
   cols: ColDef[];
   totalMinW: number;
   tableId?: string;
   children: React.ReactNode;
+  extraLeadingCol?: { width: number; header?: React.ReactNode };
 }) {
   const storageKey = tableId ? `onesoft-col-widths:${tableId}` : null;
 
@@ -284,15 +286,21 @@ export function ExcelGridShell({
     >
       <table
         className="border-collapse text-[13px] w-full"
-        style={{ tableLayout: "fixed", minWidth: `${Math.max(totalMinW, dynamicTotal) + 48 + 90}px` }}
+        style={{ tableLayout: "fixed", minWidth: `${Math.max(totalMinW, dynamicTotal) + 48 + 90 + (extraLeadingCol?.width ?? 0)}px` }}
       >
         <colgroup>
+          {extraLeadingCol && <col style={{ width: `${extraLeadingCol.width}px` }} />}
           <col style={{ width: "48px" }} />
           {cols.map(c => <col key={c.field} style={{ width: `${widths[c.field] ?? c.minW}px` }} />)}
           <col style={{ width: "90px" }} />
         </colgroup>
         <thead className="sticky top-0 z-10">
           <tr>
+            {extraLeadingCol && (
+              <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 py-2 select-none" style={{ width: `${extraLeadingCol.width}px` }}>
+                {extraLeadingCol.header ?? null}
+              </th>
+            )}
             <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">#</th>
             {cols.map(c => (
               <th

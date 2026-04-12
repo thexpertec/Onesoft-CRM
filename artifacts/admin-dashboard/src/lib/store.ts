@@ -989,6 +989,14 @@ export const deleteProduct = (id: string): void => {
   addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
 };
 
+export const reorderProducts = (orderedIds: string[]): void => {
+  const all = getProducts();
+  const map = new Map(all.map(p => [p.id, p]));
+  const reordered = orderedIds.map(id => map.get(id)).filter(Boolean) as Product[];
+  const leftover  = all.filter(p => !orderedIds.includes(p.id));
+  setStored(PRODUCTS_KEY, [...reordered, ...leftover]);
+};
+
 // ─── Brands API ───────────────────────────────────────────────────────────────
 export type BrandStatus = "Active" | "Inactive";
 

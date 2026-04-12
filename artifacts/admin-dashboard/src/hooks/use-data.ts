@@ -7,7 +7,7 @@ import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getShareholders, createShareholder, updateShareholder, deleteShareholder,
   getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,
-  getProducts, createProduct, updateProduct, deleteProduct,
+  getProducts, createProduct, updateProduct, deleteProduct, reorderProducts,
   getBrands, createBrand, updateBrand, deleteBrand,
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
   getUnits, createUnit, updateUnit, deleteUnit,
@@ -171,11 +171,12 @@ export function useProducts() {
     return () => window.removeEventListener("storage", fetchProducts);
   }, [fetchProducts]);
 
-  const addProduct = (data: Parameters<typeof createProduct>[0]) => { const p = createProduct(data); fetchProducts(); return p; };
-  const editProduct = (id: string, updates: Parameters<typeof updateProduct>[1]) => { const p = updateProduct(id, updates); fetchProducts(); return p; };
+  const addProduct    = (data: Parameters<typeof createProduct>[0]) => { const p = createProduct(data); fetchProducts(); return p; };
+  const editProduct   = (id: string, updates: Parameters<typeof updateProduct>[1]) => { const p = updateProduct(id, updates); fetchProducts(); return p; };
   const removeProduct = (id: string) => { deleteProduct(id); fetchProducts(); };
+  const reorderProds  = (ids: string[]) => { reorderProducts(ids); fetchProducts(); };
 
-  return { products, addProduct, editProduct, removeProduct, refresh: fetchProducts };
+  return { products, addProduct, editProduct, removeProduct, reorderProds, refresh: fetchProducts };
 }
 
 export function useBrands() {

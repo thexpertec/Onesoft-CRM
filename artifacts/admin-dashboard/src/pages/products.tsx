@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList, GripVertical } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,7 +102,7 @@ function parseCSV(text: string): ImportRow[] {
 }
 
 export default function ProductsPage() {
-  const { products, addProduct, editProduct, removeProduct } = useProducts();
+  const { products, addProduct, editProduct, removeProduct, reorderProds } = useProducts();
   const { stock } = useStock();
   const { isAuthenticated } = useAuth();
 
@@ -299,10 +299,34 @@ export default function ProductsPage() {
 
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
+  const isFiltered = !!(search || statusFilter !== "All");
+
   const filtered = products
     .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
-    .filter(p => statusFilter === "All" || p.status === statusFilter)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .filter(p => statusFilter === "All" || p.status === statusFilter);
+
+  // Drag-and-drop reorder state
+  const [dragId,    setDragId]    = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const handleDragStart = (id: string) => { setDragId(id); };
+  const handleDragOver  = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (id !== dragId) setDragOverId(id);
+  };
+  const handleDrop = (dropId: string) => {
+    if (!dragId || dragId === dropId) { setDragId(null); setDragOverId(null); return; }
+    const ids = filtered.map(p => p.id);
+    const fromIdx = ids.indexOf(dragId);
+    const toIdx   = ids.indexOf(dropId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, dragId);
+    reorderProds(ids);
+    setDragId(null);
+    setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   const tableRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -590,11 +614,14 @@ export default function ProductsPage() {
 
       {/* Excel grid */}
       <div ref={tableRef}>
-        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="products">
+        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="products"
+          extraLeadingCol={{ width: 28 }}
+        >
 
           {/* New row */}
           {isAuthenticated && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
+              <td className="border-r border-gray-100 dark:border-border w-7" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
               {COLS.map((c, ci) => {
                 const isA = newRowActive === ci;
@@ -641,16 +668,37 @@ export default function ProductsPage() {
 
           {/* Existing rows */}
           {filtered.length === 0 ? (
-            <tr><td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
+            <tr><td colSpan={COLS.length + 3} className="text-center py-16 text-muted-foreground text-sm">
               {search || statusFilter !== "All"
                 ? "No products match your current filter."
                 : <span>No products yet. Click <strong>Add Product</strong> to get started.</span>}
             </td></tr>
           ) : filtered.map((prod, ri) => {
             const isRowActive = activeCell?.id === prod.id;
+            const isDragging  = dragId === prod.id;
+            const isDragOver  = dragOverId === prod.id;
             return (
               <tr key={prod.id} data-testid={`row-product-${prod.id}`}
-                className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
+                draggable={!isFiltered && isAuthenticated}
+                onDragStart={() => handleDragStart(prod.id)}
+                onDragOver={e => handleDragOver(e, prod.id)}
+                onDrop={() => handleDrop(prod.id)}
+                onDragEnd={handleDragEnd}
+                className={`border-b border-gray-100 dark:border-border transition-colors group select-none
+                  ${isDragging  ? "opacity-40 bg-blue-50 dark:bg-blue-950/20" : ""}
+                  ${isDragOver  ? "border-t-2 border-t-blue-500 bg-blue-50/50 dark:bg-blue-950/10" : ""}
+                  ${!isDragging && !isDragOver ? (isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10") : ""}
+                  hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
+
+                {/* Drag handle */}
+                <td className="border-r border-gray-100 dark:border-border w-7 text-center select-none" style={{ height: `${CELL_H}px` }}>
+                  {!isFiltered && isAuthenticated ? (
+                    <div className="flex items-center justify-center h-full cursor-grab active:cursor-grabbing text-gray-300 dark:text-zinc-700 group-hover:text-gray-400 dark:group-hover:text-zinc-500 transition-colors">
+                      <GripVertical size={13} />
+                    </div>
+                  ) : null}
+                </td>
+
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
