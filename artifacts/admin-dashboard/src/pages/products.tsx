@@ -301,9 +301,25 @@ export default function ProductsPage() {
 
   const isFiltered = !!(search || statusFilter !== "All");
 
+  const applyStatusFilter = (p: Product): boolean => {
+    switch (statusFilter) {
+      case "All":          return true;
+      case "Active":
+      case "Inactive":
+      case "Draft":        return p.status === statusFilter;
+      case "no-price":     return !p.price || parseFloat(p.price) === 0;
+      case "no-cost":      return !p.costPrice || parseFloat(p.costPrice) === 0;
+      case "has-wholesale":return !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0);
+      case "no-category":  return !p.category;
+      case "with-images":  return !!(p.images && p.images.length > 0);
+      case "no-image":     return !(p.images && p.images.length > 0);
+      default:             return true;
+    }
+  };
+
   const filtered = products
     .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
-    .filter(p => statusFilter === "All" || p.status === statusFilter);
+    .filter(applyStatusFilter);
 
   // Drag-and-drop reorder state
   const [dragId,    setDragId]    = useState<string | null>(null);
@@ -406,10 +422,16 @@ export default function ProductsPage() {
   };
 
   const pills = [
-    { label: "Total",    value: products.length,                                     filter: "All",      color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",                        activeRing: "ring-gray-400 dark:ring-gray-500"    },
-    { label: "Active",   value: products.filter(p => p.status === "Active").length,   filter: "Active",   color: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300",          activeRing: "ring-emerald-500 dark:ring-emerald-400" },
-    { label: "Inactive", value: products.filter(p => p.status === "Inactive").length, filter: "Inactive", color: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",                  activeRing: "ring-amber-400 dark:ring-amber-500"  },
-    { label: "Draft",    value: products.filter(p => p.status === "Draft").length,    filter: "Draft",    color: "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400",                       activeRing: "ring-gray-300 dark:ring-gray-600"    },
+    { label: "Total",         value: products.length,                                                                         filter: "All",           color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",                           activeRing: "ring-gray-400 dark:ring-gray-500"        },
+    { label: "Active",        value: products.filter(p => p.status === "Active").length,                                      filter: "Active",        color: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300",             activeRing: "ring-emerald-500 dark:ring-emerald-400"  },
+    { label: "Inactive",      value: products.filter(p => p.status === "Inactive").length,                                    filter: "Inactive",      color: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",                     activeRing: "ring-amber-400 dark:ring-amber-500"      },
+    { label: "Draft",         value: products.filter(p => p.status === "Draft").length,                                       filter: "Draft",         color: "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400",                        activeRing: "ring-gray-300 dark:ring-gray-600"        },
+    { label: "No Price",      value: products.filter(p => !p.price || parseFloat(p.price) === 0).length,                     filter: "no-price",      color: "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",                        activeRing: "ring-rose-400 dark:ring-rose-500"        },
+    { label: "No Cost",       value: products.filter(p => !p.costPrice || parseFloat(p.costPrice) === 0).length,              filter: "no-cost",       color: "bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300",                           activeRing: "ring-red-400 dark:ring-red-500"          },
+    { label: "Has Wholesale", value: products.filter(p => !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0)).length,  filter: "has-wholesale", color: "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300",                activeRing: "ring-purple-400 dark:ring-purple-500"    },
+    { label: "No Category",   value: products.filter(p => !p.category).length,                                               filter: "no-category",   color: "bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300",                activeRing: "ring-orange-400 dark:ring-orange-500"    },
+    { label: "With Images",   value: products.filter(p => !!(p.images && p.images.length > 0)).length,                       filter: "with-images",   color: "bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",                           activeRing: "ring-sky-400 dark:ring-sky-500"          },
+    { label: "No Image",      value: products.filter(p => !(p.images && p.images.length > 0)).length,                        filter: "no-image",      color: "bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400",                    activeRing: "ring-slate-300 dark:ring-slate-600"      },
   ];
 
   const hasRefData = brandOptions.length === 0 || categoryOptions.length === 0 || unitOptions.length === 0;
