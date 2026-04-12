@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
-  MapPin,
+  MapPin, BarChart3,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -201,7 +201,8 @@ const SALES_COLUMNS: MegaColumn[] = [
     color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
     desc: "Agents & commissions",
     links: [
-      { label: "Sales Agents", href: "/sales-agents", icon: Users2, desc: "Manage agents & commissions" },
+      { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
+      { label: "Agent Performance", href: "/agent-performance", icon: BarChart3,  desc: "Revenue, targets & commission" },
     ],
   },
 ];
@@ -308,7 +309,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES           = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
-const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return"];
+const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return", "/agent-performance"];
 const HRM_ROUTES           = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
@@ -922,6 +923,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
                   <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
                   <NavLink href="/sales-agents"           icon={Users2}       label="Sales Agents" />
+                  <NavLink href="/agent-performance"      icon={BarChart3}    label="Agent Performance" />
                 </>}
 
                 {/* Products */}
@@ -1170,8 +1172,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SidebarLink href="/leads"        icon={Users}         label="Leads"     active={location.startsWith("/leads")}        navigate={navigate} titleFull="Leads"        color="violet" />
           <SidebarLink href="/customers"    icon={UserCheck}     label="Customers" active={location.startsWith("/customers")}    navigate={navigate} titleFull="Customers"    color="emerald" />
           <SidebarLink href="/suppliers"    icon={Truck}         label="Suppliers" active={location.startsWith("/suppliers")}    navigate={navigate} titleFull="Suppliers"    color="amber" />
-          <SidebarLink href="/sales-agents" icon={Users2}        label="Agents"    active={location.startsWith("/sales-agents")} navigate={navigate} titleFull="Sales Agents" color="teal" />
-          <SidebarLink href="/areas"        icon={MapPin}        label="Areas"     active={location.startsWith("/areas")}        navigate={navigate} titleFull="Areas & Regions" color="lime" />
+          <SidebarLink href="/sales-agents"      icon={Users2}    label="Agents"   active={location.startsWith("/sales-agents")}      navigate={navigate} titleFull="Sales Agents"       color="teal" />
+          <SidebarLink href="/agent-performance" icon={BarChart3} label="Perf"     active={location.startsWith("/agent-performance")} navigate={navigate} titleFull="Agent Performance"  color="violet" />
+          <SidebarLink href="/areas"             icon={MapPin}    label="Areas"    active={location.startsWith("/areas")}             navigate={navigate} titleFull="Areas & Regions"   color="lime" />
 
           <SidebarDivider />
 
