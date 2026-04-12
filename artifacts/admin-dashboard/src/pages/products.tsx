@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList, GripVertical } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList, GripVertical, Columns3 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,6 +136,30 @@ export default function ProductsPage() {
   const [viewProdId,    setViewProdId]    = useState<string | null>(null);
 
   const [showHelp,      setShowHelp]      = useState(false);
+
+  // ── Column visibility ──────────────────────────────────────────────────────
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem("products-hidden-cols") || "[]")); }
+    catch { return new Set<string>(); }
+  });
+  const [colsMenuOpen, setColsMenuOpen] = useState(false);
+  const colsMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (colsMenuRef.current && !colsMenuRef.current.contains(e.target as Node)) setColsMenuOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const toggleCol = (field: string) => {
+    if (field === "name") return; // always visible
+    setHiddenCols(prev => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field); else next.add(field);
+      localStorage.setItem("products-hidden-cols", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // ── Add-mode toggle: "sheet" = inline row, "form" = modal dialog ──────────
   const [addMode,       setAddMode]       = useState<"sheet" | "form">("sheet");
@@ -297,7 +321,8 @@ export default function ProductsPage() {
     { field: "description", label: "Description",        minW: 220, type: "text"                                                                   },
   ], [brandOptions, categoryOptions, unitOptions, sym]);
 
-  const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
+  const visibleCols = useMemo(() => COLS.filter(c => !hiddenCols.has(c.field)), [COLS, hiddenCols]);
+  const TOTAL_W = visibleCols.reduce((a, c) => a + c.minW, 0);
 
   const isFiltered = !!(search || statusFilter !== "All");
 
@@ -370,13 +395,13 @@ export default function ProductsPage() {
     const rows = [NEW_ROW_ID, ...filtered.map(p => p.id)];
     const ri = rows.indexOf(id);
     let nc = col + (shift ? -1 : 1), nr = ri;
-    if (nc >= COLS.length) { nc = 0; nr++; }
-    if (nc < 0) { nc = COLS.length - 1; nr--; }
+    if (nc >= visibleCols.length) { nc = 0; nr++; }
+    if (nc < 0) { nc = visibleCols.length - 1; nr--; }
     if (nr < 0 || nr >= rows.length) { setActiveCell(null); return; }
     const nid = rows[nr];
     if (nid === NEW_ROW_ID) { setActiveCell(null); setNewRowActive(nc); }
     else { setActiveCell({ id: nid, col: nc }); setNewRowActive(null); }
-  }, [filtered, COLS.length]);
+  }, [filtered, visibleCols.length]);
 
   const moveCellDown = useCallback((id: string, col: number) => {
     const rows = [NEW_ROW_ID, ...filtered.map(p => p.id)];
@@ -390,7 +415,7 @@ export default function ProductsPage() {
 
   const navigateNewRow = (col: number, shift: boolean) => {
     const nc = col + (shift ? -1 : 1);
-    if (nc >= COLS.filter(c => c.type !== "readonly").length) { commitNewRow(); return; }
+    if (nc >= visibleCols.filter(c => c.type !== "readonly").length) { commitNewRow(); return; }
     if (nc < 0) { setNewRowActive(null); return; }
     setNewRowActive(nc);
   };
@@ -636,7 +661,7 @@ export default function ProductsPage() {
 
       {/* Excel grid */}
       <div ref={tableRef}>
-        <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="products"
+        <ExcelGridShell cols={visibleCols} totalMinW={TOTAL_W} tableId="products"
           extraLeadingCol={{ width: 28 }}
         >
 
@@ -645,7 +670,7 @@ export default function ProductsPage() {
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-100 dark:border-border w-7" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
-              {COLS.map((c, ci) => {
+              {visibleCols.map((c, ci) => {
                 const isA = newRowActive === ci;
                 const val = newRow[c.field as EditableField] ?? "";
                 // Readonly / computed columns (profit) — show "—" in new row
@@ -669,7 +694,7 @@ export default function ProductsPage() {
                     ) : isA ? (
                       <input autoFocus type="text" value={val} placeholder={c.label}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
-                        onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
+                        onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === visibleCols.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
                     ) : (
                       <div className="w-full h-full flex items-center px-3 cursor-text" onClick={() => setNewRowActive(ci)}>
@@ -690,7 +715,7 @@ export default function ProductsPage() {
 
           {/* Existing rows */}
           {filtered.length === 0 ? (
-            <tr><td colSpan={COLS.length + 3} className="text-center py-16 text-muted-foreground text-sm">
+            <tr><td colSpan={visibleCols.length + 3} className="text-center py-16 text-muted-foreground text-sm">
               {search || statusFilter !== "All"
                 ? "No products match your current filter."
                 : <span>No products yet. Click <strong>Add Product</strong> to get started.</span>}
@@ -722,7 +747,7 @@ export default function ProductsPage() {
                 </td>
 
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
-                {COLS.map((c, ci) => {
+                {visibleCols.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
                   // Compute readonly profit columns
                   let rawVal: string;
