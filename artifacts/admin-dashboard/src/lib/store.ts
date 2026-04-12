@@ -2583,6 +2583,8 @@ export type AppSettings = {
   accPurchasePayable:   string;   // CR for Accounts Payable on purchase receipt (optional)
   // ── Inventory behaviour ──
   allowNegativeStock:   boolean;  // if false, POS blocks selling when stock qty <= 0
+  // ── POS discount behaviour ──
+  posDiscountType:      "pct" | "amt";  // default discount mode for new POS line items
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2623,6 +2625,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accInventory:         "sys-1300",
   accPurchasePayable:   "",
   allowNegativeStock:   true,
+  posDiscountType:      "pct",
 };
 
 export function getSettings(): AppSettings {

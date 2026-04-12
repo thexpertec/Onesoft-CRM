@@ -927,6 +927,39 @@ export default function SettingsPage() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between py-3 px-4 bg-gray-50 dark:bg-muted/30 rounded-lg border border-gray-100 dark:border-border">
+                  <div>
+                    <p className="text-[13px] font-medium text-gray-700 dark:text-gray-300">Default Discount Type</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Discount mode applied to each new line item when added in POS
+                    </p>
+                  </div>
+                  <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[12px] font-semibold shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => set("posDiscountType", "pct")}
+                      className={`px-4 py-1.5 transition-colors ${
+                        form.posDiscountType !== "amt"
+                          ? "bg-blue-600 text-white"
+                          : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      % Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => set("posDiscountType", "amt")}
+                      className={`px-4 py-1.5 transition-colors border-l border-gray-200 dark:border-zinc-700 ${
+                        form.posDiscountType === "amt"
+                          ? "bg-blue-600 text-white"
+                          : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Flat Amount
+                    </button>
+                  </div>
+                </div>
+
                 <SectionHeader title="Receipt Content" desc="Text printed at the top and bottom of receipts." />
                 <div className="grid gap-4">
                   <Field label="Receipt Header" hint="Leave blank to use company name automatically.">

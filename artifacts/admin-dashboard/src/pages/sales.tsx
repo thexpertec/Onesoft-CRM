@@ -1510,12 +1510,14 @@ export default function SalesPage() {
       );
       saveItems(next);
     } else {
+      const defaultDiscountType = settings.posDiscountType ?? "pct";
       const item: SaleItem = {
         ...blankSaleItem(),
         productName: product.name,
         sku: product.sku,
         unit: product.unit || "pcs",
         unitPrice: resolvedPrice,
+        discountType: defaultDiscountType,
       };
       saveItems([...current, item]);
       toast({ title: `${product.name} added` });
