@@ -2525,13 +2525,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   socialLinks:          "",
   invoiceTerms:         "Payment is due within 30 days of the invoice date.",
   invoiceFooter:        "",
-  accSalesRevenue:      "",
-  accCash:              "",
-  accBank:              "",
-  accReceivable:        "",
-  accVatPayable:        "",
-  accCogs:              "",
-  accInventory:         "",
+  accSalesRevenue:      "sys-3100",
+  accCash:              "sys-1200",
+  accBank:              "sys-1210",
+  accReceivable:        "sys-1101",
+  accVatPayable:        "sys-2200",
+  accCogs:              "sys-4100",
+  accInventory:         "sys-1300",
   accPurchasePayable:   "",
   allowNegativeStock:   true,
 };
@@ -2561,6 +2561,15 @@ export function getSettings(): AppSettings {
           createdAt: now, updatedAt: now,
         });
       }
+      // ── Backfill empty accounting mappings with system defaults ──────────────
+      // Handles existing saved settings that have "" from before system defaults existed.
+      if (!merged.accSalesRevenue) merged.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
+      if (!merged.accCash)         merged.accCash         = SYS_ACCS.CASH;
+      if (!merged.accBank)         merged.accBank         = SYS_ACCS.BANK;
+      if (!merged.accReceivable)   merged.accReceivable   = SYS_ACCS.AR_TRADE;
+      if (!merged.accVatPayable)   merged.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
+      if (!merged.accCogs)         merged.accCogs         = SYS_ACCS.COGS;
+      if (!merged.accInventory)    merged.accInventory    = SYS_ACCS.INVENTORY;
       return merged;
     }
   } catch { /* ignore */ }

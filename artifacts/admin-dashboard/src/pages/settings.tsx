@@ -559,6 +559,11 @@ export default function SettingsPage() {
   const logoInputRef  = useRef<HTMLInputElement>(null);
   const importRef     = useRef<HTMLInputElement>(null);
 
+  // Re-read settings on mount so any backfill that ran after the lazy initializer is applied
+  useEffect(() => {
+    setForm(getSettings());
+  }, []);
+
   const set = useCallback(<K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
     setForm(f => ({ ...f, [key]: val }));
     setDirty(true);
