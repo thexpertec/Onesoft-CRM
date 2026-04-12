@@ -377,6 +377,7 @@ function SharePlansDialog({
   categoryOptions: string[];
 }) {
   const currSym = getCurrency(getSettings().currency).symbol;
+  const [formLayoutMode, toggleFormLayoutMode] = useFormMode("shareholders-form-mode");
 
   const [form,           setForm]           = useState<PlanForm>(BLANK_PLAN());
   const [adding,         setAdding]         = useState(false);
@@ -511,19 +512,21 @@ function SharePlansDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={v => !v && onClose()}>
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-5xl max-h-[90vh] flex flex-col gap-0 p-0">
+      <FormWrapper open={open} onOpenChange={v => !v && onClose()} mode={formLayoutMode} dialogClass="w-[calc(100vw-3rem)] max-w-5xl max-h-[90vh] flex flex-col">
           {/* Header */}
-          <DialogHeader className="px-6 pt-5 pb-4 border-b">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <TrendingUp size={17} className="text-emerald-500" />
-              Share Plans
-              <span className="text-muted-foreground font-normal">— {shareholder.name}</span>
-            </DialogTitle>
-            {shareholder.shareholderId && (
-              <p className="text-[12px] text-muted-foreground mt-0.5">ID: {shareholder.shareholderId}</p>
-            )}
-          </DialogHeader>
+          <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b shrink-0">
+            <div className="flex-1">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <TrendingUp size={17} className="text-emerald-500" />
+                Share Plans
+                <span className="text-muted-foreground font-normal">— {shareholder.name}</span>
+              </h2>
+              {shareholder.shareholderId && (
+                <p className="text-[12px] text-muted-foreground mt-0.5">ID: {shareholder.shareholderId}</p>
+              )}
+            </div>
+            <FormModeToggle mode={formLayoutMode} onToggle={toggleFormLayoutMode} onClose={onClose} />
+          </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
 
@@ -896,8 +899,7 @@ function SharePlansDialog({
             </Button>
             <Button size="sm" variant="outline" onClick={onClose} className="h-8 text-[13px]">Close</Button>
           </div>
-        </DialogContent>
-      </Dialog>
+      </FormWrapper>
 
       {/* Delete plan confirmation */}
       <AlertDialog open={!!delId} onOpenChange={open => !open && setDelId(null)}>

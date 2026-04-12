@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Save, CheckCircle, Search, FileText, ArrowDownCircle,
   ArrowUpCircle, X, Pencil, ChevronDown, Eye, AlertTriangle, CreditCard,
 } from "lucide-react";
+import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { RPVoucher, RPVoucherLine, Account } from "@/lib/store";
@@ -162,6 +163,7 @@ interface VoucherFormProps {
 function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, onDelete, sym }: VoucherFormProps) {
   const isEdit   = !!initial?.id;
   const isPosted = initial?.status === "posted";
+  const [formLayoutMode, toggleFormLayoutMode] = useFormMode("rp-form-mode");
 
   const [vtype,   setVtype]   = useState<"receipt" | "payment">(initial?.voucherType ?? defaultType);
   const [date,    setDate]    = useState(initial?.date ?? todayStr());
@@ -220,12 +222,20 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const typeColor = vtype === "receipt" ? "bg-emerald-600" : "bg-rose-600";
   const typeBg    = vtype === "receipt" ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-rose-50 dark:bg-rose-950/30";
 
+  const isSheet = formLayoutMode === "sheet";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={isSheet
+      ? "fixed inset-0 z-50 flex items-end justify-end bg-black/40 backdrop-blur-sm"
+      : "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+    }>
+      <div className={isSheet
+        ? "bg-background shadow-2xl w-full max-w-xl h-full flex flex-col overflow-hidden"
+        : "bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden"
+      }>
 
         {/* Header */}
-        <div className={`flex items-center justify-between px-5 py-4 ${typeBg} border-b border-border`}>
+        <div className={`flex items-center justify-between px-5 py-4 ${typeBg} border-b border-border shrink-0`}>
           <div className="flex items-center gap-3">
             {vtype === "receipt"
               ? <ArrowDownCircle className="h-5 w-5 text-emerald-600" />
@@ -237,9 +247,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
               {isPosted && <span className="text-[11px] text-emerald-600 font-medium">Posted to Journal</span>}
             </div>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
-          </button>
+          <FormModeToggle mode={formLayoutMode} onToggle={toggleFormLayoutMode} onClose={onClose} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
