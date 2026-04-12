@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { getSales, getSalesAgents, getAreas, getCities } from "@/lib/store";
 import type { Sale, SaleItem, SalesAgent, Area } from "@/lib/store";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import {
   Users2, TrendingUp, Award, Target, BarChart3,
   Printer, Download, Search, Calendar, ChevronUp,
@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+const dp = getSettingsDecimalPlaces();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -177,9 +179,9 @@ export default function AgentPerformancePage() {
     const csvRows = filtered.map((r, i) => [
       i + 1, r.agent.name, r.agent.agentCode, r.agent.area ?? "",
       r.agent.city ?? "", r.numSales,
-      r.revenue.toFixed(2), r.avgOrder.toFixed(2),
+      r.revenue.toFixed(dp), r.avgOrder.toFixed(dp),
       r.agent.commissionRate,
-      r.commission.toFixed(2), r.target.toFixed(2),
+      r.commission.toFixed(dp), r.target.toFixed(dp),
       r.achievement.toFixed(1) + "%",
     ]);
     const content = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(",")).join("\n");

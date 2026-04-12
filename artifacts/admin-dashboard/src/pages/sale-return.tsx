@@ -6,7 +6,7 @@ import {
   type Sale, type SaleReturn, type SaleReturnItem, type SalePayment, SALE_PAYMENTS,
   getProducts,
 } from "@/lib/store";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +24,12 @@ import {
   ShoppingBag, ChevronRight, AlertCircle, Package, X,
 } from "lucide-react";
 
+const dp = getSettingsDecimalPlaces();
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const today = () => new Date().toISOString().slice(0, 10);
-const fmt = (n: number) => `${getSettingsCurrencySymbol()}${n.toFixed(2)}`;
+const fmt = (n: number) => `${getSettingsCurrencySymbol()}${n.toFixed(dp)}`;
 
 function calcItems(items: SaleReturnItem[]) {
   return items.reduce((s, i) => {
@@ -132,9 +134,9 @@ function ReturnInvoiceView({ sr, onClose }: { sr: SaleReturn; onClose: () => voi
                       <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-gray-200">{item.productName}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{item.sku || "—"}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{q} {item.unit}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{sym}{p.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{sym}{p.toFixed(dp)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{d > 0 ? `${d}%` : "—"}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{sym}{total.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{sym}{total.toFixed(dp)}</td>
                     </tr>
                   );
                 })}
@@ -352,7 +354,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{sym}{total.toFixed(2)}</p>
+                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{sym}{total.toFixed(dp)}</p>
                           <p className="text-xs text-muted-foreground">{sale.date || sale.createdAt?.slice(0, 10)}</p>
                         </div>
                         <ChevronRight size={14} className="text-muted-foreground group-hover:text-rose-500 transition-colors" />
@@ -420,7 +422,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                           </div>
                           <div className="min-w-0">
                             <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 truncate">{item.productName}</p>
-                            <p className="text-[10px] text-muted-foreground">{item.sku || "—"} · {sym}{p.toFixed(2)} each{d > 0 ? ` · ${d}% disc` : ""}</p>
+                            <p className="text-[10px] text-muted-foreground">{item.sku || "—"} · {sym}{p.toFixed(dp)} each{d > 0 ? ` · ${d}% disc` : ""}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -436,7 +438,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                                 className="w-20 h-7 text-sm text-right"
                               />
                             </div>
-                            {q > 0 && <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{sym}{lineTotal.toFixed(2)}</p>}
+                            {q > 0 && <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{sym}{lineTotal.toFixed(dp)}</p>}
                           </div>
                           <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
                             <Trash2 size={13} />
@@ -593,7 +595,7 @@ export default function SaleReturnPage() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{sr.refundMethod}</td>
                     <td className="px-4 py-3 text-right font-bold text-rose-600 dark:text-rose-400 tabular-nums">
-                      {sym}{sr.grandTotal.toFixed(2)}
+                      {sym}{sr.grandTotal.toFixed(dp)}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className={sr.status === "posted" ? "border-emerald-500 text-emerald-600 dark:text-emerald-400 text-[11px]" : "border-amber-400 text-amber-600 dark:text-amber-400 text-[11px]"}>

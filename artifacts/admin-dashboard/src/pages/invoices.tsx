@@ -10,7 +10,7 @@ import {
   receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, getJournalEntries,
 } from "@/lib/store";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
 import RichTextEditor from "@/components/RichTextEditor";
 import { printFullInvoice } from "@/lib/print-invoice-full";
@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
+const dp = getSettingsDecimalPlaces();
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_STYLE: Record<InvoiceStatus, { bg: string; dot: string; label: string }> = {
@@ -100,7 +102,7 @@ function fmtCcy(n: number): string {
     try { return (0).toLocaleString("en", { style: "currency", currency: getSettings().currency || "GBP", minimumFractionDigits: 0 }).replace(/[\d,. ]/g, "").trim(); }
     catch { return "£"; }
   })();
-  return `${sym}${n.toFixed(2)}`;
+  return `${sym}${n.toFixed(dp)}`;
 }
 
 function computeTotals(
@@ -286,14 +288,14 @@ interface CollectPaymentModalProps {
 }
 function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm }: CollectPaymentModalProps) {
   const sym = getSettingsCurrencySymbol();
-  const [amount, setAmount]   = useState(outstanding > 0 ? outstanding.toFixed(2) : "");
+  const [amount, setAmount]   = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
   const [method, setMethod]   = useState<SalePayment>("Bank Transfer");
   const [date,   setDate]     = useState(new Date().toISOString().slice(0, 10));
   const [note,   setNote]     = useState("");
 
   useEffect(() => {
     if (open) {
-      setAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
+      setAmount(outstanding > 0 ? outstanding.toFixed(dp) : "");
       setDate(new Date().toISOString().slice(0, 10));
       setNote("");
     }
@@ -334,7 +336,7 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
           {outstanding > 0 && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
               <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Outstanding Balance</span>
-              <span className="text-base font-bold font-mono text-amber-700 dark:text-amber-400">{sym}{outstanding.toFixed(2)}</span>
+              <span className="text-base font-bold font-mono text-amber-700 dark:text-amber-400">{sym}{outstanding.toFixed(dp)}</span>
             </div>
           )}
 
@@ -783,18 +785,18 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <div className="grid grid-cols-3 gap-3 mb-4">
                       <div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 text-center">
                         <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Invoice Total</p>
-                        <p className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{total.toFixed(2)}</p>
+                        <p className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{total.toFixed(dp)}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-center">
                         <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">Collected</p>
-                        <p className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">{sym}{paid.toFixed(2)}</p>
+                        <p className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">{sym}{paid.toFixed(dp)}</p>
                       </div>
                       <div className={`p-3 rounded-xl text-center ${balance > 0.005 ? "bg-red-50 dark:bg-red-950/20" : "bg-emerald-50 dark:bg-emerald-950/20"}`}>
                         <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${balance > 0.005 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-500"}`}>
                           {balance > 0.005 ? "Outstanding" : "✓ Settled"}
                         </p>
                         <p className={`text-sm font-bold font-mono ${balance > 0.005 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                          {sym}{balance.toFixed(2)}
+                          {sym}{balance.toFixed(dp)}
                         </p>
                       </div>
                     </div>
@@ -927,7 +929,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       <div className="pl-7 mt-1.5 flex justify-between items-center">
                         {item.sku && <span className="text-[10px] text-gray-400">SKU: {item.sku}</span>}
                         <span className="text-sm font-bold text-gray-900 dark:text-gray-100 ml-auto font-mono">
-                          = {sym}{lineTotal(item).toFixed(2)}
+                          = {sym}{lineTotal(item).toFixed(dp)}
                         </span>
                       </div>
                     </div>
@@ -946,40 +948,40 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 px-5 py-4">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                    <span>Subtotal</span><span className="font-mono">{sym}{subtotal.toFixed(2)}</span>
+                    <span>Subtotal</span><span className="font-mono">{sym}{subtotal.toFixed(dp)}</span>
                   </div>
                   {discountAmt > 0 && (
                     <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
-                      <span>Discount</span><span className="font-mono">−{sym}{discountAmt.toFixed(2)}</span>
+                      <span>Discount</span><span className="font-mono">−{sym}{discountAmt.toFixed(dp)}</span>
                     </div>
                   )}
                   {parseFloat(form.taxRate) > 0 && (
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                      <span>Tax / VAT ({form.taxRate}%)</span><span className="font-mono">{sym}{tax.toFixed(2)}</span>
+                      <span>Tax / VAT ({form.taxRate}%)</span><span className="font-mono">{sym}{tax.toFixed(dp)}</span>
                     </div>
                   )}
                   {shipping > 0 && (
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                       <span>Shipping{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
-                      <span className="font-mono">{sym}{shipping.toFixed(2)}</span>
+                      <span className="font-mono">{sym}{shipping.toFixed(dp)}</span>
                     </div>
                   )}
                   {handling > 0 && (
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                      <span>Handling</span><span className="font-mono">{sym}{handling.toFixed(2)}</span>
+                      <span>Handling</span><span className="font-mono">{sym}{handling.toFixed(dp)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-base font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
-                    <span>Total</span><span className="font-mono">{sym}{total.toFixed(2)}</span>
+                    <span>Total</span><span className="font-mono">{sym}{total.toFixed(dp)}</span>
                   </div>
                   {balance > 0.005 && (
                     <div className="flex justify-between text-sm font-bold text-red-600 dark:text-red-400">
-                      <span>Balance Due</span><span className="font-mono">{sym}{balance.toFixed(2)}</span>
+                      <span>Balance Due</span><span className="font-mono">{sym}{balance.toFixed(dp)}</span>
                     </div>
                   )}
                   {paid > 0 && balance <= 0.005 && (
                     <div className="flex justify-between text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                      <span>✓ Fully Paid</span><span className="font-mono">{sym}{total.toFixed(2)}</span>
+                      <span>✓ Fully Paid</span><span className="font-mono">{sym}{total.toFixed(dp)}</span>
                     </div>
                   )}
                 </div>
@@ -1134,11 +1136,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           onConfirm={(record) => {
             const newHistory = [...savedHistory, record];
             const newPaid = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-            const { total: invTotal } = computeTotals(invoice.items, form.taxRate, newPaid.toFixed(2), form.shippingFee, form.handlingFee);
+            const { total: invTotal } = computeTotals(invoice.items, form.taxRate, newPaid.toFixed(dp), form.shippingFee, form.handlingFee);
             const newStatus: InvoiceStatus = newPaid >= invTotal - 0.005 ? "Paid" : "Partial";
             setPayHist(newHistory);
-            setPayInput(newPaid.toFixed(2));
-            onCollectPayment(invoice.id, record, newPaid.toFixed(2), newStatus);
+            setPayInput(newPaid.toFixed(dp));
+            onCollectPayment(invoice.id, record, newPaid.toFixed(dp), newStatus);
           }}
         />
       )}
@@ -1495,9 +1497,9 @@ export default function InvoicesPage() {
                     { header: isPurchase ? "Supplier" : "Customer", key: "customer", width: 24 },
                     { header: "Status",         key: "status",        width: 14 },
                     { header: "Payment",        key: "paymentMethod", width: 16 },
-                    { header: "Total (£)",      key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).total.toFixed(2), width: 14 },
+                    { header: "Total (£)",      key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).total.toFixed(dp), width: 14 },
                     { header: "Paid (£)",       key: "amountPaid",    width: 12 },
-                    { header: "Balance (£)",    key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).balance.toFixed(2), width: 14 },
+                    { header: "Balance (£)",    key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).balance.toFixed(dp), width: 14 },
                   ]
                 );
               }}

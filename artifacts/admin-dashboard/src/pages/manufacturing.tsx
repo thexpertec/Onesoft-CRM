@@ -19,9 +19,11 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   getProducts, MFG_STATUSES, MfgInput, MfgOutput, ProductionCost, ManufacturingOrder,
 } from "@/lib/store";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { ExcelGridShell, ColDef, CELL_H } from "@/components/editable-cell";
+
+const dp = getSettingsDecimalPlaces();
 
 // ── Grid columns ──────────────────────────────────────────────────────────────
 const COLS: ColDef[] = [
@@ -222,7 +224,7 @@ export default function ManufacturingPage() {
             status:      order.status,
             _inputs:     `${order.inputs.length} mat.`,
             _outputs:    `${(order.outputs || []).length} prod.`,
-            _cost:       tCost > 0 ? `${sym}${tCost.toFixed(2)}` : "—",
+            _cost:       tCost > 0 ? `${sym}${tCost.toFixed(dp)}` : "—",
             notes:       order.notes || "—",
           };
           return (
@@ -379,7 +381,7 @@ export default function ManufacturingPage() {
                                 placeholder="0" className="h-10 text-[13px]" />
                             </td>
                             <td className="px-3 py-2 text-right text-[13px] font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
-                              {lineCost > 0 ? `${sym}${lineCost.toFixed(2)}` : "—"}
+                              {lineCost > 0 ? `${sym}${lineCost.toFixed(dp)}` : "—"}
                             </td>
                             <td className="px-1 py-2 text-center">
                               {form.inputs.length > 1 && (
@@ -398,7 +400,7 @@ export default function ManufacturingPage() {
                           {form.inputs.filter(i => i.rmName).length} material(s) selected
                         </td>
                         <td className="px-3 py-2.5 text-right text-[13px] font-bold text-emerald-700 dark:text-emerald-400">
-                          {sym}{rmCost.toFixed(2)}
+                          {sym}{rmCost.toFixed(dp)}
                         </td>
                         <td />
                       </tr>
@@ -582,7 +584,7 @@ export default function ManufacturingPage() {
                           <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2">
                             <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-semibold">Subtotal</td>
                             <td className="px-3 py-2.5 text-right text-[13px] font-bold text-violet-700 dark:text-violet-400">
-                              {sym}{prodCost.toFixed(2)}
+                              {sym}{prodCost.toFixed(dp)}
                             </td>
                             <td />
                           </tr>
@@ -611,12 +613,12 @@ export default function ManufacturingPage() {
                     ].map(r => (
                       <div key={r.label} className="flex justify-between items-center text-[14px]">
                         <span className="text-muted-foreground">{r.label}</span>
-                        <span className={`font-semibold ${r.color}`}>{sym}{r.value.toFixed(2)}</span>
+                        <span className={`font-semibold ${r.color}`}>{sym}{r.value.toFixed(dp)}</span>
                       </div>
                     ))}
                     <div className="border-t pt-3 flex justify-between items-center">
                       <span className="text-[15px] font-bold">Total Cost</span>
-                      <span className="text-[18px] font-bold text-orange-600">{sym}{totalCost.toFixed(2)}</span>
+                      <span className="text-[18px] font-bold text-orange-600">{sym}{totalCost.toFixed(dp)}</span>
                     </div>
                     {totalOutQty > 0 && totalCost > 0 && (
                       <div className="flex justify-between items-center text-[13px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-4 py-2.5">
@@ -681,7 +683,7 @@ export default function ManufacturingPage() {
                       ].map(p => (
                         <div key={p.label} className={`${p.color} rounded-xl px-3 py-1.5 text-white`}>
                           <div className="text-[9px] uppercase tracking-widest text-white/60 font-semibold">{p.label}</div>
-                          <div className="text-[13px] font-bold">{sym}{p.val.toFixed(2)}</div>
+                          <div className="text-[13px] font-bold">{sym}{p.val.toFixed(dp)}</div>
                         </div>
                       ))}
                       {canEdit && (viewOrder.status === "Draft" || viewOrder.status === "In Progress") && (
@@ -731,7 +733,7 @@ export default function ManufacturingPage() {
                                     <td className="px-3 py-2.5 font-medium">{inp.rmName || "—"}</td>
                                     <td className="px-3 py-2.5 font-semibold text-emerald-700 dark:text-emerald-400">{inp.qtyUsed}</td>
                                     <td className="px-3 py-2.5 text-muted-foreground">{inp.unit || "—"}</td>
-                                    <td className="px-3 py-2.5 text-right font-semibold">{lc > 0 ? `${sym}${lc.toFixed(2)}` : "—"}</td>
+                                    <td className="px-3 py-2.5 text-right font-semibold">{lc > 0 ? `${sym}${lc.toFixed(dp)}` : "—"}</td>
                                   </tr>
                                 );
                               })}
@@ -739,7 +741,7 @@ export default function ManufacturingPage() {
                             <tfoot>
                               <tr className="bg-emerald-50/60 dark:bg-emerald-950/10 border-t-2 border-emerald-200 dark:border-emerald-800">
                                 <td colSpan={3} className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Total RM Cost</td>
-                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700 dark:text-emerald-400">{sym}{vRMCost.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700 dark:text-emerald-400">{sym}{vRMCost.toFixed(dp)}</td>
                               </tr>
                             </tfoot>
                           </table>
@@ -800,7 +802,7 @@ export default function ManufacturingPage() {
                                     <td className="px-3 py-2.5 font-medium">{out.productName || "—"}</td>
                                     <td className="px-3 py-2.5 font-semibold text-orange-700 dark:text-orange-400">{out.qty}</td>
                                     <td className="px-3 py-2.5 text-muted-foreground">{out.unit || "—"}</td>
-                                    <td className="px-3 py-2.5 text-right">{estCost > 0 ? `${sym}${estCost.toFixed(2)}` : "—"}</td>
+                                    <td className="px-3 py-2.5 text-right">{estCost > 0 ? `${sym}${estCost.toFixed(dp)}` : "—"}</td>
                                     <td className="px-3 py-2.5 text-right font-bold text-orange-700 dark:text-orange-400">{unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}</td>
                                   </tr>
                                 );
@@ -809,7 +811,7 @@ export default function ManufacturingPage() {
                             <tfoot>
                               <tr className="bg-orange-50/60 dark:bg-orange-950/10 border-t-2 border-orange-200 dark:border-orange-800">
                                 <td colSpan={3} className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Grand Total</td>
-                                <td className="px-3 py-2.5 text-right font-bold text-orange-600">{sym}{vTotal.toFixed(2)}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-orange-600">{sym}{vTotal.toFixed(dp)}</td>
                                 <td className="px-3 py-2.5 text-right font-bold text-orange-600">{vOutQty > 0 ? `${sym}${(vTotal/vOutQty).toFixed(3)}/unit` : "—"}</td>
                               </tr>
                             </tfoot>
@@ -850,7 +852,7 @@ export default function ManufacturingPage() {
                               <tfoot>
                                 <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2 border-violet-200 dark:border-violet-800">
                                   <td className="px-3 py-2.5 text-[11px] font-bold text-muted-foreground uppercase">Total</td>
-                                  <td className="px-3 py-2.5 text-right font-bold text-violet-700 dark:text-violet-400">{sym}{vProdCost.toFixed(2)}</td>
+                                  <td className="px-3 py-2.5 text-right font-bold text-violet-700 dark:text-violet-400">{sym}{vProdCost.toFixed(dp)}</td>
                                 </tr>
                               </tfoot>
                             </table>
@@ -869,12 +871,12 @@ export default function ManufacturingPage() {
                             ].map(r => (
                               <div key={r.label} className={`flex justify-between items-center rounded-lg px-3 py-2 ${r.bg}`}>
                                 <span className="text-[13px] text-muted-foreground">{r.label}</span>
-                                <span className={`text-[13px] font-bold ${r.c}`}>{sym}{r.val.toFixed(2)}</span>
+                                <span className={`text-[13px] font-bold ${r.c}`}>{sym}{r.val.toFixed(dp)}</span>
                               </div>
                             ))}
                             <div className="flex justify-between items-center rounded-lg px-3 py-2.5 bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
                               <span className="text-[14px] font-bold">Total Cost</span>
-                              <span className="text-[15px] font-bold text-orange-600">{sym}{vTotal.toFixed(2)}</span>
+                              <span className="text-[15px] font-bold text-orange-600">{sym}{vTotal.toFixed(dp)}</span>
                             </div>
                             {vOutQty > 0 && vTotal > 0 && (
                               <div className="flex justify-between items-center px-3 py-1.5">

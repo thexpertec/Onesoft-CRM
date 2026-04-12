@@ -14,8 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
+
+const dp = getSettingsDecimalPlaces();
 
 type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "status" | "condition" | "description";
 
@@ -494,13 +496,13 @@ export default function ProductsPage() {
                 { header: "Retail Price",      key: "price",           width: 14 },
                 { header: "Retail Profit",     key: "retailProfit",    width: 14, getValue: (r: Product) => {
                     const cost = parseFloat(r.costPrice ?? ""); const retail = parseFloat(r.price ?? "");
-                    return (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(2) : "";
+                    return (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(dp) : "";
                   }
                 },
                 { header: "Wholesale Price",   key: "wholesalePrice",  width: 16 },
                 { header: "Wholesale Profit",  key: "wholesaleProfit", width: 17, getValue: (r: Product) => {
                     const cost = parseFloat(r.costPrice ?? ""); const ws = parseFloat(r.wholesalePrice ?? "");
-                    return (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(2) : "";
+                    return (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(dp) : "";
                   }
                 },
                 { header: "Status",            key: "status",          width: 12 },
@@ -795,10 +797,10 @@ export default function ProductsPage() {
                   const cost = parseFloat(prod.costPrice ?? "");
                   if (c.field === "retailProfit") {
                     const retail = parseFloat(prod.price ?? "");
-                    rawVal = (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(2) : "";
+                    rawVal = (!isNaN(cost) && !isNaN(retail)) ? (retail - cost).toFixed(dp) : "";
                   } else if (c.field === "wholesaleProfit") {
                     const ws = parseFloat(prod.wholesalePrice ?? "");
-                    rawVal = (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(2) : "";
+                    rawVal = (!isNaN(cost) && !isNaN(ws)) ? (ws - cost).toFixed(dp) : "";
                   } else {
                     rawVal = String((prod as unknown as Record<string, string>)[c.field] ?? "");
                   }
@@ -1024,7 +1026,7 @@ export default function ProductsPage() {
                     return (
                       <div className={`h-9 flex items-center px-3 rounded-md border border-dashed border-border bg-background text-sm font-medium
                         ${profit === null ? "text-muted-foreground/40" : profit > 0 ? "text-emerald-600 dark:text-emerald-400" : profit < 0 ? "text-red-500" : "text-muted-foreground"}`}>
-                        {profit !== null ? profit.toFixed(2) : "—"}
+                        {profit !== null ? profit.toFixed(dp) : "—"}
                       </div>
                     );
                   })()}
@@ -1052,7 +1054,7 @@ export default function ProductsPage() {
                     return (
                       <div className={`h-9 flex items-center px-3 rounded-md border border-dashed border-border bg-background text-sm font-medium
                         ${profit === null ? "text-muted-foreground/40" : profit > 0 ? "text-emerald-600 dark:text-emerald-400" : profit < 0 ? "text-red-500" : "text-muted-foreground"}`}>
-                        {profit !== null ? profit.toFixed(2) : "—"}
+                        {profit !== null ? profit.toFixed(dp) : "—"}
                       </div>
                     );
                   })()}
@@ -1386,7 +1388,7 @@ export default function ProductsPage() {
                           {card.icon} {card.label}
                         </div>
                         <p className={`text-[15px] font-bold ${card.isProfit ? (card.value === null ? "text-muted-foreground" : (card.value as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : (card.value as number) < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground") : ""}`}>
-                          {card.value === null || (card.value as number) === 0 && !card.isProfit ? "—" : card.value !== null ? `${sym}${(card.value as number).toFixed(2)}` : "—"}
+                          {card.value === null || (card.value as number) === 0 && !card.isProfit ? "—" : card.value !== null ? `${sym}${(card.value as number).toFixed(dp)}` : "—"}
                         </p>
                         {card.sub && <p className="text-[10px] text-muted-foreground">{card.sub}</p>}
                       </div>
@@ -1462,7 +1464,7 @@ export default function ProductsPage() {
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                       <span><span className="font-bold text-blue-600 dark:text-blue-400">{totalPurchasedQty}</span> purchased</span>
                       <span><span className="font-bold text-emerald-600 dark:text-emerald-400">{totalSoldQty}</span> sold</span>
-                      <span><span className="font-bold text-foreground">{sym}{totalRevenue.toFixed(2)}</span> revenue</span>
+                      <span><span className="font-bold text-foreground">{sym}{totalRevenue.toFixed(dp)}</span> revenue</span>
                     </div>
                   </div>
                   {ledger.length === 0 ? (
@@ -1497,8 +1499,8 @@ export default function ProductsPage() {
                               <td className="px-3 py-2 font-mono font-medium text-[11px]">{e.ref}</td>
                               <td className="px-3 py-2 max-w-[120px] truncate text-muted-foreground" title={e.party}>{e.party || "—"}</td>
                               <td className="px-3 py-2 font-semibold text-right">{e.qty}</td>
-                              <td className="px-3 py-2 text-right">{e.unitPrice.toFixed(2)}</td>
-                              <td className="px-3 py-2 font-semibold text-right">{e.total.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right">{e.unitPrice.toFixed(dp)}</td>
+                              <td className="px-3 py-2 font-semibold text-right">{e.total.toFixed(dp)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1507,7 +1509,7 @@ export default function ProductsPage() {
                             <td colSpan={4} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Totals</td>
                             <td className="px-3 py-2 font-bold text-right text-[12px]">{totalPurchasedQty - totalSoldQty}</td>
                             <td className="px-3 py-2"></td>
-                            <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{(ledger.reduce((s, e) => s + e.total, 0)).toFixed(2)}</td>
+                            <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{(ledger.reduce((s, e) => s + e.total, 0)).toFixed(dp)}</td>
                           </tr>
                         </tfoot>
                       </table>

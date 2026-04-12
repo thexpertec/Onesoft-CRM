@@ -8,7 +8,10 @@ import { useAccounts } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { Account, JournalEntry } from "@/lib/store";
+import { getSettingsDecimalPlaces } from "@/lib/currencies";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
+const dp = getSettingsDecimalPlaces();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -271,7 +274,7 @@ export default function JournalEntryPage() {
       toast({ title: "At least 2 ledger entries required", variant: "destructive" }); return;
     }
     if (!balanced && status === "posted") {
-      toast({ title: `Entry is unbalanced — difference: ${diff.toFixed(2)}`, variant: "destructive" }); return;
+      toast({ title: `Entry is unbalanced — difference: ${diff.toFixed(dp)}`, variant: "destructive" }); return;
     }
     const lines = validLines.map(r => ({
       id: crypto.randomUUID(),

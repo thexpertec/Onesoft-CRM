@@ -15,10 +15,12 @@ import {
 import { useSalesAgents, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
-import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { downloadExcel } from "@/lib/export-excel";
 import { useToast } from "@/hooks/use-toast";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
+
+const dp = getSettingsDecimalPlaces();
 
 type EditableField = "name" | "email" | "phone" | "region" | "city" | "area" | "commissionRate" | "targetAmount" | "status" | "joinDate" | "notes";
 type NewRow = Record<string, string>;
@@ -522,21 +524,21 @@ export default function SalesAgentsPage() {
                       {
                         icon: <BadgeDollarSign size={15} />,
                         label: "Total Sales",
-                        value: `${sym}${agentStats.totalSales.toFixed(2)}`,
+                        value: `${sym}${agentStats.totalSales.toFixed(dp)}`,
                         sub: "all time",
                         color: "bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400",
                       },
                       {
                         icon: <TrendingUp size={15} />,
                         label: "Commission Earned",
-                        value: `${sym}${agentStats.commission.toFixed(2)}`,
+                        value: `${sym}${agentStats.commission.toFixed(dp)}`,
                         sub: agentStats.rate > 0 ? `${viewAgent.commissionRate}% of sales` : "No rate set",
                         color: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400",
                       },
                       {
                         icon: <Target size={15} />,
                         label: "This Month",
-                        value: `${sym}${agentStats.thisMonthTotal.toFixed(2)}`,
+                        value: `${sym}${agentStats.thisMonthTotal.toFixed(dp)}`,
                         sub: agentStats.target > 0
                           ? `${Math.round((agentStats.thisMonthTotal / agentStats.target) * 100)}% of ${sym}${agentStats.target.toLocaleString()} target`
                           : "No target set",
@@ -619,7 +621,7 @@ export default function SalesAgentsPage() {
                                     }`}>{row.type}</span>
                                   </td>
                                   <td className="px-3 py-2 max-w-[100px] truncate" title={row.customer}>{row.customer || "—"}</td>
-                                  <td className="px-3 py-2 font-semibold text-right">{sym}{row.amount.toFixed(2)}</td>
+                                  <td className="px-3 py-2 font-semibold text-right">{sym}{row.amount.toFixed(dp)}</td>
                                   <td className="px-3 py-2">
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                       row.status === "Paid"      || row.status === "Completed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
@@ -635,7 +637,7 @@ export default function SalesAgentsPage() {
                             <tfoot>
                               <tr className="bg-muted/40 border-t-2">
                                 <td colSpan={4} className="px-3 py-2 text-[11px] font-bold text-muted-foreground uppercase">Grand Total</td>
-                                <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{grandTotal.toFixed(2)}</td>
+                                <td className="px-3 py-2 font-bold text-right text-[12px]">{sym}{grandTotal.toFixed(dp)}</td>
                                 <td />
                               </tr>
                             </tfoot>

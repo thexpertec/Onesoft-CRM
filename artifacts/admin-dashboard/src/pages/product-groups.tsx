@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { useProductGroups } from "@/hooks/use-data";
 import { useProducts } from "@/hooks/use-data";
 import type { ProductGroup, ProductGroupItem } from "@/lib/store";
+import { getSettingsDecimalPlaces } from "@/lib/currencies";
+
+const dp = getSettingsDecimalPlaces();
 
 const GROUP_COLORS = [
   "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
@@ -16,7 +19,7 @@ const GROUP_COLORS = [
 
 function fmt(v?: string) {
   const n = parseFloat(v ?? "0");
-  return isNaN(n) ? "—" : `£${n.toFixed(2)}`;
+  return isNaN(n) ? "—" : `£${n.toFixed(dp)}`;
 }
 
 function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
@@ -392,13 +395,13 @@ function GroupDetail({
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-right text-gray-600 dark:text-gray-400">
-                      {purchase > 0 ? `£${purchase.toFixed(2)}` : <span className="text-gray-300">—</span>}
+                      {purchase > 0 ? `£${purchase.toFixed(dp)}` : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right text-gray-600 dark:text-gray-400">
-                      {cost > 0 ? `£${cost.toFixed(2)}` : <span className="text-gray-300">—</span>}
+                      {cost > 0 ? `£${cost.toFixed(dp)}` : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                      {sale > 0 ? `£${sale.toFixed(2)}` : <span className="text-gray-300">—</span>}
+                      {sale > 0 ? `£${sale.toFixed(dp)}` : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-2 py-2.5">
                       <button
@@ -419,13 +422,13 @@ function GroupDetail({
                   <td className="px-3 py-2.5 text-gray-500">{group.items.length} product{group.items.length !== 1 ? "s" : ""}</td>
                   <td className="px-3 py-2.5 text-center text-gray-700 dark:text-gray-300">{totals.totalQty}</td>
                   <td className="px-3 py-2.5 text-right text-gray-600 dark:text-gray-400">
-                    {totals.totalPurchase > 0 ? `£${totals.totalPurchase.toFixed(2)}` : "—"}
+                    {totals.totalPurchase > 0 ? `£${totals.totalPurchase.toFixed(dp)}` : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-right text-gray-600 dark:text-gray-400">
-                    {totals.totalCost > 0 ? `£${totals.totalCost.toFixed(2)}` : "—"}
+                    {totals.totalCost > 0 ? `£${totals.totalCost.toFixed(dp)}` : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-right text-indigo-600 dark:text-indigo-400 text-base">
-                    {totals.totalSale > 0 ? `£${totals.totalSale.toFixed(2)}` : "—"}
+                    {totals.totalSale > 0 ? `£${totals.totalSale.toFixed(dp)}` : "—"}
                   </td>
                   <td />
                 </tr>

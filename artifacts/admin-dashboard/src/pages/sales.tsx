@@ -25,7 +25,9 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
-import { getSettingsCurrencySymbol, fmtMoney } from "@/lib/currencies";
+import { getSettingsCurrencySymbol, fmtMoney, getSettingsDecimalPlaces } from "@/lib/currencies";
+
+const dp = getSettingsDecimalPlaces();
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_BG: Record<SaleStatus, string> = {
@@ -160,7 +162,7 @@ function SaleCompleteModal({
   const paid        = parseFloat(sale.amountPaid || "0") || 0;
   const change      = Math.max(0, paid - total);
   const balance     = Math.max(0, total - paid);
-  const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
+  const fmt = (n: number) => `${sym}${n.toFixed(dp)}`;
 
   function handlePrint() {
     try { printReceiptHtml(buildSaleReceiptHtml(sale, settings)); } catch { /* ignore */ }
@@ -297,10 +299,10 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
   const overPaid  = paid > total;
 
   const sym = getSettingsCurrencySymbol();
-  const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
+  const fmt = (n: number) => `${sym}${n.toFixed(dp)}`;
 
   const presets = [
-    { label: "Exact", value: total.toFixed(2) },
+    { label: "Exact", value: total.toFixed(dp) },
     ...([5, 10, 20, 50, 100, 200].filter(v => v >= Math.ceil(paid)).slice(0, 4).map(v => ({ label: `${sym}${v}`, value: String(Math.min(v, total)) }))),
   ];
 
@@ -425,7 +427,7 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
                   onChange={e => setPayAmount(e.target.value)}
                   onBlur={e => {
                     const v = parseFloat(e.target.value) || 0;
-                    setPayAmount(Math.min(v, total).toFixed(2));
+                    setPayAmount(Math.min(v, total).toFixed(dp));
                   }}
                   onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
                   className="w-full pl-10 pr-3 py-3 text-[32px] font-black text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-xl outline-none focus:border-blue-400 dark:focus:border-blue-500 font-mono tabular-nums transition-colors"
@@ -933,11 +935,11 @@ function POSView({
                       {/* Subtotal */}
                       <div className="shrink-0 w-[88px] text-right">
                         <div className="text-[18px] font-extrabold font-mono tabular-nums text-gray-900 dark:text-gray-100 leading-tight">
-                          {sym}{lineTotal(item).toFixed(2)}
+                          {sym}{lineTotal(item).toFixed(dp)}
                         </div>
                         {lineDiscAmt(item) > 0 && (
                           <div className="text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 font-mono">
-                            −{sym}{lineDiscAmt(item).toFixed(2)}
+                            −{sym}{lineDiscAmt(item).toFixed(dp)}
                           </div>
                         )}
                       </div>
@@ -962,18 +964,18 @@ function POSView({
             <div className="px-5 pt-3.5 pb-2 space-y-1.5">
               <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
                 <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
-                <span className="font-mono font-semibold">{sym}{subTotal(localItems).toFixed(2)}</span>
+                <span className="font-mono font-semibold">{sym}{subTotal(localItems).toFixed(dp)}</span>
               </div>
               {discountAmt > 0 && (
                 <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
                   <span>Discount savings</span>
-                  <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(2)}</span>
+                  <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(dp)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-zinc-800">
                 <span className="text-[14px] font-bold text-gray-600 dark:text-gray-300">Total to Pay</span>
                 <span className="text-[26px] font-black font-mono tabular-nums text-blue-600 dark:text-blue-400 leading-none">
-                  {sym}{grandTotal.toFixed(2)}
+                  {sym}{grandTotal.toFixed(dp)}
                 </span>
               </div>
             </div>
@@ -1496,11 +1498,11 @@ export default function SalesPage() {
       const totalQty = sale.items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
       return Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
     }
-    if (field === "total")     return saleTotal(sale.items).toFixed(2);
+    if (field === "total")     return saleTotal(sale.items).toFixed(dp);
     if (field === "balance") {
       const total = saleTotal(sale.items);
       const paid  = parseFloat(sale.amountPaid || "0");
-      return Math.max(0, total - paid).toFixed(2);
+      return Math.max(0, total - paid).toFixed(dp);
     }
     if (field === "payStatus") {
       if (sale.status === "Cancelled" || sale.status === "Refunded" || sale.status === "Draft") return "N/A";

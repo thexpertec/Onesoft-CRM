@@ -849,6 +849,32 @@ export default function SettingsPage() {
                       className="h-9 text-[13px]" placeholder="GB 123 4567 89" />
                   </Field>
 
+                  <Field label="Decimal Places" hint="Number of decimal places shown on all prices, totals and amounts across the system.">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {([0, 1, 2, 3, 4] as const).map(dp => {
+                        const label = dp === 0 ? "None" : "." + "0".repeat(dp);
+                        const active = (form.decimalPlaces ?? 2) === dp;
+                        return (
+                          <button
+                            key={dp}
+                            type="button"
+                            onClick={() => set("decimalPlaces", dp)}
+                            className={`h-9 px-3 rounded-lg border-2 text-[13px] font-semibold font-mono transition-all ${
+                              active
+                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                                : "border-border text-muted-foreground hover:border-indigo-300 dark:hover:border-indigo-700"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                      <span className="text-[11px] text-muted-foreground ml-1">
+                        Preview: {(1234.5678).toFixed(form.decimalPlaces ?? 2)}
+                      </span>
+                    </div>
+                  </Field>
+
                   <Field label="Fiscal Year Start">
                     <Select value={form.fiscalYearStart} onValueChange={v => set("fiscalYearStart", v)}>
                       <SelectTrigger className="h-9 text-[13px]">

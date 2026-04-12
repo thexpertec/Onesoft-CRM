@@ -2585,6 +2585,8 @@ export type AppSettings = {
   allowNegativeStock:   boolean;  // if false, POS blocks selling when stock qty <= 0
   // ── POS discount behaviour ──
   posDiscountType:      "pct" | "amt";  // default discount mode for new POS line items
+  // ── Number formatting ──
+  decimalPlaces:        0 | 1 | 2 | 3 | 4;  // decimal places for all monetary/numeric display
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2626,6 +2628,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accPurchasePayable:   "",
   allowNegativeStock:   true,
   posDiscountType:      "pct",
+  decimalPlaces:        2,
 };
 
 export function getSettings(): AppSettings {
