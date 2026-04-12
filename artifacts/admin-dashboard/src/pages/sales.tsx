@@ -526,6 +526,13 @@ function POSView({
     return Array.from(set).sort();
   }, [allProducts]);
 
+  // Stock qty per SKU (moved here so filteredProds can use it for sorting)
+  const stockMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    stock.forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
+    return m;
+  }, [stock]);
+
   // ── Sales summary for top-selling sorts ──────────────────────────────────
   const saleSummary = useMemo(() => {
     const qtyMap: Record<string, number>    = {};
@@ -575,16 +582,16 @@ function POSView({
         sorted.sort((a, b) => parseFloat(a.price || "0") - parseFloat(b.price || "0"));
         break;
       case "stock-high":
-        sorted.sort((a, b) => (stock[b.sku] ?? 0) - (stock[a.sku] ?? 0));
+        sorted.sort((a, b) => (stockMap[b.sku] ?? 0) - (stockMap[a.sku] ?? 0));
         break;
       case "stock-low":
-        sorted.sort((a, b) => (stock[a.sku] ?? 0) - (stock[b.sku] ?? 0));
+        sorted.sort((a, b) => (stockMap[a.sku] ?? 0) - (stockMap[b.sku] ?? 0));
         break;
       default:
         break;
     }
     return sorted;
-  }, [allProducts, catFilter, prodSearch, prodSort, saleSummary, stock]);
+  }, [allProducts, catFilter, prodSearch, prodSort, saleSummary, stockMap]);
 
   const grandTotal   = localItems.reduce((s, i) => s + lineTotal(i), 0);
   const discountAmt  = discountTotal(localItems);
@@ -600,13 +607,6 @@ function POSView({
     localItems.forEach(i => { if (i.sku) m[i.sku] = (m[i.sku] || 0) + (parseFloat(i.qty) || 0); });
     return m;
   }, [localItems]);
-
-  // Stock qty per SKU — reactive: updates whenever stock changes (e.g. after a sale deducts)
-  const stockMap = useMemo(() => {
-    const m: Record<string, number> = {};
-    stock.forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
-    return m;
-  }, [stock]);
 
   // Whether overselling is allowed (read once per render; Settings.allowNegativeStock)
   const allowNegativeStock = useMemo(() => getSettings().allowNegativeStock !== false, []);
@@ -1092,42 +1092,43 @@ function POSView({
               )}
             </div>
 
-            {/* Retail / Wholesale toggle */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
-              <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
-                <button
-                  onClick={() => onPriceModeChange("retail")}
-                  className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                >
-                  Retail
-                </button>
-                <button
-                  onClick={() => onPriceModeChange("wholesale")}
-                  className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                >
-                  Wholesale
-                </button>
+            {/* Retail / Wholesale toggle + Sort by — same row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
+                <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
+                  <button
+                    onClick={() => onPriceModeChange("retail")}
+                    className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                  >
+                    Retail
+                  </button>
+                  <button
+                    onClick={() => onPriceModeChange("wholesale")}
+                    className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                  >
+                    Wholesale
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* Sort by dropdown */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
-              <select
-                value={prodSort}
-                onChange={e => setProdSort(e.target.value)}
-                className="text-[11px] font-semibold border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
-              >
-                <option value="listing">Listing Sequence</option>
-                <option value="qty">Top Selling (Qty)</option>
-                <option value="orders">Top Selling (Orders)</option>
-                <option value="az">A – Z</option>
-                <option value="price-high">Highest Price</option>
-                <option value="price-low">Lowest Price</option>
-                <option value="stock-high">Highest Stock</option>
-                <option value="stock-low">Lowest Stock</option>
-              </select>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
+                <select
+                  value={prodSort}
+                  onChange={e => setProdSort(e.target.value)}
+                  className="text-[11px] font-semibold border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                >
+                  <option value="listing">Listing Sequence</option>
+                  <option value="qty">Top Selling (Qty)</option>
+                  <option value="orders">Top Selling (Orders)</option>
+                  <option value="az">A – Z</option>
+                  <option value="price-high">Highest Price</option>
+                  <option value="price-low">Lowest Price</option>
+                  <option value="stock-high">Highest Stock</option>
+                  <option value="stock-low">Lowest Stock</option>
+                </select>
+              </div>
             </div>
 
             {/* Category pills */}
