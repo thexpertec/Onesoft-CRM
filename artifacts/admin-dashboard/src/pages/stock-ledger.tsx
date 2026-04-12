@@ -1,13 +1,15 @@
 import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useToast } from "@/components/ui/use-toast";
 import {
   getStock, getStockLedger, deleteStockLedgerEntry, getSettings,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
+  reconcileStockItem, reconcileAllStock,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
   TrendingUp, TrendingDown, Package, BarChart3,
-  Filter, X, Trash2, AlertTriangle, ChevronDown,
+  Filter, X, Trash2, AlertTriangle, ChevronDown, Wrench, CheckCircle2,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -264,6 +266,7 @@ function printLedger(
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function StockLedgerPage() {
   const [, navigate]  = useLocation();
+  const { toast }     = useToast();
 
   const [search,    setSearch]    = useState("");
   const [productId, setProductId] = useState<string>("__all__");
@@ -283,6 +286,27 @@ export default function StockLedgerPage() {
     setDeleteId(null);
     setRevision(r => r + 1);
   }, [deleteId]);
+
+  const handleReconcileOne = useCallback(() => {
+    if (!productId || productId === "__all__") return;
+    const fixed = reconcileStockItem(productId);
+    setRevision(r => r + 1);
+    if (fixed) {
+      toast({ title: "Reconciled", description: "A correction entry has been added to bring the ledger in sync." });
+    } else {
+      toast({ title: "Already in sync", description: "The ledger balance already matches the actual stock quantity." });
+    }
+  }, [productId, toast]);
+
+  const handleReconcileAll = useCallback(() => {
+    const count = reconcileAllStock();
+    setRevision(r => r + 1);
+    if (count > 0) {
+      toast({ title: `${count} item${count !== 1 ? "s" : ""} reconciled`, description: "Correction entries added for all mismatched stock items." });
+    } else {
+      toast({ title: "All in sync", description: "All stock ledger balances already match their actual quantities." });
+    }
+  }, [toast]);
 
   const productOpts = useMemo(() =>
     stocks.filter(s =>
@@ -336,10 +360,10 @@ export default function StockLedgerPage() {
       <header className="bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-4 md:px-6 py-0 flex items-center justify-between gap-3 h-14 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate("/stock")}
+            onClick={() => navigate("/products")}
             className="flex items-center gap-1.5 text-sm font-medium text-gray-400 dark:text-zinc-500 hover:text-gray-700 dark:hover:text-zinc-200 transition-colors shrink-0"
           >
-            <ArrowLeft size={14}/> Stock
+            <ArrowLeft size={14}/> Products
           </button>
           <span className="text-gray-200 dark:text-zinc-700 text-lg">/</span>
           <div className="flex items-center gap-2 min-w-0">
@@ -350,6 +374,15 @@ export default function StockLedgerPage() {
           </div>
         </div>
 
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleReconcileAll}
+            title="Scan all stock items and create correction ledger entries where the ledger balance doesn't match actual quantity"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 dark:border-violet-800 text-xs font-semibold text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
+          >
+            <Wrench size={12}/> Reconcile All
+          </button>
+
         <button
           onClick={() => printLedger(
             selectedStock?.productName ?? "All Products",
@@ -357,10 +390,11 @@ export default function StockLedgerPage() {
             openingQty, totalIn, totalOut, closingQty, unit,
             settings.companyName || "Onesoft",
           )}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm shrink-0"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm"
         >
           <Printer size={13}/> Print / Export
         </button>
+        </div>
       </header>
 
       {/* ── Filter Bar ── */}
@@ -586,12 +620,18 @@ export default function StockLedgerPage() {
                 <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0 mt-0.5">
                   <AlertTriangle size={15} className="text-amber-600"/>
                 </div>
-                <div className="text-sm">
-                  <p className="font-bold text-amber-800 dark:text-amber-400 mb-0.5">Ledger / Stock mismatch detected</p>
-                  <p className="text-amber-700 dark:text-amber-500 text-xs leading-relaxed">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-amber-800 dark:text-amber-400 mb-1 text-sm">Ledger / Stock mismatch detected</p>
+                  <p className="text-amber-700 dark:text-amber-500 text-xs leading-relaxed mb-2">
                     Ledger closing is <strong>{closingQty.toLocaleString("en-GB", { maximumFractionDigits: 3 })} {unit}</strong> but actual stock card shows <strong>{actualQty!.toLocaleString("en-GB", { maximumFractionDigits: 3 })} {unit}</strong>.
-                    A phantom or duplicate entry may exist — hover over a row and click the trash icon to remove it.
+                    This usually means the stock quantity was set directly (e.g. opening stock) without a corresponding ledger entry.
                   </p>
+                  <button
+                    onClick={handleReconcileOne}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-colors shadow-sm"
+                  >
+                    <CheckCircle2 size={12}/> Reconcile this item — add correction entry ({(actualQty! - closingQty) > 0 ? "+" : ""}{(actualQty! - closingQty).toLocaleString("en-GB", { maximumFractionDigits: 3 })} {unit})
+                  </button>
                 </div>
               </div>
             )}

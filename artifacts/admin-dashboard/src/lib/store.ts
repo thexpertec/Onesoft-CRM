@@ -1725,6 +1725,59 @@ export const addManualLedgerEntry = (entry: Omit<StockLedgerEntry, "id" | "creat
   batchLedger([entry]);
 };
 
+/**
+ * Reconcile a single stock item: if the ledger's closing balance does not
+ * match the stock item's actual quantity, insert a correction entry.
+ * Returns true if a correction was written, false if already in sync.
+ */
+export function reconcileStockItem(stockId: string): boolean {
+  const item = getStock().find(s => s.id === stockId);
+  if (!item) return false;
+
+  const actualQty = parseFloat(item.quantity) || 0;
+
+  // Compute ledger closing for this item (all-time)
+  const entries = getStockLedger()
+    .filter(e => e.entityId === stockId)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+
+  const ledgerQty = entries.length === 0 ? 0 : entries[entries.length - 1].qtyAfter;
+  const diff = actualQty - ledgerQty;
+
+  if (Math.abs(diff) < 0.001) return false; // already in sync
+
+  const today = new Date().toISOString().slice(0, 10);
+  batchLedger([{
+    entityType: "product",
+    entityId:   stockId,
+    entityName: item.productName,
+    date:       today,
+    txType:     entries.length === 0 ? "opening-balance" : "manual-adjustment",
+    reference:  "RECONCILE",
+    qtyBefore:  ledgerQty,
+    qtyChange:  diff,
+    qtyAfter:   actualQty,
+    unit:       item.unit,
+    notes:      entries.length === 0
+      ? `Opening balance (reconciliation) — ${item.store}`
+      : `Stock reconciliation — ledger was ${ledgerQty}, actual stock ${actualQty}`,
+  }]);
+  return true;
+}
+
+/**
+ * Reconcile ALL stock items in one pass. Returns the count of items that
+ * had a correction entry written.
+ */
+export function reconcileAllStock(): number {
+  const stocks = getStock();
+  let fixed = 0;
+  for (const s of stocks) {
+    if (reconcileStockItem(s.id)) fixed++;
+  }
+  return fixed;
+}
+
 // ─── Stock Mutations (with Ledger) ────────────────────────────────────────────
 export const deductStockForSale = (saleItems: SaleItem[], reference = ""): void => {
   const stocks = getStock();
