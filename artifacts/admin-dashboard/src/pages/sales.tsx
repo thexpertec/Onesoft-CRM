@@ -942,6 +942,18 @@ function POSView({
                             −{sym}{lineDiscAmt(item).toFixed(dp)}
                           </div>
                         )}
+                        {settings.showPosProfit !== false && (() => {
+                          const cp = parseFloat(prod?.costPrice ?? "0") || 0;
+                          if (cp <= 0) return null;
+                          const qty = parseFloat(item.qty) || 0;
+                          const profit = lineTotal(item) - cp * qty;
+                          if (profit <= 0) return null;
+                          return (
+                            <div className="text-[11px] font-bold font-mono text-green-600 dark:text-green-400 tabular-nums">
+                              +{sym}{profit.toFixed(dp)}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Delete */}

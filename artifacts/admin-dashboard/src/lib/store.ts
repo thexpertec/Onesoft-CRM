@@ -2599,6 +2599,8 @@ export type AppSettings = {
   decimalPlaces:        0 | 1 | 2 | 3 | 4;  // decimal places for all monetary/numeric display
   // ── Reference number padding ──
   referenceDigits:      number;  // how many digits to pad the sequence number (e.g. 4 → SAL-0001, 5 → SAL-00001)
+  // ── POS display ──
+  showPosProfit:        boolean; // show green profit amount under each line subtotal in POS
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2642,6 +2644,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   posDiscountType:      "pct",
   decimalPlaces:        2,
   referenceDigits:      4,
+  showPosProfit:        true,
 };
 
 export function getSettings(): AppSettings {
