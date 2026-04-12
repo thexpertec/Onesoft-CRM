@@ -14,8 +14,9 @@ import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
-  MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck,
+  MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
 } from "lucide-react";
+import BarcodeScanner from "@/components/barcode-scanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -514,6 +515,7 @@ function POSView({
   const [payModalOpen,  setPayModalOpen]  = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
+  const [scannerOpen,   setScannerOpen]   = useState(false);
 
   // ── Quick-add customer dialog ────────────────────────────────────────────
   const [qaOpen,  setQaOpen]  = useState(false);
@@ -585,7 +587,8 @@ function POSView({
       list = list.filter(p =>
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q),
+        p.category.toLowerCase().includes(q) ||
+        (p.barcode ?? "").toLowerCase().includes(q),
       );
     }
     const sorted = [...list];
@@ -1121,25 +1124,35 @@ function POSView({
 
           {/* Search + filters */}
           <div className="px-4 pt-3 pb-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 space-y-2.5 shrink-0">
-            {/* Search */}
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                autoFocus
-                type="text"
-                value={prodSearch}
-                onChange={e => setProdSearch(e.target.value)}
-                placeholder="Search by name or SKU…"
-                className="w-full pl-9 pr-8 py-2.5 text-[13px] border-2 border-gray-200 dark:border-zinc-700 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-700 transition-all placeholder:text-gray-400 dark:placeholder:text-zinc-500"
-              />
-              {prodSearch && (
-                <button
-                  onClick={() => setProdSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-zinc-600 hover:bg-gray-400 dark:hover:bg-zinc-500 flex items-center justify-center transition-colors"
-                >
-                  <X size={10} className="text-white" />
-                </button>
-              )}
+            {/* Search + Scan button */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={prodSearch}
+                  onChange={e => setProdSearch(e.target.value)}
+                  placeholder="Search by name, SKU or barcode…"
+                  className="w-full pl-9 pr-8 py-2.5 text-[13px] border-2 border-gray-200 dark:border-zinc-700 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-700 transition-all placeholder:text-gray-400 dark:placeholder:text-zinc-500"
+                />
+                {prodSearch && (
+                  <button
+                    onClick={() => setProdSearch("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-zinc-600 hover:bg-gray-400 dark:hover:bg-zinc-500 flex items-center justify-center transition-colors"
+                  >
+                    <X size={10} className="text-white" />
+                  </button>
+                )}
+              </div>
+              {/* QR / Barcode scan button */}
+              <button
+                onClick={() => setScannerOpen(true)}
+                className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border-2 border-blue-200 dark:border-blue-800 transition-colors"
+                title="Scan barcode / QR code to add product"
+              >
+                <ScanLine size={16} />
+              </button>
             </div>
 
             {/* Retail / Wholesale toggle + Sort by — same row */}
@@ -1404,6 +1417,29 @@ function POSView({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* ── Barcode / QR scanner ─────────────────────────────────────────────── */}
+    <BarcodeScanner
+      open={scannerOpen}
+      onClose={() => setScannerOpen(false)}
+      onScan={code => {
+        const products = getProducts().filter(p => p.status !== "Inactive");
+        const found = products.find(
+          p => p.sku === code || p.barcode === code ||
+               p.sku.toLowerCase() === code.toLowerCase() ||
+               (p.barcode ?? "").toLowerCase() === code.toLowerCase()
+        );
+        if (found) {
+          onAddProduct(found);
+          setScannerOpen(false);
+        } else {
+          setProdSearch(code);
+          setScannerOpen(false);
+        }
+      }}
+      title="Scan to Add Product"
+      hint="Scan a product barcode or QR code to instantly add it to the cart"
+    />
     </>
   );
 }
