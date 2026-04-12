@@ -487,6 +487,7 @@ function POSView({
   const { stock } = useStock();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
+  const [prodSort,      setProdSort]      = useState("listing");
   const [payModalOpen,  setPayModalOpen]  = useState(false);
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
 
@@ -525,6 +526,20 @@ function POSView({
     return Array.from(set).sort();
   }, [allProducts]);
 
+  // ── Sales summary for top-selling sorts ──────────────────────────────────
+  const saleSummary = useMemo(() => {
+    const qtyMap: Record<string, number>    = {};
+    const orderMap: Record<string, number>  = {};
+    getSales().forEach(s => {
+      s.items.forEach(item => {
+        if (!item.sku) return;
+        qtyMap[item.sku]   = (qtyMap[item.sku]   || 0) + (parseFloat(item.qty) || 0);
+        orderMap[item.sku] = (orderMap[item.sku]  || 0) + 1;
+      });
+    });
+    return { qtyMap, orderMap };
+  }, []);
+
   const filteredProds = useMemo(() => {
     let list = allProducts;
     if (catFilter !== "All") {
@@ -542,8 +557,34 @@ function POSView({
         p.category.toLowerCase().includes(q),
       );
     }
-    return list;
-  }, [allProducts, catFilter, prodSearch]);
+    const sorted = [...list];
+    switch (prodSort) {
+      case "qty":
+        sorted.sort((a, b) => (saleSummary.qtyMap[b.sku] || 0) - (saleSummary.qtyMap[a.sku] || 0));
+        break;
+      case "orders":
+        sorted.sort((a, b) => (saleSummary.orderMap[b.sku] || 0) - (saleSummary.orderMap[a.sku] || 0));
+        break;
+      case "az":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "price-high":
+        sorted.sort((a, b) => parseFloat(b.price || "0") - parseFloat(a.price || "0"));
+        break;
+      case "price-low":
+        sorted.sort((a, b) => parseFloat(a.price || "0") - parseFloat(b.price || "0"));
+        break;
+      case "stock-high":
+        sorted.sort((a, b) => (stock[b.sku] ?? 0) - (stock[a.sku] ?? 0));
+        break;
+      case "stock-low":
+        sorted.sort((a, b) => (stock[a.sku] ?? 0) - (stock[b.sku] ?? 0));
+        break;
+      default:
+        break;
+    }
+    return sorted;
+  }, [allProducts, catFilter, prodSearch, prodSort, saleSummary, stock]);
 
   const grandTotal   = localItems.reduce((s, i) => s + lineTotal(i), 0);
   const discountAmt  = discountTotal(localItems);
@@ -1068,6 +1109,25 @@ function POSView({
                   Wholesale
                 </button>
               </div>
+            </div>
+
+            {/* Sort by dropdown */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
+              <select
+                value={prodSort}
+                onChange={e => setProdSort(e.target.value)}
+                className="text-[11px] font-semibold border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+              >
+                <option value="listing">Listing Sequence</option>
+                <option value="qty">Top Selling (Qty)</option>
+                <option value="orders">Top Selling (Orders)</option>
+                <option value="az">A – Z</option>
+                <option value="price-high">Highest Price</option>
+                <option value="price-low">Lowest Price</option>
+                <option value="stock-high">Highest Stock</option>
+                <option value="stock-low">Lowest Stock</option>
+              </select>
             </div>
 
             {/* Category pills */}
