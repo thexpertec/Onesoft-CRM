@@ -1005,12 +1005,15 @@ export type Product = {
   barcode?: string;          // Barcode / QR code value for scanning
   brand: string;
   category: string;
+  subcategory?: string;      // Subcategory within the product category
   unit: string;
   purchasePrice?: string;    // Purchase price (from supplier)
   costPrice?: string;        // Cost price per unit (internal cost including overheads)
   price: string;             // Retail sale price per unit
   wholesalePrice?: string;   // Wholesale price per unit
   commissionPct?: string;    // Sales agent commission percentage on this product
+  openingStock?: string;     // Initial stock quantity when product is created
+  stockAlertValue?: string;  // Low-stock alert threshold (triggers alert when stock falls below)
   description: string;
   status: ProductStatus;
   condition?: ProductCondition; // Physical condition of the product

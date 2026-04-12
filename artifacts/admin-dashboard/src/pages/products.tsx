@@ -21,7 +21,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "status" | "condition" | "description";
+type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -38,9 +38,10 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", barcode: "", brand: "", category: "", unit: "",
+  name: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
+  openingStock: "", stockAlertValue: "",
   status: "Active", condition: "", description: "",
 });
 
@@ -185,9 +186,12 @@ export default function ProductsPage() {
       addProduct({
         name: formData.name, sku: formData.sku, barcode: formData.barcode || undefined,
         brand: formData.brand, category: formData.category,
+        subcategory: formData.subcategory || undefined,
         unit: formData.unit, purchasePrice: formData.purchasePrice, costPrice: formData.costPrice,
         price: formData.price, wholesalePrice: formData.wholesalePrice,
         commissionPct: formData.commissionPct || undefined,
+        openingStock: formData.openingStock || undefined,
+        stockAlertValue: formData.stockAlertValue || undefined,
         status: (formData.status as Product["status"]) || "Active",
         condition: (formData.condition as Product["condition"]) || undefined,
         description: formData.description,
@@ -292,16 +296,7 @@ export default function ProductsPage() {
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), [products]);
   const categoryOptions = useMemo(() => {
     const cats = getProductCategories();
-    const parents = cats.filter(c => !c.parentId);
-    const subs = cats.filter(c => !!c.parentId);
-    const options: string[] = [];
-    parents.forEach(p => {
-      options.push(p.name);
-      subs.filter(s => s.parentId === p.id).forEach(s => options.push(`${p.name} > ${s.name}`));
-    });
-    // any subs whose parent wasn't found
-    subs.filter(s => !parents.find(p => p.id === s.parentId)).forEach(s => options.push(s.name));
-    return options;
+    return cats.filter(c => !c.parentId).map(c => c.name);
   }, [products]);
   const unitOptions     = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
   const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
@@ -930,8 +925,8 @@ export default function ProductsPage() {
           {/* Body */}
           <div className={`px-6 py-4 space-y-3${formLayoutMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
 
-            {/* Row 1: Name + SKU + Barcode + Brand + Category + Unit — 7-column grid */}
-            <div className="grid grid-cols-7 gap-3">
+            {/* Row 1: Name + SKU + Barcode + Brand + Category + Subcategory + Unit — 8-column grid */}
+            <div className="grid grid-cols-8 gap-3">
               <div className="col-span-2 space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
                 <Input value={formData.name} onChange={e => patchForm("name", e.target.value)}
@@ -973,15 +968,33 @@ export default function ProductsPage() {
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Category</label>
                 {categoryOptions.length > 0 ? (
-                  <select value={formData.category} onChange={e => patchForm("category", e.target.value)}
+                  <select value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
                     className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                     <option value="">— select —</option>
                     {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : (
-                  <Input value={formData.category} onChange={e => patchForm("category", e.target.value)}
+                  <Input value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
                     placeholder="Category" className="h-8 text-sm" />
                 )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Subcategory</label>
+                {(() => {
+                  const allCats = getProductCategories();
+                  const parentCat = allCats.find(c => !c.parentId && c.name === formData.category);
+                  const subOpts = parentCat ? allCats.filter(c => c.parentId === parentCat.id).map(c => c.name) : [];
+                  return subOpts.length > 0 ? (
+                    <select value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
+                      className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                      <option value="">— select —</option>
+                      {subOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <Input value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
+                      placeholder="Subcategory" className="h-8 text-sm" />
+                  );
+                })()}
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Unit</label>
@@ -1098,8 +1111,8 @@ export default function ProductsPage() {
               </div>
             </div>
 
-            {/* Row 3: Condition + Status + Description */}
-            <div className="grid grid-cols-6 gap-3">
+            {/* Row 3: Condition + Status + Opening Stock + Stock Alert + Description */}
+            <div className="grid grid-cols-8 gap-3">
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Condition</label>
                 <select value={formData.condition} onChange={e => patchForm("condition", e.target.value)}
@@ -1114,6 +1127,20 @@ export default function ProductsPage() {
                   className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                   {["Active","Inactive","Draft"].map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Opening Stock</label>
+                <Input type="number" min="0" step="1" value={formData.openingStock}
+                  onChange={e => patchForm("openingStock", e.target.value)}
+                  placeholder="0" className="h-8 text-sm" />
+                <p className="text-[10px] text-muted-foreground leading-tight">Initial qty</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Stock Alert</label>
+                <Input type="number" min="0" step="1" value={formData.stockAlertValue}
+                  onChange={e => patchForm("stockAlertValue", e.target.value)}
+                  placeholder="0" className="h-8 text-sm" />
+                <p className="text-[10px] text-muted-foreground leading-tight">Low-stock level</p>
               </div>
               <div className="col-span-4 space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Description</label>
