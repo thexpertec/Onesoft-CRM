@@ -13,6 +13,7 @@ import { useLocation } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -171,6 +172,7 @@ export default function ProductsPage() {
   const [formData,      setFormData]      = useState<Record<EditableField, string>>(BLANK());
   const [formSaving,    setFormSaving]    = useState(false);
   const [barcodeScanOpen, setBarcodeScanOpen] = useState(false);
+  const [formLayoutMode, toggleFormLayoutMode] = useFormMode();
 
   const openAddForm = () => { setFormData(BLANK()); setFormOpen(true); };
   const closeForm   = () => { setFormOpen(false); };
@@ -910,23 +912,23 @@ export default function ProductsPage() {
         </ExcelGridShell>
       </div>
 
-      {/* ── Add Product Form Dialog ─────────────────────────────────────────── */}
-      <Dialog open={formOpen} onOpenChange={v => !v && closeForm()}>
-        <DialogContent className="w-[min(98vw,920px)] max-w-none p-0 overflow-hidden gap-0">
+      {/* ── Add Product Form: Dialog or Side Panel ──────────────────────────── */}
+      <FormWrapper open={formOpen} onOpenChange={v => !v && closeForm()} mode={formLayoutMode}>
 
           {/* Header */}
-          <div className="flex items-center gap-3 px-6 py-3 border-b border-border">
+          <div className="flex items-center gap-3 px-6 py-3 border-b border-border shrink-0">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Package size={15} className="text-primary" />
             </div>
-            <div>
+            <div className="flex-1">
               <h2 className="text-[14px] font-bold text-foreground leading-tight">Add New Product</h2>
               <p className="text-[11px] text-muted-foreground">All fields except Name are optional</p>
             </div>
+            <FormModeToggle mode={formLayoutMode} onToggle={toggleFormLayoutMode} onClose={closeForm} />
           </div>
 
           {/* Body */}
-          <div className="px-6 py-4 space-y-3">
+          <div className={`px-6 py-4 space-y-3${formLayoutMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
 
             {/* Row 1: Name + SKU + Barcode + Brand + Category + Unit — 7-column grid */}
             <div className="grid grid-cols-7 gap-3">
@@ -1124,15 +1126,15 @@ export default function ProductsPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex gap-3 px-6 py-3 border-t border-border bg-muted/20">
+          <div className={`flex gap-3 px-6 py-3 border-t border-border bg-muted/20${formLayoutMode === "sheet" ? " shrink-0" : ""}`}>
             <Button variant="outline" onClick={closeForm} className="flex-1 h-9">Cancel</Button>
             <Button onClick={submitForm} disabled={formSaving} className="flex-1 h-9 font-semibold">
               <Plus size={14} className="mr-1.5" />
               {formSaving ? "Adding…" : "Add Product"}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+
+      </FormWrapper>
 
       {/* Barcode scanner for product form */}
       <BarcodeScanner
