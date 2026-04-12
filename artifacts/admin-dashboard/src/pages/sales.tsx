@@ -509,6 +509,7 @@ function POSView({
   onSetStatus, onComplete, onAddCustomer,
 }: POSViewProps) {
   const { stock } = useStock();
+  const settings = getSettings();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [prodSort,      setProdSort]      = useState("listing");
