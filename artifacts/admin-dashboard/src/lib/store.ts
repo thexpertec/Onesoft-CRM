@@ -1471,13 +1471,17 @@ const SALES_KEY = "admin-sales";
 
 const nextSaleNumber = (): string => {
   const existing = getStored<Sale>(SALES_KEY);
+  const settings = getSettings();
+  const refDigits = settings.referenceDigits || 4;
+  const customPrefix = (settings.salePrefix || "SAL-").replace(/[-_\s]+$/, "");
   const d = new Date();
-  const prefix = `SAL-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const datePart = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const fullPrefix = `${customPrefix}-${datePart}`;
   const max = existing
-    .filter(s => s.saleNumber.startsWith(prefix))
+    .filter(s => s.saleNumber.startsWith(fullPrefix))
     .map(s => parseInt(s.saleNumber.split("-").pop() ?? "0") || 0)
     .reduce((a, b) => Math.max(a, b), 0);
-  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+  return `${fullPrefix}-${String(max + 1).padStart(refDigits, "0")}`;
 };
 
 export const getSales = (): Sale[] => getStored<Sale>(SALES_KEY);
@@ -2071,14 +2075,20 @@ const INVOICES_KEY = "admin-invoices";
 
 const nextInvoiceNumber = (type: "sale" | "purchase" = "sale"): string => {
   const existing = getStored<Invoice>(INVOICES_KEY);
+  const settings = getSettings();
+  const refDigits = settings.referenceDigits || 4;
   const d = new Date();
   const base = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-  const prefix = type === "purchase" ? `PINV-${base}` : `INV-${base}`;
+  const defaultPre = type === "purchase" ? "PINV" : "INV";
+  const customPre = type === "purchase"
+    ? (settings.purchasePrefix || "PO-").replace(/[-_\s]+$/, "")
+    : defaultPre;
+  const prefix = `${customPre}-${base}`;
   const max = existing
     .filter(inv => inv.invoiceNumber.startsWith(prefix))
     .map(inv => parseInt(inv.invoiceNumber.split("-").pop() ?? "0") || 0)
     .reduce((a, b) => Math.max(a, b), 0);
-  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+  return `${prefix}-${String(max + 1).padStart(refDigits, "0")}`;
 };
 
 export const getInvoices = (): Invoice[] => getStored<Invoice>(INVOICES_KEY);
@@ -2587,6 +2597,8 @@ export type AppSettings = {
   posDiscountType:      "pct" | "amt";  // default discount mode for new POS line items
   // ── Number formatting ──
   decimalPlaces:        0 | 1 | 2 | 3 | 4;  // decimal places for all monetary/numeric display
+  // ── Reference number padding ──
+  referenceDigits:      number;  // how many digits to pad the sequence number (e.g. 4 → SAL-0001, 5 → SAL-00001)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2629,6 +2641,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowNegativeStock:   true,
   posDiscountType:      "pct",
   decimalPlaces:        2,
+  referenceDigits:      4,
 };
 
 export function getSettings(): AppSettings {

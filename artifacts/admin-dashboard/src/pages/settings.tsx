@@ -889,17 +889,53 @@ export default function SettingsPage() {
                   </Field>
                 </div>
 
-                <SectionHeader title="Reference Prefixes" desc="Prefix added to auto-generated reference numbers." />
+                <SectionHeader title="Reference Prefixes" desc="Prefix and digit format for all auto-generated reference numbers." />
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Sale / Invoice Prefix" hint='e.g. "SAL-" produces SAL-0001'>
+                  <Field label="Sale / Invoice Prefix">
                     <Input value={form.salePrefix} onChange={e => set("salePrefix", e.target.value)}
                       className="h-9 text-[13px] font-mono" placeholder="SAL-" />
                   </Field>
-                  <Field label="Purchase Order Prefix" hint='e.g. "PO-" produces PO-0001'>
+                  <Field label="Purchase Order Prefix">
                     <Input value={form.purchasePrefix} onChange={e => set("purchasePrefix", e.target.value)}
                       className="h-9 text-[13px] font-mono" placeholder="PO-" />
                   </Field>
                 </div>
+
+                <Field label="Sequence Digits" hint="How many digits the auto-incrementing number is padded to.">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[3, 4, 5, 6].map(d => {
+                      const active = (form.referenceDigits ?? 4) === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => set("referenceDigits", d)}
+                          className={`h-9 px-3 rounded-lg border-2 text-[13px] font-semibold font-mono transition-all ${
+                            active
+                              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                              : "border-border text-muted-foreground hover:border-indigo-300 dark:hover:border-indigo-700"
+                          }`}
+                        >
+                          {d} digits
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex gap-6 text-[12px] text-muted-foreground font-mono">
+                    <span>
+                      Sale preview:{" "}
+                      <strong className="text-foreground">
+                        {(form.salePrefix || "SAL-").replace(/[-_\s]+$/, "")}-202506-{String(1).padStart(form.referenceDigits ?? 4, "0")}
+                      </strong>
+                    </span>
+                    <span>
+                      PO preview:{" "}
+                      <strong className="text-foreground">
+                        {(form.purchasePrefix || "PO-").replace(/[-_\s]+$/, "")}-202506-{String(1).padStart(form.referenceDigits ?? 4, "0")}
+                      </strong>
+                    </span>
+                  </div>
+                </Field>
               </div>
             )}
 
