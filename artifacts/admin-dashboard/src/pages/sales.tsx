@@ -788,7 +788,7 @@ function POSView({
                           )}
                           {parseFloat(prod?.costPrice ?? "0") > 0 && (
                             <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 text-red-400 dark:text-red-500 tabular-nums">
-                              Cost: {sym}{parseFloat(prod!.costPrice).toFixed(2)}
+                              {sym}{parseFloat(prod!.costPrice).toFixed(2)}
                             </span>
                           )}
                           {(() => {
