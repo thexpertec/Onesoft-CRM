@@ -59,6 +59,7 @@ type Preset = "month" | "year" | "all" | "custom";
 
 export default function AgentPerformancePage() {
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
+  const dp  = getSettingsDecimalPlaces();
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const [preset,     setPreset]     = useState<Preset>("year");

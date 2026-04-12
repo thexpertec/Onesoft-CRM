@@ -153,6 +153,7 @@ function SaleCompleteModal({
 }) {
   const settings = getSettings();
   const sym = getSettingsCurrencySymbol();
+  const dp  = getSettingsDecimalPlaces();
 
   const subtotal    = sale.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
   const discAmt     = discountTotal(sale.items);
@@ -300,6 +301,7 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
   const overPaid  = paid > total;
 
   const sym = getSettingsCurrencySymbol();
+  const dp  = getSettingsDecimalPlaces();
   const fmt = (n: number) => `${sym}${n.toFixed(dp)}`;
 
   const presets = [
@@ -510,6 +512,7 @@ function POSView({
 }: POSViewProps) {
   const { stock } = useStock();
   const settings = getSettings();
+  const dp  = getSettingsDecimalPlaces();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [prodSort,      setProdSort]      = useState("listing");
@@ -1448,6 +1451,7 @@ function POSView({
 // ─── Main SalesPage component ─────────────────────────────────────────────────
 export default function SalesPage() {
   const [location, navigate] = useLocation();
+  const dp = getSettingsDecimalPlaces();
   const isNewSale = location.includes("/new");
   const { sales, addSale, editSale, removeSale } = useSales();
   const { customers, addCustomer } = useCustomers();

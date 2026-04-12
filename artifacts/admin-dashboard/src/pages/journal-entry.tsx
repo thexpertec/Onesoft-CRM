@@ -181,6 +181,7 @@ export default function JournalEntryPage() {
   const { accounts } = useAccounts();
   const { entries, addEntry, editEntry, removeEntry } = useJournalEntries();
   const { toast } = useToast();
+  const dp = getSettingsDecimalPlaces();
 
   const ledgers = useMemo(() => accounts.filter(a => a.accountType === "Ledger" && a.isActive), [accounts]);
 

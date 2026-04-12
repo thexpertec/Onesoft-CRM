@@ -448,6 +448,7 @@ function GroupDetail({
 
 export default function ProductGroupsPage() {
   const { groups, addGroup, editGroup, removeGroup } = useProductGroups();
+  const dp = getSettingsDecimalPlaces();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [search, setSearch] = useState("");

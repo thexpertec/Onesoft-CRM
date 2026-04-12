@@ -64,6 +64,7 @@ export default function SalesAgentsPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const sym = getSettingsCurrencySymbol();
+  const dp  = getSettingsDecimalPlaces();
 
   const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
   const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);

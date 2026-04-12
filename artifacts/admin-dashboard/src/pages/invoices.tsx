@@ -425,6 +425,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const isNew = !invoice;
   const invoiceType: "sale" | "purchase" = (invoice?.invoiceType ?? defaultType) as "sale" | "purchase";
   const sym = getSettingsCurrencySymbol();
+  const dp  = getSettingsDecimalPlaces();
 
   const [form, setForm]         = useState<ReturnType<typeof blankInvoice>>(
     () => invoice ? { ...invoice } : blankInvoice(defaultType)
@@ -1381,6 +1382,7 @@ export default function InvoicesPage() {
   const { invoices } = useInvoices();
   const [, navigate] = useLocation();
   const rawSearch    = useSearch();
+  const dp           = getSettingsDecimalPlaces();
 
   // Derive type from ?type= URL param so sidebar links work correctly
   const typeFilter: "sale" | "purchase" =

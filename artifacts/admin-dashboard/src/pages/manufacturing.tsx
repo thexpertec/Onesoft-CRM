@@ -98,6 +98,7 @@ export default function ManufacturingPage() {
   const { isStaff, staffPermissions }         = useAuth();
   const { toast }                             = useToast();
   const sym                                   = getSettingsCurrencySymbol();
+  const dp                                    = getSettingsDecimalPlaces();
   const products                              = getProducts();
   const canEdit = !isStaff || staffPermissions.manufacturing !== "view";
 

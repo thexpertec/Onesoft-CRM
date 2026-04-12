@@ -493,6 +493,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
 
 export default function SaleReturnPage() {
   const { toast } = useToast();
+  const dp  = getSettingsDecimalPlaces();
   const [returns, setReturns]       = useState<SaleReturn[]>(() => getSaleReturns());
   const [search, setSearch]         = useState("");
   const [newOpen, setNewOpen]       = useState(false);

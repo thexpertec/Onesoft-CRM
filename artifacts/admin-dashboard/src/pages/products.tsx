@@ -108,6 +108,7 @@ export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds } = useProducts();
   const { stock } = useStock();
   const { isAuthenticated } = useAuth();
+  const dp = getSettingsDecimalPlaces();
 
   // Build a map: SKU (lowercased) → total qty across all stock entries
   const stockBySkuMap = useMemo(() => {
