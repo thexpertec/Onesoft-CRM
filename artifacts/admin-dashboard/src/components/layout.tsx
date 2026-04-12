@@ -5,7 +5,7 @@ import {
   LogOut, Shield, UserCheck, Package, Truck,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen, Layers,
-  ShoppingCart, Users2, KeyRound, Building2, Boxes, Lock, Receipt,
+  ShoppingCart, Users2, KeyRound, Building2, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
@@ -190,8 +190,6 @@ const OTHER_NAV: NavItem[] = [
       { label: "Units",           href: "/units",           icon: Ruler,             desc: "Measurement units"    },
       { label: "Media Library", href: "/media",       icon: ImageIcon,         desc: "Product images"       },
       { label: "Stock",         divider: true },
-      { label: "All Stock",     href: "/stock",         icon: Boxes,             desc: "Product quantities & levels"   },
-      { label: "Stock Holds",   href: "/stock/holds",   icon: Lock,              desc: "Reserved (Not For Sale) items" },
       { label: "Stock Ledger",  href: "/stock-ledger",  icon: BookOpen,          desc: "Movement history per product"  },
     ],
   },
@@ -246,7 +244,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock"];
+const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
 const SALES_ROUTES       = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return"];
 const HRM_ROUTES            = ["/staff", "/roles", "/users"];
 const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
@@ -257,7 +255,7 @@ const QUICK_ADD: SubItem[] = [
   { label: "New Lead",           href: "/leads",         icon: UserPlus    },
   { label: "New Customer",       href: "/customers",     icon: UserCheck   },
   { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
-  { label: "Add Stock Item",     href: "/stock",         icon: Boxes       },
+  { label: "Stock Ledger",       href: "/stock-ledger",  icon: BookOpen    },
   { label: "Purchase Invoice",   href: "/invoices?type=purchase", icon: ShoppingCart},
   { label: "New Sale",           href: "/sales/new",     icon: Receipt     },
   { label: "New Document",       href: "/documents/new", icon: FilePlus    },
@@ -820,8 +818,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <NavLink href="/units"          icon={Ruler}             label="Units" />
                   </>}
                   {isModuleAllowed("stock") && <>
-                    <NavLink href="/stock"         icon={Boxes}     label="All Stock" />
-                    <NavLink href="/stock/holds"   icon={Lock}      label="Stock Holds" />
                     <NavLink href="/stock-ledger"  icon={BookOpen}  label="Stock Ledger" />
                     <NavLink href="/raw-materials" icon={FlaskConical} label="Raw Materials" />
                   </>}
@@ -1072,7 +1068,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Products & stock */}
           <SidebarLink href="/products"    icon={Package}    label="Products"  active={location.startsWith("/products")}    navigate={navigate} titleFull="Products" />
-          <SidebarLink href="/stock"       icon={Boxes}      label="Stock"     active={location.startsWith("/stock")}       navigate={navigate} titleFull="Stock" />
+          <SidebarLink href="/stock-ledger" icon={BookOpen}  label="Ledger"   active={location.startsWith("/stock-ledger")} navigate={navigate} titleFull="Stock Ledger" />
           <SidebarLink href="/raw-materials" icon={FlaskConical} label="Raw Mtl." active={location.startsWith("/raw-materials")} navigate={navigate} titleFull="Raw Materials" />
 
           <SidebarDivider />

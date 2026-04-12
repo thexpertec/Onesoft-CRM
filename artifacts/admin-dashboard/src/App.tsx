@@ -20,7 +20,6 @@ import UsersPage from "@/pages/users";
 import SalesPage from "@/pages/sales";
 import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
 import CalcInvoicePage from "@/pages/calc-invoice";
-import StockPage from "@/pages/stock";
 import StockLedgerPage from "@/pages/stock-ledger";
 import StaffPage from "@/pages/staff";
 import HrmRolesPage from "@/pages/hrm-roles";
@@ -136,8 +135,6 @@ function Router() {
               <Route path="/production-guide" component={ProductionGuidePage} />
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
-              <Route path="/stock/holds" component={StockPage} />
-              <Route path="/stock" component={StockPage} />
               <Route path="/stock-ledger" component={StockLedgerPage} />
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
