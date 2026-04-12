@@ -13,7 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
-  ArrowLeft, Package, ChevronDown, Lock, Printer,
+  ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
+  MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1358,13 +1359,47 @@ export default function SalesPage() {
   const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── List state ──
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [search,       setSearch]       = useState("");
-  const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
-  const [newRow,       setNewRow]       = useState<Record<string, string> | null>(null);
-  const [newRowActive, setNewRowActive] = useState<number | null>(null);
-  const [deleteId,     setDeleteId]     = useState<string | null>(null);
+  const [statusFilter,   setStatusFilter]   = useState<string>("All");
+  const [search,         setSearch]         = useState("");
+  const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
+  const [newRow,         setNewRow]         = useState<Record<string, string> | null>(null);
+  const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
+  const [deleteId,       setDeleteId]       = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // ── Advanced filters ──────────────────────────────────────────────────────
+  const [advOpen,        setAdvOpen]        = useState(false);
+  const [filterArea,     setFilterArea]     = useState("");
+  const [filterCustomer, setFilterCustomer] = useState("");
+  const [filterAgent,    setFilterAgent]    = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo,   setFilterDateTo]   = useState("");
+  const [filterPayMode,  setFilterPayMode]  = useState("");
+  const [filterPayStatus,setFilterPayStatus]= useState("");
+
+  const clearAdvFilters = () => {
+    setFilterArea(""); setFilterCustomer(""); setFilterAgent("");
+    setFilterDateFrom(""); setFilterDateTo(""); setFilterPayMode(""); setFilterPayStatus("");
+  };
+  const advActiveCount = [filterArea, filterCustomer, filterAgent,
+    filterDateFrom, filterDateTo, filterPayMode, filterPayStatus].filter(Boolean).length;
+
+  // Advanced filter option lists
+  const agentAreaOpts  = useMemo(() => {
+    const s = new Set<string>();
+    getSalesAgents().forEach(a => { if (a.area) s.add(a.area); });
+    return Array.from(s).sort();
+  }, []);
+  const customerOpts   = useMemo(() => {
+    const s = new Set<string>();
+    sales.forEach(s2 => { if (s2.customer) s.add(s2.customer); });
+    return Array.from(s).sort();
+  }, [sales]);
+  const agentIdAreaMap = useMemo(() => {
+    const m = new Map<string, string>();
+    getSalesAgents().forEach(a => { if (a.area) m.set(a.id, a.area); });
+    return m;
+  }, []);
 
   // ── POS state ──
   const [detailId,               setDetailId]               = useState<string | null>(null);
@@ -1644,17 +1679,58 @@ export default function SalesPage() {
   // ── List filtering ──
   const filtered = useMemo(() => {
     let rows = [...sales];
+
+    // Status pill filter
     if (statusFilter !== "All") rows = rows.filter(s => s.status === statusFilter);
+
+    // Text search
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(s =>
         s.saleNumber.toLowerCase().includes(q) ||
         s.customer.toLowerCase().includes(q) ||
+        (s.agentName ?? "").toLowerCase().includes(q) ||
         s.notes.toLowerCase().includes(q),
       );
     }
+
+    // ── Advanced filters ─────────────────────────────────────────────────────
+    if (filterArea) {
+      rows = rows.filter(s => !!s.agentId && agentIdAreaMap.get(s.agentId) === filterArea);
+    }
+    if (filterCustomer) {
+      rows = rows.filter(s => s.customer === filterCustomer);
+    }
+    if (filterAgent) {
+      rows = rows.filter(s => s.agentName === filterAgent || s.agentId === filterAgent);
+    }
+    if (filterDateFrom) {
+      rows = rows.filter(s => s.saleDate >= filterDateFrom);
+    }
+    if (filterDateTo) {
+      rows = rows.filter(s => s.saleDate <= filterDateTo);
+    }
+    if (filterPayMode) {
+      rows = rows.filter(s => s.paymentMethod === filterPayMode);
+    }
+    if (filterPayStatus) {
+      rows = rows.filter(s => {
+        const total = saleTotal(s.items);
+        const paid  = parseFloat(s.amountPaid || "0") || 0;
+        switch (filterPayStatus) {
+          case "paid":    return total > 0 && paid >= total;
+          case "unpaid":  return paid === 0;
+          case "partial": return paid > 0 && paid < total;
+          case "overdue": return s.status === "On Credit" && paid < total;
+          default:        return true;
+        }
+      });
+    }
+
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [sales, statusFilter, search]);
+  }, [sales, statusFilter, search,
+      filterArea, filterCustomer, filterAgent, filterDateFrom, filterDateTo, filterPayMode, filterPayStatus,
+      agentIdAreaMap]);
 
   const counts: Record<string, number> = useMemo(() => {
     const c: Record<string, number> = { All: sales.length };
