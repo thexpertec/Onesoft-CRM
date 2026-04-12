@@ -1167,27 +1167,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
 
           {/* CRM */}
-          <SidebarLink href="/leads"       icon={Users}      label="Leads"     active={location.startsWith("/leads")}       navigate={navigate} titleFull="Leads" />
-          <SidebarLink href="/customers"   icon={UserCheck}  label="Customers" active={location.startsWith("/customers")}   navigate={navigate} titleFull="Customers" />
-          <SidebarLink href="/suppliers"   icon={Truck}      label="Suppliers" active={location.startsWith("/suppliers")}   navigate={navigate} titleFull="Suppliers" />
-          <SidebarLink href="/sales-agents"icon={Users2}     label="Agents"    active={location.startsWith("/sales-agents")}navigate={navigate} titleFull="Sales Agents" />
+          <SidebarLink href="/leads"        icon={Users}         label="Leads"     active={location.startsWith("/leads")}        navigate={navigate} titleFull="Leads"        color="violet" />
+          <SidebarLink href="/customers"    icon={UserCheck}     label="Customers" active={location.startsWith("/customers")}    navigate={navigate} titleFull="Customers"    color="emerald" />
+          <SidebarLink href="/suppliers"    icon={Truck}         label="Suppliers" active={location.startsWith("/suppliers")}    navigate={navigate} titleFull="Suppliers"    color="amber" />
+          <SidebarLink href="/sales-agents" icon={Users2}        label="Agents"    active={location.startsWith("/sales-agents")} navigate={navigate} titleFull="Sales Agents" color="teal" />
+          <SidebarLink href="/areas"        icon={MapPin}        label="Areas"     active={location.startsWith("/areas")}        navigate={navigate} titleFull="Areas & Regions" color="lime" />
 
           <SidebarDivider />
 
           {/* HRM */}
-          <SidebarLink href="/staff"       icon={Building2}  label="Staff"     active={location.startsWith("/staff")}       navigate={navigate} titleFull="Staff / HRM" />
+          <SidebarLink href="/staff"        icon={Building2}     label="Staff"     active={location.startsWith("/staff")}        navigate={navigate} titleFull="Staff / HRM"  color="rose" />
+          <SidebarLink href="/hrm-roles"    icon={KeyRound}      label="Roles"     active={location.startsWith("/hrm-roles")}   navigate={navigate} titleFull="HRM Roles"    color="pink" />
 
           <SidebarDivider />
 
           {/* Products & stock */}
-          <SidebarLink href="/products"    icon={Package}    label="Products"  active={location.startsWith("/products")}    navigate={navigate} titleFull="Products" />
-          <SidebarLink href="/stock-ledger" icon={BookOpen}  label="Ledger"   active={location.startsWith("/stock-ledger")} navigate={navigate} titleFull="Stock Ledger" />
-          <SidebarLink href="/raw-materials" icon={FlaskConical} label="Raw Mtl." active={location.startsWith("/raw-materials")} navigate={navigate} titleFull="Raw Materials" />
+          <SidebarLink href="/products"     icon={Package}       label="Products"  active={location.startsWith("/products")}     navigate={navigate} titleFull="Products"     color="blue" />
+          <SidebarLink href="/categories"   icon={Tag}           label="Categories"active={location.startsWith("/categories")}  navigate={navigate} titleFull="Categories"   color="fuchsia" />
+          <SidebarLink href="/stock-ledger" icon={BookOpen}      label="Ledger"    active={location.startsWith("/stock-ledger")} navigate={navigate} titleFull="Stock Ledger" color="indigo" />
+          <SidebarLink href="/raw-materials"icon={FlaskConical}  label="Raw Mtl."  active={location.startsWith("/raw-materials")} navigate={navigate} titleFull="Raw Materials" color="cyan" />
 
           <SidebarDivider />
 
           {/* Manufacturing */}
-          <SidebarLink href="/manufacturing" icon={Factory} label="Mfg." active={location.startsWith("/manufacturing") || location.startsWith("/production-guide")} navigate={navigate} titleFull="Manufacturing" />
+          <SidebarLink href="/manufacturing" icon={Factory}      label="Mfg."     active={location.startsWith("/manufacturing") || location.startsWith("/production-guide")} navigate={navigate} titleFull="Manufacturing" color="orange" />
         </nav>
 
         {/* ═══ CENTER CONTENT ════════════════════════════════════════════════ */}
@@ -1221,26 +1224,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ═══ RIGHT SIDEBAR — quick-add shortcuts ═══════════════════════════ */}
         <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
-          {/* Purchase Invoices */}
-          <SidebarLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase" active={location.startsWith("/invoices") && location.includes("type=purchase")} navigate={navigate} titleFull="Purchase Invoices" />
+
+          {/* Purchasing */}
+          <SidebarLink href="/invoices?type=purchase"   icon={ShoppingCart}  label="Purchase"  active={location.startsWith("/invoices") && location.includes("type=purchase")} navigate={navigate} titleFull="Purchase Invoices"   color="indigo" />
+          <SidebarLink href="/receipt-payment"          icon={CreditCard}    label="Receipts"  active={location.startsWith("/receipt-payment")}  navigate={navigate} titleFull="Receipts & Payments" color="green" />
 
           <SidebarDivider />
 
           {/* Sales */}
-          <SidebarLink href="/sales"        icon={Receipt}     label="Sales"     active={location.startsWith("/sales")}        navigate={navigate} titleFull="Sales / POS" />
-          <SidebarLink href="/sale-return"  icon={Undo2}       label="Returns"   active={location.startsWith("/sale-return")}  navigate={navigate} titleFull="Sale Returns" />
+          <SidebarLink href="/sales"                    icon={Receipt}       label="Sales"     active={location.startsWith("/sales")}             navigate={navigate} titleFull="Sales / POS"        color="emerald" />
+          <SidebarLink href="/sales/new"                icon={PlusCircle}    label="New Sale"  active={false}                                     navigate={navigate} titleFull="New Sale (POS)"      color="teal" />
+          <SidebarLink href="/sale-return"              icon={Undo2}         label="Returns"   active={location.startsWith("/sale-return")}        navigate={navigate} titleFull="Sale Returns"        color="red" />
 
           <SidebarDivider />
 
           {/* Invoicing */}
-          <SidebarLink href="/invoices"     icon={FileText}    label="Invoice"   active={location.startsWith("/invoices")}     navigate={navigate} titleFull="Invoices" />
-          <SidebarLink href="/calc-invoice" icon={Calculator}  label="Calc Inv." active={location.startsWith("/calc-invoice")} navigate={navigate} titleFull="Calc Invoice" />
+          <SidebarLink href="/invoices"                 icon={FileText}      label="Invoices"  active={location.startsWith("/invoices") && !location.includes("type=")} navigate={navigate} titleFull="Invoices"            color="blue" />
+          <SidebarLink href="/calc-invoice"             icon={Calculator}    label="Calc Inv." active={location.startsWith("/calc-invoice")}       navigate={navigate} titleFull="Calc Invoice"        color="purple" />
 
           <SidebarDivider />
 
           {/* Accounting */}
-          <SidebarLink href="/journal-entry?mode=expense" icon={Wallet}       label="Expense"  active={false}                                   navigate={navigate} titleFull="Record Expense" />
-          <SidebarLink href="/journal-entry"              icon={ClipboardList}label="Journal"  active={location.startsWith("/journal-entry")}   navigate={navigate} titleFull="Journal Entry" />
+          <SidebarLink href="/journal-entry?mode=expense" icon={Wallet}      label="Expense"   active={false}                                     navigate={navigate} titleFull="Record Expense"       color="amber" />
+          <SidebarLink href="/journal-entry"            icon={ClipboardList} label="Journal"   active={location.startsWith("/journal-entry")}      navigate={navigate} titleFull="Journal Entry"        color="teal" />
+          <SidebarLink href="/pls-report"               icon={TrendingUp}    label="P & L"     active={location.startsWith("/pls-report")}         navigate={navigate} titleFull="P&L Statement"        color="sky" />
+          <SidebarLink href="/balance-sheet"            icon={Landmark}      label="Balance"   active={location.startsWith("/balance-sheet")}      navigate={navigate} titleFull="Balance Sheet"        color="violet" />
         </nav>
 
       </div>
@@ -1253,24 +1261,45 @@ function SidebarDivider() {
   return <div className="mx-3 my-1 h-px bg-gray-100 dark:bg-border shrink-0" />;
 }
 
+const SIDEBAR_COLORS: Record<string, { active: string; hover: string }> = {
+  blue:    { active: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",         hover: "hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:text-blue-600 dark:hover:text-blue-400" },
+  violet:  { active: "bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400", hover: "hover:bg-violet-50 dark:hover:bg-violet-950/20 hover:text-violet-600 dark:hover:text-violet-400" },
+  emerald: { active: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400", hover: "hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-600 dark:hover:text-emerald-400" },
+  amber:   { active: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",     hover: "hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-600 dark:hover:text-amber-400" },
+  teal:    { active: "bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400",         hover: "hover:bg-teal-50 dark:hover:bg-teal-950/20 hover:text-teal-600 dark:hover:text-teal-400" },
+  rose:    { active: "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400",         hover: "hover:bg-rose-50 dark:hover:bg-rose-950/20 hover:text-rose-600 dark:hover:text-rose-400" },
+  indigo:  { active: "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400", hover: "hover:bg-indigo-50 dark:hover:bg-indigo-950/20 hover:text-indigo-600 dark:hover:text-indigo-400" },
+  cyan:    { active: "bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400",         hover: "hover:bg-cyan-50 dark:hover:bg-cyan-950/20 hover:text-cyan-600 dark:hover:text-cyan-400" },
+  orange:  { active: "bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400", hover: "hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:text-orange-600 dark:hover:text-orange-400" },
+  lime:    { active: "bg-lime-50 dark:bg-lime-950/30 text-lime-600 dark:text-lime-400",         hover: "hover:bg-lime-50 dark:hover:bg-lime-950/20 hover:text-lime-600 dark:hover:text-lime-400" },
+  fuchsia: { active: "bg-fuchsia-50 dark:bg-fuchsia-950/30 text-fuchsia-600 dark:text-fuchsia-400", hover: "hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 hover:text-fuchsia-600 dark:hover:text-fuchsia-400" },
+  green:   { active: "bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400",     hover: "hover:bg-green-50 dark:hover:bg-green-950/20 hover:text-green-600 dark:hover:text-green-400" },
+  red:     { active: "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400",             hover: "hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400" },
+  purple:  { active: "bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400", hover: "hover:bg-purple-50 dark:hover:bg-purple-950/20 hover:text-purple-600 dark:hover:text-purple-400" },
+  sky:     { active: "bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400",             hover: "hover:bg-sky-50 dark:hover:bg-sky-950/20 hover:text-sky-600 dark:hover:text-sky-400" },
+  pink:    { active: "bg-pink-50 dark:bg-pink-950/30 text-pink-600 dark:text-pink-400",         hover: "hover:bg-pink-50 dark:hover:bg-pink-950/20 hover:text-pink-600 dark:hover:text-pink-400" },
+};
+
 function SidebarLink({
-  href, icon: Icon, label, active, navigate, titleFull,
+  href, icon: Icon, label, active, navigate, titleFull, color = "blue",
 }: {
   href: string; icon: React.ElementType; label: string;
   active: boolean; navigate: (to: string) => void; titleFull?: string;
+  color?: keyof typeof SIDEBAR_COLORS;
 }) {
+  const cs = SIDEBAR_COLORS[color] ?? SIDEBAR_COLORS.blue;
   return (
     <button
       title={titleFull || label}
       onClick={() => navigate(href)}
-      className={`flex flex-col items-center justify-center w-full py-2 px-1 gap-0.5 transition-colors shrink-0 group
+      className={`flex flex-col items-center justify-center w-full py-2.5 px-1 gap-0.5 transition-all shrink-0
         ${active
-          ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"
-          : "text-gray-400 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted/40 hover:text-gray-700 dark:hover:text-foreground"
+          ? `${cs.active} font-semibold`
+          : `text-gray-400 dark:text-muted-foreground ${cs.hover}`
         }`}
     >
-      <Icon size={15} />
-      <span className="text-[8.5px] font-medium leading-none truncate w-full text-center px-0.5 mt-0.5">{label}</span>
+      <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+      <span className="text-[8px] font-medium leading-none truncate w-full text-center px-0.5 mt-0.5">{label}</span>
     </button>
   );
 }
