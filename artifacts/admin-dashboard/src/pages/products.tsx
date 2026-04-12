@@ -644,11 +644,52 @@ export default function ProductsPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search products or SKU..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+
+        {/* Columns visibility dropdown */}
+        <div className="relative" ref={colsMenuRef}>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[12px]" onClick={() => setColsMenuOpen(v => !v)}>
+            <Columns3 size={13} />
+            Columns
+            {hiddenCols.size > 0 && (
+              <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{hiddenCols.size}</span>
+            )}
+            <ChevronDown size={11} className={`transition-transform ${colsMenuOpen ? "rotate-180" : ""}`} />
+          </Button>
+          {colsMenuOpen && (
+            <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-lg shadow-lg w-52 py-1 max-h-80 overflow-y-auto">
+              <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 dark:border-border">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Show / Hide Columns</span>
+                {hiddenCols.size > 0 && (
+                  <button onClick={() => { setHiddenCols(new Set()); localStorage.removeItem("products-hidden-cols"); }}
+                    className="text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold">Reset</button>
+                )}
+              </div>
+              {COLS.map(c => {
+                const visible = !hiddenCols.has(c.field);
+                const locked  = c.field === "name";
+                return (
+                  <button key={c.field} disabled={locked}
+                    onClick={() => toggleCol(c.field)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] transition-colors
+                      ${locked ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 dark:hover:bg-muted/40 cursor-pointer"}
+                      ${visible ? "text-gray-800 dark:text-foreground" : "text-gray-400 dark:text-muted-foreground"}`}>
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0
+                      ${visible ? "bg-indigo-500 border-indigo-500 text-white" : "border-gray-300 dark:border-border bg-transparent"}`}>
+                      {visible && <CheckCircle2 size={10} className="stroke-[3]" />}
+                    </span>
+                    <span className="truncate">{c.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
@@ -851,7 +892,7 @@ export default function ProductsPage() {
 
           {/* Add row */}
           {isAuthenticated && !newRow && (
-            <tr><td colSpan={COLS.length + 2}>
+            <tr><td colSpan={visibleCols.length + 2}>
               <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
                 data-testid="btn-add-row">
