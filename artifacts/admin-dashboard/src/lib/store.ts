@@ -272,6 +272,82 @@ export const syncDocsToApi = (): void => {
   if (docs.length > 0) _apiWrite(tenantKey(DOCS_KEY), docs);
 };
 
+// ─── Cities & Areas API ───────────────────────────────────────────────────────
+export type City = {
+  id: string;
+  name: string;
+  country: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const CITIES_KEY = "admin-cities";
+
+export const getCities = (): City[] => getStored<City>(CITIES_KEY);
+
+export const createCity = (data: Omit<City, "id" | "createdAt" | "updatedAt">): City => {
+  const item: City = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(CITIES_KEY, [...getCities(), item]);
+  return item;
+};
+
+export const updateCity = (id: string, updates: Partial<Omit<City, "id" | "createdAt">>): City => {
+  const items = getCities();
+  const i = items.findIndex(c => c.id === id);
+  if (i === -1) throw new Error("City not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(CITIES_KEY, items);
+  return items[i];
+};
+
+export const deleteCity = (id: string): void => {
+  setStored(CITIES_KEY, getCities().filter(c => c.id !== id));
+  setStored(AREAS_KEY, getAreas().filter(a => a.cityId !== id));
+};
+
+export type Area = {
+  id: string;
+  name: string;
+  cityId: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const AREAS_KEY = "admin-areas";
+
+export const getAreas = (): Area[] => getStored<Area>(AREAS_KEY);
+
+export const createArea = (data: Omit<Area, "id" | "createdAt" | "updatedAt">): Area => {
+  const item: Area = {
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(AREAS_KEY, [...getAreas(), item]);
+  return item;
+};
+
+export const updateArea = (id: string, updates: Partial<Omit<Area, "id" | "createdAt">>): Area => {
+  const items = getAreas();
+  const i = items.findIndex(a => a.id === id);
+  if (i === -1) throw new Error("Area not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(AREAS_KEY, items);
+  return items[i];
+};
+
+export const deleteArea = (id: string): void => {
+  setStored(AREAS_KEY, getAreas().filter(a => a.id !== id));
+};
+
 // ─── Customers API ────────────────────────────────────────────────────────────
 export type CustomerStatus = "Active" | "Inactive" | "Churned";
 
@@ -283,6 +359,7 @@ export type Customer = {
   phone: string;
   industry: string;
   city: string;
+  area?: string;   // managed area/region
   status: CustomerStatus;
   source: "from_lead" | "direct";
   leadId?: string;
@@ -371,6 +448,7 @@ export type Supplier = {
   phone: string;
   category: string;
   city: string;
+  area?: string;   // managed area/region
   country: string;
   status: SupplierStatus;
   rating: number;
@@ -2039,7 +2117,9 @@ export type SalesAgent = {
   name:           string;
   email:          string;
   phone:          string;
-  region:         string;   // territory / area they cover
+  region:         string;   // territory / area they cover (free text, legacy)
+  city?:          string;   // managed city
+  area?:          string;   // managed area/region
   commissionRate: string;   // percentage e.g. "5"
   targetAmount:   string;   // monthly sales target (in base currency)
   status:           SalesAgentStatus;
