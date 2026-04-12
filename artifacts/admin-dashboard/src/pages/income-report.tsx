@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
+import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { getSettings } from "@/lib/store";
+import { getSettings, reconcileAccountingData } from "@/lib/store";
 import { printIncomeReport } from "@/lib/print-income-report";
 import {
-  TrendingUp, Calendar, Printer, Filter, X, Search,
+  TrendingUp, Calendar, Printer, Filter, X, Search, RefreshCw,
   BarChart3, FileText, Wallet, AlertTriangle, BadgeDollarSign,
   ChevronDown, ChevronRight, Banknote,
 } from "lucide-react";
@@ -68,8 +69,9 @@ type SourceSummary = {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function IncomeReportPage() {
-  const { accounts } = useAccounts();
-  const { entries }  = useJournalEntries();
+  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { entries,  refresh: refreshEntries  } = useJournalEntries();
+  const { toast } = useToast();
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── Filters ────────────────────────────────────────────────────────────────
@@ -79,6 +81,25 @@ export default function IncomeReportPage() {
   const [srcFilter,      setSrcFilter]      = useState("__all__");
   const [search,         setSearch]         = useState("");
   const [expandedSrcs,   setExpandedSrcs]   = useState<Record<string, boolean>>({});
+  const [reconciling,    setReconciling]    = useState(false);
+
+  function handleReconcile() {
+    setReconciling(true);
+    try {
+      const result = reconcileAccountingData();
+      refreshAccounts();
+      refreshEntries();
+      const added = result.accountsAdded;
+      toast({
+        title: "Reconciliation complete",
+        description: added > 0
+          ? `${added} system account${added !== 1 ? "s" : ""} added and accounting mappings verified.`
+          : "Chart of Accounts is up to date — no changes needed.",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  }
 
   // ── Account lookup map (id → account) ────────────────────────────────────
   const accountMap = useMemo(
@@ -191,28 +212,40 @@ export default function IncomeReportPage() {
             All posted revenue transactions grouped by income source
           </p>
         </div>
-        <Button
-          variant="outline" size="sm"
-          className="gap-1.5 shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400"
-          onClick={() => {
-            const activeSrc  = revenueAccounts.find(a => a.id === srcFilter);
-            printIncomeReport({
-              settings:       getSettings(),
-              from, to,
-              sources,
-              allLines,
-              grandTotal,
-              avgPerEntry,
-              topSource,
-              filteredLines,
-              filteredTotal,
-              srcFilterName:  activeSrc?.name,
-              searchQuery:    search || undefined,
-            });
-          }}
-        >
-          <Printer size={14} /> Print Report
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            variant="outline" size="sm"
+            onClick={handleReconcile}
+            disabled={reconciling}
+            title="Reconcile COA — reseed system accounts and verify accounting mappings"
+            className="gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/20"
+          >
+            <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
+            Reconcile
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400"
+            onClick={() => {
+              const activeSrc  = revenueAccounts.find(a => a.id === srcFilter);
+              printIncomeReport({
+                settings:       getSettings(),
+                from, to,
+                sources,
+                allLines,
+                grandTotal,
+                avgPerEntry,
+                topSource,
+                filteredLines,
+                filteredTotal,
+                srcFilterName:  activeSrc?.name,
+                searchQuery:    search || undefined,
+              });
+            }}
+          >
+            <Printer size={14} /> Print Report
+          </Button>
+        </div>
       </div>
 
       {/* ── Filters ───────────────────────────────────────────────────────── */}

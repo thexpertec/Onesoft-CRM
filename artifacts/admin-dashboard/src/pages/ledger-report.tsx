@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
+import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account, getSettings } from "@/lib/store";
+import { Account, getSettings, reconcileAccountingData } from "@/lib/store";
 import {
-  BookOpen, Printer, FileDown, Search, ChevronDown,
+  BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -142,16 +143,36 @@ type LedgerRow = {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LedgerReportPage() {
-  const { accounts } = useAccounts();
-  const { entries } = useJournalEntries();
+  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { entries,  refresh: refreshEntries  } = useJournalEntries();
+  const { toast } = useToast();
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   const [accountId, setAccountId] = useState("");
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(today());
   const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "draft">("posted");
+  const [reconciling, setReconciling] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  function handleReconcile() {
+    setReconciling(true);
+    try {
+      const result = reconcileAccountingData();
+      refreshAccounts();
+      refreshEntries();
+      const added = result.accountsAdded;
+      toast({
+        title: "Reconciliation complete",
+        description: added > 0
+          ? `${added} system account${added !== 1 ? "s" : ""} added and accounting mappings verified.`
+          : "Chart of Accounts is up to date — no changes needed.",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  }
 
   // Selected account
   const account = useMemo(() => accounts.find(a => a.id === accountId) ?? null, [accounts, accountId]);
@@ -559,6 +580,16 @@ export default function LedgerReportPage() {
         </div>
 
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={handleReconcile}
+            disabled={reconciling}
+            title="Reconcile COA — reseed system accounts and verify accounting mappings"
+            className="gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/20"
+          >
+            <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
+            Reconcile
+          </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} disabled={!accountId}>
             <Printer size={14} className="mr-1.5" /> Print
           </Button>

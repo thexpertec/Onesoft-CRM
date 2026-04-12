@@ -2977,6 +2977,34 @@ export function seedDefaultCoaAccounts(): void {
 }
 
 /**
+ * Reconcile the Chart of Accounts and accounting settings to ensure all system
+ * accounts are present, hierarchy is correct, and settings mappings are wired.
+ * Returns a summary of what was fixed for display in the UI.
+ */
+export function reconcileAccountingData(): {
+  accountsBefore: number;
+  accountsAfter:  number;
+  accountsAdded:  number;
+  settingsWired:  boolean;
+} {
+  const before  = getAccounts().length;
+  const sBefore = getSettings();
+  const hadMissingMappings =
+    !sBefore.accSalesRevenue || !sBefore.accCash || !sBefore.accBank ||
+    !sBefore.accReceivable   || !sBefore.accVatPayable;
+
+  seedDefaultCoaAccounts();
+
+  const after = getAccounts().length;
+  return {
+    accountsBefore: before,
+    accountsAfter:  after,
+    accountsAdded:  Math.max(0, after - before),
+    settingsWired:  hadMissingMappings,
+  };
+}
+
+/**
  * Generates the next sequential sub-code for subsidiary ledgers under a parent.
  * Only counts children that already use the "{parentCode}-NNN" pattern so that
  * fixed-code system accounts (e.g. 1101 under parent 1100) do not skew the numbering.

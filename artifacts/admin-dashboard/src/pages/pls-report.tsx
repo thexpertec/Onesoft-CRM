@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
+import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account, getSettings } from "@/lib/store";
+import { Account, getSettings, reconcileAccountingData } from "@/lib/store";
 import {
-  TrendingUp, TrendingDown, Minus, Printer, FileDown,
+  TrendingUp, TrendingDown, Minus, Printer, FileDown, RefreshCw,
   Calendar, ChevronRight, ChevronDown, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -193,8 +194,9 @@ function Section({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PlsReportPage() {
-  const { accounts } = useAccounts();
-  const { entries }  = useJournalEntries();
+  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { entries,  refresh: refreshEntries  } = useJournalEntries();
+  const { toast } = useToast();
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   const [from,         setFrom]         = useState(yearStart());
@@ -203,6 +205,25 @@ export default function PlsReportPage() {
   const [showZero,     setShowZero]     = useState(false);
   const [colRevenue,   setColRevenue]   = useState(false);
   const [colExpense,   setColExpense]   = useState(false);
+  const [reconciling,  setReconciling]  = useState(false);
+
+  function handleReconcile() {
+    setReconciling(true);
+    try {
+      const result = reconcileAccountingData();
+      refreshAccounts();
+      refreshEntries();
+      const added = result.accountsAdded;
+      toast({
+        title: "Reconciliation complete",
+        description: added > 0
+          ? `${added} system account${added !== 1 ? "s" : ""} added and accounting mappings verified.`
+          : "Chart of Accounts is up to date — no changes needed.",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  }
 
   // ── Build JE map for the selected period ────────────────────────────────────
   const jeMap = useMemo((): JeMap => {
@@ -556,6 +577,16 @@ export default function PlsReportPage() {
         </button>
 
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={handleReconcile}
+            disabled={reconciling}
+            title="Reconcile COA — reseed system accounts and verify accounting mappings"
+            className="gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/20"
+          >
+            <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
+            Reconcile
+          </Button>
           <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer size={14} className="mr-1.5" /> Print
           </Button>

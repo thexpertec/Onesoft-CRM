@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Account, AccountHead, ACCOUNT_HEADS } from "@/lib/store";
+import { Account, AccountHead, ACCOUNT_HEADS, reconcileAccountingData } from "@/lib/store";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
+import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp,
-  CheckCircle, AlertTriangle, Minus,
+  CheckCircle, AlertTriangle, Minus, RefreshCw,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -205,11 +207,31 @@ function BalanceRow({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BalanceSheetPage() {
-  const { accounts } = useAccounts();
-  const { entries }  = useJournalEntries();
+  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { entries,  refresh: refreshEntries  } = useJournalEntries();
+  const { toast } = useToast();
 
-  const [collapsed, setCollapsed]       = useState<Record<string, boolean>>({});
+  const [collapsed, setCollapsed]         = useState<Record<string, boolean>>({});
   const [headCollapsed, setHeadCollapsed] = useState<Record<string, boolean>>({});
+  const [reconciling, setReconciling]     = useState(false);
+
+  const handleReconcile = useCallback(() => {
+    setReconciling(true);
+    try {
+      const result = reconcileAccountingData();
+      refreshAccounts();
+      refreshEntries();
+      const added = result.accountsAdded;
+      toast({
+        title: "Reconciliation complete",
+        description: added > 0
+          ? `${added} system account${added !== 1 ? "s" : ""} added and accounting mappings verified.`
+          : "Chart of Accounts is up to date — no changes needed.",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  }, [refreshAccounts, refreshEntries, toast]);
 
   const toggle      = useCallback((id: string) => setCollapsed(p => ({ ...p, [id]: !p[id] })), []);
   const toggleHead  = useCallback((h: string)  => setHeadCollapsed(p => ({ ...p, [h]: !p[h] })), []);
@@ -306,6 +328,17 @@ export default function BalanceSheetPage() {
               >
                 <ChevronsUp size={13} /> Collapse all
               </button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReconcile}
+                disabled={reconciling}
+                title="Reconcile COA — reseed system accounts and verify accounting mappings"
+                className="ml-1 gap-1.5 h-7 px-2.5 text-[11px] border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/20"
+              >
+                <RefreshCw size={12} className={reconciling ? "animate-spin" : ""} />
+                Reconcile
+              </Button>
             </div>
           </div>
         </div>

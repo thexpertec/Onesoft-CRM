@@ -1,8 +1,10 @@
 import { useState, useMemo } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
+import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
+import { reconcileAccountingData } from "@/lib/store";
 import {
-  Receipt, Calendar, Download, Printer, Filter, X,
+  Receipt, Calendar, Download, Printer, Filter, X, RefreshCw,
   TrendingDown, ChevronDown, ChevronRight, Search,
   BarChart3, FileText, Wallet, AlertTriangle,
 } from "lucide-react";
@@ -68,8 +70,9 @@ type CategorySummary = {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ExpenseReportPage() {
-  const { accounts } = useAccounts();
-  const { entries }  = useJournalEntries();
+  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { entries,  refresh: refreshEntries  } = useJournalEntries();
+  const { toast } = useToast();
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── Filters ────────────────────────────────────────────────────────────────
@@ -79,6 +82,25 @@ export default function ExpenseReportPage() {
   const [catFilter,    setCatFilter]    = useState("__all__");
   const [search,       setSearch]       = useState("");
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
+  const [reconciling,  setReconciling]  = useState(false);
+
+  function handleReconcile() {
+    setReconciling(true);
+    try {
+      const result = reconcileAccountingData();
+      refreshAccounts();
+      refreshEntries();
+      const added = result.accountsAdded;
+      toast({
+        title: "Reconciliation complete",
+        description: added > 0
+          ? `${added} system account${added !== 1 ? "s" : ""} added and accounting mappings verified.`
+          : "Chart of Accounts is up to date — no changes needed.",
+      });
+    } finally {
+      setReconciling(false);
+    }
+  }
 
   // ── Account lookup map (id → account) ────────────────────────────────────
   const accountMap = useMemo(
@@ -204,6 +226,16 @@ export default function ExpenseReportPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
+          <Button
+            variant="outline" size="sm"
+            onClick={handleReconcile}
+            disabled={reconciling}
+            title="Reconcile COA — reseed system accounts and verify accounting mappings"
+            className="gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/20"
+          >
+            <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
+            Reconcile
+          </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
             <Printer size={14} /> Print
           </Button>
