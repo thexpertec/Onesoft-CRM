@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const BS_HEADS: AccountHead[] = ["Assets", "Liabilities", "Equity"];
+const PL_HEADS: AccountHead[] = ["Revenue / Income", "Expense"];
 
 const HEAD_BASE_CODE: Record<AccountHead, string> = {
   "Assets":           "1",
@@ -247,7 +248,7 @@ export default function BalanceSheetPage() {
     accounts.filter(a => a.accountType === "Group").forEach(a => { allIds[a.id] = true; });
     setCollapsed(allIds);
     const heads: Record<string, boolean> = {};
-    BS_HEADS.forEach(h => { heads[h] = true; });
+    [...BS_HEADS, ...PL_HEADS].forEach(h => { heads[h] = true; });
     setHeadCollapsed(heads);
   }, [accounts]);
 
@@ -265,10 +266,10 @@ export default function BalanceSheetPage() {
     return map;
   }, [entries]);
 
-  // Head-level subtotals (includes JE movements)
+  // Head-level subtotals (includes JE movements) — all 5 heads
   const headTotals = useMemo(() => {
     const result: Record<string, number> = {};
-    for (const head of BS_HEADS) {
+    for (const head of [...BS_HEADS, ...PL_HEADS]) {
       const headAccounts = accounts.filter(a => a.head === head);
       const roots = headAccounts.filter(a => !a.parentId);
       result[head] = roots.reduce((s, r) => s + subtreeBalance(accounts, r.id, jeMap), 0);
@@ -347,17 +348,19 @@ export default function BalanceSheetPage() {
       <div className="px-6 py-5 space-y-4">
 
         {/* ── Summary cards ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
-          {(["Assets", "Liabilities", "Equity"] as AccountHead[]).map(head => {
+        <div className="grid grid-cols-5 gap-3">
+          {(["Assets", "Liabilities", "Revenue / Income", "Expense", "Equity"] as AccountHead[]).map(head => {
             const s = HEAD_STYLE[head];
             const total = headTotals[head] ?? 0;
+            const isPL = head === "Revenue / Income" || head === "Expense";
             return (
-              <div key={head} className={`rounded-xl border ${s.border} ${s.bg} px-4 py-3`}>
+              <div key={head} className={`rounded-xl border ${s.border} ${s.bg} px-4 py-3 ${isPL ? "opacity-90" : ""}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`w-2 h-2 rounded-full ${s.dot}`} />
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${s.text}`}>{head}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${s.text} truncate`}>{head === "Revenue / Income" ? "Revenue" : head}</span>
+                  {isPL && <span className="text-[9px] font-semibold text-gray-400 ml-auto">P&amp;L</span>}
                 </div>
-                <div className={`text-[20px] font-bold font-mono ${s.text}`}>
+                <div className={`text-[18px] font-bold font-mono ${s.text}`}>
                   {fmt(total)}
                 </div>
                 <div className={`text-[10px] mt-0.5 ${s.text} opacity-60`}>Opening balance total</div>
@@ -497,6 +500,115 @@ export default function BalanceSheetPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* ── Income Statement Accounts (Revenue & Expense) ─────────────────── */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+
+          {/* Section label */}
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Income Statement Accounts
+            </span>
+            <span className="text-[10px] text-gray-400 dark:text-zinc-500">— Revenue &amp; Expense (P&amp;L)</span>
+          </div>
+
+          {/* Column headers */}
+          <div className="flex items-center pl-2 pr-4 py-2.5 bg-gray-50/50 dark:bg-zinc-800/30 border-b border-gray-200 dark:border-zinc-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="w-8 flex-shrink-0" />
+            <div className="w-24 flex-shrink-0">Code</div>
+            <div className="flex-1">Account Name</div>
+            <div className="w-44 text-right">Balance</div>
+          </div>
+
+          {PL_HEADS.map(head => {
+            const s = HEAD_STYLE[head];
+            const headAccounts = accounts
+              .filter(a => a.head === head)
+              .map(a => ({ ...a, parentId: a.parentId ?? null }));
+            const rows = buildTree(accounts, headAccounts, null, 0, collapsed, jeMap);
+            const headTotal = headTotals[head] ?? 0;
+            const isHCollapsed = headCollapsed[head];
+
+            return (
+              <div key={head}>
+                <div
+                  className={`flex items-center gap-2 px-4 py-2.5 border-b ${s.border} ${s.bg} cursor-pointer select-none`}
+                  onClick={() => toggleHead(head)}
+                >
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleHead(head); }}
+                    className={`p-0.5 rounded ${s.text} hover:opacity-70`}
+                  >
+                    {isHCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <span className={`font-mono text-[12px] font-extrabold opacity-60 ${s.text}`}>
+                    {HEAD_BASE_CODE[head]}
+                  </span>
+                  <span className={`text-[12px] font-bold uppercase tracking-wider flex-1 ${s.text}`}>{head}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${s.badgeBg}`}>
+                    {headAccounts.length} acct{headAccounts.length !== 1 ? "s" : ""}
+                  </span>
+                  <span className={`font-mono text-[13px] font-bold ml-4 min-w-[100px] text-right ${s.text}`}>
+                    {fmt(headTotal)}
+                  </span>
+                </div>
+
+                {!isHCollapsed && (
+                  rows.length === 0 ? (
+                    <div className="px-10 py-4 text-[12px] text-gray-400 italic border-b border-gray-100 dark:border-zinc-800">
+                      No accounts yet. Add accounts in Chart of Accounts.
+                    </div>
+                  ) : (
+                    <>
+                      {rows.map(row => (
+                        <BalanceRow
+                          key={row.account.id}
+                          row={row}
+                          s={s}
+                          collapsed={collapsed}
+                          onToggle={toggle}
+                        />
+                      ))}
+                      <div className={`flex items-center px-4 py-2 border-t ${s.border} ${s.subtotalBg}`}>
+                        <div className="w-8 flex-shrink-0" />
+                        <div className="w-24 flex-shrink-0" />
+                        <div className={`flex-1 text-[11px] font-bold uppercase tracking-wide ${s.text}`}>
+                          Total {head}
+                        </div>
+                        <div className={`w-44 text-right pr-4 font-mono text-[13px] font-bold ${s.text}`}>
+                          {fmt(headTotal)}
+                        </div>
+                      </div>
+                    </>
+                  )
+                )}
+              </div>
+            );
+          })}
+
+          {/* Net Income / Loss row */}
+          {(() => {
+            const totalRevenue = headTotals["Revenue / Income"] ?? 0;
+            const totalExpense = headTotals["Expense"] ?? 0;
+            const netIncome = totalRevenue - totalExpense;
+            const isProfit = netIncome >= 0;
+            return (
+              <div className={`flex items-center px-4 py-3 border-t-2 border-gray-200 dark:border-zinc-700 ${isProfit ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-red-50/70 dark:bg-red-950/20"}`}>
+                {isProfit ? (
+                  <CheckCircle size={14} className="text-emerald-600 dark:text-emerald-400 mr-2 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle size={14} className="text-red-600 dark:text-red-400 mr-2 flex-shrink-0" />
+                )}
+                <span className={`text-[12px] font-bold flex-1 ${isProfit ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  {isProfit ? "Net Income" : "Net Loss"} (Revenue − Expenses)
+                </span>
+                <span className={`font-mono text-[14px] font-bold w-44 text-right pr-4 ${isProfit ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  {fmt(Math.abs(netIncome))}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
       </div>
