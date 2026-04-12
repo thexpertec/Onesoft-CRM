@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useSalesAgents } from "@/hooks/use-data";
+import { useSalesAgents, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -20,26 +20,11 @@ import { downloadExcel } from "@/lib/export-excel";
 import { useToast } from "@/hooks/use-toast";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
 
-// ── Column definitions ─────────────────────────────────────────────────────────
-const COLS: ColDef[] = [
-  { field: "agentCode",      label: "Code",           minW: 90,  type: "readonly" },
-  { field: "name",           label: "Name",            minW: 160, type: "text"     },
-  { field: "email",          label: "Email",           minW: 190, type: "email"    },
-  { field: "phone",          label: "Phone",           minW: 130, type: "tel"      },
-  { field: "region",         label: "Region / Area",   minW: 140, type: "text"     },
-  { field: "commissionRate", label: "Commission %",    minW: 110, type: "text"     },
-  { field: "targetAmount",   label: "Monthly Target",  minW: 130, type: "text"     },
-  { field: "status",         label: "Status",          minW: 100, type: "select",  options: ["Active", "Inactive"] },
-  { field: "joinDate",       label: "Join Date",       minW: 110, type: "date"     },
-  { field: "notes",          label: "Notes",           minW: 200, type: "text"     },
-];
-const TOTAL_W = COLS.reduce((s, c) => s + c.minW, 0);
-
-type EditableField = "name" | "email" | "phone" | "region" | "commissionRate" | "targetAmount" | "status" | "joinDate" | "notes";
+type EditableField = "name" | "email" | "phone" | "region" | "city" | "area" | "commissionRate" | "targetAmount" | "status" | "joinDate" | "notes";
 type NewRow = Record<string, string>;
 
 const BLANK: NewRow = {
-  agentCode: "", name: "", email: "", phone: "", region: "",
+  agentCode: "", name: "", email: "", phone: "", region: "", city: "", area: "",
   commissionRate: "", targetAmount: "", status: "Active",
   joinDate: format(new Date(), "yyyy-MM-dd"), notes: "",
 };
@@ -72,9 +57,30 @@ function calcSaleTotal(sale: Sale): number {
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function SalesAgentsPage() {
   const { agents, addAgent, editAgent, removeAgent } = useSalesAgents();
+  const { cities } = useCities();
+  const { areas }  = useAreas();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const sym = getSettingsCurrencySymbol();
+
+  const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
+  const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);
+
+  const COLS = useMemo<ColDef[]>(() => [
+    { field: "agentCode",      label: "Code",           minW: 90,  type: "readonly" },
+    { field: "name",           label: "Name",            minW: 160, type: "text"     },
+    { field: "email",          label: "Email",           minW: 190, type: "email"    },
+    { field: "phone",          label: "Phone",           minW: 130, type: "tel"      },
+    { field: "city",           label: "City",            minW: 120, type: cityOptions.length ? "select" : "text", options: cityOptions },
+    { field: "area",           label: "Area / Region",   minW: 130, type: areaOptions.length ? "select" : "text", options: areaOptions },
+    { field: "region",         label: "Territory (free)",minW: 140, type: "text"     },
+    { field: "commissionRate", label: "Commission %",    minW: 110, type: "text"     },
+    { field: "targetAmount",   label: "Monthly Target",  minW: 130, type: "text"     },
+    { field: "status",         label: "Status",          minW: 100, type: "select",  options: ["Active", "Inactive"] },
+    { field: "joinDate",       label: "Join Date",       minW: 110, type: "date"     },
+    { field: "notes",          label: "Notes",           minW: 200, type: "text"     },
+  ], [cityOptions, areaOptions]);
+  const TOTAL_W = useMemo(() => COLS.reduce((s, c) => s + c.minW, 0), [COLS]);
 
   const [search,       setSearch]       = useState("");
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
@@ -113,6 +119,8 @@ export default function SalesAgentsPage() {
       name:           newRow.name.trim(),
       email:          newRow.email?.trim() || "",
       phone:          newRow.phone?.trim() || "",
+      city:           newRow.city?.trim() || "",
+      area:           newRow.area?.trim() || "",
       region:         newRow.region?.trim() || "",
       commissionRate: newRow.commissionRate?.trim() || "",
       targetAmount:   newRow.targetAmount?.trim() || "",
@@ -454,7 +462,12 @@ export default function SalesAgentsPage() {
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${viewAgent.status === "Active" ? "bg-emerald-400/30 text-emerald-100" : "bg-white/20 text-white/70"}`}>
                         {viewAgent.status}
                       </span>
-                      {viewAgent.region && (
+                      {(viewAgent.city || viewAgent.area) && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-white/80 flex items-center gap-1">
+                          <MapPin size={9} /> {[viewAgent.city, viewAgent.area].filter(Boolean).join(" › ")}
+                        </span>
+                      )}
+                      {viewAgent.region && !viewAgent.city && (
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-white/80 flex items-center gap-1">
                           <MapPin size={9} /> {viewAgent.region}
                         </span>

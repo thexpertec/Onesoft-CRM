@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useCustomers, useLeads } from "@/hooks/use-data";
+import { useCustomers, useLeads, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Customer, CustomerStatus, Lead, convertLeadToCustomer } from "@/lib/store";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
@@ -174,24 +174,10 @@ const STATUS_COLORS: Record<string, string> = {
   Churned:  "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
-const COLS: ColDef[] = [
-  { field: "name",          label: "Name",          minW: 150, type: "text"  },
-  { field: "company",       label: "Company",       minW: 140, type: "text"  },
-  { field: "email",         label: "Email",         minW: 190, type: "email" },
-  { field: "phone",         label: "Phone",         minW: 120, type: "tel"   },
-  { field: "industry",      label: "Industry",      minW: 120, type: "text"  },
-  { field: "city",          label: "City",          minW: 110, type: "text"  },
-  { field: "status",        label: "Status",        minW: 130, type: "select", options: CUSTOMER_STATUSES, optionColors: STATUS_COLORS },
-  { field: "customerSince", label: "Since",         minW: 120, type: "date"  },
-  { field: "totalValue",    label: "Value",         minW: 110, type: "text"  },
-  { field: "notes",         label: "Notes",         minW: 180, type: "text"  },
-];
-const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
-
-type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "customerSince" | "totalValue" | "notes";
+type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes";
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", company: "", email: "", phone: "", industry: "", city: "",
+  name: "", company: "", email: "", phone: "", industry: "", city: "", area: "",
   status: "Active", customerSince: new Date().toISOString().split("T")[0], totalValue: "", notes: "",
 });
 
@@ -201,8 +187,28 @@ type Tab = typeof TABS[number];
 export default function CustomersPage() {
   const { customers, addCustomer, editCustomer, removeCustomer, refresh } = useCustomers();
   const { leads } = useLeads();
+  const { cities } = useCities();
+  const { areas }  = useAreas();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+
+  const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
+  const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);
+
+  const COLS = useMemo<ColDef[]>(() => [
+    { field: "name",          label: "Name",          minW: 150, type: "text"   },
+    { field: "company",       label: "Company",       minW: 140, type: "text"   },
+    { field: "email",         label: "Email",         minW: 190, type: "email"  },
+    { field: "phone",         label: "Phone",         minW: 120, type: "tel"    },
+    { field: "industry",      label: "Industry",      minW: 120, type: "text"   },
+    { field: "city",          label: "City",          minW: 120, type: cityOptions.length ? "select" : "text", options: cityOptions },
+    { field: "area",          label: "Area / Region", minW: 130, type: areaOptions.length ? "select" : "text", options: areaOptions },
+    { field: "status",        label: "Status",        minW: 130, type: "select", options: CUSTOMER_STATUSES, optionColors: STATUS_COLORS },
+    { field: "customerSince", label: "Since",         minW: 120, type: "date"   },
+    { field: "totalValue",    label: "Value",         minW: 110, type: "text"   },
+    { field: "notes",         label: "Notes",         minW: 180, type: "text"   },
+  ], [cityOptions, areaOptions]);
+  const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const [activeTab,    setActiveTab]    = useState<Tab>("All Customers");
   const [search,       setSearch]       = useState("");
@@ -323,7 +329,8 @@ export default function CustomersPage() {
     }
     addCustomer({
       name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
-      industry: newRow.industry, city: newRow.city, status: newRow.status as CustomerStatus,
+      industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
+      status: newRow.status as CustomerStatus,
       customerSince: newRow.customerSince, totalValue: newRow.totalValue, notes: newRow.notes,
       currency: "GBP", tags: [], source: "direct",
     });
@@ -375,6 +382,7 @@ export default function CustomersPage() {
                 { header: "Phone",         key: "phone",         width: 18 },
                 { header: "Industry",      key: "industry",      width: 20 },
                 { header: "City",          key: "city",          width: 18 },
+                { header: "Area/Region",   key: "area",          width: 18 },
                 { header: "Status",        key: "status",        width: 12 },
                 { header: "Currency",      key: "currency",      width: 10 },
                 { header: "Total Value",   key: "totalValue",    width: 14 },
@@ -605,8 +613,9 @@ export default function CustomersPage() {
                 {[
                   { label: "Email",    value: viewCust.email,    link: `mailto:${viewCust.email}` },
                   { label: "Phone",    value: viewCust.phone,    link: `tel:${viewCust.phone}` },
-                  { label: "Industry", value: viewCust.industry },
-                  { label: "City",     value: viewCust.city },
+                  { label: "Industry",     value: viewCust.industry },
+                  { label: "City",        value: viewCust.city },
+                  { label: "Area/Region", value: viewCust.area ?? "" },
                   { label: "Since",    value: viewCust.customerSince ? format(new Date(viewCust.customerSince), "d MMM yyyy") : "—" },
                   { label: "Value",    value: viewCust.totalValue ? formatAmount(parseFloat(viewCust.totalValue || "0"), viewCust.currency || "GBP") : "—" },
                 ].map(item => (

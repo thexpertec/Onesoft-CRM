@@ -21,9 +21,10 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/categories` | Product categories | `admin-product-categories` |
 | `/attributes` | Product attributes | `admin-attributes` |
 | `/units` | Units of measurement | `admin-units` |
+| `/areas` | Cities & Areas / Regions master data | `admin-cities`, `admin-areas` |
 | `/leads` | Leads pipeline | `admin-leads` |
-| `/customers` | Customer management | `admin-customers` |
-| `/suppliers` | Supplier management | `admin-suppliers` |
+| `/customers` | Customer management (city + area/region fields) | `admin-customers` |
+| `/suppliers` | Supplier management (city + area/region fields) | `admin-suppliers` |
 | `/documents` | Requirement documents | `admin-req-docs` |
 | `/users` | User management (superadmin) | `admin-users` |
 | `/tenants` | Tenant management (superadmin) — create/edit/delete client orgs, switch views | `admin-tenants` (global) |

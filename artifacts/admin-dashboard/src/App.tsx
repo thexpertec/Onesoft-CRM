@@ -47,6 +47,7 @@ import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
 import SaleReturnPage from "@/pages/sale-return";
 import SalesAgentsPage from "@/pages/sales-agents";
+import AreasPage from "@/pages/areas";
 import RawMaterialsPage from "@/pages/raw-materials";
 import ManufacturingPage from "@/pages/manufacturing";
 import ProductionGuidePage from "@/pages/production-guide";
@@ -130,6 +131,7 @@ function Router() {
               <Route path="/invoices" component={InvoicesPage} />
               <Route path="/calc-invoice" component={CalcInvoicePage} />
               <Route path="/sales-agents" component={SalesAgentsPage} />
+              <Route path="/areas" component={AreasPage} />
               <Route path="/raw-materials" component={RawMaterialsPage} />
               <Route path="/manufacturing" component={ManufacturingPage} />
               <Route path="/production-guide" component={ProductionGuidePage} />

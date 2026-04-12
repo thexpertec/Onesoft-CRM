@@ -9,6 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
+  MapPin,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -160,6 +161,15 @@ const CRM_COLUMNS: MegaColumn[] = [
     links: [
       { label: "All Suppliers", href: "/suppliers", icon: Truck     },
       { label: "Add Supplier",  href: "/suppliers", icon: UserPlus  },
+    ],
+  },
+  {
+    href: "/areas", label: "Areas & Regions", icon: MapPin,
+    color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/40",
+    desc: "Cities & area master data",
+    links: [
+      { label: "Cities & Areas",  href: "/areas", icon: MapPin     },
+      { label: "Sales Agents",    href: "/sales-agents", icon: Users2 },
     ],
   },
 ];

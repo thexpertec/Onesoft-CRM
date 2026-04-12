@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useSuppliers } from "@/hooks/use-data";
+import { useSuppliers, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Supplier, SupplierStatus } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
@@ -181,26 +181,11 @@ const SUPPLIER_CATEGORIES = [
   "HR & Recruitment","Logistics & Delivery","Office Supplies","Other",
 ];
 
-// ─── Column definitions ────────────────────────────────────────────────────────
-const COLS: ColDef[] = [
-  { field: "company",       label: "Company",      minW: 150, type: "text"   },
-  { field: "contactPerson", label: "Contact",      minW: 140, type: "text"   },
-  { field: "email",         label: "Email",        minW: 180, type: "email"  },
-  { field: "phone",         label: "Phone",        minW: 120, type: "tel"    },
-  { field: "category",     label: "Category",     minW: 160, type: "select", options: SUPPLIER_CATEGORIES },
-  { field: "city",          label: "City",         minW: 110, type: "text"   },
-  { field: "country",       label: "Country",      minW: 110, type: "text"   },
-  { field: "status",        label: "Status",       minW: 130, type: "select", options: SUPPLIER_STATUSES, optionColors: STATUS_COLORS },
-  { field: "rating",        label: "Rating",       minW: 120, type: "stars"  },
-  { field: "notes",         label: "Notes",        minW: 180, type: "text"   },
-];
-const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
-
-type EditableField = "company" | "contactPerson" | "email" | "phone" | "category" | "city" | "country" | "status" | "rating" | "notes";
+type EditableField = "company" | "contactPerson" | "email" | "phone" | "category" | "city" | "area" | "country" | "status" | "rating" | "notes";
 
 const BLANK = (): Record<EditableField, string> => ({
   company: "", contactPerson: "", email: "", phone: "",
-  category: SUPPLIER_CATEGORIES[0], city: "", country: "",
+  category: SUPPLIER_CATEGORIES[0], city: "", area: "", country: "",
   status: "Active", rating: "0", notes: "",
 });
 
@@ -217,8 +202,28 @@ function Stars({ n }: { n: number }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function SuppliersPage() {
   const { suppliers, addSupplier, editSupplier, removeSupplier } = useSuppliers();
+  const { cities } = useCities();
+  const { areas }  = useAreas();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+
+  const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
+  const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);
+
+  const COLS = useMemo<ColDef[]>(() => [
+    { field: "company",       label: "Company",      minW: 150, type: "text"   },
+    { field: "contactPerson", label: "Contact",      minW: 140, type: "text"   },
+    { field: "email",         label: "Email",        minW: 180, type: "email"  },
+    { field: "phone",         label: "Phone",        minW: 120, type: "tel"    },
+    { field: "category",      label: "Category",     minW: 160, type: "select", options: SUPPLIER_CATEGORIES },
+    { field: "city",          label: "City",         minW: 120, type: cityOptions.length ? "select" : "text", options: cityOptions },
+    { field: "area",          label: "Area / Region",minW: 130, type: areaOptions.length ? "select" : "text", options: areaOptions },
+    { field: "country",       label: "Country",      minW: 110, type: "text"   },
+    { field: "status",        label: "Status",       minW: 130, type: "select", options: SUPPLIER_STATUSES, optionColors: STATUS_COLORS },
+    { field: "rating",        label: "Rating",       minW: 120, type: "stars"  },
+    { field: "notes",         label: "Notes",        minW: 180, type: "text"   },
+  ], [cityOptions, areaOptions]);
+  const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const [search,       setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -345,7 +350,8 @@ export default function SuppliersPage() {
     addSupplier({
       company: newRow.company, contactPerson: newRow.contactPerson, email: newRow.email,
       phone: newRow.phone, category: newRow.category || SUPPLIER_CATEGORIES[0],
-      city: newRow.city, country: newRow.country, status: newRow.status as SupplierStatus,
+      city: newRow.city, area: newRow.area || undefined, country: newRow.country,
+      status: newRow.status as SupplierStatus,
       rating: parseInt(newRow.rating) || 0, currency: "GBP", notes: newRow.notes, tags: [],
     });
     toast({ title: "Supplier added", description: `${newRow.company} added.` });
@@ -591,8 +597,9 @@ export default function SuppliersPage() {
                   { label: "Email",    value: viewSupp.email,    link: `mailto:${viewSupp.email}` },
                   { label: "Phone",    value: viewSupp.phone,    link: `tel:${viewSupp.phone}` },
                   { label: "Category", value: viewSupp.category },
-                  { label: "City",     value: viewSupp.city },
-                  { label: "Country",  value: viewSupp.country },
+                  { label: "City",        value: viewSupp.city },
+                  { label: "Area/Region", value: viewSupp.area ?? "" },
+                  { label: "Country",     value: viewSupp.country },
                   { label: "Added",    value: format(new Date(viewSupp.createdAt), "d MMM yyyy") },
                 ].map(item => (
                   <div key={item.label}>

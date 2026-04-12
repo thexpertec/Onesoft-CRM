@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
+  getCities, createCity, updateCity, deleteCity,
+  getAreas, createArea, updateArea, deleteArea,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup,
@@ -26,6 +28,7 @@ import {
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost, RPVoucher,
+  City, Area,
 } from "@/lib/store";
 
 export function useLeads() {
@@ -439,4 +442,24 @@ export function useRPVouchers() {
   const remove = (id: string)                                             => { deleteRPVoucher(id);              fetch(); };
   const post   = (id: string)                                             => { const je = postRPVoucherJE(id);   fetch(); return je; };
   return { vouchers, add, edit, remove, post, refresh: fetch };
+}
+
+export function useCities() {
+  const [cities, setCities] = useState<City[]>([]);
+  const fetch = useCallback(() => setCities(getCities()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add    = (d: Parameters<typeof createCity>[0])              => { const c = createCity(d);    fetch(); return c; };
+  const edit   = (id: string, u: Parameters<typeof updateCity>[1]) => { const c = updateCity(id, u); fetch(); return c; };
+  const remove = (id: string)                                        => { deleteCity(id);              fetch(); };
+  return { cities, add, edit, remove, refresh: fetch };
+}
+
+export function useAreas() {
+  const [areas, setAreas] = useState<Area[]>([]);
+  const fetch = useCallback(() => setAreas(getAreas()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add    = (d: Parameters<typeof createArea>[0])              => { const a = createArea(d);    fetch(); return a; };
+  const edit   = (id: string, u: Parameters<typeof updateArea>[1]) => { const a = updateArea(id, u); fetch(); return a; };
+  const remove = (id: string)                                        => { deleteArea(id);              fetch(); };
+  return { areas, add, edit, remove, refresh: fetch };
 }
