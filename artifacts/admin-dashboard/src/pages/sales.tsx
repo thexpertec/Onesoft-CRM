@@ -777,13 +777,18 @@ function POSView({
                         <ProductThumbnail product={prod ?? { name: item.productName, sku: item.sku } as Product} size="sm" />
                       </div>
 
-                      {/* Product name + unit + stock + item status */}
+                      {/* Product name + unit + stock + cost tag */}
                       <div className="flex-1 min-w-0">
                         <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">{item.productName || "—"}</div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {item.unit && (
                             <span className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400">
                               {item.unit}
+                            </span>
+                          )}
+                          {parseFloat(prod?.costPrice ?? "0") > 0 && (
+                            <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 text-red-400 dark:text-red-500 tabular-nums">
+                              Cost: {sym}{parseFloat(prod!.costPrice).toFixed(2)}
                             </span>
                           )}
                           {(() => {
@@ -817,16 +822,6 @@ function POSView({
                         ) : (
                           <span className="text-[15px] font-bold text-gray-600 dark:text-gray-300 block text-center">×{item.qty}</span>
                         )}
-                      </div>
-
-                      {/* Cost price (read-only) */}
-                      <div className="shrink-0 w-[78px]">
-                        <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Cost {sym}</div>
-                        <div className="text-[14px] font-semibold text-right text-gray-400 dark:text-zinc-500 tabular-nums pb-0.5 border-b-2 border-transparent">
-                          {parseFloat(prod?.costPrice ?? "0") > 0
-                            ? parseFloat(prod?.costPrice ?? "0").toFixed(2)
-                            : <span className="text-gray-200 dark:text-zinc-700">—</span>}
-                        </div>
                       </div>
 
                       {/* Unit price */}
