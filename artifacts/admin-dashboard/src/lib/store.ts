@@ -1010,6 +1010,7 @@ export type Product = {
   costPrice?: string;        // Cost price per unit (internal cost including overheads)
   price: string;             // Retail sale price per unit
   wholesalePrice?: string;   // Wholesale price per unit
+  commissionPct?: string;    // Sales agent commission percentage on this product
   description: string;
   status: ProductStatus;
   condition?: ProductCondition; // Physical condition of the product

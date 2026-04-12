@@ -20,7 +20,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "status" | "condition" | "description";
+type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -39,7 +39,7 @@ const CONDITION_COLORS: Record<string, string> = {
 const BLANK = (): Record<EditableField, string> => ({
   name: "", sku: "", barcode: "", brand: "", category: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
-  retailProfit: "", wholesaleProfit: "",
+  retailProfit: "", wholesaleProfit: "", commissionPct: "",
   status: "Active", condition: "", description: "",
 });
 
@@ -184,6 +184,7 @@ export default function ProductsPage() {
         brand: formData.brand, category: formData.category,
         unit: formData.unit, purchasePrice: formData.purchasePrice, costPrice: formData.costPrice,
         price: formData.price, wholesalePrice: formData.wholesalePrice,
+        commissionPct: formData.commissionPct || undefined,
         status: (formData.status as Product["status"]) || "Active",
         condition: (formData.condition as Product["condition"]) || undefined,
         description: formData.description,
@@ -994,10 +995,10 @@ export default function ProductsPage() {
               </div>
             </div>
 
-            {/* Row 2: Pricing — all 6 price fields in one row */}
+            {/* Row 2: Pricing — 7 fields in one row */}
             <div className="rounded-xl border border-border bg-muted/20 px-4 pt-2.5 pb-3">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">Pricing</p>
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid grid-cols-7 gap-3">
 
                 {/* Purchase Price */}
                 <div className="space-y-1">
@@ -1065,6 +1066,30 @@ export default function ProductsPage() {
                     );
                   })()}
                   <p className="text-[10px] text-muted-foreground leading-tight">Wholesale − Cost</p>
+                </div>
+
+                {/* Commission % */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-foreground">Commission %</label>
+                  <div className="relative">
+                    <Input
+                      type="number" min="0" max="100" step="0.1"
+                      value={formData.commissionPct}
+                      onChange={e => patchForm("commissionPct", e.target.value)}
+                      placeholder="0"
+                      className="h-8 text-sm pr-7"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                  {(() => {
+                    const retail = parseFloat(formData.price);
+                    const pct    = parseFloat(formData.commissionPct);
+                    if (!isNaN(retail) && retail > 0 && !isNaN(pct) && pct > 0) {
+                      const amt = retail * pct / 100;
+                      return <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium leading-tight">{sym}{amt.toFixed(dp)} / sale</p>;
+                    }
+                    return <p className="text-[10px] text-muted-foreground leading-tight">Agent's cut per sale</p>;
+                  })()}
                 </div>
 
               </div>
