@@ -1324,10 +1324,13 @@ export default function SalesPage() {
   useEffect(() => { localMetaRef.current  = localMeta;  }, [localMeta]);
 
   // ── COLS ──
+  const agentNameOpts = useMemo(() => agentOpts.map(a => a.name), [agentOpts]);
+
   const COLS: ColDef[] = useMemo(() => [
     { field: "saleNumber",    label: "Sale #",          minW: 145, type: "readonly" },
     { field: "saleDate",      label: "Date",            minW: 130, type: "date"     },
-    { field: "customer",      label: "Customer",        minW: 200, type: "text"     },
+    { field: "customer",      label: "Customer",        minW: 180, type: "text"     },
+    { field: "agentName",     label: "Sales Agent",     minW: 150, type: agentNameOpts.length ? "select" : "text", options: agentNameOpts },
     { field: "status",        label: "Status",          minW: 130, type: "select",  options: [...SALE_STATUSES] },
     { field: "itemCount",     label: "Items",           minW: 60,  type: "readonly" },
     { field: "total",         label: `Total (${sym})`,   minW: 110, type: "readonly" },
@@ -1336,7 +1339,7 @@ export default function SalesPage() {
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
     { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
-  ], [sym]);
+  ], [sym, agentNameOpts]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
   const cellValue = (sale: Sale, field: string): string => {
@@ -1615,10 +1618,15 @@ export default function SalesPage() {
   const commitCell = useCallback((id: string, field: string, value: string) => {
     const sale = sales.find(s => s.id === id);
     if (!sale || cellValue(sale, field) === value) { setActiveCell(null); return; }
-    editSale(id, { [field]: value } as Partial<Sale>);
+    if (field === "agentName") {
+      const agent = agentOpts.find(a => a.name === value);
+      editSale(id, { agentName: value, agentId: agent?.id ?? "" });
+    } else {
+      editSale(id, { [field]: value } as Partial<Sale>);
+    }
     setActiveCell(null);
     toast({ title: "Saved" });
-  }, [sales, editSale, toast]);
+  }, [sales, editSale, agentOpts, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
     const ids = filtered.map(s => s.id);
