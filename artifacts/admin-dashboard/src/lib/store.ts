@@ -1002,6 +1002,7 @@ export type Product = {
   id: string;
   name: string;
   sku: string;
+  barcode?: string;          // Barcode / QR code value for scanning
   brand: string;
   category: string;
   unit: string;

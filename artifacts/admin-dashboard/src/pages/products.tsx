@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList, GripVertical, Columns3 } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, Table2, LayoutList, GripVertical, Columns3, ScanLine } from "lucide-react";
+import BarcodeScanner from "@/components/barcode-scanner";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "sku" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "status" | "condition" | "description";
+type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -36,7 +37,7 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", brand: "", category: "", unit: "",
+  name: "", sku: "", barcode: "", brand: "", category: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "",
   status: "Active", condition: "", description: "",
@@ -168,6 +169,7 @@ export default function ProductsPage() {
   const [formOpen,      setFormOpen]      = useState(false);
   const [formData,      setFormData]      = useState<Record<EditableField, string>>(BLANK());
   const [formSaving,    setFormSaving]    = useState(false);
+  const [barcodeScanOpen, setBarcodeScanOpen] = useState(false);
 
   const openAddForm = () => { setFormData(BLANK()); setFormOpen(true); };
   const closeForm   = () => { setFormOpen(false); };
@@ -178,7 +180,8 @@ export default function ProductsPage() {
     setFormSaving(true);
     try {
       addProduct({
-        name: formData.name, sku: formData.sku, brand: formData.brand, category: formData.category,
+        name: formData.name, sku: formData.sku, barcode: formData.barcode || undefined,
+        brand: formData.brand, category: formData.category,
         unit: formData.unit, purchasePrice: formData.purchasePrice, costPrice: formData.costPrice,
         price: formData.price, wholesalePrice: formData.wholesalePrice,
         status: (formData.status as Product["status"]) || "Active",
@@ -923,8 +926,8 @@ export default function ProductsPage() {
           {/* Body */}
           <div className="px-6 py-4 space-y-3">
 
-            {/* Row 1: Name + SKU + Brand + Category + Unit — 6-column grid */}
-            <div className="grid grid-cols-6 gap-3">
+            {/* Row 1: Name + SKU + Barcode + Brand + Category + Unit — 7-column grid */}
+            <div className="grid grid-cols-7 gap-3">
               <div className="col-span-2 space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
                 <Input value={formData.name} onChange={e => patchForm("name", e.target.value)}
@@ -934,6 +937,21 @@ export default function ProductsPage() {
                 <label className="text-[11px] font-semibold text-foreground">SKU</label>
                 <Input value={formData.sku} onChange={e => patchForm("sku", e.target.value)}
                   placeholder="e.g. ODT-001" className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">Barcode / QR</label>
+                <div className="flex gap-1">
+                  <Input value={formData.barcode} onChange={e => patchForm("barcode", e.target.value)}
+                    placeholder="Scan or type…" className="h-8 text-sm" />
+                  <button
+                    type="button"
+                    onClick={() => setBarcodeScanOpen(true)}
+                    className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors"
+                    title="Scan barcode / QR code"
+                  >
+                    <ScanLine size={13} />
+                  </button>
+                </div>
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-foreground">Brand</label>
@@ -1089,6 +1107,18 @@ export default function ProductsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Barcode scanner for product form */}
+      <BarcodeScanner
+        open={barcodeScanOpen}
+        onClose={() => setBarcodeScanOpen(false)}
+        onScan={code => {
+          patchForm("barcode", code);
+          setBarcodeScanOpen(false);
+        }}
+        title="Scan Product Barcode"
+        hint="Point the camera at the product barcode or QR code"
+      />
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
