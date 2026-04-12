@@ -123,142 +123,195 @@ function ActivityLogPanel({ onClose }: { onClose: () => void }) {
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SubItem = { label: string; href?: string; icon?: React.ElementType; desc?: string; divider?: boolean };
 type NavItem = {
-  key: string;
-  href?: string;
-  label: string;
-  icon: React.ElementType;
-  items?: SubItem[] | null;
-  mega?: boolean;
+  key: string; href?: string; label: string; icon: React.ElementType;
+  items?: SubItem[] | null; isMega?: boolean;
+};
+type MegaColumn = {
+  label: string; href: string; icon: React.ElementType;
+  color: string; bg: string; desc: string;
+  links: { label: string; href: string; icon: React.ElementType; desc?: string }[];
 };
 
 // ─── CRM mega-menu columns ────────────────────────────────────────────────────
-const CRM_COLUMNS = [
+const CRM_COLUMNS: MegaColumn[] = [
   {
-    href:  "/leads",
-    label: "Leads",
-    icon:  Users,
-    color: "text-blue-500",
-    bg:    "bg-blue-50 dark:bg-blue-950/40",
-    desc:  "Pipeline & prospecting",
+    href: "/leads", label: "Leads", icon: Users,
+    color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
+    desc: "Pipeline & prospecting",
     links: [
-      { label: "All Leads",  href: "/leads", icon: Users },
-      { label: "Add Lead",   href: "/leads", icon: UserPlus },
+      { label: "All Leads", href: "/leads", icon: Users    },
+      { label: "Add Lead",  href: "/leads", icon: UserPlus },
     ],
   },
   {
-    href:  "/customers",
-    label: "Customers",
-    icon:  UserCheck,
-    color: "text-emerald-500",
-    bg:    "bg-emerald-50 dark:bg-emerald-950/40",
-    desc:  "Client management",
+    href: "/customers", label: "Customers", icon: UserCheck,
+    color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    desc: "Client management",
     links: [
-      { label: "All Customers",     href: "/customers", icon: UserCheck },
-      { label: "Add Customer",      href: "/customers", icon: UserPlus },
+      { label: "All Customers",     href: "/customers", icon: UserCheck  },
+      { label: "Add Customer",      href: "/customers", icon: UserPlus   },
       { label: "Convert from Lead", href: "/customers", icon: ArrowRight },
     ],
   },
   {
-    href:  "/suppliers",
-    label: "Suppliers",
-    icon:  Truck,
-    color: "text-violet-500",
-    bg:    "bg-violet-50 dark:bg-violet-950/40",
-    desc:  "Vendor relationships",
+    href: "/suppliers", label: "Suppliers", icon: Truck,
+    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
+    desc: "Vendor relationships",
     links: [
-      { label: "All Suppliers", href: "/suppliers", icon: Truck },
-      { label: "Add Supplier",  href: "/suppliers", icon: UserPlus },
+      { label: "All Suppliers", href: "/suppliers", icon: Truck     },
+      { label: "Add Supplier",  href: "/suppliers", icon: UserPlus  },
     ],
   },
 ];
 
-// ─── Other nav items ──────────────────────────────────────────────────────────
+// ─── Sales mega-menu columns ──────────────────────────────────────────────────
+const SALES_COLUMNS: MegaColumn[] = [
+  {
+    label: "Point of Sale", href: "/sales", icon: Receipt,
+    color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
+    desc: "Transactions & POS",
+    links: [
+      { label: "All Sales",    href: "/sales",       icon: Receipt, desc: "View all transactions"  },
+      { label: "New Sale",     href: "/sales/new",   icon: Plus,    desc: "Open POS terminal"      },
+      { label: "Sale Returns", href: "/sale-return", icon: Undo2,   desc: "Refunds & credit notes" },
+    ],
+  },
+  {
+    label: "Invoicing", href: "/invoices", icon: FileText,
+    color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    desc: "Bills & purchase orders",
+    links: [
+      { label: "Sales Invoices",    href: "/invoices",               icon: FileText,     desc: "Invoice management"          },
+      { label: "Calc Invoice",      href: "/calc-invoice",           icon: Calculator,   desc: "Calculation-based invoicing" },
+      { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Stock & vendor invoices"     },
+    ],
+  },
+  {
+    label: "Sales Team", href: "/sales-agents", icon: Users2,
+    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
+    desc: "Agents & commissions",
+    links: [
+      { label: "Sales Agents", href: "/sales-agents", icon: Users2, desc: "Manage agents & commissions" },
+    ],
+  },
+];
+
+// ─── Products mega-menu columns ───────────────────────────────────────────────
+const PRODUCTS_COLUMNS: MegaColumn[] = [
+  {
+    label: "Catalogue", href: "/products", icon: Package,
+    color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
+    desc: "Products & bundles",
+    links: [
+      { label: "All Products",   href: "/products",       icon: Package, desc: "Full product catalogue" },
+      { label: "Product Groups", href: "/product-groups", icon: Layers,  desc: "Menus & bundles"        },
+    ],
+  },
+  {
+    label: "Organisation", href: "/categories", icon: FolderOpen,
+    color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    desc: "Structure & classification",
+    links: [
+      { label: "Brands",     href: "/brands",     icon: Bookmark,          desc: "Brand management"   },
+      { label: "Categories", href: "/categories", icon: FolderOpen,        desc: "Product grouping"   },
+      { label: "Attributes", href: "/attributes", icon: SlidersHorizontal, desc: "Product properties" },
+      { label: "Units",      href: "/units",      icon: Ruler,             desc: "Measurement units"  },
+    ],
+  },
+  {
+    label: "Assets & Stock", href: "/stock-ledger", icon: ImageIcon,
+    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
+    desc: "Media & inventory",
+    links: [
+      { label: "Media Library", href: "/media",        icon: ImageIcon, desc: "Product images & files"       },
+      { label: "Stock Ledger",  href: "/stock-ledger", icon: BookOpen,  desc: "Movement history per product" },
+    ],
+  },
+];
+
+// ─── Accounts mega-menu columns ───────────────────────────────────────────────
+const ACCOUNTS_COLUMNS: MegaColumn[] = [
+  {
+    label: "Books", href: "/chart-of-accounts", icon: BookOpen,
+    color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
+    desc: "Core accounting records",
+    links: [
+      { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,      desc: "Account hierarchy & ledgers" },
+      { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList, desc: "Double-entry bookkeeping"    },
+      { label: "Receipt & Payment", href: "/receipt-payment",   icon: CreditCard,    desc: "Cash & bank transactions"    },
+    ],
+  },
+  {
+    label: "Financial Statements", href: "/balance-sheet", icon: LayoutDashboard,
+    color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    desc: "Core financial reports",
+    links: [
+      { label: "Balance Sheet", href: "/balance-sheet", icon: LayoutDashboard, desc: "Assets, Liabilities & Equity" },
+      { label: "P&L Statement", href: "/pls-report",    icon: TrendingUp,      desc: "Profit & Loss by period"     },
+      { label: "Ledger Report", href: "/ledger-report", icon: FileBarChart,    desc: "Account statement & balance"  },
+    ],
+  },
+  {
+    label: "Analysis", href: "/income-report", icon: TrendingUp,
+    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
+    desc: "Revenue & cost insights",
+    links: [
+      { label: "Income Report",  href: "/income-report",  icon: TrendingUp,   desc: "Revenue by source & date"  },
+      { label: "Expense Report", href: "/expense-report", icon: TrendingDown, desc: "Costs by category & date"  },
+    ],
+  },
+];
+
+// ─── Nav items (professional sequence) ───────────────────────────────────────
+// Order: Dashboard → CRM → Sales → Products → Manufacturing → Accounts → Documents → Investments → Settings
+// HRM is appended dynamically based on permissions
 const OTHER_NAV: NavItem[] = [
   { key: "dashboard", href: "/", label: "Dashboard", icon: LayoutDashboard, items: null },
+  { key: "crm",       label: "CRM",       icon: Users,    isMega: true },
+  { key: "sales",     label: "Sales",     icon: Receipt,  isMega: true },
+  { key: "products",  label: "Products",  icon: Package,  isMega: true },
   {
-    key: "crm", label: "CRM", icon: Users, mega: true,
-    items: null,
-  },
-  {
-    key: "products", label: "Products", icon: Package,
+    key: "manufacturing", label: "Manufacturing", icon: Factory,
     items: [
-      { label: "Products",        href: "/products",        icon: Package,           desc: "Product catalogue"    },
-      { label: "Product Groups",  href: "/product-groups",  icon: Layers,            desc: "Menus & bundles"      },
-      { label: "Brands",          href: "/brands",          icon: Bookmark,          desc: "Brand management"     },
-      { label: "Categories",      href: "/categories",      icon: FolderOpen,        desc: "Product grouping"     },
-      { label: "Attributes",      href: "/attributes",      icon: SlidersHorizontal, desc: "Product properties"   },
-      { label: "Units",           href: "/units",           icon: Ruler,             desc: "Measurement units"    },
-      { label: "Media Library", href: "/media",       icon: ImageIcon,         desc: "Product images"       },
-      { label: "Stock",         divider: true },
-      { label: "Stock Ledger",  href: "/stock-ledger",  icon: BookOpen,          desc: "Movement history per product"  },
+      { label: "Workflow Guide", href: "/production-guide", icon: ArrowRight,   desc: "Step-by-step production help" },
+      { label: "Raw Materials",  href: "/raw-materials",    icon: FlaskConical, desc: "Track raw material stock"     },
+      { label: "Mfg. Orders",   href: "/manufacturing",    icon: Factory,      desc: "Production & batch orders"    },
     ],
   },
+  { key: "accounts", label: "Accounts", icon: BookOpen, isMega: true },
   {
-    key: "sales", label: "Sales", icon: Receipt,
-    items: [
-      { label: "All Sales",     href: "/sales",         icon: Receipt,      desc: "Sales & POS terminal"          },
-      { label: "New Sale",      href: "/sales/new",     icon: Plus,         desc: "Open POS terminal"             },
-      { label: "Sale Returns",  href: "/sale-return",   icon: Undo2,        desc: "Process refunds & credit notes" },
-      { label: "Invoices",      href: "/invoices",      icon: FileText,     desc: "Invoice management"            },
-      { label: "Calc Invoice",  href: "/calc-invoice",   icon: Calculator,   desc: "Calculation-based invoicing"   },
-      { label: "Sales Agents",  href: "/sales-agents",   icon: Users2,        desc: "Agent management & commissions" },
-      { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Purchase invoicing & stock updates" },
-    ],
-  },
-  {
-    key: "documents", href: "/documents", label: "Documents", icon: FileText,
+    key: "documents", label: "Documents", icon: FileText,
     items: [
       { label: "All Documents", href: "/documents",     icon: FileText },
       { label: "New Document",  href: "/documents/new", icon: FilePlus },
     ],
   },
   {
-    key: "accounts", label: "Accounts", icon: BookOpen,
-    items: [
-      { label: "Chart of Accounts",  href: "/chart-of-accounts",  icon: BookOpen,        desc: "Account hierarchy & ledgers"     },
-      { label: "Journal Entry",      href: "/journal-entry",      icon: ClipboardList,   desc: "Double-entry bookkeeping"         },
-      { label: "Receipt & Payment",  href: "/receipt-payment",    icon: CreditCard,      desc: "Record cash/bank transactions"    },
-      { label: "Ledger Report",      href: "/ledger-report",      icon: FileBarChart,    desc: "Account statement & balance"     },
-      { label: "P&L Statement",      href: "/pls-report",         icon: TrendingUp,      desc: "Profit & Loss by period"         },
-      { label: "Income Report",       href: "/income-report",      icon: TrendingUp,      desc: "Revenue by source & date"        },
-      { label: "Expense Report",     href: "/expense-report",     icon: TrendingDown,    desc: "All expenses by category & date" },
-      { label: "Balance Sheet",      href: "/balance-sheet",      icon: LayoutDashboard, desc: "Assets, Liabilities & Equity"   },
-    ],
-  },
-  {
-    key: "manufacturing", label: "Manufacturing", icon: Factory,
-    items: [
-      { label: "Workflow Guide",  href: "/production-guide", icon: ArrowRight,   desc: "Step-by-step production help" },
-      { label: "Raw Materials",   href: "/raw-materials",    icon: FlaskConical, desc: "Track raw material stock"     },
-      { label: "Mfg. Orders",     href: "/manufacturing",    icon: Factory,      desc: "Production & batch orders"    },
-    ],
-  },
-  {
     key: "investments", label: "Investments", icon: TrendingUp,
     items: [
-      { label: "Shareholders",     href: "/shareholders",    icon: Landmark,   desc: "Equity & ownership"             },
+      { label: "Shareholders",     href: "/shareholders",     icon: Landmark,   desc: "Equity & ownership"               },
       { label: "Investment Plans", href: "/investment-plans", icon: TrendingUp, desc: "Define & manage investment plans" },
     ],
   },
-  { key: "settings", href: "/settings",           label: "Settings", icon: Settings, items: null },
+  { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
 ];
 
-const CRM_ROUTES         = ["/leads", "/customers", "/suppliers"];
-const PRODUCTS_ROUTES    = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
-const SALES_ROUTES       = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return"];
-const HRM_ROUTES            = ["/staff", "/roles", "/users"];
-const MANUFACTURING_ROUTES  = ["/raw-materials", "/manufacturing", "/production-guide"];
-const INVESTMENTS_ROUTES    = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES    = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
+const CRM_ROUTES           = ["/leads", "/customers", "/suppliers"];
+const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
+const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return"];
+const HRM_ROUTES           = ["/staff", "/roles", "/users"];
+const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
+const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
+const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
 
 const QUICK_ADD: SubItem[] = [
-  { label: "New Lead",           href: "/leads",         icon: UserPlus    },
-  { label: "New Customer",       href: "/customers",     icon: UserCheck   },
-  { label: "New Supplier",       href: "/suppliers",     icon: Truck       },
-  { label: "Stock Ledger",       href: "/stock-ledger",  icon: BookOpen    },
-  { label: "Purchase Invoice",   href: "/invoices?type=purchase", icon: ShoppingCart},
-  { label: "New Sale",           href: "/sales/new",     icon: Receipt     },
-  { label: "New Document",       href: "/documents/new", icon: FilePlus    },
+  { label: "New Lead",         href: "/leads",                  icon: UserPlus     },
+  { label: "New Customer",     href: "/customers",              icon: UserCheck    },
+  { label: "New Sale",         href: "/sales/new",              icon: Receipt      },
+  { label: "Purchase Invoice", href: "/invoices?type=purchase", icon: ShoppingCart },
+  { label: "New Document",     href: "/documents/new",          icon: FilePlus     },
+  { label: "Journal Entry",    href: "/journal-entry",          icon: ClipboardList},
+  { label: "New Supplier",     href: "/suppliers",              icon: Truck        },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -268,12 +321,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { isSuperAdmin, isStaff, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
   useDemoReset();
 
-  const [mobileOpen,       setMobileOpen]       = useState(false);
-  const [searchOpen,       setSearchOpen]       = useState(false);
-  const [searchQuery,      setSearchQuery]      = useState("");
-  const [crmOpen,          setCrmOpen]          = useState(false);
-  const [activityOpen,     setActivityOpen]     = useState(false);
-  const [unreadCount,      setUnreadCount]      = useState(0);
+  const [mobileOpen,   setMobileOpen]   = useState(false);
+  const [searchOpen,   setSearchOpen]   = useState(false);
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [openMega,     setOpenMega]     = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [unreadCount,  setUnreadCount]  = useState(0);
 
   // Compute unread count (entries newer than last-seen timestamp)
   const refreshUnread = useCallback(() => {
@@ -298,22 +351,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const crmRef = useRef<HTMLDivElement>(null);
+  const megaRef = useRef<HTMLDivElement>(null);
 
-  // Close mega menu on outside click
+  // Close any open mega menu on outside click
   useEffect(() => {
-    if (!crmOpen) return;
+    if (!openMega) return;
     const handler = (e: MouseEvent) => {
-      if (crmRef.current && !crmRef.current.contains(e.target as Node)) {
-        setCrmOpen(false);
+      if (megaRef.current && !megaRef.current.contains(e.target as Node)) {
+        setOpenMega(null);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [crmOpen]);
+  }, [openMega]);
 
   // Close on route change
-  useEffect(() => { setCrmOpen(false); setMobileOpen(false); }, [location]);
+  useEffect(() => { setOpenMega(null); setMobileOpen(false); }, [location]);
 
   // ⌘K shortcut
   useEffect(() => {
@@ -410,13 +463,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const userInitials = (currentUser?.fullName || currentUser?.username || "?")
     .split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const isCrmActive         = CRM_ROUTES.some(r         => location === r || location.startsWith(r));
-  const isProductsActive    = PRODUCTS_ROUTES.some(r    => location === r || location.startsWith(r));
-  const isSalesActive       = SALES_ROUTES.some(r       => location === r || location.startsWith(r));
-  const isHrmActive         = HRM_ROUTES.some(r         => location === r || location.startsWith(r));
+  const isCrmActive           = CRM_ROUTES.some(r           => location === r || location.startsWith(r));
+  const isProductsActive      = PRODUCTS_ROUTES.some(r      => location === r || location.startsWith(r));
+  const isSalesActive         = SALES_ROUTES.some(r         => location === r || location.startsWith(r));
+  const isHrmActive           = HRM_ROUTES.some(r           => location === r || location.startsWith(r));
   const isManufacturingActive = MANUFACTURING_ROUTES.some(r => location === r || location.startsWith(r));
-  const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r  => location === r || location.startsWith(r));
-  const isAccountsActive      = ACCOUNTS_ROUTES.some(r     => location === r || location.startsWith(r));
+  const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r   => location === r || location.startsWith(r));
+  const isAccountsActive      = ACCOUNTS_ROUTES.some(r      => location === r || location.startsWith(r));
+
+  // Mega menu column configs keyed by nav item key
+  const MEGA_CONFIGS: Record<string, { columns: MegaColumn[]; footerText: string; footerHref: string; footerLabel: string }> = {
+    crm: {
+      columns: allowedCrmColumns,
+      footerText: "Manage all your CRM records in one place",
+      footerHref: "/leads", footerLabel: "View pipeline",
+    },
+    sales: {
+      columns: SALES_COLUMNS,
+      footerText: "Manage sales, invoices and purchase orders",
+      footerHref: "/sales", footerLabel: "View all sales",
+    },
+    products: {
+      columns: PRODUCTS_COLUMNS,
+      footerText: "Manage your full product catalogue and inventory",
+      footerHref: "/products", footerLabel: "View catalogue",
+    },
+    accounts: {
+      columns: ACCOUNTS_COLUMNS,
+      footerText: "Double-entry bookkeeping & financial statements",
+      footerHref: "/chart-of-accounts", footerLabel: "Open accounts",
+    },
+  };
 
   // Search
   const q = searchQuery.toLowerCase();
@@ -604,14 +681,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
             {navItems.map(item => {
               const isActive =
-                item.key === "crm"         ? isCrmActive :
-                item.key === "products"    ? isProductsActive :
-                item.key === "sales"       ? isSalesActive :
+                item.key === "crm"           ? isCrmActive :
+                item.key === "products"      ? isProductsActive :
+                item.key === "sales"         ? isSalesActive :
                 item.key === "hrm"           ? isHrmActive :
                 item.key === "manufacturing" ? isManufacturingActive :
                 item.key === "investments"   ? isInvestmentsActive :
                 item.key === "accounts"      ? isAccountsActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
+
+              const isThisMegaOpen = openMega === item.key;
 
               const baseClass = `flex items-center gap-1 px-2.5 h-full text-[12px] font-medium whitespace-nowrap border-b-2 transition-all duration-150 ${
                 isActive
@@ -619,33 +698,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   : "border-transparent text-gray-500 hover:text-gray-800 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted/40"
               }`;
 
-              // ── CRM mega menu trigger ──────────────────────────────────────
-              if (item.key === "crm") {
+              // ── Unified mega menu (CRM / Sales / Products / Accounts) ──────
+              if (item.isMega) {
+                const cfg = MEGA_CONFIGS[item.key];
+                if (!cfg || cfg.columns.length === 0) return null;
                 return (
-                  <div key="crm" ref={crmRef} className="relative flex items-stretch">
+                  <div
+                    key={item.key}
+                    ref={isThisMegaOpen ? megaRef : undefined}
+                    className="relative flex items-stretch"
+                  >
                     <button
-                      data-testid="nav-crm"
-                      onClick={() => setCrmOpen(v => !v)}
+                      data-testid={`nav-${item.key}`}
+                      onClick={() => setOpenMega(isThisMegaOpen ? null : item.key)}
                       className={baseClass + " group"}
                     >
                       {item.label}
                       <ChevronDown
                         size={10}
-                        className={`text-gray-400 transition-transform duration-200 ${crmOpen ? "rotate-180" : ""}`}
+                        className={`text-gray-400 transition-transform duration-200 ${isThisMegaOpen ? "rotate-180" : ""}`}
                       />
                     </button>
 
-                    {/* ── Mega menu panel ──────────────────────────────────── */}
-                    {crmOpen && (
-                      <div className="absolute top-full left-0 z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden"
-                        style={{ minWidth: "580px" }}>
-
+                    {isThisMegaOpen && (
+                      <div
+                        className="absolute top-full left-0 z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden"
+                        style={{ minWidth: `${cfg.columns.length * 210}px` }}
+                      >
                         {/* Column grid */}
-                        <div className="grid divide-x divide-gray-100 dark:divide-border" style={{ gridTemplateColumns: `repeat(${allowedCrmColumns.length || 1}, minmax(0, 1fr))` }}>
-                          {allowedCrmColumns.map(col => (
-                            <div key={col.href} className="p-5">
+                        <div
+                          className="grid divide-x divide-gray-100 dark:divide-border"
+                          style={{ gridTemplateColumns: `repeat(${cfg.columns.length}, minmax(0, 1fr))` }}
+                        >
+                          {cfg.columns.map(col => (
+                            <div key={col.label} className="p-5">
                               {/* Column header */}
-                              <div className="flex items-center gap-2.5 mb-1">
+                              <div className="flex items-center gap-2.5 mb-3">
                                 <div className={`w-8 h-8 rounded-lg ${col.bg} flex items-center justify-center flex-shrink-0`}>
                                   <col.icon size={15} className={col.color} />
                                 </div>
@@ -659,34 +747,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
                                   <p className="text-[10px] text-gray-400 dark:text-muted-foreground">{col.desc}</p>
                                 </div>
                               </div>
-
-                              {/* Links */}
-                              <div className="mt-3 space-y-0.5">
+                              {/* Sub-links */}
+                              <div className="space-y-0.5">
                                 {col.links.map(link => (
                                   <Link
                                     key={link.label}
                                     href={link.href}
-                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted transition-colors"
+                                    className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-[12px] text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted transition-colors group/link"
                                   >
-                                    <link.icon size={12} className="text-gray-400 flex-shrink-0" />
-                                    {link.label}
+                                    <link.icon size={13} className={`${col.color} opacity-70 group-hover/link:opacity-100 flex-shrink-0`} />
+                                    <div className="min-w-0">
+                                      <div className="font-medium leading-tight">{link.label}</div>
+                                      {link.desc && (
+                                        <div className="text-[10px] text-gray-400 dark:text-zinc-600 leading-tight mt-0.5 truncate">{link.desc}</div>
+                                      )}
+                                    </div>
                                   </Link>
                                 ))}
                               </div>
                             </div>
                           ))}
                         </div>
-
-                        {/* Footer bar */}
+                        {/* Footer */}
                         <div className="px-5 py-2.5 bg-gray-50 dark:bg-muted/40 border-t border-gray-100 dark:border-border flex items-center justify-between">
-                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">
-                            Manage all your CRM records in one place
-                          </span>
+                          <span className="text-[11px] text-gray-400 dark:text-muted-foreground">{cfg.footerText}</span>
                           <Link
-                            href="/leads"
+                            href={cfg.footerHref}
                             className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
                           >
-                            View pipeline <ArrowRight size={11} />
+                            {cfg.footerLabel} <ArrowRight size={11} />
                           </Link>
                         </div>
                       </div>
@@ -715,7 +804,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <ChevronDown size={10} className="text-gray-400 group-data-[state=open]:rotate-180 transition-transform" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" sideOffset={0} className="w-52">
+                  <DropdownMenuContent align="start" sideOffset={0} className="w-56">
                     {item.items.map((sub, idx) =>
                       sub.divider ? (
                         <div key={idx}>
@@ -728,7 +817,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         <DropdownMenuItem key={idx} asChild>
                           <Link href={sub.href!} className="flex items-center gap-2 cursor-pointer text-[13px]">
                             {sub.icon && <sub.icon size={13} className="text-muted-foreground" />}
-                            {sub.label}
+                            <div className="min-w-0">
+                              <div>{sub.label}</div>
+                              {sub.desc && <div className="text-[10px] text-muted-foreground/60 truncate">{sub.desc}</div>}
+                            </div>
                           </Link>
                         </DropdownMenuItem>
                       )
@@ -802,73 +894,84 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="space-y-0.5">
                 <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
 
+                {/* CRM */}
                 {allowedCrmColumns.length > 0 && <>
                   <SectionLabel label="CRM" />
                   {allowedCrmColumns.map(col => <NavLink key={col.href} href={col.href} icon={col.icon} label={col.label} />)}
                 </>}
 
-                {(isModuleAllowed("products") || isModuleAllowed("stock")) && <>
-                  <SectionLabel label="Products & Stock" />
-                  {isModuleAllowed("products") && <>
-                    <NavLink href="/products"       icon={Package}           label="Products" />
-                    <NavLink href="/product-groups" icon={Layers}            label="Product Groups" />
-                    <NavLink href="/brands"         icon={Bookmark}          label="Brands" />
-                    <NavLink href="/categories"     icon={FolderOpen}        label="Categories" />
-                    <NavLink href="/attributes"     icon={SlidersHorizontal} label="Attributes" />
-                    <NavLink href="/units"          icon={Ruler}             label="Units" />
-                  </>}
-                  {isModuleAllowed("stock") && <>
-                    <NavLink href="/stock-ledger"  icon={BookOpen}  label="Stock Ledger" />
-                    <NavLink href="/raw-materials" icon={FlaskConical} label="Raw Materials" />
-                  </>}
-                </>}
-
+                {/* Sales */}
                 {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
-                  <SectionLabel label="Sales & Purchases" />
+                  <SectionLabel label="Sales" />
                   {isModuleAllowed("sales") && <>
                     <NavLink href="/sales"       icon={Receipt} label="All Sales" />
                     <NavLink href="/sales/new"   icon={Plus}    label="New Sale" />
                     <NavLink href="/sale-return" icon={Undo2}   label="Sale Returns" />
                   </>}
-                  {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
-                    <NavLink href="/invoices"               icon={FileText}     label="Invoices" />
-                    <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
-                    <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
-                  </>}
-                  {(isModuleAllowed("sales") || isModuleAllowed("sales_agents")) && <NavLink href="/sales-agents" icon={Users2} label="Sales Agents" />}
+                  <NavLink href="/invoices"               icon={FileText}     label="Sales Invoices" />
+                  <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
+                  <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
+                  <NavLink href="/sales-agents"           icon={Users2}       label="Sales Agents" />
                 </>}
 
-                {isModuleAllowed("documents") && <>
-                  <SectionLabel label="Documents" />
-                  <NavLink href="/documents" icon={FileText} label="All Documents" />
+                {/* Products */}
+                {isModuleAllowed("products") && <>
+                  <SectionLabel label="Products" />
+                  <NavLink href="/products"       icon={Package}           label="All Products" />
+                  <NavLink href="/product-groups" icon={Layers}            label="Product Groups" />
+                  <NavLink href="/brands"         icon={Bookmark}          label="Brands" />
+                  <NavLink href="/categories"     icon={FolderOpen}        label="Categories" />
+                  <NavLink href="/attributes"     icon={SlidersHorizontal} label="Attributes" />
+                  <NavLink href="/units"          icon={Ruler}             label="Units" />
+                  <NavLink href="/media"          icon={ImageIcon}         label="Media Library" />
+                  <NavLink href="/stock-ledger"   icon={BookOpen}          label="Stock Ledger" />
                 </>}
 
+                {/* Manufacturing */}
+                {isModuleAllowed("manufacturing") && <>
+                  <SectionLabel label="Manufacturing" />
+                  <NavLink href="/production-guide" icon={ArrowRight}    label="Workflow Guide" />
+                  <NavLink href="/raw-materials"    icon={FlaskConical}  label="Raw Materials" />
+                  <NavLink href="/manufacturing"    icon={Factory}       label="Mfg. Orders" />
+                </>}
+
+                {/* Accounts */}
+                <SectionLabel label="Accounts" />
+                <NavLink href="/chart-of-accounts" icon={BookOpen}       label="Chart of Accounts" />
+                <NavLink href="/journal-entry"     icon={ClipboardList}  label="Journal Entry" />
+                <NavLink href="/receipt-payment"   icon={CreditCard}     label="Receipt & Payment" />
+                <NavLink href="/balance-sheet"     icon={LayoutDashboard}label="Balance Sheet" />
+                <NavLink href="/pls-report"        icon={TrendingUp}     label="P&L Statement" />
+                <NavLink href="/ledger-report"     icon={FileBarChart}   label="Ledger Report" />
+                <NavLink href="/income-report"     icon={TrendingUp}     label="Income Report" />
+                <NavLink href="/expense-report"    icon={TrendingDown}   label="Expense Report" />
+
+                {/* HRM */}
                 {hrmItems.length > 0 && <>
                   <SectionLabel label="HRM" />
                   {hrmItems.map(item => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />)}
                 </>}
 
-                {isModuleAllowed("manufacturing") && <>
-                  <SectionLabel label="Manufacturing" />
-                  <NavLink href="/raw-materials"    icon={FlaskConical}  label="Raw Materials" />
-                  <NavLink href="/manufacturing"    icon={Factory}       label="Manufacturing" />
-                  <NavLink href="/production-guide" icon={ClipboardList} label="Production Guide" />
+                {/* Documents */}
+                {isModuleAllowed("documents") && <>
+                  <SectionLabel label="Documents" />
+                  <NavLink href="/documents"     icon={FileText} label="All Documents" />
+                  <NavLink href="/documents/new" icon={FilePlus} label="New Document" />
                 </>}
 
-                <SectionLabel label="Accounts" />
-                <NavLink href="/chart-of-accounts" icon={Landmark}     label="Chart of Accounts" />
-                <NavLink href="/journal-entry"     icon={ClipboardList} label="Journal Entry" />
-                <NavLink href="/balance-sheet"     icon={FileBarChart}  label="Balance Sheet" />
-                <NavLink href="/ledger-report"     icon={BookOpen}      label="Ledger Report" />
-                <NavLink href="/pls-report"        icon={TrendingUp}    label="P&L Statement" />
-                <NavLink href="/income-report"     icon={TrendingUp}    label="Income Report" />
-                <NavLink href="/expense-report"    icon={TrendingDown}  label="Expense Report" />
-                <NavLink href="/receipt-payment"   icon={CreditCard}    label="Receipt & Payment" />
+                {/* Investments */}
+                <SectionLabel label="Investments" />
+                <NavLink href="/shareholders"     icon={Landmark}   label="Shareholders" />
+                <NavLink href="/investment-plans" icon={TrendingUp} label="Investment Plans" />
 
-                {isSuperAdmin && <>
+                {/* Settings / Admin */}
+                {isModuleAllowed("settings") && <>
+                  <SectionLabel label="Settings" />
+                  <NavLink href="/settings" icon={Settings} label="Settings" />
+                </>}
+                {isSuperAdmin && !currentTenantId && <>
                   <SectionLabel label="Admin" />
-                  <NavLink href="/settings" icon={Settings}     label="Settings" />
-                  <NavLink href="/users"    icon={KeyRound}     label="Users" />
+                  <NavLink href="/users"    icon={KeyRound}     label="Admin Accounts" />
                   <NavLink href="/tenants"  icon={Building2}    label="Tenants" />
                 </>}
               </div>
