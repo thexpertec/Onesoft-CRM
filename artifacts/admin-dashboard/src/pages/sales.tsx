@@ -830,7 +830,7 @@ function POSView({
                 {localItems.map((item, idx) => {
                   const prod = getProducts().find(p => p.name === item.productName || p.sku === item.sku);
                   return (
-                    <div key={item.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50/80 dark:hover:bg-zinc-900/50 transition-colors group">
+                    <div key={item.id} className="flex items-center gap-3 px-5 py-4 hover:bg-gray-50/80 dark:hover:bg-zinc-900/50 transition-colors group">
 
                       {/* Row number */}
                       <span className="text-[12px] text-gray-300 dark:text-zinc-700 w-5 text-center shrink-0 font-medium">{idx + 1}</span>
@@ -872,7 +872,7 @@ function POSView({
                       </div>
 
                       {/* Qty — plain input, no +/- buttons */}
-                      <div className="shrink-0 w-[58px]">
+                      <div className="shrink-0 w-[42px]">
                         <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Qty</div>
                         {isDraft ? (
                           <input
@@ -888,7 +888,7 @@ function POSView({
                       </div>
 
                       {/* Unit price */}
-                      <div className="shrink-0 w-[88px]">
+                      <div className="shrink-0 w-[72px]">
                         <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold">Unit {sym}</div>
                         <input
                           type="number" min="0" step="0.01"
@@ -901,7 +901,7 @@ function POSView({
                       </div>
 
                       {/* Discount — toggle between % and flat amount */}
-                      <div className="shrink-0 w-[82px]">
+                      <div className="shrink-0 w-[58px]">
                         <div className="text-[10px] uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1 font-bold flex items-center gap-1">
                           Disc
                           {isDraft && (
