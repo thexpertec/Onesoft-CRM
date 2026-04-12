@@ -500,3 +500,14 @@
   50%  { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* ── Remove number input spinners (up/down arrows) everywhere ── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
