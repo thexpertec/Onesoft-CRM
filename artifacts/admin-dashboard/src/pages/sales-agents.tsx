@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   Users2, Plus, Search, X, Save, Trash2, Eye, FileSpreadsheet,
@@ -14,7 +15,6 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useSalesAgents, useCities, useAreas } from "@/hooks/use-data";
-import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { Combobox, ComboOption } from "@/components/combobox";
 import { useAuth } from "@/contexts/auth-context";
 import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
@@ -97,43 +97,7 @@ export default function SalesAgentsPage() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const [viewId,       setViewId]       = useState<string | null>(null);
 
-  // ── Add Agent form (dialog / sheet) ─────────────────────────────────────────
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMode, toggleFormMode] = useFormMode("agents-form-mode");
-  const BLANK_FORM = () => ({
-    name: "", email: "", phone: "",
-    city: "", area: "", region: "",
-    commissionRate: "", targetAmount: "",
-    status: "Active" as SalesAgent["status"],
-    joinDate: format(new Date(), "yyyy-MM-dd"),
-    openingBalance: "", notes: "",
-  });
-  const [formData, setFormData] = useState(BLANK_FORM());
-  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
-
-  const openAgentForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
-
-  const submitAgentForm = () => {
-    if (!formData.name.trim()) {
-      toast({ title: "Name is required", variant: "destructive" }); return;
-    }
-    addAgent({
-      name:           formData.name.trim(),
-      email:          formData.email.trim(),
-      phone:          formData.phone.trim(),
-      city:           formData.city.trim() || undefined,
-      area:           formData.area.trim() || undefined,
-      region:         formData.region.trim(),
-      commissionRate: formData.commissionRate.trim(),
-      targetAmount:   formData.targetAmount.trim(),
-      status:         formData.status,
-      joinDate:       formData.joinDate || format(new Date(), "yyyy-MM-dd"),
-      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
-      notes:          formData.notes.trim(),
-    });
-    toast({ title: "Agent added", description: `${formData.name.trim()} has been added.` });
-    setFormOpen(false);
-  };
+  const [, nav] = useLocation();
 
   // Editable columns (skip readonly agentCode at index 0)
   const editableCols = COLS.filter(c => c.type !== "readonly");
@@ -312,10 +276,9 @@ export default function SalesAgentsPage() {
           {isAuthenticated && (
             <div className="flex items-center gap-1">
               <Button size="sm" className="gap-1.5 text-[12px] bg-teal-600 hover:bg-teal-700 text-white"
-                onClick={openAgentForm}>
+                onClick={() => nav("/sales-agents/new")}>
                 <Plus size={13} /> Add Agent
               </Button>
-              <FormModeToggle mode={formMode} onToggle={toggleFormMode} />
             </div>
           )}
         </div>
@@ -475,7 +438,7 @@ export default function SalesAgentsPage() {
             <tr>
               <td colSpan={COLS.length + 2} className="px-4 py-2 border-t border-dashed border-gray-200 dark:border-border">
                 <button
-                  onClick={openAgentForm}
+                  onClick={() => nav("/sales-agents/new")}
                   className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-teal-600 transition-colors">
                   <Plus size={12} /> Add row
                 </button>
@@ -486,159 +449,6 @@ export default function SalesAgentsPage() {
       </div>
 
       {/* ── Add Agent form ─────────────────────────────────────────────────── */}
-      <FormWrapper
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        mode={formMode}
-        dialogClass="w-[min(98vw,920px)] max-w-none"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-violet-600 to-purple-600">
-          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-            <Plus size={16} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-white leading-snug">Add Sales Agent</h2>
-            <p className="text-[11px] text-violet-100 truncate">
-              {formData.name.trim() ? formData.name : "Name required · all other fields optional"}
-            </p>
-          </div>
-          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
-        </div>
-
-        {/* Body */}
-        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
-
-          {/* ── Row A: Name (full) ── */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-foreground">Full Name <span className="text-red-500">*</span></label>
-            <Input autoFocus placeholder="e.g. James Wilson" value={formData.name}
-              onChange={e => setF("name", e.target.value)} className="h-8 text-sm font-medium" />
-          </div>
-
-          {/* ── Row B: Email | Phone | Join Date | City | Area | Territory ── */}
-          <div className="grid grid-cols-6 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Email</label>
-              <Input type="email" placeholder="agent@example.com" value={formData.email}
-                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Phone</label>
-              <Input type="tel" placeholder="+44 7700 900000" value={formData.phone}
-                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Join Date</label>
-              <Input type="date" value={formData.joinDate}
-                onChange={e => setF("joinDate", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">City</label>
-              <Combobox value={formData.city} onChange={v => setF("city", v)}
-                options={cityComboOpts} placeholder="City…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Area / Region</label>
-              <Combobox value={formData.area} onChange={v => setF("area", v)}
-                options={areaComboOpts} placeholder="Area…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Territory</label>
-              <Input placeholder="e.g. North England" value={formData.region}
-                onChange={e => setF("region", e.target.value)} className="h-8 text-sm" />
-            </div>
-          </div>
-
-          {/* ── Divider: Status ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row C: Status pill toggles ── */}
-          <div className="flex gap-2">
-            {(["Active", "Inactive"] as const).map(s => (
-              <button key={s} type="button" onClick={() => setF("status", s)}
-                className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
-                  formData.status === s
-                    ? s === "Active" ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                    :                  "bg-amber-500 border-amber-500 text-white shadow-sm"
-                    : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                }`}>{s}</button>
-            ))}
-          </div>
-
-          {/* ── Divider: Targets & Commission ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Targets &amp; Commission</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row D: Commission % | Monthly Target | Opening Balance ── */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-foreground">Commission %</label>
-                {(() => {
-                  const rate = parseFloat(formData.commissionRate);
-                  const target = parseFloat(formData.targetAmount);
-                  if (!isNaN(rate) && rate > 0 && !isNaN(target) && target > 0)
-                    return <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">{sym}{(target * rate / 100).toFixed(dp)}/mo</span>;
-                  return null;
-                })()}
-              </div>
-              <div className="relative">
-                <Input type="number" step="0.1" min="0" max="100" placeholder="0"
-                  value={formData.commissionRate} onChange={e => setF("commissionRate", e.target.value)}
-                  className="h-8 text-sm pr-7 tabular-nums" />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground pointer-events-none">%</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-tight">% of each sale</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Monthly Target ({sym})</label>
-              <Input type="number" step="0.01" min="0" placeholder="0.00"
-                value={formData.targetAmount} onChange={e => setF("targetAmount", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Sales goal per month</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Opening Balance ({sym})</label>
-              <Input type="number" step="0.01" placeholder="0.00"
-                value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Commission owed at setup</p>
-            </div>
-          </div>
-
-          {/* ── Divider: Notes ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Notes</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row E: Notes (full) ── */}
-          <textarea rows={2} placeholder="Optional notes about this agent, specialisations, assigned accounts…"
-            value={formData.notes} onChange={e => setF("notes", e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
-
-        </div>
-
-        {/* Footer */}
-        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
-          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
-          <Button onClick={submitAgentForm}
-            className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white border-0 shadow-sm gap-1.5">
-            <Plus size={14} /> Add Agent
-          </Button>
-        </div>
-      </FormWrapper>
 
       {/* ── Delete dialog ─────────────────────────────────────────────────── */}
       <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>

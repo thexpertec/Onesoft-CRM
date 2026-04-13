@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useCustomers, useLeads, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Customer, CustomerStatus, Lead, convertLeadToCustomer } from "@/lib/store";
@@ -13,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
-import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── CSV Import helpers ────────────────────────────────────────────────────────
@@ -224,47 +224,7 @@ export default function CustomersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
 
-  // ── Add Customer form (dialog / sheet) ──────────────────────────────────────
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMode, toggleFormMode] = useFormMode("customers-form-mode");
-  const BLANK_FORM = () => ({
-    name: "", company: "", email: "", phone: "", industry: "",
-    city: "", area: "", status: "Active" as CustomerStatus,
-    customerSince: new Date().toISOString().split("T")[0],
-    totalValue: "", currency: "GBP", openingBalance: "", notes: "", tags: "",
-  });
-  const [formData, setFormData] = useState(BLANK_FORM());
-
-  const openCustomerForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
-  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
-
-  const submitCustomerForm = () => {
-    if (!formData.name.trim()) {
-      toast({ title: "Name is required", variant: "destructive" }); return;
-    }
-    const emailLower = formData.email?.toLowerCase();
-    const normPhone  = formData.phone?.replace(/\D/g, "");
-    if (emailLower && existingEmails.has(emailLower)) {
-      toast({ title: "Duplicate email", description: `"${formData.email}" already exists.`, variant: "destructive" }); return;
-    }
-    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
-      toast({ title: "Duplicate phone", description: `"${formData.phone}" already exists.`, variant: "destructive" }); return;
-    }
-    addCustomer({
-      name: formData.name.trim(), company: formData.company.trim(),
-      email: formData.email.trim(), phone: formData.phone.trim(),
-      industry: formData.industry.trim(), city: formData.city.trim(),
-      area: formData.area.trim() || undefined, status: formData.status,
-      customerSince: formData.customerSince || new Date().toISOString().split("T")[0],
-      totalValue: formData.totalValue.trim(),
-      currency: formData.currency.trim() || "GBP",
-      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
-      notes: formData.notes.trim(), source: "direct",
-      tags: formData.tags ? formData.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
-    });
-    toast({ title: "Customer added", description: `${formData.name.trim()} has been added.` });
-    setFormOpen(false);
-  };
+  const [, nav] = useLocation();
 
   const existingEmails = useMemo(() => new Set(customers.map(c => c.email?.toLowerCase()).filter(Boolean)), [customers]);
   const existingPhones = useMemo(() => new Set(customers.map(c => c.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [customers]);
@@ -438,7 +398,7 @@ export default function CustomersPage() {
             }} className="gap-1.5">
               <FileDown size={13} /> Export Excel
             </Button>
-            <Button size="sm" onClick={openCustomerForm} className="gap-1.5" data-testid="btn-add-customer">
+            <Button size="sm" onClick={() => nav("/customers/new")} className="gap-1.5" data-testid="btn-add-customer">
               <Plus size={14} /> Add Customer
             </Button>
           </div>
@@ -599,7 +559,7 @@ export default function CustomersPage() {
               {/* Add row */}
               {isAuthenticated && !newRow && (
                 <tr><td colSpan={COLS.length + 2}>
-                  <button onClick={openCustomerForm}
+                  <button onClick={() => nav("/customers/new")}
                     className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
                     <Plus size={13} /> Add row
                   </button>
@@ -717,164 +677,6 @@ export default function CustomersPage() {
         onImport={handleImportCustomers}
       />
 
-      {/* ── Add Customer form (Dialog / Sheet) ────────────────────────────── */}
-      <FormWrapper
-        open={formOpen}
-        onOpenChange={v => setFormOpen(v)}
-        mode={formMode}
-        dialogClass="w-[min(98vw,920px)] max-w-none"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-emerald-600 to-teal-600">
-          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-            <Plus size={16} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-white leading-snug">Add New Customer</h2>
-            <p className="text-[11px] text-emerald-100 truncate">
-              {formData.name.trim() ? formData.name : "Name required · all other fields optional"}
-            </p>
-          </div>
-          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
-        </div>
-
-        {/* Body */}
-        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
-
-          {/* ── Row A: Name (full) ── */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-foreground">Customer Name <span className="text-red-500">*</span></label>
-            <Input autoFocus placeholder="e.g. Jane Smith" value={formData.name}
-              onChange={e => setF("name", e.target.value)} className="h-8 text-sm font-medium" />
-          </div>
-
-          {/* ── Row B: Company | Email | Phone | Industry | City | Area ── */}
-          <div className="grid grid-cols-6 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Company</label>
-              <Input placeholder="e.g. Acme Ltd" value={formData.company}
-                onChange={e => setF("company", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Email</label>
-              <Input type="email" placeholder="jane@acme.com" value={formData.email}
-                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Phone</label>
-              <Input type="tel" placeholder="+44 7700 900000" value={formData.phone}
-                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Industry</label>
-              <Input placeholder="e.g. Technology" value={formData.industry}
-                onChange={e => setF("industry", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">City</label>
-              <Combobox value={formData.city} onChange={v => setF("city", v)}
-                options={cityComboOpts} placeholder="City…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Area / Region</label>
-              <Combobox value={formData.area} onChange={v => setF("area", v)}
-                options={areaComboOpts} placeholder="Area…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-          </div>
-
-          {/* ── Divider: Status ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row C: Status pill toggles ── */}
-          <div className="flex gap-2">
-            {CUSTOMER_STATUSES.map(s => (
-              <button key={s} type="button" onClick={() => setF("status", s)}
-                className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
-                  formData.status === s
-                    ? s === "Active"   ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                    : s === "Inactive" ? "bg-amber-500 border-amber-500 text-white shadow-sm"
-                    :                   "bg-red-500 border-red-500 text-white shadow-sm"
-                    : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                }`}>{s}</button>
-            ))}
-          </div>
-
-          {/* ── Divider: Financials ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Financials</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row D: Customer Since | Total Value | Currency | Opening Balance ── */}
-          <div className="grid grid-cols-4 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Customer Since</label>
-              <Input type="date" value={formData.customerSince}
-                onChange={e => setF("customerSince", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Total Value</label>
-              <Input type="number" min="0" placeholder="0.00" value={formData.totalValue}
-                onChange={e => setF("totalValue", e.target.value)} className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Lifetime spend</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Currency</label>
-              <Select value={formData.currency} onValueChange={v => setF("currency", v)}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Opening Balance</label>
-              <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance}
-                onChange={e => setF("openingBalance", e.target.value)} className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Dr balance (receivable)</p>
-            </div>
-          </div>
-
-          {/* ── Divider: Tags & Notes ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Tags &amp; Notes</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row E: Tags | Notes ── */}
-          <div className="grid grid-cols-6 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Tags</label>
-              <Input placeholder="VIP;Retail" value={formData.tags}
-                onChange={e => setF("tags", e.target.value)} className="h-8 text-sm" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Semicolon-separated</p>
-            </div>
-            <div className="col-span-5 space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Notes</label>
-              <textarea rows={2} placeholder="Optional customer notes…"
-                value={formData.notes} onChange={e => setF("notes", e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
-            </div>
-          </div>
-
-        </div>
-
-        {/* Footer */}
-        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
-          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
-          <Button className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border-0 shadow-sm gap-1.5" onClick={submitCustomerForm}>
-            <Plus size={14} /> Add Customer
-          </Button>
-        </div>
-      </FormWrapper>
     </div>
   );
 }

@@ -25,13 +25,16 @@ import StaffPage from "@/pages/staff";
 import StaffNewPage from "@/pages/staff-new";
 import HrmRolesPage from "@/pages/hrm-roles";
 import CustomersPage from "@/pages/customers";
+import CustomerNewPage from "@/pages/customer-new";
 import ProductsPage from "@/pages/products";
+import ProductNewPage from "@/pages/product-new";
 import CategoriesPage from "@/pages/categories";
 import ProductGroupsPage from "@/pages/product-groups";
 import BrandsPage from "@/pages/brands";
 import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
 import SuppliersPage from "@/pages/suppliers";
+import SupplierNewPage from "@/pages/supplier-new";
 import ShareholdersPage from "@/pages/shareholders";
 import InvestmentPlansPage from "@/pages/investment-plans";
 import MediaLibraryPage from "@/pages/media";
@@ -48,6 +51,7 @@ import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
 import SaleReturnPage from "@/pages/sale-return";
 import SalesAgentsPage from "@/pages/sales-agents";
+import AgentNewPage from "@/pages/agent-new";
 import AgentPerformancePage from "@/pages/agent-performance";
 import AreasPage from "@/pages/areas";
 import RawMaterialsPage from "@/pages/raw-materials";
@@ -116,13 +120,16 @@ function Router() {
               <Route path="/documents/new" component={NewDocument} />
               <Route path="/documents/edit/:id" component={NewDocument} />
               <Route path="/documents/:id" component={DocumentDetail} />
+              <Route path="/customers/new" component={CustomerNewPage} />
               <Route path="/customers" component={CustomersPage} />
+              <Route path="/products/new" component={ProductNewPage} />
               <Route path="/products" component={ProductsPage} />
               <Route path="/brands" component={BrandsPage} />
               <Route path="/categories" component={CategoriesPage} />
               <Route path="/product-groups" component={ProductGroupsPage} />
               <Route path="/attributes" component={AttributesPage} />
               <Route path="/units" component={UnitsPage} />
+              <Route path="/suppliers/new" component={SupplierNewPage} />
               <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/shareholders" component={ShareholdersPage} />
               <Route path="/investment-plans" component={InvestmentPlansPage} />
@@ -132,6 +139,7 @@ function Router() {
               <Route path="/invoices/:id" component={InvoiceFormPage} />
               <Route path="/invoices" component={InvoicesPage} />
               <Route path="/calc-invoice" component={CalcInvoicePage} />
+              <Route path="/sales-agents/new" component={AgentNewPage} />
               <Route path="/sales-agents" component={SalesAgentsPage} />
               <Route path="/agent-performance" component={AgentPerformancePage} />
               <Route path="/areas" component={AreasPage} />
