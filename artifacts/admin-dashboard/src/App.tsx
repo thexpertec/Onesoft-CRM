@@ -22,6 +22,7 @@ import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
 import CalcInvoicePage from "@/pages/calc-invoice";
 import StockLedgerPage from "@/pages/stock-ledger";
 import StaffPage from "@/pages/staff";
+import StaffNewPage from "@/pages/staff-new";
 import HrmRolesPage from "@/pages/hrm-roles";
 import CustomersPage from "@/pages/customers";
 import ProductsPage from "@/pages/products";
@@ -140,6 +141,7 @@ function Router() {
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock-ledger" component={StockLedgerPage} />
+              <Route path="/staff/new" component={StaffNewPage} />
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
               <Route path="/users" component={UsersPage} />

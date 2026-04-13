@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Staff, StaffStatus } from "@/lib/store";
@@ -11,8 +12,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
-import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
-import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_OPTS: StaffStatus[] = ["Active", "On Leave", "Terminated"];
@@ -45,12 +44,11 @@ const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function StaffPage() {
+  const [, nav] = useLocation();
   const { staff, addStaff, editStaff, removeStaff } = useStaff();
   const { roles } = useStaffRoles();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const sym = getSettingsCurrencySymbol();
-  const dp  = getSettingsDecimalPlaces();
 
   const roleNames = useMemo(() => roles.map(r => r.name), [roles]);
 
@@ -65,50 +63,6 @@ export default function StaffPage() {
   const [loginForm,    setLoginForm]    = useState({ enabled: false, username: "", password: "" });
   const [showLoginPwd, setShowLoginPwd] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
-
-  // ── Add Staff form (dialog / sheet) ──────────────────────────────────────────
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMode, toggleFormMode] = useFormMode("staff-form-mode");
-  const BLANK_FORM = () => ({
-    name: "", department: "", designation: "", role: "",
-    status: "Active" as StaffStatus,
-    email: "", phone: "",
-    joinDate: new Date().toISOString().slice(0, 10),
-    openingBalance: "", notes: "",
-    salaryType: "Monthly" as "Monthly" | "Hourly" | "Daily" | "Commission",
-    basicSalary: "", allowances: "", deductions: "",
-    bankName: "", accountNumber: "",
-  });
-  const [formData, setFormData] = useState(BLANK_FORM());
-  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
-
-  const openStaffForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
-
-  const submitStaffForm = () => {
-    if (!formData.name.trim()) {
-      toast({ title: "Full name is required", variant: "destructive" }); return;
-    }
-    addStaff({
-      name:           formData.name.trim(),
-      department:     formData.department.trim(),
-      designation:    formData.designation.trim(),
-      role:           formData.role.trim(),
-      status:         formData.status,
-      email:          formData.email.trim(),
-      phone:          formData.phone.trim(),
-      joinDate:       formData.joinDate || new Date().toISOString().slice(0, 10),
-      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
-      notes:          formData.notes.trim(),
-      salaryType:     formData.salaryType,
-      basicSalary:    formData.basicSalary  ? parseFloat(formData.basicSalary)  : undefined,
-      allowances:     formData.allowances   ? parseFloat(formData.allowances)   : undefined,
-      deductions:     formData.deductions   ? parseFloat(formData.deductions)   : undefined,
-      bankName:       formData.bankName.trim()      || undefined,
-      accountNumber:  formData.accountNumber.trim() || undefined,
-    });
-    toast({ title: "Staff member added", description: `${formData.name.trim()} has been added.` });
-    setFormOpen(false);
-  };
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -260,12 +214,9 @@ export default function StaffPage() {
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · organised by department & designation</p>
         </div>
         {isAuthenticated && (
-          <div className="flex items-center gap-1">
-            <Button size="sm" onClick={openStaffForm} className="gap-1.5">
-              <Plus size={14} /> Add Staff
-            </Button>
-            <FormModeToggle mode={formMode} onToggle={toggleFormMode} />
-          </div>
+          <Button size="sm" onClick={() => nav("/staff/new")} className="gap-1.5">
+            <Plus size={14} /> Add Staff
+          </Button>
         )}
       </div>
 
@@ -467,7 +418,7 @@ export default function StaffPage() {
           {/* Add row */}
           {isAuthenticated && (
             <tr><td colSpan={COLS.length + 2}>
-              <button onClick={openStaffForm}
+              <button onClick={() => nav("/staff/new")}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
                 data-testid="btn-add-staff-row">
                 <Plus size={13} /> Add row
@@ -476,207 +427,6 @@ export default function StaffPage() {
           )}
         </ExcelGridShell>
       </div>
-
-      {/* ── Add Staff form ─────────────────────────────────────────────────── */}
-      <FormWrapper
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        mode={formMode}
-        dialogClass="w-[min(98vw,920px)] max-w-none"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-rose-600 to-pink-600">
-          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-            <Users2 size={16} className="text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-white leading-snug">Add Staff Member</h2>
-            <p className="text-[11px] text-rose-100 truncate">
-              {formData.name.trim()
-                ? `${formData.name}${formData.designation ? " · " + formData.designation : ""}${formData.department ? " · " + formData.department : ""}`
-                : "Name required · all other fields optional"}
-            </p>
-          </div>
-          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
-        </div>
-
-        {/* Body */}
-        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
-
-          {/* ── Row A: Name (full) ── */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-foreground">Full Name <span className="text-red-500">*</span></label>
-            <Input autoFocus placeholder="e.g. Sarah Khan" value={formData.name}
-              onChange={e => setF("name", e.target.value)} className="h-8 text-sm font-medium" />
-          </div>
-
-          {/* ── Row B: Dept | Designation | Role | Email | Phone | Join Date ── */}
-          <div className="grid grid-cols-6 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Department</label>
-              <Combobox value={formData.department} onChange={v => setF("department", v)}
-                options={deptComboOpts} placeholder="Select or type…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Designation</label>
-              <Combobox value={formData.designation} onChange={v => setF("designation", v)}
-                options={desigComboOpts} placeholder="Select or type…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Role</label>
-              <Combobox value={formData.role} onChange={v => setF("role", v)}
-                options={roleComboOpts} placeholder="Select or type…"
-                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Email</label>
-              <Input type="email" placeholder="staff@company.com" value={formData.email}
-                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Phone</label>
-              <Input type="tel" placeholder="+44 7700 900000" value={formData.phone}
-                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Join Date</label>
-              <Input type="date" value={formData.joinDate}
-                onChange={e => setF("joinDate", e.target.value)} className="h-8 text-sm" />
-            </div>
-          </div>
-
-          {/* ── Divider: Status ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row C: Status pill toggles (Active / On Leave / Terminated) ── */}
-          <div className="flex gap-2">
-            {(["Active", "On Leave", "Terminated"] as const).map(s => (
-              <button key={s} type="button" onClick={() => setF("status", s)}
-                className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
-                  formData.status === s
-                    ? s === "Active"     ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                    : s === "On Leave"  ? "bg-amber-500 border-amber-500 text-white shadow-sm"
-                    :                     "bg-red-600 border-red-600 text-white shadow-sm"
-                    : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                }`}>{s}</button>
-            ))}
-          </div>
-
-          {/* ── Divider: Financials ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Financials</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row D1: Salary Type pills ── */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold text-foreground">Salary / Pay Type</label>
-            <div className="flex gap-2">
-              {(["Monthly", "Hourly", "Daily", "Commission"] as const).map(t => (
-                <button key={t} type="button"
-                  onClick={() => setFormData(p => ({ ...p, salaryType: t }))}
-                  className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
-                    formData.salaryType === t
-                      ? "bg-rose-600 border-rose-600 text-white shadow-sm"
-                      : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                  }`}>{t}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Row D2: Basic | Allowances | Deductions | Net (live) ── */}
-          <div className="grid grid-cols-4 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">
-                Basic Salary ({sym})
-              </label>
-              <Input type="number" step="0.01" min="0" placeholder="0.00"
-                value={formData.basicSalary} onChange={e => setF("basicSalary", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Base pay</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Allowances ({sym})</label>
-              <Input type="number" step="0.01" min="0" placeholder="0.00"
-                value={formData.allowances} onChange={e => setF("allowances", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Transport, housing…</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Deductions ({sym})</label>
-              <Input type="number" step="0.01" min="0" placeholder="0.00"
-                value={formData.deductions} onChange={e => setF("deductions", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Tax, provident…</p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Net Pay ({sym})</label>
-              <div className={`h-8 rounded-md border px-3 flex items-center text-sm tabular-nums font-semibold ${
-                (() => {
-                  const net = (parseFloat(formData.basicSalary) || 0) + (parseFloat(formData.allowances) || 0) - (parseFloat(formData.deductions) || 0);
-                  return net >= 0 ? "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20" : "text-red-600 border-red-200 bg-red-50 dark:bg-red-900/20";
-                })()
-              }`}>
-                {(() => {
-                  const net = (parseFloat(formData.basicSalary) || 0) + (parseFloat(formData.allowances) || 0) - (parseFloat(formData.deductions) || 0);
-                  return net.toFixed(dp);
-                })()}
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-tight">Calculated automatically</p>
-            </div>
-          </div>
-
-          {/* ── Row D3: Bank Name | Account Number | Opening Balance ── */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Bank Name</label>
-              <Input placeholder="e.g. Barclays, HBL" value={formData.bankName}
-                onChange={e => setF("bankName", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Account / IBAN</label>
-              <Input placeholder="Account number or IBAN" value={formData.accountNumber}
-                onChange={e => setF("accountNumber", e.target.value)} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Opening Balance ({sym})</label>
-              <Input type="number" step="0.01" placeholder="0.00"
-                value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)}
-                className="h-8 text-sm tabular-nums" />
-              <p className="text-[10px] text-muted-foreground leading-tight">Salary advance / balance owed at setup</p>
-            </div>
-          </div>
-
-          {/* ── Divider: Notes ── */}
-          <div className="flex items-center gap-3 pt-0.5">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Notes</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* ── Row E: Notes (full) ── */}
-          <textarea rows={2} placeholder="Optional notes about this staff member, skills, assigned projects, emergency contact…"
-            value={formData.notes} onChange={e => setF("notes", e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
-
-        </div>
-
-        {/* Footer */}
-        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
-          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
-          <Button onClick={submitStaffForm}
-            className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white border-0 shadow-sm gap-1.5">
-            <Plus size={14} /> Add Staff Member
-          </Button>
-        </div>
-      </FormWrapper>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
