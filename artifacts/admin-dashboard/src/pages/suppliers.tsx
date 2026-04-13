@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Supplier, SupplierStatus } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Truck, Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, BadgeCheck, ShieldAlert, Filter, Upload, FileDown } from "lucide-react";
+import { Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, Filter, Upload, FileDown } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 
 // ─── CSV Import helpers ────────────────────────────────────────────────────────
 const SUPPLIER_CSV_HEADERS = ["company","contactPerson","email","phone","category","city","country","status","rating","currency","notes","tags"] as const;
@@ -235,6 +236,48 @@ export default function SuppliersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
 
+  // ── Add Supplier form (dialog / sheet) ──────────────────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, toggleFormMode] = useFormMode("suppliers-form-mode");
+  const BLANK_FORM = () => ({
+    company: "", contactPerson: "", email: "", phone: "",
+    category: SUPPLIER_CATEGORIES[0], city: "", area: "", country: "",
+    status: "Active" as SupplierStatus, rating: 0,
+    currency: "GBP", notes: "", tags: "",
+  });
+  const [formData, setFormData] = useState(BLANK_FORM());
+
+  const openSupplierForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
+
+  const setF = (key: string, value: string | number) =>
+    setFormData(p => ({ ...p, [key]: value }));
+
+  const submitSupplierForm = () => {
+    if (!formData.company.trim()) {
+      toast({ title: "Company name is required", variant: "destructive" }); return;
+    }
+    const emailLower = formData.email?.toLowerCase();
+    const normPhone  = formData.phone?.replace(/\D/g, "");
+    if (emailLower && existingEmails.has(emailLower)) {
+      toast({ title: "Duplicate email", description: `"${formData.email}" already exists.`, variant: "destructive" }); return;
+    }
+    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
+      toast({ title: "Duplicate phone", description: `"${formData.phone}" already exists.`, variant: "destructive" }); return;
+    }
+    addSupplier({
+      company: formData.company.trim(), contactPerson: formData.contactPerson.trim(),
+      email: formData.email.trim(), phone: formData.phone.trim(),
+      category: formData.category || SUPPLIER_CATEGORIES[0],
+      city: formData.city.trim(), area: formData.area.trim() || undefined,
+      country: formData.country.trim(), status: formData.status,
+      rating: formData.rating, currency: formData.currency.trim() || "GBP",
+      notes: formData.notes.trim(),
+      tags: formData.tags ? formData.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
+    });
+    toast({ title: "Supplier added", description: `${formData.company.trim()} has been added.` });
+    setFormOpen(false);
+  };
+
   const existingEmails = useMemo(() => new Set(suppliers.map(s => s.email?.toLowerCase()).filter(Boolean)), [suppliers]);
   const existingPhones = useMemo(() => new Set(suppliers.map(s => s.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [suppliers]);
 
@@ -399,7 +442,7 @@ export default function SuppliersPage() {
             }} className="gap-1.5">
               <FileDown size={13} /> Export Excel
             </Button>
-            <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-supplier">
+            <Button size="sm" onClick={openSupplierForm} className="gap-1.5" data-testid="btn-add-supplier">
               <Plus size={14} /> Add Supplier
             </Button>
           </div>
@@ -571,7 +614,7 @@ export default function SuppliersPage() {
           {/* Add row */}
           {isAuthenticated && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
-              <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
+              <button onClick={openSupplierForm}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
                 <Plus size={13} /> Add row
               </button>
@@ -648,6 +691,156 @@ export default function SuppliersPage() {
         onImport={handleImportSuppliers}
         statusColors={STATUS_COLORS}
       />
+
+      {/* ── Add Supplier form (Dialog / Sheet) ────────────────────────────── */}
+      <FormWrapper
+        open={formOpen}
+        onOpenChange={v => setFormOpen(v)}
+        mode={formMode}
+        dialogClass="w-[min(98vw,860px)] max-w-none"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              <Plus size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold leading-tight">Add New Supplier</h2>
+              <p className="text-[12px] text-muted-foreground mt-0.5">All fields except Company are optional</p>
+            </div>
+          </div>
+          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[70vh]">
+
+          {/* Row 1 — Identity */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Company <span className="text-red-500">*</span>
+              </label>
+              <Input
+                autoFocus
+                placeholder="e.g. TechVision Ltd"
+                value={formData.company}
+                onChange={e => setF("company", e.target.value)}
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Contact Person</label>
+              <Input placeholder="e.g. Ali Khan" value={formData.contactPerson} onChange={e => setF("contactPerson", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
+              <Input type="email" placeholder="e.g. ali@company.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
+              <Input type="tel" placeholder="e.g. +92 300 1234567" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+          </div>
+
+          {/* Row 2 — Location & Classification */}
+          <div className="grid grid-cols-6 gap-3">
+            <div className="col-span-2 flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
+              <Select value={formData.category} onValueChange={v => setF("category", v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SUPPLIER_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
+              {cityOptions.length > 0 ? (
+                <Select value={formData.city || "__none__"} onValueChange={v => setF("city", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— none —</SelectItem>
+                    {cityOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="City" value={formData.city} onChange={e => setF("city", e.target.value)} className="h-9 text-[13px]" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
+              {areaOptions.length > 0 ? (
+                <Select value={formData.area || "__none__"} onValueChange={v => setF("area", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— none —</SelectItem>
+                    {areaOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="Area" value={formData.area} onChange={e => setF("area", e.target.value)} className="h-9 text-[13px]" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Country</label>
+              <Input placeholder="e.g. Pakistan" value={formData.country} onChange={e => setF("country", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
+              <Select value={formData.status} onValueChange={v => setF("status", v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SUPPLIER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Row 3 — Rating, Currency, Tags, Notes */}
+          <div className="grid grid-cols-6 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Rating</label>
+              <div className="h-9 flex items-center gap-1 px-2 border rounded-md bg-background">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} type="button"
+                    onClick={() => setF("rating", n === formData.rating ? 0 : n)}
+                    className="focus:outline-none hover:scale-110 transition-transform">
+                    <StarIcon size={16} className={n <= formData.rating ? "fill-amber-400 text-amber-400" : "fill-transparent text-gray-300"} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Currency</label>
+              <Input placeholder="GBP" value={formData.currency} onChange={e => setF("currency", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tags</label>
+              <Input placeholder="IT;Hardware (semicolon-separated)" value={formData.tags} onChange={e => setF("tags", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="col-span-3 flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
+              <textarea
+                rows={1}
+                placeholder="Optional supplier notes..."
+                value={formData.notes}
+                onChange={e => setF("notes", e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20">
+          <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
+          <Button className="gap-1.5 min-w-[160px]" onClick={submitSupplierForm}>
+            <Plus size={14} /> Add Supplier
+          </Button>
+        </div>
+      </FormWrapper>
     </div>
   );
 }
