@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useSalesAgents, useCities, useAreas } from "@/hooks/use-data";
 import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
+import { Combobox, ComboOption } from "@/components/combobox";
 import { useAuth } from "@/contexts/auth-context";
 import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -68,8 +69,10 @@ export default function SalesAgentsPage() {
   const sym = getSettingsCurrencySymbol();
   const dp  = getSettingsDecimalPlaces();
 
-  const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
-  const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);
+  const cityOptions   = useMemo(() => cities.map(c => c.name), [cities]);
+  const areaOptions   = useMemo(() => areas.map(a => a.name), [areas]);
+  const cityComboOpts = useMemo<ComboOption[]>(() => cities.map(c => ({ value: c.name, label: c.name })), [cities]);
+  const areaComboOpts = useMemo<ComboOption[]>(() => areas.map(a => ({ value: a.name, label: a.name })), [areas]);
 
   const COLS = useMemo<ColDef[]>(() => [
     { field: "agentCode",      label: "Code",           minW: 90,  type: "readonly" },
@@ -482,101 +485,158 @@ export default function SalesAgentsPage() {
         </ExcelGridShell>
       </div>
 
-      {/* ── Add Agent FormWrapper ──────────────────────────────────────────── */}
+      {/* ── Add Agent form ─────────────────────────────────────────────────── */}
       <FormWrapper
-        title="Add Sales Agent"
         open={formOpen}
         onOpenChange={setFormOpen}
         mode={formMode}
-        onSubmit={submitAgentForm}
-        submitLabel="Add Agent"
-        dialogClass="w-[min(98vw,860px)] max-w-none"
+        dialogClass="w-[min(98vw,920px)] max-w-none"
       >
-        {/* Row 1 — Name*, Email, Phone, Join Date */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Name <span className="text-red-500">*</span></label>
-            <Input placeholder="Full name" value={formData.name} onChange={e => setF("name", e.target.value)} className="h-9 text-[13px]" autoFocus />
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-violet-600 to-purple-600">
+          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+            <Plus size={16} className="text-white" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
-            <Input type="email" placeholder="agent@example.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[13px] font-bold text-white leading-snug">Add Sales Agent</h2>
+            <p className="text-[11px] text-violet-100 truncate">
+              {formData.name.trim() ? formData.name : "Name required · all other fields optional"}
+            </p>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
-            <Input type="tel" placeholder="+44 …" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Join Date</label>
-            <Input type="date" value={formData.joinDate} onChange={e => setF("joinDate", e.target.value)} className="h-9 text-[13px]" />
-          </div>
+          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
         </div>
 
-        {/* Row 2 — City, Area, Territory, Status, Commission % */}
-        <div className="grid grid-cols-5 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
-            {cityOptions.length > 0 ? (
-              <Select value={formData.city || "__none__"} onValueChange={v => setF("city", v === "__none__" ? "" : v)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select city" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None —</SelectItem>
-                  {cityOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input placeholder="City" value={formData.city} onChange={e => setF("city", e.target.value)} className="h-9 text-[13px]" />
-            )}
+        {/* Body */}
+        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
+
+          {/* ── Row A: Name (full) ── */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-foreground">Full Name <span className="text-red-500">*</span></label>
+            <Input autoFocus placeholder="e.g. James Wilson" value={formData.name}
+              onChange={e => setF("name", e.target.value)} className="h-8 text-sm font-medium" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
-            {areaOptions.length > 0 ? (
-              <Select value={formData.area || "__none__"} onValueChange={v => setF("area", v === "__none__" ? "" : v)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select area" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None —</SelectItem>
-                  {areaOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input placeholder="Area" value={formData.area} onChange={e => setF("area", e.target.value)} className="h-9 text-[13px]" />
-            )}
+
+          {/* ── Row B: Email | Phone | Join Date | City | Area | Territory ── */}
+          <div className="grid grid-cols-6 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Email</label>
+              <Input type="email" placeholder="agent@example.com" value={formData.email}
+                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Phone</label>
+              <Input type="tel" placeholder="+44 7700 900000" value={formData.phone}
+                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Join Date</label>
+              <Input type="date" value={formData.joinDate}
+                onChange={e => setF("joinDate", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">City</label>
+              <Combobox value={formData.city} onChange={v => setF("city", v)}
+                options={cityComboOpts} placeholder="City…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Area / Region</label>
+              <Combobox value={formData.area} onChange={v => setF("area", v)}
+                options={areaComboOpts} placeholder="Area…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Territory</label>
+              <Input placeholder="e.g. North England" value={formData.region}
+                onChange={e => setF("region", e.target.value)} className="h-8 text-sm" />
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Territory (free)</label>
-            <Input placeholder="e.g. North England" value={formData.region} onChange={e => setF("region", e.target.value)} className="h-9 text-[13px]" />
+
+          {/* ── Divider: Status ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
-            <Select value={formData.status} onValueChange={v => setF("status", v)}>
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
+
+          {/* ── Row C: Status pill toggles ── */}
+          <div className="flex gap-2">
+            {(["Active", "Inactive"] as const).map(s => (
+              <button key={s} type="button" onClick={() => setF("status", s)}
+                className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
+                  formData.status === s
+                    ? s === "Active" ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                    :                  "bg-amber-500 border-amber-500 text-white shadow-sm"
+                    : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                }`}>{s}</button>
+            ))}
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Commission %</label>
-            <Input type="number" step="0.1" placeholder="5" value={formData.commissionRate} onChange={e => setF("commissionRate", e.target.value)} className="h-9 text-[13px]" />
+
+          {/* ── Divider: Targets & Commission ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Targets &amp; Commission</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
+
+          {/* ── Row D: Commission % | Monthly Target | Opening Balance ── */}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-semibold text-foreground">Commission %</label>
+                {(() => {
+                  const rate = parseFloat(formData.commissionRate);
+                  const target = parseFloat(formData.targetAmount);
+                  if (!isNaN(rate) && rate > 0 && !isNaN(target) && target > 0)
+                    return <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">{sym}{(target * rate / 100).toFixed(dp)}/mo</span>;
+                  return null;
+                })()}
+              </div>
+              <div className="relative">
+                <Input type="number" step="0.1" min="0" max="100" placeholder="0"
+                  value={formData.commissionRate} onChange={e => setF("commissionRate", e.target.value)}
+                  className="h-8 text-sm pr-7 tabular-nums" />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground pointer-events-none">%</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-tight">% of each sale</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Monthly Target ({sym})</label>
+              <Input type="number" step="0.01" min="0" placeholder="0.00"
+                value={formData.targetAmount} onChange={e => setF("targetAmount", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Sales goal per month</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Opening Balance ({sym})</label>
+              <Input type="number" step="0.01" placeholder="0.00"
+                value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Commission owed at setup</p>
+            </div>
+          </div>
+
+          {/* ── Divider: Notes ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Notes</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row E: Notes (full) ── */}
+          <textarea rows={2} placeholder="Optional notes about this agent, specialisations, assigned accounts…"
+            value={formData.notes} onChange={e => setF("notes", e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+
         </div>
 
-        {/* Row 3 — Monthly Target, Opening Balance, Notes */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Monthly Target</label>
-            <Input type="number" step="0.01" placeholder="0.00" value={formData.targetAmount} onChange={e => setF("targetAmount", e.target.value)} className="h-9 text-[13px]" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
-            <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
-            <span className="text-[10px] text-muted-foreground leading-none">Commission owed at setup</span>
-          </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
-            <Input placeholder="Any additional notes…" value={formData.notes} onChange={e => setF("notes", e.target.value)} className="h-9 text-[13px]" />
-          </div>
+        {/* Footer */}
+        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
+          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
+          <Button onClick={submitAgentForm}
+            className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white border-0 shadow-sm gap-1.5">
+            <Plus size={14} /> Add Agent
+          </Button>
         </div>
       </FormWrapper>
 
