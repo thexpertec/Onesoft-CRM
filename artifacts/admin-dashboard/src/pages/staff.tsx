@@ -6,10 +6,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
+import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_OPTS: StaffStatus[] = ["Active", "On Leave", "Terminated"];
@@ -60,6 +62,41 @@ export default function StaffPage() {
   const [loginForm,    setLoginForm]    = useState({ enabled: false, username: "", password: "" });
   const [showLoginPwd, setShowLoginPwd] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // ── Add Staff form (dialog / sheet) ──────────────────────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, toggleFormMode] = useFormMode("staff-form-mode");
+  const BLANK_FORM = () => ({
+    name: "", department: "", designation: "", role: "",
+    status: "Active" as StaffStatus,
+    email: "", phone: "",
+    joinDate: new Date().toISOString().slice(0, 10),
+    openingBalance: "", notes: "",
+  });
+  const [formData, setFormData] = useState(BLANK_FORM());
+  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
+
+  const openStaffForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
+
+  const submitStaffForm = () => {
+    if (!formData.name.trim()) {
+      toast({ title: "Full name is required", variant: "destructive" }); return;
+    }
+    addStaff({
+      name:           formData.name.trim(),
+      department:     formData.department.trim(),
+      designation:    formData.designation.trim(),
+      role:           formData.role.trim(),
+      status:         formData.status,
+      email:          formData.email.trim(),
+      phone:          formData.phone.trim(),
+      joinDate:       formData.joinDate || new Date().toISOString().slice(0, 10),
+      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
+      notes:          formData.notes.trim(),
+    });
+    toast({ title: "Staff member added", description: `${formData.name.trim()} has been added.` });
+    setFormOpen(false);
+  };
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -211,9 +248,12 @@ export default function StaffPage() {
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · organised by department & designation</p>
         </div>
         {isAuthenticated && (
-          <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow}>
-            <Plus size={14} /> Add Staff
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="sm" onClick={openStaffForm} className="gap-1.5">
+              <Plus size={14} /> Add Staff
+            </Button>
+            <FormModeToggle mode={formMode} onToggle={toggleFormMode} />
+          </div>
         )}
       </div>
 
@@ -413,9 +453,9 @@ export default function StaffPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {isAuthenticated && (
             <tr><td colSpan={COLS.length + 2}>
-              <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
+              <button onClick={openStaffForm}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
                 data-testid="btn-add-staff-row">
                 <Plus size={13} /> Add row
@@ -424,6 +464,93 @@ export default function StaffPage() {
           )}
         </ExcelGridShell>
       </div>
+
+      {/* ── Add Staff FormWrapper ──────────────────────────────────────────── */}
+      <FormWrapper
+        title="Add Staff Member"
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        mode={formMode}
+        onSubmit={submitStaffForm}
+        submitLabel="Add Staff"
+        dialogClass="w-[min(98vw,860px)] max-w-none"
+      >
+        {/* Row 1 — Name*, Department, Designation, Role */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Full Name <span className="text-red-500">*</span></label>
+            <Input placeholder="e.g. Sarah Khan" value={formData.name} onChange={e => setF("name", e.target.value)} className="h-9 text-[13px]" autoFocus />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</label>
+            <Combobox
+              value={formData.department}
+              onChange={v => setF("department", v)}
+              options={deptComboOpts}
+              placeholder="Select or type…"
+              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Designation</label>
+            <Combobox
+              value={formData.designation}
+              onChange={v => setF("designation", v)}
+              options={desigComboOpts}
+              placeholder="Select or type…"
+              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Role</label>
+            <Combobox
+              value={formData.role}
+              onChange={v => setF("role", v)}
+              options={roleComboOpts}
+              placeholder="Select or type…"
+              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
+            />
+          </div>
+        </div>
+
+        {/* Row 2 — Status, Email, Phone, Join Date */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
+            <Select value={formData.status} onValueChange={v => setF("status", v)}>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
+            <Input type="email" placeholder="staff@company.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
+            <Input type="tel" placeholder="+44 …" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Join Date</label>
+            <Input type="date" value={formData.joinDate} onChange={e => setF("joinDate", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+        </div>
+
+        {/* Row 3 — Opening Balance, Notes */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
+            <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
+            <span className="text-[10px] text-muted-foreground leading-none">Salary advance / balance owed at setup</span>
+          </div>
+          <div className="col-span-2 flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
+            <Input placeholder="Any additional notes…" value={formData.notes} onChange={e => setF("notes", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+        </div>
+      </FormWrapper>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>

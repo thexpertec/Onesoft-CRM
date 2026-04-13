@@ -2454,6 +2454,7 @@ export type Staff = {
   phone: string;
   joinDate: string;
   notes: string;
+  openingBalance?: number;   // salary advance / balance owed at setup
   // Login credentials (optional — set by admin)
   username?: string;
   password?: string;
