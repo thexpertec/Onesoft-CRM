@@ -909,316 +909,283 @@ export default function ProductsPage() {
 
       {/* ── Add Product Form ─────────────────────────────────────────────────── */}
       <FormWrapper open={formOpen} onOpenChange={v => !v && closeForm()} mode={formLayoutMode}
-        dialogClass="w-[min(98vw,1060px)] max-w-none">
+        dialogClass="w-[min(98vw,920px)] max-w-none">
 
-        {/* ── Gradient header ── */}
-        <div className="flex items-center gap-4 px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600">
-          <div className="w-11 h-11 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
-            <Package size={20} className="text-white" />
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600">
+          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+            <Package size={16} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-[15px] font-bold text-white leading-tight">Add New Product</h2>
-            <p className="text-[12px] text-blue-100 truncate mt-0.5">
-              {formData.name.trim() ? formData.name : "Fill in product details below · Name is required"}
+            <h2 className="text-[13px] font-bold text-white leading-snug">Add New Product</h2>
+            <p className="text-[11px] text-blue-100 truncate">
+              {formData.name.trim() ? formData.name : "Name required · all other fields optional"}
             </p>
           </div>
           <FormModeToggle mode={formLayoutMode} onToggle={toggleFormLayoutMode} onClose={closeForm} />
         </div>
 
-        {/* ── Body: two columns ── */}
-        <div className={`px-6 py-5 ${formLayoutMode === "sheet" ? "flex-1 overflow-y-auto" : ""}`}>
-          <div className="grid grid-cols-9 gap-5">
+        {/* Body */}
+        <div className={`px-5 py-4 space-y-3.5${formLayoutMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
 
-            {/* ════ LEFT PANEL (5/9) — Identity + Description ════ */}
-            <div className="col-span-5 space-y-4">
+          {/* ── Row A: Name (full) ── */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
+            <Input value={formData.name} onChange={e => patchForm("name", e.target.value)}
+              placeholder="e.g. Oak Dining Table" className="h-8 text-sm font-medium" autoFocus />
+          </div>
 
-              {/* Identity card */}
-              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-5 rounded-full bg-blue-600" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Identity</span>
-                </div>
-
-                {/* Product Name — full width */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-foreground">Product Name <span className="text-red-500">*</span></label>
-                  <Input value={formData.name} onChange={e => patchForm("name", e.target.value)}
-                    placeholder="e.g. Oak Dining Table" className="h-9 text-sm font-medium" autoFocus />
-                </div>
-
-                {/* SKU | Barcode | Brand */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">SKU</label>
-                    <Input value={formData.sku} onChange={e => patchForm("sku", e.target.value)}
-                      placeholder="ODT-001" className="h-9 text-sm font-mono" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Barcode / QR</label>
-                    <div className="flex gap-1">
-                      <Input value={formData.barcode} onChange={e => patchForm("barcode", e.target.value)}
-                        placeholder="Scan or type…" className="h-9 text-sm font-mono" />
-                      <button type="button" onClick={() => setBarcodeScanOpen(true)}
-                        className="shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors"
-                        title="Scan barcode / QR">
-                        <ScanLine size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Brand</label>
-                    {brandOptions.length > 0 ? (
-                      <select value={formData.brand} onChange={e => patchForm("brand", e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="">— select —</option>
-                        {brandOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <Input value={formData.brand} onChange={e => patchForm("brand", e.target.value)}
-                        placeholder="Brand name" className="h-9 text-sm" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Category | Subcategory | Unit */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Category</label>
-                    {categoryOptions.length > 0 ? (
-                      <select value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
-                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="">— select —</option>
-                        {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <Input value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
-                        placeholder="Category" className="h-9 text-sm" />
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Subcategory</label>
-                    {(() => {
-                      const allCats = getProductCategories();
-                      const parentCat = allCats.find(c => !c.parentId && c.name === formData.category);
-                      const subOpts = parentCat ? allCats.filter(c => c.parentId === parentCat.id).map(c => c.name) : [];
-                      return subOpts.length > 0 ? (
-                        <select value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
-                          className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                          <option value="">— select —</option>
-                          {subOpts.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      ) : (
-                        <Input value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
-                          placeholder="Subcategory" className="h-9 text-sm" />
-                      );
-                    })()}
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Unit</label>
-                    {unitOptions.length > 0 ? (
-                      <select value={formData.unit} onChange={e => patchForm("unit", e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="">— select —</option>
-                        {unitOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <Input value={formData.unit} onChange={e => patchForm("unit", e.target.value)}
-                        placeholder="pcs / kg / m²" className="h-9 text-sm" />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Description card */}
-              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-5 rounded-full bg-purple-500" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Description</span>
-                </div>
-                <textarea value={formData.description} onChange={e => patchForm("description", e.target.value)}
-                  placeholder="Product description, features, specifications, dimensions…" rows={4}
-                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed" />
+          {/* ── Row B: SKU | Barcode | Brand | Category | Subcategory | Unit ── */}
+          <div className="grid grid-cols-6 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">SKU</label>
+              <Input value={formData.sku} onChange={e => patchForm("sku", e.target.value)}
+                placeholder="ODT-001" className="h-8 text-sm font-mono" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Barcode / QR</label>
+              <div className="flex gap-1">
+                <Input value={formData.barcode} onChange={e => patchForm("barcode", e.target.value)}
+                  placeholder="Scan or type…" className="h-8 text-sm font-mono flex-1 min-w-0" />
+                <button type="button" onClick={() => setBarcodeScanOpen(true)}
+                  className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800"
+                  title="Scan barcode">
+                  <ScanLine size={13} />
+                </button>
               </div>
             </div>
-
-            {/* ════ RIGHT PANEL (4/9) — Status, Pricing, Stock ════ */}
-            <div className="col-span-4 space-y-4">
-
-              {/* Status + Condition pill toggles */}
-              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-5 rounded-full bg-emerald-500" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status & Condition</span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-foreground">Status</label>
-                  <div className="flex gap-1.5">
-                    {(["Active","Inactive","Draft"] as const).map(s => (
-                      <button key={s} type="button" onClick={() => patchForm("status", s)}
-                        className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all border-2 ${
-                          formData.status === s
-                            ? s === "Active"   ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-200 dark:shadow-emerald-900/30"
-                            : s === "Inactive" ? "bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200 dark:shadow-amber-900/30"
-                            :                   "bg-slate-500 border-slate-500 text-white shadow-md"
-                            : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                        }`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-foreground">
-                    Condition <span className="text-muted-foreground font-normal">(optional)</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["New","Used","Fresh","Refurbished","Damaged"] as const).map(c => (
-                      <button key={c} type="button"
-                        onClick={() => patchForm("condition", formData.condition === c ? "" : c)}
-                        className={`py-1.5 rounded-lg text-[11px] font-semibold transition-all border-2 ${
-                          formData.condition === c
-                            ? c === "New"         ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200 dark:shadow-blue-900/30"
-                            : c === "Used"        ? "bg-amber-500 border-amber-500 text-white shadow-md"
-                            : c === "Fresh"       ? "bg-emerald-600 border-emerald-600 text-white shadow-md"
-                            : c === "Refurbished" ? "bg-violet-600 border-violet-600 text-white shadow-md"
-                            :                       "bg-red-500 border-red-500 text-white shadow-md"
-                            : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                        }`}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Pricing card */}
-              <div className="rounded-xl border border-border overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-5 rounded-full bg-white/50" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/90">Pricing</span>
-                  </div>
-                  <span className="text-[10px] text-blue-200 italic">profit updates live</span>
-                </div>
-                <div className="bg-muted/10 p-4 space-y-3">
-
-                  {/* Purchase + Cost side by side */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Purchase ({sym})</label>
-                      <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
-                        onChange={e => patchForm("purchasePrice", e.target.value)}
-                        placeholder="0.00" className="h-9 text-sm tabular-nums" />
-                      <p className="text-[10px] text-muted-foreground">Supplier cost</p>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Cost ({sym})</label>
-                      <Input type="number" min="0" step="0.01" value={formData.costPrice}
-                        onChange={e => patchForm("costPrice", e.target.value)}
-                        placeholder="0.00" className="h-9 text-sm tabular-nums" />
-                      <p className="text-[10px] text-muted-foreground">Incl. overheads</p>
-                    </div>
-                  </div>
-
-                  {/* Retail + live profit badge */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-foreground">Retail Price ({sym})</label>
-                      {(() => {
-                        const cost = parseFloat(formData.costPrice); const retail = parseFloat(formData.price);
-                        if (isNaN(cost) || isNaN(retail) || retail <= 0) return null;
-                        const profit = retail - cost;
-                        const pct = cost > 0 ? ((profit / cost) * 100).toFixed(1) : null;
-                        return (
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${profit >= 0 ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300" : "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"}`}>
-                            {profit >= 0 ? "+" : ""}{sym}{profit.toFixed(dp)}{pct ? ` · ${pct}%` : ""}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <Input type="number" min="0" step="0.01" value={formData.price}
-                      onChange={e => patchForm("price", e.target.value)}
-                      placeholder="0.00" className="h-9 text-sm tabular-nums" />
-                  </div>
-
-                  {/* Wholesale + live profit badge */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-foreground">Wholesale ({sym})</label>
-                      {(() => {
-                        const cost = parseFloat(formData.costPrice); const ws = parseFloat(formData.wholesalePrice);
-                        if (isNaN(cost) || isNaN(ws) || ws <= 0) return null;
-                        const profit = ws - cost;
-                        const pct = cost > 0 ? ((profit / cost) * 100).toFixed(1) : null;
-                        return (
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${profit >= 0 ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"}`}>
-                            {profit >= 0 ? "+" : ""}{sym}{profit.toFixed(dp)}{pct ? ` · ${pct}%` : ""}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <Input type="number" min="0" step="0.01" value={formData.wholesalePrice}
-                      onChange={e => patchForm("wholesalePrice", e.target.value)}
-                      placeholder="0.00" className="h-9 text-sm tabular-nums" />
-                  </div>
-
-                  {/* Commission % */}
-                  <div className="pt-2 border-t border-border/60 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-foreground">Commission %</label>
-                      {(() => {
-                        const retail = parseFloat(formData.price);
-                        const pct    = parseFloat(formData.commissionPct);
-                        if (isNaN(retail) || retail <= 0 || isNaN(pct) || pct <= 0) return null;
-                        return <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">{sym}{(retail * pct / 100).toFixed(dp)} / sale</span>;
-                      })()}
-                    </div>
-                    <div className="relative">
-                      <Input type="number" min="0" max="100" step="0.1"
-                        value={formData.commissionPct}
-                        onChange={e => patchForm("commissionPct", e.target.value)}
-                        placeholder="0" className="h-9 text-sm pr-8 tabular-nums" />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-muted-foreground pointer-events-none">%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stock card */}
-              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-5 rounded-full bg-orange-500" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Stock</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Opening Stock</label>
-                    <Input type="number" min="0" step="1" value={formData.openingStock}
-                      onChange={e => patchForm("openingStock", e.target.value)}
-                      placeholder="0" className="h-9 text-sm tabular-nums" />
-                    <p className="text-[10px] text-muted-foreground">Initial quantity</p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Alert Level</label>
-                    <Input type="number" min="0" step="1" value={formData.stockAlertValue}
-                      onChange={e => patchForm("stockAlertValue", e.target.value)}
-                      placeholder="0" className="h-9 text-sm tabular-nums" />
-                    <p className="text-[10px] text-muted-foreground">Low-stock trigger</p>
-                  </div>
-                </div>
-              </div>
-
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Brand</label>
+              {brandOptions.length > 0 ? (
+                <select value={formData.brand} onChange={e => patchForm("brand", e.target.value)}
+                  className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                  <option value="">— select —</option>
+                  {brandOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <Input value={formData.brand} onChange={e => patchForm("brand", e.target.value)}
+                  placeholder="Brand" className="h-8 text-sm" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Category</label>
+              {categoryOptions.length > 0 ? (
+                <select value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
+                  className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                  <option value="">— select —</option>
+                  {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <Input value={formData.category} onChange={e => { patchForm("category", e.target.value); patchForm("subcategory", ""); }}
+                  placeholder="Category" className="h-8 text-sm" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Subcategory</label>
+              {(() => {
+                const allCats = getProductCategories();
+                const parentCat = allCats.find(c => !c.parentId && c.name === formData.category);
+                const subOpts = parentCat ? allCats.filter(c => c.parentId === parentCat.id).map(c => c.name) : [];
+                return subOpts.length > 0 ? (
+                  <select value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
+                    className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">— select —</option>
+                    {subOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <Input value={formData.subcategory} onChange={e => patchForm("subcategory", e.target.value)}
+                    placeholder="Subcategory" className="h-8 text-sm" />
+                );
+              })()}
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Unit</label>
+              {unitOptions.length > 0 ? (
+                <select value={formData.unit} onChange={e => patchForm("unit", e.target.value)}
+                  className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                  <option value="">— select —</option>
+                  {unitOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <Input value={formData.unit} onChange={e => patchForm("unit", e.target.value)}
+                  placeholder="pcs / kg / m²" className="h-8 text-sm" />
+              )}
             </div>
           </div>
+
+          {/* ── Divider: Status & Condition ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status &amp; Condition</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row C: Status pills | Condition pills ── */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-foreground">Status</label>
+              <div className="flex gap-1.5">
+                {(["Active","Inactive","Draft"] as const).map(s => (
+                  <button key={s} type="button" onClick={() => patchForm("status", s)}
+                    className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
+                      formData.status === s
+                        ? s === "Active"   ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                        : s === "Inactive" ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                        :                   "bg-slate-500 border-slate-500 text-white shadow-sm"
+                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                    }`}>{s}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-foreground">Condition <span className="text-muted-foreground font-normal">(optional — click to toggle)</span></label>
+              <div className="flex gap-1.5">
+                {(["New","Used","Fresh","Refurbished","Damaged"] as const).map(c => (
+                  <button key={c} type="button" onClick={() => patchForm("condition", formData.condition === c ? "" : c)}
+                    className={`flex-1 h-8 rounded-lg text-[11px] font-semibold transition-all border ${
+                      formData.condition === c
+                        ? c === "New"         ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                        : c === "Used"        ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                        : c === "Fresh"       ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                        : c === "Refurbished" ? "bg-violet-600 border-violet-600 text-white shadow-sm"
+                        :                       "bg-red-500 border-red-500 text-white shadow-sm"
+                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                    }`}>{c}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Divider: Pricing ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Pricing</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row D: Purchase | Cost | Retail | RetailProfit | Wholesale | WSProfit | Commission ── */}
+          <div className="grid grid-cols-7 gap-2.5">
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Purchase ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.purchasePrice}
+                onChange={e => patchForm("purchasePrice", e.target.value)}
+                placeholder="0.00" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Supplier cost</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Cost ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.costPrice}
+                onChange={e => patchForm("costPrice", e.target.value)}
+                placeholder="0.00" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Incl. overheads</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Retail ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.price}
+                onChange={e => patchForm("price", e.target.value)}
+                placeholder="0.00" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Sale price</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground">Retail Profit</label>
+              {(() => {
+                const cost = parseFloat(formData.costPrice); const retail = parseFloat(formData.price);
+                const profit = (!isNaN(cost) && !isNaN(retail)) ? retail - cost : null;
+                const pct = profit !== null && cost > 0 ? ((profit / cost) * 100).toFixed(0) : null;
+                return (
+                  <div className={`h-8 flex items-center justify-center px-2 rounded-md border border-dashed text-[12px] font-bold tabular-nums
+                    ${profit === null ? "border-border text-muted-foreground/30" : profit > 0 ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300" : profit < 0 ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 text-red-600" : "border-border text-muted-foreground"}`}>
+                    {profit !== null ? <>{profit > 0 ? "+" : ""}{sym}{profit.toFixed(dp)}{pct ? <span className="text-[10px] ml-1 opacity-70">{pct}%</span> : null}</> : "—"}
+                  </div>
+                );
+              })()}
+              <p className="text-[10px] text-muted-foreground leading-tight">Retail − Cost</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Wholesale ({sym})</label>
+              <Input type="number" min="0" step="0.01" value={formData.wholesalePrice}
+                onChange={e => patchForm("wholesalePrice", e.target.value)}
+                placeholder="0.00" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Bulk / trade</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground">WS Profit</label>
+              {(() => {
+                const cost = parseFloat(formData.costPrice); const ws = parseFloat(formData.wholesalePrice);
+                const profit = (!isNaN(cost) && !isNaN(ws)) ? ws - cost : null;
+                const pct = profit !== null && cost > 0 ? ((profit / cost) * 100).toFixed(0) : null;
+                return (
+                  <div className={`h-8 flex items-center justify-center px-2 rounded-md border border-dashed text-[12px] font-bold tabular-nums
+                    ${profit === null ? "border-border text-muted-foreground/30" : profit > 0 ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300" : profit < 0 ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 text-red-600" : "border-border text-muted-foreground"}`}>
+                    {profit !== null ? <>{profit > 0 ? "+" : ""}{sym}{profit.toFixed(dp)}{pct ? <span className="text-[10px] ml-1 opacity-70">{pct}%</span> : null}</> : "—"}
+                  </div>
+                );
+              })()}
+              <p className="text-[10px] text-muted-foreground leading-tight">WS − Cost</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Commission</label>
+              <div className="relative">
+                <Input type="number" min="0" max="100" step="0.1"
+                  value={formData.commissionPct}
+                  onChange={e => patchForm("commissionPct", e.target.value)}
+                  placeholder="0" className="h-8 text-sm pr-6 tabular-nums" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground pointer-events-none">%</span>
+              </div>
+              {(() => {
+                const retail = parseFloat(formData.price); const pct = parseFloat(formData.commissionPct);
+                if (!isNaN(retail) && retail > 0 && !isNaN(pct) && pct > 0)
+                  return <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium leading-tight">{sym}{(retail * pct / 100).toFixed(dp)}/sale</p>;
+                return <p className="text-[10px] text-muted-foreground leading-tight">Agent's cut</p>;
+              })()}
+            </div>
+          </div>
+
+          {/* ── Divider: Stock & Notes ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Stock &amp; Notes</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row E: Opening Stock | Alert | Description ── */}
+          <div className="grid grid-cols-8 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Opening Stock</label>
+              <Input type="number" min="0" step="1" value={formData.openingStock}
+                onChange={e => patchForm("openingStock", e.target.value)}
+                placeholder="0" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Initial qty</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Alert Level</label>
+              <Input type="number" min="0" step="1" value={formData.stockAlertValue}
+                onChange={e => patchForm("stockAlertValue", e.target.value)}
+                placeholder="0" className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Low-stock trigger</p>
+            </div>
+            <div className="col-span-6 space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Description</label>
+              <textarea value={formData.description} onChange={e => patchForm("description", e.target.value)}
+                placeholder="Optional product description, features, specifications…" rows={2}
+                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
+            </div>
+          </div>
+
         </div>
 
-        {/* ── Footer ── */}
-        <div className={`flex items-center gap-3 px-6 py-4 border-t border-border bg-muted/20${formLayoutMode === "sheet" ? " shrink-0" : ""}`}>
-          <Button variant="outline" onClick={closeForm} className="h-9 px-6 text-[13px]">Cancel</Button>
+        {/* Footer */}
+        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formLayoutMode === "sheet" ? " shrink-0" : ""}`}>
+          <Button variant="outline" onClick={closeForm} className="h-9 px-5 text-[13px]">Cancel</Button>
           <Button onClick={submitForm} disabled={formSaving}
-            className="h-9 flex-1 font-semibold text-[13px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md shadow-blue-200 dark:shadow-blue-900/30">
+            className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-sm">
             <Plus size={14} className="mr-1.5" />
             {formSaving ? "Adding…" : "Add Product"}
           </Button>
