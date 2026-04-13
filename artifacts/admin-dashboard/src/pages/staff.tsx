@@ -72,6 +72,9 @@ export default function StaffPage() {
     email: "", phone: "",
     joinDate: new Date().toISOString().slice(0, 10),
     openingBalance: "", notes: "",
+    salaryType: "Monthly" as "Monthly" | "Hourly" | "Daily" | "Commission",
+    basicSalary: "", allowances: "", deductions: "",
+    bankName: "", accountNumber: "",
   });
   const [formData, setFormData] = useState(BLANK_FORM());
   const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
@@ -93,6 +96,12 @@ export default function StaffPage() {
       joinDate:       formData.joinDate || new Date().toISOString().slice(0, 10),
       openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
       notes:          formData.notes.trim(),
+      salaryType:     formData.salaryType,
+      basicSalary:    formData.basicSalary  ? parseFloat(formData.basicSalary)  : undefined,
+      allowances:     formData.allowances   ? parseFloat(formData.allowances)   : undefined,
+      deductions:     formData.deductions   ? parseFloat(formData.deductions)   : undefined,
+      bankName:       formData.bankName.trim()      || undefined,
+      accountNumber:  formData.accountNumber.trim() || undefined,
     });
     toast({ title: "Staff member added", description: `${formData.name.trim()} has been added.` });
     setFormOpen(false);
@@ -563,10 +572,78 @@ export default function StaffPage() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          {/* ── Row D: Opening Balance ── */}
+          {/* ── Row D1: Salary Type pills ── */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-foreground">Salary / Pay Type</label>
+            <div className="flex gap-2">
+              {(["Monthly", "Hourly", "Daily", "Commission"] as const).map(t => (
+                <button key={t} type="button"
+                  onClick={() => setFormData(p => ({ ...p, salaryType: t }))}
+                  className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
+                    formData.salaryType === t
+                      ? "bg-rose-600 border-rose-600 text-white shadow-sm"
+                      : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                  }`}>{t}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Row D2: Basic | Allowances | Deductions | Net (live) ── */}
+          <div className="grid grid-cols-4 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">
+                Basic Salary ({sym})
+              </label>
+              <Input type="number" step="0.01" min="0" placeholder="0.00"
+                value={formData.basicSalary} onChange={e => setF("basicSalary", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Base pay</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Allowances ({sym})</label>
+              <Input type="number" step="0.01" min="0" placeholder="0.00"
+                value={formData.allowances} onChange={e => setF("allowances", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Transport, housing…</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Deductions ({sym})</label>
+              <Input type="number" step="0.01" min="0" placeholder="0.00"
+                value={formData.deductions} onChange={e => setF("deductions", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Tax, provident…</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Net Pay ({sym})</label>
+              <div className={`h-8 rounded-md border px-3 flex items-center text-sm tabular-nums font-semibold ${
+                (() => {
+                  const net = (parseFloat(formData.basicSalary) || 0) + (parseFloat(formData.allowances) || 0) - (parseFloat(formData.deductions) || 0);
+                  return net >= 0 ? "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20" : "text-red-600 border-red-200 bg-red-50 dark:bg-red-900/20";
+                })()
+              }`}>
+                {(() => {
+                  const net = (parseFloat(formData.basicSalary) || 0) + (parseFloat(formData.allowances) || 0) - (parseFloat(formData.deductions) || 0);
+                  return net.toFixed(dp);
+                })()}
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-tight">Calculated automatically</p>
+            </div>
+          </div>
+
+          {/* ── Row D3: Bank Name | Account Number | Opening Balance ── */}
           <div className="grid grid-cols-3 gap-2.5">
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-foreground">Opening Balance</label>
+              <label className="text-[11px] font-semibold text-foreground">Bank Name</label>
+              <Input placeholder="e.g. Barclays, HBL" value={formData.bankName}
+                onChange={e => setF("bankName", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Account / IBAN</label>
+              <Input placeholder="Account number or IBAN" value={formData.accountNumber}
+                onChange={e => setF("accountNumber", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Opening Balance ({sym})</label>
               <Input type="number" step="0.01" placeholder="0.00"
                 value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)}
                 className="h-8 text-sm tabular-nums" />

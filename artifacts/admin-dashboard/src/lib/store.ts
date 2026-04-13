@@ -2455,6 +2455,13 @@ export type Staff = {
   joinDate: string;
   notes: string;
   openingBalance?: number;   // salary advance / balance owed at setup
+  // ── Salary details ──
+  salaryType?:   "Monthly" | "Hourly" | "Daily" | "Commission";
+  basicSalary?:  number;    // base pay amount
+  allowances?:   number;    // total allowances (transport, housing, etc.)
+  deductions?:   number;    // total deductions (tax, provident fund, etc.)
+  bankName?:     string;    // bank name for payroll
+  accountNumber?: string;   // bank account / IBAN
   // Login credentials (optional — set by admin)
   username?: string;
   password?: string;
