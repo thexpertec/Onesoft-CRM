@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 
 // ─── CSV Import helpers ────────────────────────────────────────────────────────
 const CUSTOMER_CSV_HEADERS = ["name","company","email","phone","industry","city","status","customerSince","totalValue","currency","notes","tags"] as const;
@@ -220,6 +221,47 @@ export default function CustomersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
 
+  // ── Add Customer form (dialog / sheet) ──────────────────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, toggleFormMode] = useFormMode("customers-form-mode");
+  const BLANK_FORM = () => ({
+    name: "", company: "", email: "", phone: "", industry: "",
+    city: "", area: "", status: "Active" as CustomerStatus,
+    customerSince: new Date().toISOString().split("T")[0],
+    totalValue: "", currency: "GBP", notes: "", tags: "",
+  });
+  const [formData, setFormData] = useState(BLANK_FORM());
+
+  const openCustomerForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
+  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
+
+  const submitCustomerForm = () => {
+    if (!formData.name.trim()) {
+      toast({ title: "Name is required", variant: "destructive" }); return;
+    }
+    const emailLower = formData.email?.toLowerCase();
+    const normPhone  = formData.phone?.replace(/\D/g, "");
+    if (emailLower && existingEmails.has(emailLower)) {
+      toast({ title: "Duplicate email", description: `"${formData.email}" already exists.`, variant: "destructive" }); return;
+    }
+    if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
+      toast({ title: "Duplicate phone", description: `"${formData.phone}" already exists.`, variant: "destructive" }); return;
+    }
+    addCustomer({
+      name: formData.name.trim(), company: formData.company.trim(),
+      email: formData.email.trim(), phone: formData.phone.trim(),
+      industry: formData.industry.trim(), city: formData.city.trim(),
+      area: formData.area.trim() || undefined, status: formData.status,
+      customerSince: formData.customerSince || new Date().toISOString().split("T")[0],
+      totalValue: formData.totalValue.trim(),
+      currency: formData.currency.trim() || "GBP",
+      notes: formData.notes.trim(), source: "direct",
+      tags: formData.tags ? formData.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
+    });
+    toast({ title: "Customer added", description: `${formData.name.trim()} has been added.` });
+    setFormOpen(false);
+  };
+
   const existingEmails = useMemo(() => new Set(customers.map(c => c.email?.toLowerCase()).filter(Boolean)), [customers]);
   const existingPhones = useMemo(() => new Set(customers.map(c => c.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [customers]);
 
@@ -392,7 +434,7 @@ export default function CustomersPage() {
             }} className="gap-1.5">
               <FileDown size={13} /> Export Excel
             </Button>
-            <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-customer">
+            <Button size="sm" onClick={openCustomerForm} className="gap-1.5" data-testid="btn-add-customer">
               <Plus size={14} /> Add Customer
             </Button>
           </div>
@@ -553,7 +595,7 @@ export default function CustomersPage() {
               {/* Add row */}
               {isAuthenticated && !newRow && (
                 <tr><td colSpan={COLS.length + 2}>
-                  <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
+                  <button onClick={openCustomerForm}
                     className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
                     <Plus size={13} /> Add row
                   </button>
@@ -670,6 +712,146 @@ export default function CustomersPage() {
         onClose={() => setShowImport(false)}
         onImport={handleImportCustomers}
       />
+
+      {/* ── Add Customer form (Dialog / Sheet) ────────────────────────────── */}
+      <FormWrapper
+        open={formOpen}
+        onOpenChange={v => setFormOpen(v)}
+        mode={formMode}
+        dialogClass="w-[min(98vw,880px)] max-w-none"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              <Plus size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold leading-tight">Add New Customer</h2>
+              <p className="text-[12px] text-muted-foreground mt-0.5">All fields except Name are optional</p>
+            </div>
+          </div>
+          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[70vh]">
+
+          {/* Row 1 — Identity */}
+          <div className="grid grid-cols-5 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <Input autoFocus placeholder="e.g. Jane Smith" value={formData.name}
+                onChange={e => setF("name", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Company</label>
+              <Input placeholder="e.g. Acme Ltd" value={formData.company}
+                onChange={e => setF("company", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
+              <Input type="email" placeholder="e.g. jane@acme.com" value={formData.email}
+                onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
+              <Input type="tel" placeholder="e.g. +44 7700 900000" value={formData.phone}
+                onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Industry</label>
+              <Input placeholder="e.g. Technology" value={formData.industry}
+                onChange={e => setF("industry", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+          </div>
+
+          {/* Row 2 — Location & Status */}
+          <div className="grid grid-cols-6 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
+              {cityOptions.length > 0 ? (
+                <Select value={formData.city || "__none__"} onValueChange={v => setF("city", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— none —</SelectItem>
+                    {cityOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="City" value={formData.city} onChange={e => setF("city", e.target.value)} className="h-9 text-[13px]" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
+              {areaOptions.length > 0 ? (
+                <Select value={formData.area || "__none__"} onValueChange={v => setF("area", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— none —</SelectItem>
+                    {areaOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="Area" value={formData.area} onChange={e => setF("area", e.target.value)} className="h-9 text-[13px]" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
+              <Select value={formData.status} onValueChange={v => setF("status", v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CUSTOMER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Customer Since</label>
+              <Input type="date" value={formData.customerSince}
+                onChange={e => setF("customerSince", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total Value</label>
+              <Input type="number" min="0" placeholder="0.00" value={formData.totalValue}
+                onChange={e => setF("totalValue", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Currency</label>
+              <Select value={formData.currency} onValueChange={v => setF("currency", v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Row 3 — Tags & Notes */}
+          <div className="grid grid-cols-5 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tags</label>
+              <Input placeholder="VIP;Retail (semicolon-separated)" value={formData.tags}
+                onChange={e => setF("tags", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="col-span-4 flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
+              <textarea rows={1} placeholder="Optional customer notes..."
+                value={formData.notes} onChange={e => setF("notes", e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20">
+          <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
+          <Button className="gap-1.5 min-w-[160px]" onClick={submitCustomerForm}>
+            <Plus size={14} /> Add Customer
+          </Button>
+        </div>
+      </FormWrapper>
     </div>
   );
 }
