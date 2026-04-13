@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
 import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
+import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_OPTS: StaffStatus[] = ["Active", "On Leave", "Terminated"];
@@ -48,6 +49,8 @@ export default function StaffPage() {
   const { roles } = useStaffRoles();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const sym = getSettingsCurrencySymbol();
+  const dp  = getSettingsDecimalPlaces();
 
   const roleNames = useMemo(() => roles.map(r => r.name), [roles]);
 
