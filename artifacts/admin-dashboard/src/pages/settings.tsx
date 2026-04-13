@@ -5,6 +5,7 @@ import {
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
+  PanelRight, Maximize2,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import {
   AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
   clearAccountingLedger,
 } from "@/lib/store";
+import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
@@ -572,6 +574,11 @@ export default function SettingsPage() {
   // ── Save ────────────────────────────────────────────────────────────────────
   function handleSave() {
     setSaving(true);
+    // When crmFormMode changes, clear all per-module overrides so the new default takes effect
+    const prev = getSettings();
+    if (prev.crmFormMode !== form.crmFormMode) {
+      CRM_FORM_MODE_KEYS.forEach(k => localStorage.removeItem(k));
+    }
     saveSettings(form);
     setTimeout(() => {
       setSaving(false);
@@ -813,6 +820,39 @@ export default function SettingsPage() {
                         className="text-[13px] pl-8 resize-none" rows={2} placeholder="Street, Sector, Islamabad, Pakistan" />
                     </div>
                   </Field>
+                </div>
+              </div>
+
+              {/* ── UI Preferences ─────────────────────────────────────────── */}
+              <SectionHeader title="UI Preferences" desc="Control how forms open across CRM and HRM modules." />
+              <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">CRM / HRM Add-Form style</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Choose how the "Add" form opens in Customers, Suppliers, Sales Agents, Staff and Products.
+                    </p>
+                  </div>
+                  <div className="flex rounded-lg border border-gray-200 dark:border-border overflow-hidden shrink-0">
+                    {([
+                      { value: "dialog", label: "Form",       icon: Maximize2,   desc: "Centred dialog"  },
+                      { value: "sheet",  label: "Side Panel", icon: PanelRight,  desc: "Slides from right" },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => set("crmFormMode", opt.value)}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold transition-all ${
+                          form.crmFormMode === opt.value
+                            ? "bg-blue-600 text-white"
+                            : "bg-white dark:bg-card text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-muted/40"
+                        }`}
+                      >
+                        <opt.icon size={13} />
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

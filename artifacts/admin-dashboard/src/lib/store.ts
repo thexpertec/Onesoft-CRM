@@ -2610,6 +2610,8 @@ export type AppSettings = {
   referenceDigits:      number;  // how many digits to pad the sequence number (e.g. 4 → SAL-0001, 5 → SAL-00001)
   // ── POS display ──
   showPosProfit:        boolean; // show green profit amount under each line subtotal in POS
+  // ── CRM / HRM form display ──
+  crmFormMode:          "dialog" | "sheet"; // default open mode for all CRM/HRM add-forms
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2654,6 +2656,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   decimalPlaces:        2,
   referenceDigits:      4,
   showPosProfit:        true,
+  crmFormMode:          "dialog",
 };
 
 export function getSettings(): AppSettings {

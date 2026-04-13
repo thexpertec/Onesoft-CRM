@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PanelRight, Maximize2, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { getSettings } from "@/lib/store";
 
 // ── Shared "dialog or side-panel" wrapper ────────────────────────────────────
 interface FormWrapperProps {
@@ -73,10 +74,13 @@ export function FormModeToggle({ mode, onToggle, onClose, className = "" }: Form
 }
 
 // ── Hook: persist preference in localStorage ──────────────────────────────────
+// Priority: per-module localStorage key → global setting (crmFormMode) → "dialog"
 export function useFormMode(storageKey = "os-form-mode"): ["dialog" | "sheet", () => void] {
-  const [mode, setMode] = useState<"dialog" | "sheet">(
-    () => (localStorage.getItem(storageKey) as "dialog" | "sheet") || "dialog"
-  );
+  const [mode, setMode] = useState<"dialog" | "sheet">(() => {
+    const perModule = localStorage.getItem(storageKey) as "dialog" | "sheet" | null;
+    if (perModule === "dialog" || perModule === "sheet") return perModule;
+    return getSettings().crmFormMode ?? "dialog";
+  });
   const toggle = () => {
     const next = mode === "dialog" ? "sheet" : "dialog";
     setMode(next);
@@ -84,3 +88,14 @@ export function useFormMode(storageKey = "os-form-mode"): ["dialog" | "sheet", (
   };
   return [mode, toggle];
 }
+
+// ── CRM_FORM_MODE_KEYS: all per-module localStorage keys ─────────────────────
+export const CRM_FORM_MODE_KEYS = [
+  "os-form-mode",
+  "shareholders-form-mode",
+  "rp-form-mode",
+  "suppliers-form-mode",
+  "customers-form-mode",
+  "agents-form-mode",
+  "staff-form-mode",
+];
