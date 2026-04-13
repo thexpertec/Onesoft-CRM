@@ -8,11 +8,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useSalesAgents, useCities, useAreas } from "@/hooks/use-data";
+import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useAuth } from "@/contexts/auth-context";
 import { getInvoices, getSales, SalesAgent, Sale } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -91,6 +93,44 @@ export default function SalesAgentsPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const [viewId,       setViewId]       = useState<string | null>(null);
+
+  // ── Add Agent form (dialog / sheet) ─────────────────────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, toggleFormMode] = useFormMode("agents-form-mode");
+  const BLANK_FORM = () => ({
+    name: "", email: "", phone: "",
+    city: "", area: "", region: "",
+    commissionRate: "", targetAmount: "",
+    status: "Active" as SalesAgent["status"],
+    joinDate: format(new Date(), "yyyy-MM-dd"),
+    openingBalance: "", notes: "",
+  });
+  const [formData, setFormData] = useState(BLANK_FORM());
+  const setF = (key: string, value: string) => setFormData(p => ({ ...p, [key]: value }));
+
+  const openAgentForm = () => { setFormData(BLANK_FORM()); setFormOpen(true); };
+
+  const submitAgentForm = () => {
+    if (!formData.name.trim()) {
+      toast({ title: "Name is required", variant: "destructive" }); return;
+    }
+    addAgent({
+      name:           formData.name.trim(),
+      email:          formData.email.trim(),
+      phone:          formData.phone.trim(),
+      city:           formData.city.trim() || undefined,
+      area:           formData.area.trim() || undefined,
+      region:         formData.region.trim(),
+      commissionRate: formData.commissionRate.trim(),
+      targetAmount:   formData.targetAmount.trim(),
+      status:         formData.status,
+      joinDate:       formData.joinDate || format(new Date(), "yyyy-MM-dd"),
+      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
+      notes:          formData.notes.trim(),
+    });
+    toast({ title: "Agent added", description: `${formData.name.trim()} has been added.` });
+    setFormOpen(false);
+  };
 
   // Editable columns (skip readonly agentCode at index 0)
   const editableCols = COLS.filter(c => c.type !== "readonly");
@@ -266,11 +306,14 @@ export default function SalesAgentsPage() {
             <FileSpreadsheet size={13} /> Export
           </Button>
 
-          {isAuthenticated && !newRow && (
-            <Button size="sm" className="gap-1.5 text-[12px] bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={() => { setNewRow({ ...BLANK }); setNewRowActive(0); }}>
-              <Plus size={13} /> Add Agent
-            </Button>
+          {isAuthenticated && (
+            <div className="flex items-center gap-1">
+              <Button size="sm" className="gap-1.5 text-[12px] bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={openAgentForm}>
+                <Plus size={13} /> Add Agent
+              </Button>
+              <FormModeToggle mode={formMode} onToggle={toggleFormMode} />
+            </div>
           )}
         </div>
       </div>
@@ -424,8 +467,118 @@ export default function SalesAgentsPage() {
               </tr>
             );
           })}
+          {/* + Add row footer */}
+          {isAuthenticated && (
+            <tr>
+              <td colSpan={COLS.length + 2} className="px-4 py-2 border-t border-dashed border-gray-200 dark:border-border">
+                <button
+                  onClick={openAgentForm}
+                  className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-teal-600 transition-colors">
+                  <Plus size={12} /> Add row
+                </button>
+              </td>
+            </tr>
+          )}
         </ExcelGridShell>
       </div>
+
+      {/* ── Add Agent FormWrapper ──────────────────────────────────────────── */}
+      <FormWrapper
+        title="Add Sales Agent"
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        mode={formMode}
+        onSubmit={submitAgentForm}
+        submitLabel="Add Agent"
+        dialogClass="w-[min(98vw,860px)] max-w-none"
+      >
+        {/* Row 1 — Name*, Email, Phone, Join Date */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Name <span className="text-red-500">*</span></label>
+            <Input placeholder="Full name" value={formData.name} onChange={e => setF("name", e.target.value)} className="h-9 text-[13px]" autoFocus />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
+            <Input type="email" placeholder="agent@example.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
+            <Input type="tel" placeholder="+44 …" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Join Date</label>
+            <Input type="date" value={formData.joinDate} onChange={e => setF("joinDate", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+        </div>
+
+        {/* Row 2 — City, Area, Territory, Status, Commission % */}
+        <div className="grid grid-cols-5 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
+            {cityOptions.length > 0 ? (
+              <Select value={formData.city || "__none__"} onValueChange={v => setF("city", v === "__none__" ? "" : v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select city" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {cityOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input placeholder="City" value={formData.city} onChange={e => setF("city", e.target.value)} className="h-9 text-[13px]" />
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
+            {areaOptions.length > 0 ? (
+              <Select value={formData.area || "__none__"} onValueChange={v => setF("area", v === "__none__" ? "" : v)}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select area" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {areaOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input placeholder="Area" value={formData.area} onChange={e => setF("area", e.target.value)} className="h-9 text-[13px]" />
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Territory (free)</label>
+            <Input placeholder="e.g. North England" value={formData.region} onChange={e => setF("region", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
+            <Select value={formData.status} onValueChange={v => setF("status", v)}>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Commission %</label>
+            <Input type="number" step="0.1" placeholder="5" value={formData.commissionRate} onChange={e => setF("commissionRate", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+        </div>
+
+        {/* Row 3 — Monthly Target, Opening Balance, Notes */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Monthly Target</label>
+            <Input type="number" step="0.01" placeholder="0.00" value={formData.targetAmount} onChange={e => setF("targetAmount", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
+            <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
+            <span className="text-[10px] text-muted-foreground leading-none">Commission owed at setup</span>
+          </div>
+          <div className="col-span-2 flex flex-col gap-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
+            <Input placeholder="Any additional notes…" value={formData.notes} onChange={e => setF("notes", e.target.value)} className="h-9 text-[13px]" />
+          </div>
+        </div>
+      </FormWrapper>
 
       {/* ── Delete dialog ─────────────────────────────────────────────────── */}
       <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>

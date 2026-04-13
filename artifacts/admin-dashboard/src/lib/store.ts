@@ -2142,6 +2142,7 @@ export type SalesAgent = {
   status:           SalesAgentStatus;
   joinDate:         string;   // YYYY-MM-DD
   notes:            string;
+  openingBalance?:  number;  // commission balance owed to agent at setup
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Sales Commission
   createdAt:        string;
   updatedAt:        string;
