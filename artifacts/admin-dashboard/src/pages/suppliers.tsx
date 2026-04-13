@@ -701,144 +701,165 @@ export default function SuppliersPage() {
         open={formOpen}
         onOpenChange={v => setFormOpen(v)}
         mode={formMode}
-        dialogClass="w-[min(98vw,860px)] max-w-none"
+        dialogClass="w-[min(98vw,920px)] max-w-none"
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b bg-muted/30">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <Plus size={18} />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold leading-tight">Add New Supplier</h2>
-              <p className="text-[12px] text-muted-foreground mt-0.5">All fields except Company are optional</p>
-            </div>
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-orange-500 to-amber-500">
+          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+            <Plus size={16} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[13px] font-bold text-white leading-snug">Add New Supplier</h2>
+            <p className="text-[11px] text-orange-100 truncate">
+              {formData.company.trim() ? formData.company : "Company required · all other fields optional"}
+            </p>
           </div>
           <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[70vh]">
+        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
 
-          {/* Row 1 — Identity */}
-          <div className="grid grid-cols-4 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Company <span className="text-red-500">*</span>
-              </label>
-              <Input
-                autoFocus
-                placeholder="e.g. TechVision Ltd"
-                value={formData.company}
-                onChange={e => setF("company", e.target.value)}
-                className="h-9 text-[13px]"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Contact Person</label>
-              <Input placeholder="e.g. Ali Khan" value={formData.contactPerson} onChange={e => setF("contactPerson", e.target.value)} className="h-9 text-[13px]" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
-              <Input type="email" placeholder="e.g. ali@company.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
-              <Input type="tel" placeholder="e.g. +92 300 1234567" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
-            </div>
+          {/* ── Row A: Company (full) ── */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-foreground">Company Name <span className="text-red-500">*</span></label>
+            <Input autoFocus placeholder="e.g. TechVision Ltd" value={formData.company}
+              onChange={e => setF("company", e.target.value)} className="h-8 text-sm font-medium" />
           </div>
 
-          {/* Row 2 — Location & Classification */}
-          <div className="grid grid-cols-6 gap-3">
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
+          {/* ── Row B: Contact | Email | Phone | Category | City | Area ── */}
+          <div className="grid grid-cols-6 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Contact Person</label>
+              <Input placeholder="e.g. Ali Khan" value={formData.contactPerson}
+                onChange={e => setF("contactPerson", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Email</label>
+              <Input type="email" placeholder="ali@company.com" value={formData.email}
+                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Phone</label>
+              <Input type="tel" placeholder="+92 300 1234567" value={formData.phone}
+                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Category</label>
               <Select value={formData.category} onValueChange={v => setF("category", v)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {SUPPLIER_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
-              <Combobox
-                value={formData.city}
-                onChange={v => setF("city", v)}
-                options={cityComboOpts}
-                placeholder="Select or type city…"
-                inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
-              />
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">City</label>
+              <Combobox value={formData.city} onChange={v => setF("city", v)}
+                options={cityComboOpts} placeholder="City…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
-              <Combobox
-                value={formData.area}
-                onChange={v => setF("area", v)}
-                options={areaComboOpts}
-                placeholder="Select or type area…"
-                inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Country</label>
-              <Input placeholder="e.g. Pakistan" value={formData.country} onChange={e => setF("country", e.target.value)} className="h-9 text-[13px]" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
-              <Select value={formData.status} onValueChange={v => setF("status", v)}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SUPPLIER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Area / Region</label>
+              <Combobox value={formData.area} onChange={v => setF("area", v)}
+                options={areaComboOpts} placeholder="Area…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
             </div>
           </div>
 
-          {/* Row 3 — Rating, Currency, Opening Balance, Tags, Notes */}
-          <div className="grid grid-cols-7 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Rating</label>
-              <div className="h-9 flex items-center gap-1 px-2 border rounded-md bg-background">
-                {[1,2,3,4,5].map(n => (
-                  <button key={n} type="button"
-                    onClick={() => setF("rating", n === formData.rating ? 0 : n)}
-                    className="focus:outline-none hover:scale-110 transition-transform">
-                    <StarIcon size={16} className={n <= formData.rating ? "fill-amber-400 text-amber-400" : "fill-transparent text-gray-300"} />
-                  </button>
+          {/* ── Divider: Status & Location ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status &amp; Location</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row C: Status pills | Country ── */}
+          <div className="grid grid-cols-4 gap-2.5">
+            <div className="col-span-3 space-y-1.5">
+              <label className="text-[11px] font-semibold text-foreground">Status</label>
+              <div className="flex gap-1.5">
+                {SUPPLIER_STATUSES.map(s => (
+                  <button key={s} type="button" onClick={() => setF("status", s)}
+                    className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
+                      formData.status === s
+                        ? s === "Active"      ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                        : s === "Inactive"    ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                        :                       "bg-red-600 border-red-600 text-white shadow-sm"
+                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                    }`}>{s}</button>
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Currency</label>
-              <Input placeholder="GBP" value={formData.currency} onChange={e => setF("currency", e.target.value)} className="h-9 text-[13px]" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
-              <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance}
-                onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
-              <span className="text-[10px] text-muted-foreground leading-none">Cr balance (payable)</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tags</label>
-              <Input placeholder="IT;Hardware (semicolon-separated)" value={formData.tags} onChange={e => setF("tags", e.target.value)} className="h-9 text-[13px]" />
-            </div>
-            <div className="col-span-3 flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
-              <textarea
-                rows={1}
-                placeholder="Optional supplier notes..."
-                value={formData.notes}
-                onChange={e => setF("notes", e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-              />
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-foreground">Country</label>
+              <Input placeholder="e.g. Pakistan" value={formData.country}
+                onChange={e => setF("country", e.target.value)} className="h-8 text-sm" />
             </div>
           </div>
+
+          {/* ── Divider: Financials & Rating ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Financials &amp; Rating</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row D: Rating | Currency | Opening Balance | Tags ── */}
+          <div className="grid grid-cols-4 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Rating</label>
+              <div className="h-8 flex items-center gap-1.5 px-2 border border-input rounded-md bg-background">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} type="button"
+                    onClick={() => setF("rating", n === formData.rating ? 0 : n)}
+                    className="focus:outline-none hover:scale-125 transition-transform">
+                    <StarIcon size={17}
+                      className={n <= formData.rating ? "fill-amber-400 text-amber-400" : "fill-transparent text-gray-300 dark:text-gray-600"} />
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-tight">Click to set · click again to clear</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Currency</label>
+              <Input placeholder="GBP" value={formData.currency}
+                onChange={e => setF("currency", e.target.value)} className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">ISO code e.g. GBP, USD</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Opening Balance</label>
+              <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance}
+                onChange={e => setF("openingBalance", e.target.value)} className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Cr balance (payable)</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Tags</label>
+              <Input placeholder="IT;Hardware" value={formData.tags}
+                onChange={e => setF("tags", e.target.value)} className="h-8 text-sm" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Semicolon-separated</p>
+            </div>
+          </div>
+
+          {/* ── Divider: Notes ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Notes</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row E: Notes (full width) ── */}
+          <textarea rows={2} placeholder="Optional supplier notes, payment terms, delivery preferences…"
+            value={formData.notes} onChange={e => setF("notes", e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20">
-          <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-          <Button className="gap-1.5 min-w-[160px]" onClick={submitSupplierForm}>
+        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
+          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
+          <Button className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white border-0 shadow-sm gap-1.5"
+            onClick={submitSupplierForm}>
             <Plus size={14} /> Add Supplier
           </Button>
         </div>
