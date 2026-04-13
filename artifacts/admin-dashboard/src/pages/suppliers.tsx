@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { FormWrapper, FormModeToggle, useFormMode } from "@/components/form-wrapper";
+import { Combobox, ComboOption } from "@/components/combobox";
 
 // ─── CSV Import helpers ────────────────────────────────────────────────────────
 const SUPPLIER_CSV_HEADERS = ["company","contactPerson","email","phone","category","city","country","status","rating","currency","notes","tags"] as const;
@@ -208,8 +209,10 @@ export default function SuppliersPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const cityOptions = useMemo(() => cities.map(c => c.name), [cities]);
-  const areaOptions = useMemo(() => areas.map(a => a.name), [areas]);
+  const cityOptions   = useMemo(() => cities.map(c => c.name), [cities]);
+  const areaOptions   = useMemo(() => areas.map(a => a.name), [areas]);
+  const cityComboOpts = useMemo<ComboOption[]>(() => cities.map(c => ({ value: c.name, label: c.name })), [cities]);
+  const areaComboOpts = useMemo<ComboOption[]>(() => areas.map(a => ({ value: a.name, label: a.name })), [areas]);
 
   const COLS = useMemo<ColDef[]>(() => [
     { field: "company",       label: "Company",      minW: 150, type: "text"   },
@@ -758,31 +761,23 @@ export default function SuppliersPage() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
-              {cityOptions.length > 0 ? (
-                <Select value={formData.city || "__none__"} onValueChange={v => setF("city", v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— none —</SelectItem>
-                    {cityOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input placeholder="City" value={formData.city} onChange={e => setF("city", e.target.value)} className="h-9 text-[13px]" />
-              )}
+              <Combobox
+                value={formData.city}
+                onChange={v => setF("city", v)}
+                options={cityComboOpts}
+                placeholder="Select or type city…"
+                inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
+              />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Area / Region</label>
-              {areaOptions.length > 0 ? (
-                <Select value={formData.area || "__none__"} onValueChange={v => setF("area", v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="— select —" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— none —</SelectItem>
-                    {areaOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input placeholder="Area" value={formData.area} onChange={e => setF("area", e.target.value)} className="h-9 text-[13px]" />
-              )}
+              <Combobox
+                value={formData.area}
+                onChange={v => setF("area", v)}
+                options={areaComboOpts}
+                placeholder="Select or type area…"
+                inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
+              />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Country</label>
