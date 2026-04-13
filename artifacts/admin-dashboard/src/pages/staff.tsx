@@ -465,90 +465,136 @@ export default function StaffPage() {
         </ExcelGridShell>
       </div>
 
-      {/* ── Add Staff FormWrapper ──────────────────────────────────────────── */}
+      {/* ── Add Staff form ─────────────────────────────────────────────────── */}
       <FormWrapper
-        title="Add Staff Member"
         open={formOpen}
         onOpenChange={setFormOpen}
         mode={formMode}
-        onSubmit={submitStaffForm}
-        submitLabel="Add Staff"
-        dialogClass="w-[min(98vw,860px)] max-w-none"
+        dialogClass="w-[min(98vw,920px)] max-w-none"
       >
-        {/* Row 1 — Name*, Department, Designation, Role */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Full Name <span className="text-red-500">*</span></label>
-            <Input placeholder="e.g. Sarah Khan" value={formData.name} onChange={e => setF("name", e.target.value)} className="h-9 text-[13px]" autoFocus />
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0 bg-gradient-to-r from-rose-600 to-pink-600">
+          <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+            <Users2 size={16} className="text-white" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</label>
-            <Combobox
-              value={formData.department}
-              onChange={v => setF("department", v)}
-              options={deptComboOpts}
-              placeholder="Select or type…"
-              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
-            />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[13px] font-bold text-white leading-snug">Add Staff Member</h2>
+            <p className="text-[11px] text-rose-100 truncate">
+              {formData.name.trim()
+                ? `${formData.name}${formData.designation ? " · " + formData.designation : ""}${formData.department ? " · " + formData.department : ""}`
+                : "Name required · all other fields optional"}
+            </p>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Designation</label>
-            <Combobox
-              value={formData.designation}
-              onChange={v => setF("designation", v)}
-              options={desigComboOpts}
-              placeholder="Select or type…"
-              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Role</label>
-            <Combobox
-              value={formData.role}
-              onChange={v => setF("role", v)}
-              options={roleComboOpts}
-              placeholder="Select or type…"
-              inputClassName="h-9 text-[13px] w-full border rounded-md px-3"
-            />
-          </div>
+          <FormModeToggle mode={formMode} onToggle={toggleFormMode} onClose={() => setFormOpen(false)} />
         </div>
 
-        {/* Row 2 — Status, Email, Phone, Join Date */}
-        <div className="grid grid-cols-4 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</label>
-            <Select value={formData.status} onValueChange={v => setF("status", v)}>
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        {/* Body */}
+        <div className={`px-5 py-4 space-y-3.5${formMode === "sheet" ? " flex-1 overflow-y-auto" : ""}`}>
+
+          {/* ── Row A: Name (full) ── */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-foreground">Full Name <span className="text-red-500">*</span></label>
+            <Input autoFocus placeholder="e.g. Sarah Khan" value={formData.name}
+              onChange={e => setF("name", e.target.value)} className="h-8 text-sm font-medium" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
-            <Input type="email" placeholder="staff@company.com" value={formData.email} onChange={e => setF("email", e.target.value)} className="h-9 text-[13px]" />
+
+          {/* ── Row B: Dept | Designation | Role | Email | Phone | Join Date ── */}
+          <div className="grid grid-cols-6 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Department</label>
+              <Combobox value={formData.department} onChange={v => setF("department", v)}
+                options={deptComboOpts} placeholder="Select or type…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Designation</label>
+              <Combobox value={formData.designation} onChange={v => setF("designation", v)}
+                options={desigComboOpts} placeholder="Select or type…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Role</label>
+              <Combobox value={formData.role} onChange={v => setF("role", v)}
+                options={roleComboOpts} placeholder="Select or type…"
+                inputClassName="h-8 text-sm w-full border rounded-md px-3" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Email</label>
+              <Input type="email" placeholder="staff@company.com" value={formData.email}
+                onChange={e => setF("email", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Phone</label>
+              <Input type="tel" placeholder="+44 7700 900000" value={formData.phone}
+                onChange={e => setF("phone", e.target.value)} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Join Date</label>
+              <Input type="date" value={formData.joinDate}
+                onChange={e => setF("joinDate", e.target.value)} className="h-8 text-sm" />
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</label>
-            <Input type="tel" placeholder="+44 …" value={formData.phone} onChange={e => setF("phone", e.target.value)} className="h-9 text-[13px]" />
+
+          {/* ── Divider: Status ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Status</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Join Date</label>
-            <Input type="date" value={formData.joinDate} onChange={e => setF("joinDate", e.target.value)} className="h-9 text-[13px]" />
+
+          {/* ── Row C: Status pill toggles (Active / On Leave / Terminated) ── */}
+          <div className="flex gap-2">
+            {(["Active", "On Leave", "Terminated"] as const).map(s => (
+              <button key={s} type="button" onClick={() => setF("status", s)}
+                className={`flex-1 h-8 rounded-lg text-[12px] font-semibold transition-all border ${
+                  formData.status === s
+                    ? s === "Active"     ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                    : s === "On Leave"  ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                    :                     "bg-red-600 border-red-600 text-white shadow-sm"
+                    : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                }`}>{s}</button>
+            ))}
           </div>
+
+          {/* ── Divider: Financials ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Financials</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row D: Opening Balance ── */}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-foreground">Opening Balance</label>
+              <Input type="number" step="0.01" placeholder="0.00"
+                value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)}
+                className="h-8 text-sm tabular-nums" />
+              <p className="text-[10px] text-muted-foreground leading-tight">Salary advance / balance owed at setup</p>
+            </div>
+          </div>
+
+          {/* ── Divider: Notes ── */}
+          <div className="flex items-center gap-3 pt-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Notes</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* ── Row E: Notes (full) ── */}
+          <textarea rows={2} placeholder="Optional notes about this staff member, skills, assigned projects, emergency contact…"
+            value={formData.notes} onChange={e => setF("notes", e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+
         </div>
 
-        {/* Row 3 — Opening Balance, Notes */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
-            <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance} onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
-            <span className="text-[10px] text-muted-foreground leading-none">Salary advance / balance owed at setup</span>
-          </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</label>
-            <Input placeholder="Any additional notes…" value={formData.notes} onChange={e => setF("notes", e.target.value)} className="h-9 text-[13px]" />
-          </div>
+        {/* Footer */}
+        <div className={`flex gap-3 px-5 py-3 border-t border-border bg-muted/20${formMode === "sheet" ? " shrink-0" : ""}`}>
+          <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9 px-5 text-[13px]">Cancel</Button>
+          <Button onClick={submitStaffForm}
+            className="flex-1 h-9 font-semibold text-[13px] bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white border-0 shadow-sm gap-1.5">
+            <Plus size={14} /> Add Staff Member
+          </Button>
         </div>
       </FormWrapper>
 
