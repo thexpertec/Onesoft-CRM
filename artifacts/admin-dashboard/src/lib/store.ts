@@ -721,7 +721,7 @@ export type ModuleId =
   | "products" | "stock" | "purchases"
   | "sales" | "invoices" | "sales_agents"
   | "documents"
-  | "hrm_staff" | "hrm_roles"
+  | "hrm_staff" | "hrm_roles" | "hrm_org"
   | "media"
   | "settings";
 
@@ -751,6 +751,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   // HRM
   { id: "hrm_staff",     label: "Staff",           desc: "Employee records & departments", group: "HRM",      href: "/staff"     },
   { id: "hrm_roles",     label: "Roles",           desc: "Permission roles",               group: "HRM",      href: "/roles"     },
+  { id: "hrm_org",       label: "Departments & Designations", desc: "Org structure, JDs", group: "HRM",      href: "/hrm-org"   },
   // Other
   { id: "media",         label: "Media Library",   desc: "File & image management",        group: "Other",    href: "/media"     },
   { id: "settings",      label: "Settings",        desc: "Company profile & app config",   group: "Other",    href: "/settings"  },
@@ -2556,6 +2557,74 @@ export const deleteStaffRole = (id: string): void => {
   setStored(HRM_ROLES_KEY, getStaffRoles().filter(r => r.id !== id));
 };
 
+// ─── HRM — Departments ────────────────────────────────────────────────────────
+export type Department = {
+  id: string;
+  name: string;
+  description: string;
+  headOf: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const HRM_DEPT_KEY = "admin-hrm-departments";
+
+export const getDepartments = (): Department[] => getStored<Department>(HRM_DEPT_KEY);
+
+export const createDepartment = (data: Omit<Department, "id" | "createdAt" | "updatedAt">): Department => {
+  const item: Department = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(HRM_DEPT_KEY, [...getDepartments(), item]);
+  return item;
+};
+
+export const updateDepartment = (id: string, updates: Partial<Omit<Department, "id" | "createdAt">>): Department => {
+  const items = getDepartments();
+  const i = items.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Department not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(HRM_DEPT_KEY, items);
+  return items[i];
+};
+
+export const deleteDepartment = (id: string): void => {
+  setStored(HRM_DEPT_KEY, getDepartments().filter(r => r.id !== id));
+};
+
+// ─── HRM — Designations ───────────────────────────────────────────────────────
+export type Designation = {
+  id: string;
+  title: string;
+  department: string;
+  jobDescription: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const HRM_DESIG_KEY = "admin-hrm-designations";
+
+export const getDesignations = (): Designation[] => getStored<Designation>(HRM_DESIG_KEY);
+
+export const createDesignation = (data: Omit<Designation, "id" | "createdAt" | "updatedAt">): Designation => {
+  const item: Designation = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(HRM_DESIG_KEY, [...getDesignations(), item]);
+  return item;
+};
+
+export const updateDesignation = (id: string, updates: Partial<Omit<Designation, "id" | "createdAt">>): Designation => {
+  const items = getDesignations();
+  const i = items.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Designation not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(HRM_DESIG_KEY, items);
+  return items[i];
+};
+
+export const deleteDesignation = (id: string): void => {
+  setStored(HRM_DESIG_KEY, getDesignations().filter(r => r.id !== id));
+};
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export const SETTINGS_KEY = "admin-settings";
 
@@ -2717,7 +2786,7 @@ export const ALL_STORE_KEYS = [
   "admin-leads", "admin-req-docs", "admin-customers", "admin-suppliers",
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
-  "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-users", "admin-team-members",
+  "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-hrm-departments", "admin-hrm-designations", "admin-users", "admin-team-members",
   "admin-settings", "admin-journal-entries", "admin-stock-ledger",
 ] as const;
 
@@ -2730,7 +2799,7 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
   Purchases:            ["admin-purchase-orders"],
   Sales:                ["admin-sales", "admin-invoices", "admin-sale-returns"],
   Documents:            ["admin-req-docs"],
-  HRM:                  ["admin-hrm-staff", "admin-hrm-roles"],
+  HRM:                  ["admin-hrm-staff", "admin-hrm-roles", "admin-hrm-departments", "admin-hrm-designations"],
   Users:                ["admin-users"],
   "Stock Ledger History": ["admin-stock-ledger"],
 };

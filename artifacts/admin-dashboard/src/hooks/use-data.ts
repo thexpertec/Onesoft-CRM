@@ -16,6 +16,8 @@ import {
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
   getStaff, createStaff, updateStaff, deleteStaff,
   getStaffRoles, createStaffRole, updateStaffRole, deleteStaffRole,
+  getDepartments, createDepartment, updateDepartment, deleteDepartment,
+  getDesignations, createDesignation, updateDesignation, deleteDesignation,
   getStock, createStockItem, updateStockItem, deleteStockItem,
   getSales, createSale, updateSale, deleteSale,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
@@ -26,7 +28,7 @@ import {
   getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
   getRPVouchers, createRPVoucher, updateRPVoucher, deleteRPVoucher, postRPVoucherJE,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
-  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, StockItem, Sale, Invoice, Account,
+  Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, Department, Designation, StockItem, Sale, Invoice, Account,
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost, RPVoucher,
   City, Area,
 } from "@/lib/store";
@@ -360,6 +362,26 @@ export function useStaffRoles() {
   const editRole   = (id: string, u: Parameters<typeof updateStaffRole>[1])       => { const r = updateStaffRole(id, u); fetch(); return r; };
   const removeRole = (id: string)                                                  => { deleteStaffRole(id);              fetch(); };
   return { roles, addRole, editRole, removeRole, refresh: fetch };
+}
+
+export function useDepartments() {
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const fetch = useCallback(() => setDepartments(getDepartments()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addDepartment    = (d: Parameters<typeof createDepartment>[0])                  => { const r = createDepartment(d);    fetch(); return r; };
+  const editDepartment   = (id: string, u: Parameters<typeof updateDepartment>[1])      => { const r = updateDepartment(id, u); fetch(); return r; };
+  const removeDepartment = (id: string)                                                  => { deleteDepartment(id);              fetch(); };
+  return { departments, addDepartment, editDepartment, removeDepartment, refresh: fetch };
+}
+
+export function useDesignations() {
+  const [designations, setDesignations] = useState<Designation[]>([]);
+  const fetch = useCallback(() => setDesignations(getDesignations()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const addDesignation    = (d: Parameters<typeof createDesignation>[0])                => { const r = createDesignation(d);    fetch(); return r; };
+  const editDesignation   = (id: string, u: Parameters<typeof updateDesignation>[1])    => { const r = updateDesignation(id, u); fetch(); return r; };
+  const removeDesignation = (id: string)                                                 => { deleteDesignation(id);              fetch(); };
+  return { designations, addDesignation, editDesignation, removeDesignation, refresh: fetch };
 }
 
 export function useShareholders() {

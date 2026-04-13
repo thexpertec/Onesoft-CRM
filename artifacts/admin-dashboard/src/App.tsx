@@ -24,6 +24,7 @@ import StockLedgerPage from "@/pages/stock-ledger";
 import StaffPage from "@/pages/staff";
 import StaffNewPage from "@/pages/staff-new";
 import HrmRolesPage from "@/pages/hrm-roles";
+import HrmOrgPage from "@/pages/hrm-org";
 import CustomersPage from "@/pages/customers";
 import CustomerNewPage from "@/pages/customer-new";
 import ProductsPage from "@/pages/products";
@@ -152,6 +153,7 @@ function Router() {
               <Route path="/staff/new" component={StaffNewPage} />
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
+              <Route path="/hrm-org" component={HrmOrgPage} />
               <Route path="/users" component={UsersPage} />
               <Route path="/tenants" component={TenantsPage} />
               <Route path="/module-groups" component={ModuleGroupsPage} />

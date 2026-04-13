@@ -310,7 +310,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return", "/agent-performance"];
-const HRM_ROUTES           = ["/staff", "/roles", "/users"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
@@ -410,6 +410,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     documents:     ["View Documents", "Manage Documents"],
     hrm_staff:     ["View Staff",     "Manage Staff"],
     hrm_roles:     ["View Roles",     "Manage Roles"],
+    hrm_org:       ["View Staff",     "Manage Staff"],
     settings:      ["Manage Settings"],
     media:         ["View Products",  "Manage Products"],
   };
@@ -420,7 +421,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       if (moduleId === "crm_leads" || moduleId === "crm_customers" || moduleId === "crm_suppliers" ||
           moduleId === "products" || moduleId === "stock" || moduleId === "purchases" ||
           moduleId === "sales" || moduleId === "invoices" || moduleId === "documents" ||
-          moduleId === "hrm_staff" || moduleId === "hrm_roles" || moduleId === "media" || moduleId === "settings") {
+          moduleId === "hrm_staff" || moduleId === "hrm_roles" || moduleId === "hrm_org" || moduleId === "media" || moduleId === "settings") {
         const required = STAFF_MODULE_PERMS[moduleId] ?? [];
         return required.some(p => staffPermissions.has(p));
       }
@@ -441,8 +442,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const hrmItems: SubItem[] = [
-    ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff", href: "/staff", icon: Users2,   desc: "Employees by dept & designation" }] : []),
-    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles", href: "/roles", icon: KeyRound, desc: "Permission roles"                }] : []),
+    ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff",                    href: "/staff",    icon: Users2,    desc: "Employees by dept & designation"   }] : []),
+    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                    href: "/roles",    icon: KeyRound,  desc: "Permission roles"                   }] : []),
+    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations",     href: "/hrm-org",  icon: Building2, desc: "Departments, designations & JDs"    }] : []),
     ...(!isStaff && isSuperAdmin && !currentTenantId ? [
       { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System users"          },
       { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
@@ -1179,8 +1181,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SidebarDivider />
 
           {/* HRM */}
-          <SidebarLink href="/staff"        icon={Building2}     label="Staff"     active={location.startsWith("/staff")}        navigate={navigate} titleFull="Staff / HRM"  color="rose" />
-          <SidebarLink href="/roles"        icon={KeyRound}      label="Roles"     active={location.startsWith("/roles")}       navigate={navigate} titleFull="HRM Roles"    color="pink" />
+          <SidebarLink href="/staff"        icon={Building2}     label="Staff"     active={location.startsWith("/staff")}        navigate={navigate} titleFull="Staff / HRM"         color="rose" />
+          <SidebarLink href="/roles"        icon={KeyRound}      label="Roles"     active={location.startsWith("/roles")}        navigate={navigate} titleFull="HRM Roles"           color="pink" />
+          <SidebarLink href="/hrm-org"      icon={Layers}        label="Org"       active={location.startsWith("/hrm-org")}      navigate={navigate} titleFull="Depts & Designations" color="orange" />
 
           <SidebarDivider />
 
