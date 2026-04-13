@@ -228,7 +228,7 @@ export default function CustomersPage() {
     name: "", company: "", email: "", phone: "", industry: "",
     city: "", area: "", status: "Active" as CustomerStatus,
     customerSince: new Date().toISOString().split("T")[0],
-    totalValue: "", currency: "GBP", notes: "", tags: "",
+    totalValue: "", currency: "GBP", openingBalance: "", notes: "", tags: "",
   });
   const [formData, setFormData] = useState(BLANK_FORM());
 
@@ -255,6 +255,7 @@ export default function CustomersPage() {
       customerSince: formData.customerSince || new Date().toISOString().split("T")[0],
       totalValue: formData.totalValue.trim(),
       currency: formData.currency.trim() || "GBP",
+      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
       notes: formData.notes.trim(), source: "direct",
       tags: formData.tags ? formData.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
     });
@@ -769,7 +770,7 @@ export default function CustomersPage() {
           </div>
 
           {/* Row 2 — Location & Status */}
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-7 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">City</label>
               {cityOptions.length > 0 ? (
@@ -825,6 +826,12 @@ export default function CustomersPage() {
                   {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
+              <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance}
+                onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
+              <span className="text-[10px] text-muted-foreground leading-none">Dr balance (receivable)</span>
             </div>
           </div>
 

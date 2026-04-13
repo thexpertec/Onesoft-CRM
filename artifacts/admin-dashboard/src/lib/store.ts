@@ -366,6 +366,7 @@ export type Customer = {
   customerSince: string;
   totalValue: string;
   currency: string;
+  openingBalance?: number;   // Dr = positive (we owe them nothing, they owe us), Cr = negative
   notes: string;
   tags: string[];
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Receivable
@@ -453,6 +454,7 @@ export type Supplier = {
   status: SupplierStatus;
   rating: number;
   currency: string;
+  openingBalance?: number;   // Cr = positive (we owe them), Dr = negative
   notes: string;
   tags: string[];
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Payable

@@ -243,7 +243,7 @@ export default function SuppliersPage() {
     company: "", contactPerson: "", email: "", phone: "",
     category: SUPPLIER_CATEGORIES[0], city: "", area: "", country: "",
     status: "Active" as SupplierStatus, rating: 0,
-    currency: "GBP", notes: "", tags: "",
+    currency: "GBP", openingBalance: "", notes: "", tags: "",
   });
   const [formData, setFormData] = useState(BLANK_FORM());
 
@@ -271,6 +271,7 @@ export default function SuppliersPage() {
       city: formData.city.trim(), area: formData.area.trim() || undefined,
       country: formData.country.trim(), status: formData.status,
       rating: formData.rating, currency: formData.currency.trim() || "GBP",
+      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
       notes: formData.notes.trim(),
       tags: formData.tags ? formData.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
     });
@@ -798,8 +799,8 @@ export default function SuppliersPage() {
             </div>
           </div>
 
-          {/* Row 3 — Rating, Currency, Tags, Notes */}
-          <div className="grid grid-cols-6 gap-3">
+          {/* Row 3 — Rating, Currency, Opening Balance, Tags, Notes */}
+          <div className="grid grid-cols-7 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Rating</label>
               <div className="h-9 flex items-center gap-1 px-2 border rounded-md bg-background">
@@ -815,6 +816,12 @@ export default function SuppliersPage() {
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Currency</label>
               <Input placeholder="GBP" value={formData.currency} onChange={e => setF("currency", e.target.value)} className="h-9 text-[13px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opening Balance</label>
+              <Input type="number" step="0.01" placeholder="0.00" value={formData.openingBalance}
+                onChange={e => setF("openingBalance", e.target.value)} className="h-9 text-[13px]" />
+              <span className="text-[10px] text-muted-foreground leading-none">Cr balance (payable)</span>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tags</label>
