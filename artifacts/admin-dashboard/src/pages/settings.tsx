@@ -33,6 +33,11 @@ import { CURRENCIES } from "@/lib/currencies";
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
 type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data";
 
+const FORM_MODE_OPTS: { value: "dialog" | "sheet"; label: string; icon: React.ElementType }[] = [
+  { value: "dialog", label: "Form",       icon: Maximize2  },
+  { value: "sheet",  label: "Side Panel", icon: PanelRight },
+];
+
 const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
   { id: "company",    label: "Company Profile",   icon: Building2,   desc: "Name, logo & office contacts"         },
   { id: "financial",  label: "Financial",          icon: DollarSign,  desc: "Currency, VAT & fiscal year"          },
@@ -821,37 +826,34 @@ export default function SettingsPage() {
                     </div>
                   </Field>
                 </div>
-              </div>
 
-              {/* ── UI Preferences ─────────────────────────────────────────── */}
-              <SectionHeader title="UI Preferences" desc="Control how forms open across CRM and HRM modules." />
-              <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/20 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">CRM / HRM Add-Form style</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Choose how the "Add" form opens in Customers, Suppliers, Sales Agents, Staff and Products.
-                    </p>
-                  </div>
-                  <div className="flex rounded-lg border border-gray-200 dark:border-border overflow-hidden shrink-0">
-                    {([
-                      { value: "dialog", label: "Form",       icon: Maximize2,   desc: "Centred dialog"  },
-                      { value: "sheet",  label: "Side Panel", icon: PanelRight,  desc: "Slides from right" },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => set("crmFormMode", opt.value)}
-                        className={`flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold transition-all ${
-                          form.crmFormMode === opt.value
-                            ? "bg-blue-600 text-white"
-                            : "bg-white dark:bg-card text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-muted/40"
-                        }`}
-                      >
-                        <opt.icon size={13} />
-                        <span>{opt.label}</span>
-                      </button>
-                    ))}
+                {/* ── UI Preferences ─────────────────────────────────────────── */}
+                <SectionHeader title="UI Preferences" desc="Control how forms open across CRM and HRM modules." />
+                <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">CRM / HRM Add-Form style</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Choose how the "Add" form opens in Customers, Suppliers, Sales Agents, Staff and Products.
+                      </p>
+                    </div>
+                    <div className="flex rounded-lg border border-gray-200 dark:border-border overflow-hidden shrink-0">
+                      {FORM_MODE_OPTS.map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => set("crmFormMode", opt.value)}
+                          className={`flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold transition-all ${
+                            form.crmFormMode === opt.value
+                              ? "bg-blue-600 text-white"
+                              : "bg-white dark:bg-card text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-muted/40"
+                          }`}
+                        >
+                          <opt.icon size={13} />
+                          <span>{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
