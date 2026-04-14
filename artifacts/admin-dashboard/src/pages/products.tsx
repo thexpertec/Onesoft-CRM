@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit, bulkImportProducts } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -178,7 +178,7 @@ function parseCSV(text: string): ImportRow[] {
 }
 
 export default function ProductsPage() {
-  const { products, addProduct, editProduct, removeProduct, reorderProds } = useProducts();
+  const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
   const { stock } = useStock();
   const { isAuthenticated } = useAuth();
   const dp = getSettingsDecimalPlaces();
@@ -399,7 +399,12 @@ export default function ProductsPage() {
 
     const processBatch = () => {
       const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
-      slice.forEach(r => {
+
+      // Build create/update lists for this batch — ONE read+write via bulkImportProducts
+      const toCreate: { row: typeof slice[0]; payload: Omit<Product, "id"|"createdAt"|"updatedAt"> }[] = [];
+      const toUpdate: { row: typeof slice[0]; id: string; payload: Partial<Omit<Product, "id"|"createdAt">> }[] = [];
+
+      for (const r of slice) {
         const payload = {
           name: r.name, sku: r.sku, brand: r.brand, category: r.category,
           subcategory: r.subcategory,
@@ -412,17 +417,19 @@ export default function ProductsPage() {
           condition: (r.condition as Product["condition"]) || undefined,
           description: r.description,
         };
-        if (r._updateId) {
-          editProduct(r._updateId, payload);
-          updated++;
-          batchRowResults.set(r._rowNum, "updated");
-        } else {
-          addProduct(payload);
-          created++;
-          batchRowResults.set(r._rowNum, "created");
-        }
-        batchImportedNums.add(r._rowNum);
-      });
+        if (r._updateId) toUpdate.push({ row: r, id: r._updateId, payload });
+        else             toCreate.push({ row: r, payload });
+      }
+
+      // Single localStorage read + write for the entire batch
+      bulkImportProducts(
+        toCreate.map(t => t.payload),
+        toUpdate.map(t => ({ id: t.id, data: t.payload })),
+      );
+
+      // Track per-row results for UI
+      for (const t of toCreate) { created++; batchRowResults.set(t.row._rowNum, "created"); batchImportedNums.add(t.row._rowNum); }
+      for (const t of toUpdate) { updated++; batchRowResults.set(t.row._rowNum, "updated"); batchImportedNums.add(t.row._rowNum); }
       batchIdx++;
       const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
       setImportProgress({ total, done, created, updated, failed: invalid.length });
@@ -443,6 +450,7 @@ export default function ProductsPage() {
         if (refSync.subcats    > 0) refParts.push(`${refSync.subcats} subcategor${refSync.subcats !== 1 ? "ies" : "y"}`);
         if (refSync.units      > 0) refParts.push(`${refSync.units} unit${refSync.units !== 1 ? "s" : ""}`);
 
+        refreshProducts(); // Single React state refresh after all batches
         toast({
           title: "Import complete",
           description: [

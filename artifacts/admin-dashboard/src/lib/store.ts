@@ -1090,6 +1090,43 @@ export const reorderProducts = (orderedIds: string[]): void => {
   setStored(PRODUCTS_KEY, [...reordered, ...leftover]);
 };
 
+/**
+ * Bulk import helper — does ONE localStorage read + ONE write for the entire
+ * batch instead of N individual read→append→write cycles.
+ * This avoids the ~5 MB localStorage quota that blocks single-row imports at ~600 rows.
+ */
+export const bulkImportProducts = (
+  toCreate: Omit<Product, "id" | "createdAt" | "updatedAt">[],
+  toUpdate: { id: string; data: Partial<Omit<Product, "id" | "createdAt">> }[],
+): { created: Product[]; updated: Product[] } => {
+  const existing = getProducts();
+  const idxMap   = new Map(existing.map((p, i) => [p.id, i]));
+  const now      = new Date().toISOString();
+
+  // Apply updates in-place
+  const updated: Product[] = [];
+  for (const { id, data } of toUpdate) {
+    const idx = idxMap.get(id);
+    if (idx !== undefined) {
+      existing[idx] = { ...existing[idx], ...data, updatedAt: now };
+      updated.push(existing[idx]);
+    }
+  }
+
+  // Build new product records
+  const created: Product[] = toCreate.map(data => ({
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  // Single bulk write (existing already has updates applied)
+  setStored(PRODUCTS_KEY, [...existing, ...created]);
+
+  return { created, updated };
+};
+
 // ─── Brands API ───────────────────────────────────────────────────────────────
 export type BrandStatus = "Active" | "Inactive";
 
