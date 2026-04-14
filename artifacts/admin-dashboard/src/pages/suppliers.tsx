@@ -1,19 +1,101 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useSuppliers, useCities, useAreas } from "@/hooks/use-data";
+import { useSuppliers, useCities, useAreas, useProducts } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Supplier, SupplierStatus } from "@/lib/store";
+import { Supplier, SupplierStatus, Product } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, Filter, Upload, FileDown } from "lucide-react";
+import { Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, Filter, Upload, FileDown, Package, Check, ChevronDown } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
+
+// ─── Product Multi-Picker ─────────────────────────────────────────────────────
+function ProductMultiPicker({
+  allProducts,
+  selectedIds,
+  onChange,
+  trigger,
+}: {
+  allProducts: Product[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  trigger?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return q
+      ? allProducts.filter(p => p.name.toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q))
+      : allProducts;
+  }, [allProducts, search]);
+
+  const toggle = (id: string) => {
+    onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
+  };
+
+  const count = selectedIds.length;
+
+  return (
+    <Popover open={open} onOpenChange={o => { setOpen(o); if (!o) setSearch(""); }}>
+      <PopoverTrigger asChild>
+        {trigger ?? (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]">
+            <Package size={12} className="text-indigo-500" />
+            Products{count > 0 ? ` (${count})` : ""}
+            <ChevronDown size={12} className="text-muted-foreground" />
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="p-2 border-b">
+          <Input
+            autoFocus
+            placeholder="Search products…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-7 text-[12px]"
+          />
+        </div>
+        <div className="max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground text-center py-4">No products found</p>
+          ) : filtered.map(p => {
+            const selected = selectedIds.includes(p.id);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggle(p.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-muted/50 transition-colors ${selected ? "bg-indigo-50 dark:bg-indigo-950/30" : ""}`}
+              >
+                <span className={`flex-none w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected ? "bg-indigo-600 border-indigo-600" : "border-gray-300"}`}>
+                  {selected && <Check size={10} className="text-white" strokeWidth={3} />}
+                </span>
+                <span className="flex-1 truncate font-medium">{p.name}</span>
+                {p.sku && <span className="flex-none text-[11px] text-muted-foreground">{p.sku}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {count > 0 && (
+          <div className="p-2 border-t flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">{count} selected</span>
+            <button onClick={() => onChange([])} className="text-[11px] text-red-500 hover:underline">Clear all</button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ─── CSV Import helpers ────────────────────────────────────────────────────────
 const SUPPLIER_CSV_HEADERS = ["company","contactPerson","email","phone","category","city","country","status","rating","currency","notes","tags"] as const;
@@ -206,6 +288,7 @@ export default function SuppliersPage() {
   const { suppliers, addSupplier, editSupplier, removeSupplier } = useSuppliers();
   const { cities } = useCities();
   const { areas }  = useAreas();
+  const { products } = useProducts();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -235,9 +318,10 @@ export default function SuppliersPage() {
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
   const [viewSupp,     setViewSupp]     = useState<Supplier | null>(null);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
-  const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
-  const [newRowActive, setNewRowActive] = useState<number | null>(null);
-  const [showImport,   setShowImport]   = useState(false);
+  const [newRow,           setNewRow]           = useState<Record<EditableField, string> | null>(null);
+  const [newRowActive,     setNewRowActive]     = useState<number | null>(null);
+  const [newRowProductIds, setNewRowProductIds] = useState<string[]>([]);
+  const [showImport,       setShowImport]       = useState(false);
 
   const [, nav] = useLocation();
 
@@ -359,9 +443,10 @@ export default function SuppliersPage() {
       city: newRow.city, area: newRow.area || undefined, country: newRow.country,
       status: newRow.status as SupplierStatus,
       rating: parseInt(newRow.rating) || 0, currency: "GBP", notes: newRow.notes, tags: [],
+      productIds: newRowProductIds,
     });
     toast({ title: "Supplier added", description: `${newRow.company} added.` });
-    setNewRow(null); setNewRowActive(null);
+    setNewRow(null); setNewRowActive(null); setNewRowProductIds([]);
   };
 
   const handleDelete = () => {
@@ -467,7 +552,12 @@ export default function SuppliersPage() {
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
-            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
+            <ProductMultiPicker
+              allProducts={products}
+              selectedIds={newRowProductIds}
+              onChange={setNewRowProductIds}
+            />
+            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); setNewRowProductIds([]); }}><X size={12} /> Cancel</Button>
             <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save Row</Button>
           </div>
         )}
@@ -529,7 +619,7 @@ export default function SuppliersPage() {
               <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }}>
                 <div className="flex items-center justify-center gap-1">
                   <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50" title="Save"><Save size={13} /></button>
-                  <button onClick={() => { setNewRow(null); setNewRowActive(null); }} className="p-1 rounded text-red-400 hover:bg-red-50" title="Cancel"><X size={13} /></button>
+                  <button onClick={() => { setNewRow(null); setNewRowActive(null); setNewRowProductIds([]); }} className="p-1 rounded text-red-400 hover:bg-red-50" title="Cancel"><X size={13} /></button>
                 </div>
               </td>
             </tr>
@@ -622,6 +712,47 @@ export default function SuppliersPage() {
                   <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">{viewSupp.notes}</p>
                 </div>
               )}
+
+              {/* Linked Products */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked Products</p>
+                  {isAuthenticated && (
+                    <ProductMultiPicker
+                      allProducts={products}
+                      selectedIds={viewSupp.productIds ?? []}
+                      onChange={ids => {
+                        editSupplier(viewSupp.id, { productIds: ids });
+                        setViewSupp(s => s ? { ...s, productIds: ids } : s);
+                      }}
+                      trigger={
+                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-[11px]">
+                          <Package size={11} className="text-indigo-500" />
+                          {(viewSupp.productIds?.length ?? 0) > 0 ? `${viewSupp.productIds!.length} linked` : "Link products"}
+                          <ChevronDown size={11} className="text-muted-foreground" />
+                        </Button>
+                      }
+                    />
+                  )}
+                </div>
+                {(viewSupp.productIds?.length ?? 0) > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {viewSupp.productIds!.map(pid => {
+                      const prod = products.find(p => p.id === pid);
+                      if (!prod) return null;
+                      return (
+                        <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                          <Package size={10} />
+                          {prod.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-muted-foreground italic">No products linked yet</p>
+                )}
+              </div>
+
               {isAuthenticated && (
                 <div className="pt-4 border-t">
                   <Button variant="destructive" className="w-full gap-2" onClick={() => { setDeleteId(viewSupp.id); setViewSupp(null); }}>

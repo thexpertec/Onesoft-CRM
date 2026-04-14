@@ -457,6 +457,7 @@ export type Supplier = {
   openingBalance?: number;   // Cr = positive (we owe them), Dr = negative
   notes: string;
   tags: string[];
+  productIds?: string[];     // products supplied by this supplier
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Payable
   createdAt: string;
   updatedAt: string;
