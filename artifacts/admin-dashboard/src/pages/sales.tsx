@@ -1536,6 +1536,10 @@ export default function SalesPage() {
   useEffect(() => { localItemsRef.current = localItems; }, [localItems]);
   useEffect(() => { localMetaRef.current  = localMeta;  }, [localMeta]);
 
+  // Track if the current POS session was a brand-new blank sale (created by "Open POS").
+  // If the user closes without adding any items or customer, we delete it automatically.
+  const freshSaleIdRef = useRef<string | null>(null);
+
   // ── COLS ──
   const agentNameOpts = useMemo(() => agentOpts.map(a => a.name), [agentOpts]);
 
@@ -1582,6 +1586,7 @@ export default function SalesPage() {
   useEffect(() => {
     if (isNewSale && isAuthenticated) {
       const draft = addSale(blankSale());
+      freshSaleIdRef.current = draft.id;
       openDetailDirect(draft);
       navigate("/sales", { replace: true });
     }
@@ -1735,7 +1740,20 @@ export default function SalesPage() {
   };
 
   const closePOS = () => {
-    saveMeta();
+    const currentId  = detailId;
+    const isFresh    = currentId !== null && currentId === freshSaleIdRef.current;
+    const hasItems   = localItemsRef.current.length > 0;
+    const hasCustomer = !!localMetaRef.current?.customer?.trim();
+    const hasNotes    = !!localMetaRef.current?.notes?.trim();
+
+    if (isFresh && !hasItems && !hasCustomer && !hasNotes) {
+      // Brand-new blank sale — delete it so it never appears in the list
+      removeSale(currentId!);
+    } else {
+      saveMeta();
+    }
+
+    freshSaleIdRef.current = null;
     setDetailId(null);
     setLocalMeta(null);
     setLocalItems([]);
@@ -1990,7 +2008,7 @@ export default function SalesPage() {
             <Button size="sm" variant="outline" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-sale-row">
               <Plus size={14} /> New Sale
             </Button>
-            <Button size="sm" onClick={() => { const s = addSale(blankSale()); openDetailDirect(s); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button size="sm" onClick={() => { const s = addSale(blankSale()); freshSaleIdRef.current = s.id; openDetailDirect(s); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
               <ShoppingCart size={14} /> Open POS
             </Button>
           </div>
@@ -2372,6 +2390,7 @@ export default function SalesPage() {
           onNewSale={() => {
             setCompletedSaleForReceipt(null);
             const draft = addSale(blankSale());
+            freshSaleIdRef.current = draft.id;
             openDetailDirect(draft);
           }}
           onClose={() => setCompletedSaleForReceipt(null)}
