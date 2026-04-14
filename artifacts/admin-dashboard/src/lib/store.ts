@@ -2844,6 +2844,26 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
 };
 
 /**
+ * Clears one or more module keys for the CURRENT tenant (or superadmin if no
+ * tenant is active).  Removes from localStorage AND pushes [] to the server so
+ * data does not reappear on the next page load.
+ */
+export function clearStoredModule(keys: readonly string[]): void {
+  keys.forEach(k => {
+    const sk = tenantKey(k);
+    localStorage.setItem(sk, JSON.stringify([]));
+    _apiWrite(sk, []);
+  });
+}
+
+/**
+ * Clears ALL module keys for the current tenant/superadmin — used by "Nuke all" in Settings.
+ */
+export function clearAllStoredModules(): void {
+  clearStoredModule(ALL_STORE_KEYS);
+}
+
+/**
  * Resets the accounting ledger to zero:
  *  1. Deletes all journal entries.
  *  2. Resets every COA account's opening balance to 0.

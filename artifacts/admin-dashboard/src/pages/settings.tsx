@@ -25,7 +25,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
   AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
-  clearAccountingLedger,
+  clearAccountingLedger, clearStoredModule, clearAllStoredModules,
 } from "@/lib/store";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
@@ -83,8 +83,8 @@ function SectionHeader({ title, desc }: { title: string; desc?: string }) {
 
 // ─── Module reset row ─────────────────────────────────────────────────────────
 function ModuleResetRow({
-  module, onReset,
-}: { module: string; onReset: () => void }) {
+  module, onReset, tenantName,
+}: { module: string; onReset: () => void; tenantName: string }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <>
@@ -108,7 +108,8 @@ function ModuleResetRow({
           <AlertDialogHeader>
             <AlertDialogTitle>Clear {module} data?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all <strong>{module}</strong> records from this device. This cannot be undone.
+              This will permanently delete all <strong>{module}</strong> records for <strong>{tenantName}</strong>.
+              Data is removed from the server and cannot be recovered. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -556,7 +557,7 @@ function LegalTab({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, currentTenant } = useAuth();
   const { toast } = useToast();
   const { accounts } = useAccounts();
 
@@ -654,14 +655,16 @@ export default function SettingsPage() {
 
   // ── Module reset ────────────────────────────────────────────────────────────
   function clearModule(module: string) {
-    MODULE_KEYS[module].forEach(k => localStorage.removeItem(k));
-    toast({ title: `${module} cleared`, description: "All records removed from this device." });
+    clearStoredModule(MODULE_KEYS[module]);
+    const scope = currentTenant ? currentTenant.name : "your account";
+    toast({ title: `${module} cleared`, description: `All ${module} records removed for ${scope}.` });
   }
 
   // ── Nuke all ────────────────────────────────────────────────────────────────
   function nukeAll() {
-    ALL_STORE_KEYS.forEach(k => localStorage.removeItem(k));
-    toast({ title: "All data cleared", description: "Every record has been wiped. Reload to start fresh.", variant: "destructive" });
+    clearAllStoredModules();
+    const scope = currentTenant ? currentTenant.name : "your account";
+    toast({ title: "All data cleared", description: `Every record has been wiped for ${scope}. Reload to start fresh.`, variant: "destructive" });
     setNukeOpen(false);
   }
 
@@ -1534,7 +1537,12 @@ export default function SettingsPage() {
                     />
                     <div className="rounded-lg border border-gray-100 dark:border-border bg-gray-50/50 dark:bg-muted/10 px-4">
                       {Object.keys(MODULE_KEYS).map(mod => (
-                        <ModuleResetRow key={mod} module={mod} onReset={() => clearModule(mod)} />
+                        <ModuleResetRow
+                          key={mod}
+                          module={mod}
+                          onReset={() => clearModule(mod)}
+                          tenantName={currentTenant ? currentTenant.name : "your account"}
+                        />
                       ))}
                     </div>
                   </div>
