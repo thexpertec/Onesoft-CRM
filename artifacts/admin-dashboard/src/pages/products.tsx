@@ -574,7 +574,7 @@ export default function ProductsPage() {
   const allBrands        = useMemo(() => [...new Set(products.map(p => p.brand).filter(Boolean))].sort() as string[], [products]);
   const allConditions    = useMemo(() => [...new Set(products.map(p => p.condition).filter(Boolean))].sort() as string[], [products]);
 
-  const isFiltered = !!(search || statusFilter !== "All" || filterCategory || filterSubcategory || filterBrand || filterCondition);
+  const isFiltered = !!(search || statusFilter !== "All" || filterCategory || filterSubcategory || filterBrand || filterCondition || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice);
 
   const applyStatusFilter = (p: Product): boolean => {
     switch (statusFilter) {
@@ -585,9 +585,16 @@ export default function ProductsPage() {
       case "no-price":     return !p.price || parseFloat(p.price) === 0;
       case "no-cost":      return !p.costPrice || parseFloat(p.costPrice) === 0;
       case "has-wholesale":return !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0);
+      case "no-wholesale": return !(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0);
       case "no-category":  return !p.category;
       case "with-images":  return !!(p.images && p.images.length > 0);
       case "no-image":     return !(p.images && p.images.length > 0);
+      case "no-sku":       return !p.sku?.trim();
+      case "no-barcode":   return !p.barcode?.trim();
+      case "loss-making":  { const cost = parseFloat(p.costPrice ?? "0") || 0; const price = parseFloat(p.price ?? "0") || 0; return price > 0 && cost > price; }
+      case "out-of-stock": return (getProductStock(p) ?? 0) === 0;
+      case "low-stock":    { const qty = getProductStock(p) ?? 0; const alert = parseFloat((p as Product & { stockAlertQty?: string }).stockAlertQty ?? "0") || 5; return qty > 0 && qty <= alert; }
+      case "in-stock":     return (getProductStock(p) ?? 0) > 0;
       default:             return true;
     }
   };
@@ -620,7 +627,88 @@ export default function ProductsPage() {
     .filter(p => !filterCategory    || p.category    === filterCategory)
     .filter(p => !filterSubcategory || p.subcategory === filterSubcategory)
     .filter(p => !filterBrand       || p.brand       === filterBrand)
-    .filter(p => !filterCondition   || p.condition   === filterCondition);
+    .filter(p => !filterCondition   || p.condition   === filterCondition)
+    .filter(p => {
+      if (filterStockStatus === "all") return true;
+      const qty   = getProductStock(p) ?? 0;
+      const alert = parseFloat((p as Product & { stockAlertQty?: string }).stockAlertQty ?? "0") || 5;
+      if (filterStockStatus === "in-stock")     return qty > 0;
+      if (filterStockStatus === "out-of-stock") return qty === 0;
+      if (filterStockStatus === "low-stock")    return qty > 0 && qty <= alert;
+      return true;
+    })
+    .filter(p => {
+      const price = parseFloat(p.price ?? "0") || 0;
+      if (filterMinPrice && price < parseFloat(filterMinPrice)) return false;
+      if (filterMaxPrice && price > parseFloat(filterMaxPrice)) return false;
+      return true;
+    });
+
+  // ── Sorted display rows ────────────────────────────────────────────────────
+  const displayRows = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let av: string | number = 0;
+      let bv: string | number = 0;
+      switch (sortField) {
+        case "name":         av = a.name?.toLowerCase() ?? ""; bv = b.name?.toLowerCase() ?? ""; break;
+        case "sku":          av = a.sku?.toLowerCase() ?? "";  bv = b.sku?.toLowerCase() ?? "";  break;
+        case "brand":        av = a.brand?.toLowerCase() ?? "";bv = b.brand?.toLowerCase() ?? "";break;
+        case "category":     av = a.category?.toLowerCase() ?? ""; bv = b.category?.toLowerCase() ?? ""; break;
+        case "price":        av = parseFloat(a.price ?? "0") || 0; bv = parseFloat(b.price ?? "0") || 0; break;
+        case "costPrice":    av = parseFloat(a.costPrice ?? "0") || 0; bv = parseFloat(b.costPrice ?? "0") || 0; break;
+        case "purchasePrice":av = parseFloat(a.purchasePrice ?? "0") || 0; bv = parseFloat(b.purchasePrice ?? "0") || 0; break;
+        case "wholesalePrice":av = parseFloat(a.wholesalePrice ?? "0") || 0; bv = parseFloat(b.wholesalePrice ?? "0") || 0; break;
+        case "margin":       {
+          const ma = (() => { const c = parseFloat(a.costPrice ?? "0") || 0; const p2 = parseFloat(a.price ?? "0") || 0; return p2 > 0 ? ((p2 - c) / p2) * 100 : 0; })();
+          const mb = (() => { const c = parseFloat(b.costPrice ?? "0") || 0; const p2 = parseFloat(b.price ?? "0") || 0; return p2 > 0 ? ((p2 - c) / p2) * 100 : 0; })();
+          av = ma; bv = mb; break;
+        }
+        case "stock":        av = getProductStock(a) ?? -1; bv = getProductStock(b) ?? -1; break;
+        case "status":       av = a.status?.toLowerCase() ?? ""; bv = b.status?.toLowerCase() ?? ""; break;
+        default:             return 0;
+      }
+      if (typeof av === "string") {
+        const cmp = av.localeCompare(bv as string);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      return sortDir === "asc" ? av - (bv as number) : (bv as number) - av;
+    });
+  }, [filtered, sortField, sortDir]);
+
+  // ── Aggregate stats ────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    let invValue = 0, retailValue = 0, marginSum = 0, marginCount = 0;
+    let outOfStock = 0, lowStock = 0, inStock = 0;
+    let noSku = 0, noBarcode = 0, lossMaking = 0, noWholesale = 0;
+
+    for (const p of products) {
+      const cost   = parseFloat(p.costPrice ?? "0") || 0;
+      const price  = parseFloat(p.price ?? "0") || 0;
+      const ws     = parseFloat(p.wholesalePrice ?? "0") || 0;
+      const qty    = getProductStock(p) ?? 0;
+      const alert  = parseFloat((p as Product & { stockAlertQty?: string }).stockAlertQty ?? "0") || 5;
+
+      invValue    += cost * qty;
+      retailValue += price * qty;
+
+      if (price > 0) { marginSum += ((price - cost) / price) * 100; marginCount++; }
+      if (qty === 0)                   outOfStock++;
+      else if (qty > 0 && qty <= alert) lowStock++;
+      else if (qty > alert)             inStock++;
+
+      if (!p.sku?.trim())     noSku++;
+      if (!p.barcode?.trim()) noBarcode++;
+      if (price > 0 && cost > price) lossMaking++;
+      if (!ws) noWholesale++;
+    }
+    return {
+      invValue, retailValue,
+      avgMargin: marginCount > 0 ? marginSum / marginCount : 0,
+      unrealisedProfit: retailValue - invValue,
+      outOfStock, lowStock, inStock, noSku, noBarcode, lossMaking, noWholesale,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, stockBySkuMap]);
 
   // Drag-and-drop reorder state
   const [dragId,    setDragId]    = useState<string | null>(null);
@@ -633,7 +721,7 @@ export default function ProductsPage() {
   };
   const handleDrop = (dropId: string) => {
     if (!dragId || dragId === dropId) { setDragId(null); setDragOverId(null); return; }
-    const ids = filtered.map(p => p.id);
+    const ids = displayRows.map(p => p.id);
     const fromIdx = ids.indexOf(dragId);
     const toIdx   = ids.indexOf(dropId);
     if (fromIdx === -1 || toIdx === -1) return;
@@ -668,7 +756,7 @@ export default function ProductsPage() {
   }, [products, editProduct, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
-    const rows = [NEW_ROW_ID, ...filtered.map(p => p.id)];
+    const rows = [NEW_ROW_ID, ...displayRows.map(p => p.id)];
     const ri = rows.indexOf(id);
     let nc = col + (shift ? -1 : 1), nr = ri;
     if (nc >= visibleCols.length) { nc = 0; nr++; }
@@ -677,17 +765,17 @@ export default function ProductsPage() {
     const nid = rows[nr];
     if (nid === NEW_ROW_ID) { setActiveCell(null); setNewRowActive(nc); }
     else { setActiveCell({ id: nid, col: nc }); setNewRowActive(null); }
-  }, [filtered, visibleCols.length]);
+  }, [displayRows, visibleCols.length]);
 
   const moveCellDown = useCallback((id: string, col: number) => {
-    const rows = [NEW_ROW_ID, ...filtered.map(p => p.id)];
+    const rows = [NEW_ROW_ID, ...displayRows.map(p => p.id)];
     const ri = rows.indexOf(id);
     const nr = ri + 1;
     if (nr >= rows.length) { setActiveCell(null); return; }
     const nid = rows[nr];
     if (nid === NEW_ROW_ID) { setActiveCell(null); setNewRowActive(col); }
     else { setActiveCell({ id: nid, col }); setNewRowActive(null); }
-  }, [filtered]);
+  }, [displayRows]);
 
   const navigateNewRow = (col: number, shift: boolean) => {
     const nc = col + (shift ? -1 : 1);
@@ -730,18 +818,18 @@ export default function ProductsPage() {
     return next;
   });
 
-  const allFilteredSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
-  const someFilteredSelected = filtered.some(p => selectedIds.has(p.id));
+  const allFilteredSelected = displayRows.length > 0 && displayRows.every(p => selectedIds.has(p.id));
+  const someFilteredSelected = displayRows.some(p => selectedIds.has(p.id));
 
   const toggleSelectAll = () => {
     if (allFilteredSelected) {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        filtered.forEach(p => next.delete(p.id));
+        displayRows.forEach(p => next.delete(p.id));
         return next;
       });
     } else {
-      setSelectedIds(prev => new Set([...prev, ...filtered.map(p => p.id)]));
+      setSelectedIds(prev => new Set([...prev, ...displayRows.map(p => p.id)]));
     }
   };
 
@@ -760,12 +848,19 @@ export default function ProductsPage() {
     { label: "Active",        value: products.filter(p => p.status === "Active").length,                                      filter: "Active",        color: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300",             activeRing: "ring-emerald-500 dark:ring-emerald-400"  },
     { label: "Inactive",      value: products.filter(p => p.status === "Inactive").length,                                    filter: "Inactive",      color: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",                     activeRing: "ring-amber-400 dark:ring-amber-500"      },
     { label: "Draft",         value: products.filter(p => p.status === "Draft").length,                                       filter: "Draft",         color: "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400",                        activeRing: "ring-gray-300 dark:ring-gray-600"        },
+    { label: "In Stock",      value: stats.inStock,                                                                           filter: "in-stock",      color: "bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300",                      activeRing: "ring-green-500 dark:ring-green-400"      },
+    { label: "Low Stock",     value: stats.lowStock,                                                                          filter: "low-stock",     color: "bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300",                  activeRing: "ring-yellow-400 dark:ring-yellow-500"    },
+    { label: "Out of Stock",  value: stats.outOfStock,                                                                        filter: "out-of-stock",  color: "bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300",                            activeRing: "ring-red-500 dark:ring-red-400"          },
     { label: "No Price",      value: products.filter(p => !p.price || parseFloat(p.price) === 0).length,                     filter: "no-price",      color: "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",                        activeRing: "ring-rose-400 dark:ring-rose-500"        },
-    { label: "No Cost",       value: products.filter(p => !p.costPrice || parseFloat(p.costPrice) === 0).length,              filter: "no-cost",       color: "bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300",                           activeRing: "ring-red-400 dark:ring-red-500"          },
+    { label: "No Cost",       value: products.filter(p => !p.costPrice || parseFloat(p.costPrice) === 0).length,              filter: "no-cost",       color: "bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300",                activeRing: "ring-orange-400 dark:ring-orange-500"    },
+    { label: "Loss Making",   value: stats.lossMaking,                                                                        filter: "loss-making",   color: "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300",                           activeRing: "ring-red-600 dark:ring-red-400"          },
+    { label: "No SKU",        value: stats.noSku,                                                                             filter: "no-sku",        color: "bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300",                 activeRing: "ring-violet-400 dark:ring-violet-500"    },
+    { label: "No Barcode",    value: stats.noBarcode,                                                                         filter: "no-barcode",    color: "bg-fuchsia-50 dark:bg-fuchsia-950/50 text-fuchsia-700 dark:text-fuchsia-300",             activeRing: "ring-fuchsia-400 dark:ring-fuchsia-500"  },
     { label: "Has Wholesale", value: products.filter(p => !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0)).length,  filter: "has-wholesale", color: "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300",                activeRing: "ring-purple-400 dark:ring-purple-500"    },
-    { label: "No Category",   value: products.filter(p => !p.category).length,                                               filter: "no-category",   color: "bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300",                activeRing: "ring-orange-400 dark:ring-orange-500"    },
+    { label: "No Wholesale",  value: stats.noWholesale,                                                                       filter: "no-wholesale",  color: "bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400",                     activeRing: "ring-slate-400 dark:ring-slate-500"      },
+    { label: "No Category",   value: products.filter(p => !p.category).length,                                               filter: "no-category",   color: "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400",                        activeRing: "ring-zinc-400 dark:ring-zinc-500"        },
     { label: "With Images",   value: products.filter(p => !!(p.images && p.images.length > 0)).length,                       filter: "with-images",   color: "bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",                           activeRing: "ring-sky-400 dark:ring-sky-500"          },
-    { label: "No Image",      value: products.filter(p => !(p.images && p.images.length > 0)).length,                        filter: "no-image",      color: "bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400",                    activeRing: "ring-slate-300 dark:ring-slate-600"      },
+    { label: "No Image",      value: products.filter(p => !(p.images && p.images.length > 0)).length,                        filter: "no-image",      color: "bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400",                        activeRing: "ring-gray-300 dark:ring-gray-600"        },
   ];
 
   const hasRefData = brandOptions.length === 0 || categoryOptions.length === 0 || unitOptions.length === 0;
@@ -791,8 +886,8 @@ export default function ProductsPage() {
               <Upload size={13} /> Import CSV
             </Button>
             <Button size="sm" variant="outline" onClick={() => {
-              downloadExcel("Products", "Products", filtered, [
-                { header: "#",               key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
+              downloadExcel("Products", "Products", displayRows, [
+                { header: "#",               key: "id",            getValue: r => displayRows.indexOf(r) + 1, width: 5 },
                 { header: "Product Name",    key: "name",          width: 32 },
                 { header: "Local Name",      key: "localName",     width: 24 },
                 { header: "SKU",             key: "sku",           width: 18 },
@@ -919,6 +1014,55 @@ export default function ProductsPage() {
         )}
       </div>
 
+      {/* ── Stats summary bar ───────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          {
+            icon: <Wallet size={15} className="text-indigo-500" />,
+            label: "Inventory Value",
+            value: `${sym}${stats.invValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+            sub: "cost × stock qty",
+            border: "border-indigo-200 dark:border-indigo-800",
+            bg: "bg-indigo-50/60 dark:bg-indigo-950/30",
+          },
+          {
+            icon: <Tag size={15} className="text-emerald-500" />,
+            label: "Retail Value",
+            value: `${sym}${stats.retailValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+            sub: "retail × stock qty",
+            border: "border-emerald-200 dark:border-emerald-800",
+            bg: "bg-emerald-50/60 dark:bg-emerald-950/30",
+          },
+          {
+            icon: <BarChart2 size={15} className="text-blue-500" />,
+            label: "Avg Margin",
+            value: `${stats.avgMargin.toFixed(1)}%`,
+            sub: products.length > 0 ? `across ${products.filter(p => parseFloat(p.price ?? "0") > 0).length} priced products` : "no products",
+            border: "border-blue-200 dark:border-blue-800",
+            bg: "bg-blue-50/60 dark:bg-blue-950/30",
+          },
+          {
+            icon: stats.unrealisedProfit >= 0
+              ? <TrendingUp size={15} className="text-green-500" />
+              : <TrendingDown size={15} className="text-red-500" />,
+            label: "Unrealised Profit",
+            value: `${sym}${Math.abs(stats.unrealisedProfit).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+            sub: stats.unrealisedProfit >= 0 ? "retail − cost value" : "cost exceeds retail",
+            border: stats.unrealisedProfit >= 0 ? "border-green-200 dark:border-green-800" : "border-red-200 dark:border-red-800",
+            bg:     stats.unrealisedProfit >= 0 ? "bg-green-50/60 dark:bg-green-950/30"    : "bg-red-50/60 dark:bg-red-950/30",
+          },
+        ].map(s => (
+          <div key={s.label} className={`rounded-xl border ${s.border} ${s.bg} px-4 py-3 flex items-start gap-3`}>
+            <div className="mt-0.5 flex-shrink-0">{s.icon}</div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground font-medium truncate">{s.label}</p>
+              <p className="text-[18px] font-bold tracking-tight leading-tight">{s.value}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate">{s.sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* KPI pills */}
       <div className="flex items-center gap-2 flex-wrap">
         {pills.map(k => {
@@ -989,6 +1133,56 @@ export default function ProductsPage() {
             </div>
           )}
         </div>
+
+        {/* ── Sort controls ─────────────────────────────────────────── */}
+        <div className="flex items-center gap-1">
+          <div className="relative">
+            <select
+              value={sortField}
+              onChange={e => setSortField(e.target.value)}
+              className="h-8 pl-2.5 pr-7 rounded-l-lg border border-r-0 border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
+            >
+              <option value="name">Sort: Name</option>
+              <option value="sku">Sort: SKU</option>
+              <option value="brand">Sort: Brand</option>
+              <option value="category">Sort: Category</option>
+              <option value="price">Sort: Price</option>
+              <option value="costPrice">Sort: Cost</option>
+              <option value="purchasePrice">Sort: Purchase</option>
+              <option value="wholesalePrice">Sort: Wholesale</option>
+              <option value="margin">Sort: Margin %</option>
+              <option value="stock">Sort: Stock</option>
+              <option value="status">Sort: Status</option>
+            </select>
+            <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+          </div>
+          <button
+            onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
+            title={sortDir === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
+            className="h-8 w-8 flex items-center justify-center rounded-r-lg border border-gray-200 dark:border-border bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted/40 transition-colors"
+          >
+            {sortDir === "asc" ? <ArrowUp size={13} className="text-indigo-500" /> : <ArrowDown size={13} className="text-indigo-500" />}
+          </button>
+        </div>
+
+        {/* Advanced filters toggle */}
+        <button
+          onClick={() => setShowAdvFilters(v => !v)}
+          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
+            showAdvFilters || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
+              ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
+              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+          }`}
+          title="Toggle advanced filters"
+        >
+          <SlidersHorizontal size={13} />
+          Filters
+          {(filterStockStatus !== "all" || filterMinPrice || filterMaxPrice) && (
+            <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+              {[filterStockStatus !== "all", !!filterMinPrice, !!filterMaxPrice].filter(Boolean).length}
+            </span>
+          )}
+        </button>
 
         {/* ── Dropdown Filters ──────────────────────────────────────── */}
         {(allCategories.length > 0 || allBrands.length > 0 || allConditions.length > 0) && (
@@ -1086,21 +1280,122 @@ export default function ProductsPage() {
         )}
         {/* Bulk action bar */}
         {selectedIds.size > 0 ? (
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             <span className="text-[12px] font-medium text-foreground">{selectedIds.size} selected</span>
+            {isAuthenticated && (
+              <>
+                <div className="relative">
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const newStatus = e.target.value as Product["status"];
+                      if (!newStatus) return;
+                      selectedIds.forEach(id => editProduct(id, { status: newStatus }));
+                      toast({ title: `Set ${selectedIds.size} products to ${newStatus}` });
+                      clearSelection();
+                      (e.target as HTMLSelectElement).value = "";
+                    }}
+                    className="h-8 pl-2.5 pr-7 rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
+                  >
+                    <option value="">Set Status…</option>
+                    <option value="Active">→ Active</option>
+                    <option value="Inactive">→ Inactive</option>
+                    <option value="Draft">→ Draft</option>
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+                </div>
+                <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => {
+                  const rows = displayRows.filter(p => selectedIds.has(p.id));
+                  downloadExcel("Products", "Selected Products", rows, [
+                    { header: "#",            key: "id", getValue: (r: Product) => rows.indexOf(r) + 1, width: 5 },
+                    { header: "Name",         key: "name",  width: 32 },
+                    { header: "SKU",          key: "sku",   width: 18 },
+                    { header: "Category",     key: "category", width: 20 },
+                    { header: "Brand",        key: "brand", width: 16 },
+                    { header: "Cost",         key: "costPrice", width: 14 },
+                    { header: "Retail Price", key: "price", width: 14 },
+                    { header: "Status",       key: "status", width: 12 },
+                  ]);
+                }}>
+                  <FileDown size={12} /> Export
+                </Button>
+                <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 size={12} /> Delete {selectedIds.size}
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="ghost" className="h-8 text-[12px] text-muted-foreground" onClick={clearSelection}>
               <X size={12} className="mr-1" /> Clear
             </Button>
-            {isAuthenticated && (
-              <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 size={12} /> Delete {selectedIds.size}
-              </Button>
-            )}
           </div>
         ) : (
-          <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {products.length}</div>
+          <div className="text-[12px] text-muted-foreground self-center ml-auto">{displayRows.length} of {products.length}</div>
         )}
       </div>
+
+      {/* ── Advanced filter panel ─────────────────────────────────────────────── */}
+      {showAdvFilters && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20">
+          <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide flex items-center gap-1.5 mr-1">
+            <SlidersHorizontal size={12} /> Advanced
+          </span>
+
+          {/* Stock status */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground font-medium">Stock:</span>
+            {(["all","in-stock","low-stock","out-of-stock"] as const).map(v => (
+              <button key={v}
+                onClick={() => setFilterStockStatus(v)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  filterStockStatus === v
+                    ? v === "all"          ? "bg-gray-600 text-white"
+                    : v === "in-stock"     ? "bg-green-500 text-white"
+                    : v === "low-stock"    ? "bg-yellow-500 text-white"
+                                           : "bg-red-500 text-white"
+                    : "bg-white dark:bg-card border border-gray-200 dark:border-border text-muted-foreground hover:border-gray-300"
+                }`}
+              >
+                {v === "all" ? "All" : v === "in-stock" ? "In Stock" : v === "low-stock" ? "Low" : "Out"}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-5 bg-indigo-200 dark:bg-indigo-800" />
+
+          {/* Price range */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground font-medium">Price:</span>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">{sym}</span>
+              <input
+                type="number" min="0" placeholder="Min"
+                value={filterMinPrice}
+                onChange={e => setFilterMinPrice(e.target.value)}
+                className="h-7 w-20 pl-5 pr-2 rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] outline-none focus:border-indigo-400"
+              />
+            </div>
+            <span className="text-[11px] text-muted-foreground">—</span>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">{sym}</span>
+              <input
+                type="number" min="0" placeholder="Max"
+                value={filterMaxPrice}
+                onChange={e => setFilterMaxPrice(e.target.value)}
+                className="h-7 w-20 pl-5 pr-2 rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+
+          {(filterStockStatus !== "all" || filterMinPrice || filterMaxPrice) && (
+            <button
+              onClick={() => { setFilterStockStatus("all"); setFilterMinPrice(""); setFilterMaxPrice(""); }}
+              className="ml-auto h-7 px-2.5 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors flex items-center gap-1"
+            >
+              <X size={10} /> Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Excel grid */}
       <div ref={tableRef}>
@@ -1171,13 +1466,13 @@ export default function ProductsPage() {
           )}
 
           {/* Existing rows */}
-          {filtered.length === 0 ? (
+          {displayRows.length === 0 ? (
             <tr><td colSpan={visibleCols.length + 3} className="text-center py-16 text-muted-foreground text-sm">
-              {search || statusFilter !== "All"
-                ? "No products match your current filter."
+              {search || statusFilter !== "All" || filterCategory || filterBrand || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
+                ? "No products match your current filters."
                 : <span>No products yet. Click <strong>Add Product</strong> to get started.</span>}
             </td></tr>
-          ) : filtered.map((prod, ri) => {
+          ) : displayRows.map((prod, ri) => {
             const isRowActive = activeCell?.id === prod.id;
             const isDragging  = dragId === prod.id;
             const isDragOver  = dragOverId === prod.id;
