@@ -10,6 +10,9 @@ import {
   getStaff,
   getStaffRoles,
   staffToAdminUser,
+  getAgentByCredentials,
+  agentToAdminUser,
+  getSalesAgents,
   setActiveTenant,
   getActiveTenantId,
   syncAllFromServer,
@@ -26,7 +29,9 @@ type AuthContextType = {
   currentUser:       AdminUser | null;
   isSuperAdmin:      boolean;
   isStaff:           boolean;
-  staffPermissions:  Set<string>; // HRM role permissions for staff users
+  isSalesAgent:      boolean;
+  currentAgentId:    string | null;  // the raw SalesAgent.id when logged in as agent
+  staffPermissions:  Set<string>; // HRM role permissions for staff/agent users
   currentTenantId:   string | null;
   currentTenant:     Tenant | null;
   isSyncing:         boolean;

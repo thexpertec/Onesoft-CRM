@@ -896,7 +896,7 @@ export const getTenantStats = (tenantId: string): Record<string, number> => {
 };
 
 // ─── Admin Users API ──────────────────────────────────────────────────────────
-export type UserRole = "superadmin" | "admin" | "staff";
+export type UserRole = "superadmin" | "admin" | "staff" | "sales_agent";
 
 export type AdminUser = {
   id: string;
@@ -951,6 +951,11 @@ export const getAdminUserById = (id: string): AdminUser | undefined => {
     const staffId = id.slice(6);
     const s = getStaff().find(x => x.id === staffId);
     return s ? staffToAdminUser(s) : undefined;
+  }
+  if (id.startsWith("agent:")) {
+    const agentId = id.slice(6);
+    const a = getSalesAgents().find(x => x.id === agentId);
+    return a ? agentToAdminUser(a) : undefined;
   }
   return getAdminUsers().find(u => u.id === id);
 };
@@ -2145,6 +2150,10 @@ export type SalesAgent = {
   notes:            string;
   openingBalance?:  number;  // commission balance owed to agent at setup
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Sales Commission
+  // Portal login
+  username?:      string;
+  password?:      string;
+  loginEnabled?:  boolean;
   createdAt:        string;
   updatedAt:        string;
 };
@@ -2201,6 +2210,27 @@ export const deleteSalesAgent = (id: string): void => {
   setStored(SALES_AGENTS_KEY, getSalesAgents().filter(a => a.id !== id));
   addActivity({ action: "deleted", entity: "SalesAgent", entityName: agent?.name || id });
 };
+
+/** Find a sales agent by portal login credentials (only if loginEnabled). */
+export const getAgentByCredentials = (username: string, password: string): SalesAgent | undefined =>
+  getSalesAgents().find(
+    a => a.loginEnabled === true &&
+         a.status === "Active" &&
+         a.username?.toLowerCase() === username.toLowerCase() &&
+         a.password === password
+  );
+
+/** Map a SalesAgent record to the AdminUser shape for the auth context. */
+export const agentToAdminUser = (a: SalesAgent): AdminUser => ({
+  id:        `agent:${a.id}`,
+  username:  a.username ?? a.name.toLowerCase().replace(/\s+/g, "."),
+  fullName:  a.name,
+  email:     a.email ?? "",
+  role:      "sales_agent",
+  password:  a.password ?? "",
+  createdAt: a.createdAt,
+  updatedAt: a.updatedAt,
+});
 
 // ─── Raw Materials ────────────────────────────────────────────────────────────
 const RM_KEY = "admin-raw-materials";
