@@ -70,13 +70,13 @@ function clearDemoData() {
     if (leadsRaw) {
       const leads: Lead[] = JSON.parse(leadsRaw);
       const filtered = leads.filter((l) => !DEMO_LEAD_IDS.includes(l.id));
-      if (filtered.length !== leads.length) localStorage.setItem(LEADS_KEY, JSON.stringify(filtered));
+      if (filtered.length !== leads.length) { try { localStorage.setItem(LEADS_KEY, JSON.stringify(filtered)); } catch { /* ignore */ } }
     }
     const docsRaw = localStorage.getItem(DOCS_KEY);
     if (docsRaw) {
       const docs: RequirementDoc[] = JSON.parse(docsRaw);
       const filtered = docs.filter((d) => !DEMO_DOC_IDS.includes(d.id));
-      if (filtered.length !== docs.length) localStorage.setItem(DOCS_KEY, JSON.stringify(filtered));
+      if (filtered.length !== docs.length) { try { localStorage.setItem(DOCS_KEY, JSON.stringify(filtered)); } catch { /* ignore */ } }
     }
   } catch { /* ignore */ }
 }
@@ -126,28 +126,56 @@ export function addActivity(entry: Omit<ActivityEntry, "id" | "user" | "timestam
   try {
     const key = tenantKey(ACTIVITY_KEY);
     let existing: ActivityEntry[] = [];
-    try { existing = JSON.parse(localStorage.getItem(key) || "[]"); } catch { existing = []; }
+    try { existing = JSON.parse(_lsGet(key) || "[]"); } catch { existing = []; }
     const newEntry: ActivityEntry = {
       ...entry,
       id: crypto.randomUUID(),
       user: _activityUser,
       timestamp: new Date().toISOString(),
     };
-    localStorage.setItem(key, JSON.stringify([newEntry, ...existing].slice(0, MAX_ACTIVITY)));
+    _lsSet(key, [newEntry, ...existing].slice(0, MAX_ACTIVITY));
   } catch { /* ignore */ }
 }
 
 export function getActivities(): ActivityEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(tenantKey(ACTIVITY_KEY)) || "[]");
+    return JSON.parse(_lsGet(tenantKey(ACTIVITY_KEY)) || "[]");
   } catch { return []; }
 }
 
 export function clearActivities(): void {
-  try { localStorage.removeItem(tenantKey(ACTIVITY_KEY)); } catch { /* ignore */ }
+  _lsRemove(tenantKey(ACTIVITY_KEY));
 }
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
+//
+// Architecture: in-memory Map (_memRaw) is the PRIMARY fast store (no quota).
+// localStorage is a SECONDARY best-effort cache (writes are try/catch).
+// PostgreSQL KV store (via _apiWrite) is the DURABLE persistent store.
+// On login, syncAllFromServer() loads the server data into both _memRaw and
+// localStorage so the app starts with a full warm cache.
+
+/** Raw JSON cache — no browser quota limit, survives within the tab session. */
+const _memRaw = new Map<string, string>();
+
+/** Read from in-memory cache first, then fall back to localStorage. */
+function _lsGet(storageKey: string): string | null {
+  if (_memRaw.has(storageKey)) return _memRaw.get(storageKey)!;
+  try { return localStorage.getItem(storageKey); } catch { return null; }
+}
+
+/** Write to in-memory cache + best-effort localStorage (quota errors are swallowed). */
+function _lsSet(storageKey: string, data: unknown): void {
+  const json = JSON.stringify(data);
+  _memRaw.set(storageKey, json);
+  try { localStorage.setItem(storageKey, json); } catch { /* quota full — server has the authoritative copy */ }
+}
+
+/** Remove from in-memory cache + best-effort localStorage. */
+function _lsRemove(storageKey: string): void {
+  _memRaw.delete(storageKey);
+  try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+}
 
 /**
  * Fire-and-forget write to the PostgreSQL KV store.
@@ -169,14 +197,12 @@ function _apiWrite(storageKey: string, value: unknown): void {
 
 /** Tenant-namespaced read (all business data). */
 function getStored<T>(key: string): T[] {
-  try {
-    const item = localStorage.getItem(tenantKey(key));
-    if (item) {
-      const parsed = JSON.parse(item);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.error(`Error reading ${tenantKey(key)} from localStorage`, e);
+  const raw = _lsGet(tenantKey(key));
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as T[];
+    } catch { }
   }
   return [];
 }
@@ -184,7 +210,7 @@ function getStored<T>(key: string): T[] {
 /** Tenant-namespaced write — also persists to PostgreSQL. */
 function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
-  localStorage.setItem(sk, JSON.stringify(data));
+  _lsSet(sk, data);
   _apiWrite(sk, data);
   // Notify same-tab listeners (browser storage event only fires in other tabs)
   try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop in non-browser env */ }
@@ -192,19 +218,19 @@ function setStored<T>(key: string, data: T[]) {
 
 /** Platform-level read (always unprefixed — for users & tenants registry). */
 function getGlobal<T>(key: string): T[] {
-  try {
-    const item = localStorage.getItem(key);
-    if (item) {
-      const parsed = JSON.parse(item);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch { }
+  const raw = _lsGet(key);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as T[];
+    } catch { }
+  }
   return [];
 }
 
 /** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
-  localStorage.setItem(key, JSON.stringify(data));
+  _lsSet(key, data);
   _apiWrite(key, data);
 }
 
@@ -552,14 +578,14 @@ export const updateShareholder = (id: string, updates: Partial<Omit<Shareholder,
   // Sync COA ledger name if the shareholder's name changed
   if (updates.name && items[i].ledgerAccountId) {
     const accounts = (() => {
-      try { return JSON.parse(localStorage.getItem(tenantKey(COA_KEY)) || "[]") as Account[]; }
+      try { return JSON.parse(_lsGet(tenantKey(COA_KEY)) || "[]") as Account[]; }
       catch { return [] as Account[]; }
     })();
     const idx = accounts.findIndex(a => a.id === items[i].ledgerAccountId);
     if (idx !== -1) {
       accounts[idx] = { ...accounts[idx], name: updates.name, updatedAt: new Date().toISOString() };
       const sk = tenantKey(COA_KEY);
-      localStorage.setItem(sk, JSON.stringify(accounts));
+      _lsSet(sk, accounts);
       _apiWrite(sk, accounts);
     }
   }
@@ -774,7 +800,7 @@ const MODULE_GROUPS_KEY = "admin-module-groups";
 
 export const getModuleGroups = (): ModuleGroup[] => {
   try {
-    const raw = localStorage.getItem(MODULE_GROUPS_KEY);
+    const raw = _lsGet(MODULE_GROUPS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 };
@@ -788,7 +814,7 @@ export const createModuleGroup = (
   const now = new Date().toISOString();
   const group: ModuleGroup = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   const updated = [...getModuleGroups(), group];
-  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(updated));
+  _lsSet(MODULE_GROUPS_KEY, updated);
   _apiWrite(MODULE_GROUPS_KEY, updated);
   return group;
 };
@@ -801,14 +827,14 @@ export const updateModuleGroup = (
   const idx = groups.findIndex(g => g.id === id);
   if (idx === -1) throw new Error("Module group not found");
   groups[idx] = { ...groups[idx], ...updates, updatedAt: new Date().toISOString() };
-  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(groups));
+  _lsSet(MODULE_GROUPS_KEY, groups);
   _apiWrite(MODULE_GROUPS_KEY, groups);
   return groups[idx];
 };
 
 export const deleteModuleGroup = (id: string): void => {
   const updated = getModuleGroups().filter(g => g.id !== id);
-  localStorage.setItem(MODULE_GROUPS_KEY, JSON.stringify(updated));
+  _lsSet(MODULE_GROUPS_KEY, updated);
   _apiWrite(MODULE_GROUPS_KEY, updated);
 };
 
@@ -888,7 +914,7 @@ export const getTenantStats = (tenantId: string): Record<string, number> => {
   const result: Record<string, number> = {};
   for (const k of keys) {
     try {
-      const raw = localStorage.getItem(`t:${tenantId}:${k}`);
+      const raw = _lsGet(`t:${tenantId}:${k}`);
       const arr = raw ? JSON.parse(raw) : [];
       result[k] = Array.isArray(arr) ? arr.length : 0;
     } catch { result[k] = 0; }
@@ -991,14 +1017,14 @@ const DEFAULT_TEAM = ["Ali Raza", "Umar Farooq", "Hassan Sheikh", "Bilal Ahmed",
 
 export const getTeamMembers = (): string[] => {
   try {
-    const raw = localStorage.getItem(tenantKey(TEAM_KEY));
+    const raw = _lsGet(tenantKey(TEAM_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch { /* ignore */ }
   const sk = tenantKey(TEAM_KEY);
-  localStorage.setItem(sk, JSON.stringify(DEFAULT_TEAM));
+  _lsSet(sk, DEFAULT_TEAM);
   _apiWrite(sk, DEFAULT_TEAM);
   return DEFAULT_TEAM;
 };
@@ -2876,7 +2902,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export function getSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(tenantKey(SETTINGS_KEY));
+    const raw = _lsGet(tenantKey(SETTINGS_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed };
@@ -2916,7 +2942,7 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(s: AppSettings): void {
   const sk = tenantKey(SETTINGS_KEY);
-  localStorage.setItem(sk, JSON.stringify(s));
+  _lsSet(sk, s);
   _apiWrite(sk, s);
 }
 
@@ -2951,7 +2977,7 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
 export function clearStoredModule(keys: readonly string[]): void {
   keys.forEach(k => {
     const sk = tenantKey(k);
-    localStorage.setItem(sk, JSON.stringify([]));
+    _lsSet(sk, []);
     _apiWrite(sk, []);
   });
 }
@@ -2972,13 +2998,13 @@ export function clearAllStoredModules(): void {
 export function clearAccountingLedger(): void {
   // 1 — wipe journal entries
   const jeKey = tenantKey(JE_KEY);
-  localStorage.removeItem(jeKey);
+  _lsRemove(jeKey);
   _apiWrite(jeKey, []);
 
   // 2 — reset opening balances to 0 on all COA accounts
   const coaKey = tenantKey(COA_KEY);
   const accounts = getAccounts().map(a => ({ ...a, openingBalance: 0 }));
-  localStorage.setItem(coaKey, JSON.stringify(accounts));
+  _lsSet(coaKey, accounts);
   _apiWrite(coaKey, accounts);
 }
 
@@ -2987,7 +3013,7 @@ export const addTeamMember = (name: string): string[] => {
   if (current.includes(name)) return current;
   const updated = [...current, name];
   const sk = tenantKey(TEAM_KEY);
-  localStorage.setItem(sk, JSON.stringify(updated));
+  _lsSet(sk, updated);
   _apiWrite(sk, updated);
   return updated;
 };
@@ -2995,7 +3021,7 @@ export const addTeamMember = (name: string): string[] => {
 export const removeTeamMember = (name: string): string[] => {
   const updated = getTeamMembers().filter(m => m !== name);
   const sk = tenantKey(TEAM_KEY);
-  localStorage.setItem(sk, JSON.stringify(updated));
+  _lsSet(sk, updated);
   _apiWrite(sk, updated);
   return updated;
 };
@@ -3145,7 +3171,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
 export function seedDefaultCoaAccounts(): void {
   const existing = (() => {
     try {
-      const raw = localStorage.getItem(tenantKey(COA_KEY));
+      const raw = _lsGet(tenantKey(COA_KEY));
       return raw ? (JSON.parse(raw) as Account[]) : [];
     } catch { return []; }
   })();
@@ -3244,7 +3270,7 @@ export function seedDefaultCoaAccounts(): void {
 
   if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || supplierLedgersMoved) {
     const sk = tenantKey(COA_KEY);
-    localStorage.setItem(sk, JSON.stringify(workingAccounts));
+    _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
   }
 
@@ -3387,7 +3413,7 @@ function createSubsidiaryLedger(params: {
 }): string {
   const existing = (() => {
     try {
-      const raw = localStorage.getItem(tenantKey(COA_KEY));
+      const raw = _lsGet(tenantKey(COA_KEY));
       return raw ? (JSON.parse(raw) as Account[]) : [];
     } catch { return []; }
   })();
@@ -3410,7 +3436,7 @@ function createSubsidiaryLedger(params: {
   };
   const updated = [...existing, account];
   const sk = tenantKey(COA_KEY);
-  localStorage.setItem(sk, JSON.stringify(updated));
+  _lsSet(sk, updated);
   _apiWrite(sk, updated);
   return account.id;
 }
@@ -3428,13 +3454,13 @@ const LEGACY_SEED_IDS = new Set([
 
 export function getAccounts(): Account[] {
   try {
-    const raw = localStorage.getItem(tenantKey(COA_KEY));
+    const raw = _lsGet(tenantKey(COA_KEY));
     if (raw) {
       const parsed: Account[] = JSON.parse(raw);
       // One-time migration: wipe legacy seed accounts, keep any user-added ones
       const userAccounts = parsed.filter(a => !LEGACY_SEED_IDS.has(a.id));
       if (userAccounts.length !== parsed.length) {
-        localStorage.setItem(tenantKey(COA_KEY), JSON.stringify(userAccounts));
+        _lsSet(tenantKey(COA_KEY), userAccounts);
         return userAccounts;
       }
       // Normalise fields added after initial release
@@ -3449,14 +3475,14 @@ export function getAccounts(): Account[] {
   } catch { /* ignore */ }
   // Fresh install — start with empty chart
   const sk = tenantKey(COA_KEY);
-  localStorage.setItem(sk, JSON.stringify([]));
+  _lsSet(sk, []);
   _apiWrite(sk, []);
   return [];
 }
 
 function _saveAccounts(accounts: Account[]): void {
   const sk = tenantKey(COA_KEY);
-  localStorage.setItem(sk, JSON.stringify(accounts));
+  _lsSet(sk, accounts);
   _apiWrite(sk, accounts);
 }
 
@@ -3517,7 +3543,7 @@ const JE_KEY = "admin-journal-entries";
 
 export function getJournalEntries(): JournalEntry[] {
   try {
-    const raw = localStorage.getItem(tenantKey(JE_KEY));
+    const raw = _lsGet(tenantKey(JE_KEY));
     if (raw) return JSON.parse(raw) as JournalEntry[];
   } catch { /* ignore */ }
   return [];
@@ -3525,7 +3551,7 @@ export function getJournalEntries(): JournalEntry[] {
 
 function _saveJournalEntries(entries: JournalEntry[]): void {
   const sk = tenantKey(JE_KEY);
-  localStorage.setItem(sk, JSON.stringify(entries));
+  _lsSet(sk, entries);
   _apiWrite(sk, entries);
 }
 
@@ -3752,7 +3778,7 @@ export function getRPVouchers(): RPVoucher[] {
 
 function _saveRPVouchers(data: RPVoucher[]): void {
   const sk = tenantKey(RPV_KEY);
-  localStorage.setItem(sk, JSON.stringify(data));
+  _lsSet(sk, data);
   _apiWrite(sk, data);
 }
 
@@ -3858,20 +3884,23 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     if (globalData) {
       for (const [key, value] of Object.entries(globalData)) {
         if (value !== undefined && value !== null) {
-          localStorage.setItem(key, JSON.stringify(value));
+          // Populate both in-memory cache and best-effort localStorage
+          _lsSet(key, value);
         }
       }
 
-      // ── One-time migration: push any global localStorage keys that are
-      //    missing from the DB (created before PostgreSQL integration was added).
-      for (let i = 0; i < localStorage.length; i++) {
-        const lsKey = localStorage.key(i);
-        if (!lsKey) continue;
+      // ── One-time migration: push any data that is in _memRaw or localStorage
+      //    but missing from the DB (created before PostgreSQL integration).
+      const allLocalKeys = new Set<string>([
+        ..._memRaw.keys(),
+        ...Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? "").filter(Boolean),
+      ]);
+      for (const lsKey of allLocalKeys) {
         // Only global keys (no tenant prefix, starts with "admin-")
         if (lsKey.startsWith("t:") || !lsKey.startsWith("admin-")) continue;
         if (lsKey in globalData) continue; // already in DB, skip
         try {
-          const raw = localStorage.getItem(lsKey);
+          const raw = _lsGet(lsKey);
           if (raw) {
             const parsed = JSON.parse(raw);
             // Fire-and-forget migration write to DB
@@ -3888,12 +3917,12 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       if (tenantData) {
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
-            localStorage.setItem(`t:${tenantId}:${key}`, JSON.stringify(value));
+            _lsSet(`t:${tenantId}:${key}`, value);
           }
         }
       }
     }
   } catch {
-    // Network unavailable — localStorage data (if any) will be used as fallback
+    // Network unavailable — in-memory cache / localStorage data will be used as fallback
   }
 }
