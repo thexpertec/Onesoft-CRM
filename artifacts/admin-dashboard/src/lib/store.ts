@@ -1009,6 +1009,7 @@ export type ProductCondition = "New" | "Used" | "Fresh" | "Refurbished" | "Damag
 export type Product = {
   id: string;
   name: string;
+  localName?: string;        // Local / alternate name of the product (optional)
   sku: string;
   barcode?: string;          // Barcode / QR code value for scanning
   brand: string;

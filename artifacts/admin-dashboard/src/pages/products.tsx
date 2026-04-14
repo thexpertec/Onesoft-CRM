@@ -19,7 +19,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description";
+type EditableField = "name" | "localName" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -36,7 +36,7 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
+  name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
@@ -264,8 +264,9 @@ export default function ProductsPage() {
   const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
 
   const COLS: ColDef[] = useMemo(() => [
-    { field: "name",        label: "Product Name",       minW: 200, type: "text"                                                                   },
-    { field: "sku",         label: "SKU",                minW: 110, type: "text"                                                                   },
+    { field: "name",        label: "Product Name",       minW: 200, type: "text" },
+    { field: "localName",   label: "Local Name",         minW: 160, type: "text" },
+    { field: "sku",         label: "SKU",                minW: 110, type: "text" },
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
     { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
@@ -309,7 +310,7 @@ export default function ProductsPage() {
   };
 
   const filtered = products
-    .filter(p => !search || [p.name, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.localName, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(applyStatusFilter);
 
   // Drag-and-drop reorder state
@@ -390,7 +391,8 @@ export default function ProductsPage() {
     if (!newRow?.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); setNewRowActive(0); return; }
     try {
       addProduct({
-        name: newRow.name, sku: newRow.sku, brand: newRow.brand, category: newRow.category,
+        name: newRow.name, localName: newRow.localName || undefined,
+        sku: newRow.sku, brand: newRow.brand, category: newRow.category,
         unit: newRow.unit, purchasePrice: newRow.purchasePrice, costPrice: newRow.costPrice,
         price: newRow.price, wholesalePrice: newRow.wholesalePrice,
         status: (newRow.status as Product["status"]) || "Active",
@@ -451,6 +453,7 @@ export default function ProductsPage() {
               downloadExcel("Products", "Products", filtered, [
                 { header: "#",               key: "id",            getValue: r => filtered.indexOf(r) + 1, width: 5 },
                 { header: "Product Name",    key: "name",          width: 32 },
+                { header: "Local Name",      key: "localName",     width: 24 },
                 { header: "SKU",             key: "sku",           width: 18 },
                 { header: "Brand",           key: "brand",         width: 16 },
                 { header: "Category",        key: "category",      width: 20 },

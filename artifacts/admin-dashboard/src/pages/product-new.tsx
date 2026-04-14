@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type FormFields = {
-  name: string; sku: string; barcode: string; brand: string;
+  name: string; localName: string; sku: string; barcode: string; brand: string;
   category: string; subcategory: string; unit: string;
   purchasePrice: string; costPrice: string; price: string; wholesalePrice: string;
   commissionPct: string; openingStock: string; stockAlertValue: string;
@@ -17,7 +17,7 @@ type FormFields = {
 };
 
 const BLANK = (): FormFields => ({
-  name: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
+  name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   commissionPct: "", openingStock: "", stockAlertValue: "",
   status: "Active", condition: "", description: "",
@@ -90,7 +90,8 @@ export default function ProductNewPage() {
     setSaving(true);
     try {
       addProduct({
-        name: form.name, sku: form.sku, barcode: form.barcode || undefined,
+        name: form.name, localName: form.localName || undefined,
+        sku: form.sku, barcode: form.barcode || undefined,
         brand: form.brand, category: form.category,
         subcategory: form.subcategory || undefined,
         unit: form.unit, purchasePrice: form.purchasePrice, costPrice: form.costPrice,
@@ -150,6 +151,11 @@ export default function ProductNewPage() {
           <Field label="Product Name *">
             <Input autoFocus placeholder="e.g. Oak Dining Table" value={form.name}
               onChange={e => patch("name", e.target.value)} className="h-10 text-[15px] font-medium" />
+          </Field>
+
+          <Field label="Local Name" hint="Optional alternate or local language name for this product">
+            <Input placeholder="e.g. مقامی نام / 本地名称" value={form.localName}
+              onChange={e => patch("localName", e.target.value)} className="h-9 text-sm" />
           </Field>
 
           <Divider label="Identity" />
