@@ -48,22 +48,28 @@ function saleItemTotal(items: { qty: string; unitPrice: string; discount: string
 
 // ─── Lead status meta ─────────────────────────────────────────────────────────
 const LEAD_STATUS_META: Record<string, { bg: string; dot: string }> = {
-  New:             { bg: "bg-blue-500",    dot: "bg-blue-500"    },
-  Contacted:       { bg: "bg-amber-400",   dot: "bg-amber-400"   },
-  Qualified:       { bg: "bg-cyan-500",    dot: "bg-cyan-500"    },
-  "Proposal Sent": { bg: "bg-violet-500",  dot: "bg-violet-500"  },
-  Won:             { bg: "bg-emerald-500", dot: "bg-emerald-500" },
-  Lost:            { bg: "bg-red-400",     dot: "bg-red-400"     },
+  New:                  { bg: "bg-blue-500",    dot: "bg-blue-500"    },
+  Contacted:            { bg: "bg-indigo-400",  dot: "bg-indigo-400"  },
+  "Meeting Scheduled":  { bg: "bg-sky-500",     dot: "bg-sky-500"     },
+  "Demo Completed":     { bg: "bg-cyan-500",    dot: "bg-cyan-500"    },
+  Qualified:            { bg: "bg-teal-500",    dot: "bg-teal-500"    },
+  "Proposal Sent":      { bg: "bg-amber-400",   dot: "bg-amber-400"   },
+  Negotiation:          { bg: "bg-orange-500",  dot: "bg-orange-500"  },
+  Won:                  { bg: "bg-emerald-500", dot: "bg-emerald-500" },
+  Lost:                 { bg: "bg-red-400",     dot: "bg-red-400"     },
 };
-const LEAD_STATUS_ORDER = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"] as const;
+const LEAD_STATUS_ORDER = ["New", "Contacted", "Meeting Scheduled", "Demo Completed", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"] as const;
 
 const LEAD_BADGE: Record<string, string> = {
-  New:             "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300",
-  Contacted:       "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
-  Qualified:       "bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300",
-  "Proposal Sent": "bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300",
-  Won:             "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
-  Lost:            "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300",
+  New:                  "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300",
+  Contacted:            "bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300",
+  "Meeting Scheduled":  "bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300",
+  "Demo Completed":     "bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300",
+  Qualified:            "bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300",
+  "Proposal Sent":      "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
+  Negotiation:          "bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300",
+  Won:                  "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
+  Lost:                 "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300",
 };
 
 // ─── Quick-add customer schema ────────────────────────────────────────────────
@@ -411,12 +417,17 @@ export default function Dashboard() {
 
   // Sales funnel — conversion from leads to completed sales
   const salesFunnel = useMemo(() => {
+    const contacted    = (statusCounts["Contacted"]           || 0) + (statusCounts["Meeting Scheduled"] || 0) + (statusCounts["Demo Completed"] || 0) + (statusCounts["Qualified"] || 0) + (statusCounts["Proposal Sent"] || 0) + (statusCounts["Negotiation"] || 0) + wonLeads;
+    const meetingHeld  = (statusCounts["Demo Completed"]      || 0) + (statusCounts["Qualified"]         || 0) + (statusCounts["Proposal Sent"]  || 0) + (statusCounts["Negotiation"] || 0) + wonLeads;
+    const inProposal   = (statusCounts["Proposal Sent"]       || 0) + (statusCounts["Negotiation"]       || 0) + wonLeads;
     const items = [
-      { label: "Total Leads",     count: leads.length,             color: "#3b82f6" },
-      { label: "Qualified",       count: (statusCounts["Qualified"] || 0) + (statusCounts["Proposal Sent"] || 0) + (wonLeads || 0), color: "#06b6d4" },
-      { label: "Won Leads",       count: wonLeads,                 color: "#10b981" },
-      { label: "Sales Created",   count: sales.length,             color: "#8b5cf6" },
-      { label: "Completed Sales", count: completedSales.length,    color: "#6366f1" },
+      { label: "Total Leads",     count: leads.length,          color: "#3b82f6" },
+      { label: "Contacted",       count: contacted,             color: "#6366f1" },
+      { label: "Demo / Meeting",  count: meetingHeld,           color: "#0891b2" },
+      { label: "Proposal Sent",   count: inProposal,            color: "#f59e0b" },
+      { label: "Won",             count: wonLeads,              color: "#10b981" },
+      { label: "Sales Created",   count: sales.length,          color: "#8b5cf6" },
+      { label: "Completed Sales", count: completedSales.length, color: "#6366f1" },
     ];
     const max = items[0]?.count || 1;
     return items.map(it => ({ ...it, pct: max ? Math.round((it.count / max) * 100) : 0 }));
