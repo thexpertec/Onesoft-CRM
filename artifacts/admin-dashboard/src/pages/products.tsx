@@ -378,71 +378,113 @@ export default function ProductsPage() {
   };
 
   const confirmImport = () => {
-    const valid   = importRows.filter(r => !r._error);
-    const invalid = importRows.filter(r => !!r._error);
-    const total   = importRows.length;
-    const BATCH   = 30;
+    // Snapshot importRows NOW, before any async re-renders change it
+    const snapshot  = importRows;
+    const valid     = snapshot.filter(r => !r._error);
+    const invalid   = snapshot.filter(r => !!r._error);
+    const total     = snapshot.length;
+
+    // Diagnostic — helps identify stale-mode or stale-products issues
+    console.info(
+      `[import] mode=${importMode} total=${total} valid=${valid.length} invalid=${invalid.length}` +
+      ` new=${valid.filter(r => !r._updateId).length} update=${valid.filter(r => !!r._updateId).length}`,
+    );
+    const BATCH     = 30;
 
     setImporting(true);
     setImportedRowNums(new Set());
     setImportRowResults(new Map());
     setImportProgress({ total, done: invalid.length, created: 0, updated: 0, failed: invalid.length });
 
-    // Sync reference tables before processing products
-    const refSync = syncReferenceDataFromImport(valid);
+    // Sync reference tables — runs synchronously, may fire storage events
+    // but we already snapshotted importRows above so re-renders don't affect us
+    let refSync: ReturnType<typeof syncReferenceDataFromImport>;
+    try {
+      refSync = syncReferenceDataFromImport(valid);
+    } catch (e) {
+      console.error("[import] syncReferenceDataFromImport failed:", e);
+      refSync = { brands: 0, categories: 0, subcats: 0, units: 0 };
+    }
+
+    // ── Accumulate ALL rows in memory — NO localStorage writes per batch ──
+    // We collect every row's payload here, then do ONE bulkImportProducts
+    // call at the very end (single localStorage read + write). This prevents
+    // the QuotaExceededError that occurs when writing 30 + 30 + 30 … times
+    // with an ever-growing product list.
+    type RowPayload = Omit<Product, "id" | "createdAt" | "updatedAt">;
+    const allToCreate: { row: (typeof valid)[0]; payload: RowPayload }[] = [];
+    const allToUpdate: { row: (typeof valid)[0]; id: string; payload: Partial<Omit<Product, "id" | "createdAt">> }[] = [];
 
     let batchIdx = 0;
-    let created  = 0;
-    let updated  = 0;
-    const batchRowResults = new Map<number, "created" | "updated">();
+    const batchRowResults   = new Map<number, "created" | "updated">();
     const batchImportedNums = new Set<number>();
 
     const processBatch = () => {
-      const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
+      try {
+        const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
 
-      // Build create/update lists for this batch — ONE read+write via bulkImportProducts
-      const toCreate: { row: typeof slice[0]; payload: Omit<Product, "id"|"createdAt"|"updatedAt"> }[] = [];
-      const toUpdate: { row: typeof slice[0]; id: string; payload: Partial<Omit<Product, "id"|"createdAt">> }[] = [];
+        // Classify rows — pure in-memory, no I/O
+        for (const r of slice) {
+          const payload: RowPayload = {
+            name: r.name, sku: r.sku, brand: r.brand, category: r.category,
+            subcategory: r.subcategory,
+            unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
+            price: r.price, wholesalePrice: r.wholesalePrice,
+            barcode: r.barcode, localName: r.localName,
+            openingStock: r.openingStock, stockAlertQty: r.stockAlertQty,
+            commissionPct: r.commissionPct,
+            status: (r.status as Product["status"]) || "Active",
+            condition: (r.condition as Product["condition"]) || undefined,
+            description: r.description,
+          };
+          if (r._updateId) allToUpdate.push({ row: r, id: r._updateId, payload });
+          else             allToCreate.push({ row: r, payload });
+        }
 
-      for (const r of slice) {
-        const payload = {
-          name: r.name, sku: r.sku, brand: r.brand, category: r.category,
-          subcategory: r.subcategory,
-          unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
-          price: r.price, wholesalePrice: r.wholesalePrice,
-          barcode: r.barcode, localName: r.localName,
-          openingStock: r.openingStock, stockAlertQty: r.stockAlertQty,
-          commissionPct: r.commissionPct,
-          status: (r.status as Product["status"]) || "Active",
-          condition: (r.condition as Product["condition"]) || undefined,
-          description: r.description,
-        };
-        if (r._updateId) toUpdate.push({ row: r, id: r._updateId, payload });
-        else             toCreate.push({ row: r, payload });
-      }
+        // Track per-row UI state for this batch tick
+        for (const r of slice) {
+          const label = r._updateId ? "updated" : "created";
+          batchRowResults.set(r._rowNum, label);
+          batchImportedNums.add(r._rowNum);
+        }
 
-      // Single localStorage read + write for the entire batch
-      bulkImportProducts(
-        toCreate.map(t => t.payload),
-        toUpdate.map(t => ({ id: t.id, data: t.payload })),
-      );
+        batchIdx++;
+        const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
+        const created = allToCreate.length;
+        const updated = allToUpdate.length;
+        setImportProgress({ total, done, created, updated, failed: invalid.length });
+        setImportedRowNums(new Set(batchImportedNums));
+        setImportRowResults(new Map(batchRowResults));
 
-      // Track per-row results for UI
-      for (const t of toCreate) { created++; batchRowResults.set(t.row._rowNum, "created"); batchImportedNums.add(t.row._rowNum); }
-      for (const t of toUpdate) { updated++; batchRowResults.set(t.row._rowNum, "updated"); batchImportedNums.add(t.row._rowNum); }
-      batchIdx++;
-      const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
-      setImportProgress({ total, done, created, updated, failed: invalid.length });
-      setImportedRowNums(new Set(batchImportedNums));
-      setImportRowResults(new Map(batchRowResults));
+        if (batchIdx * BATCH < valid.length) {
+          // More batches — keep ticking for UI progress
+          setTimeout(processBatch, 0);
+          return;
+        }
 
-      if (batchIdx * BATCH < valid.length) {
-        setTimeout(processBatch, 0);
-      } else {
+        // ── Last batch: now do the ONE bulk write ──────────────────────────
+        try {
+          bulkImportProducts(
+            allToCreate.map(t => t.payload),
+            allToUpdate.map(t => ({ id: t.id, data: t.payload })),
+          );
+        } catch (writeErr) {
+          console.error("[import] bulkImportProducts failed:", writeErr);
+          toast({
+            title: "Storage error",
+            description:
+              "Products were processed but could not be saved locally (storage full). " +
+              "Try clearing browser storage or refreshing.",
+            variant: "destructive",
+          });
+          setImporting(false);
+          return;
+        }
+
         const productParts: string[] = [];
-        if (created > 0) productParts.push(`${created} created`);
-        if (updated > 0) productParts.push(`${updated} updated`);
-        if (invalid.length > 0) productParts.push(`${invalid.length} skipped`);
+        if (allToCreate.length > 0) productParts.push(`${allToCreate.length} created`);
+        if (allToUpdate.length > 0) productParts.push(`${allToUpdate.length} updated`);
+        if (invalid.length > 0)     productParts.push(`${invalid.length} skipped`);
 
         const refParts: string[] = [];
         if (refSync.brands     > 0) refParts.push(`${refSync.brands} brand${refSync.brands !== 1 ? "s" : ""}`);
@@ -450,7 +492,7 @@ export default function ProductsPage() {
         if (refSync.subcats    > 0) refParts.push(`${refSync.subcats} subcategor${refSync.subcats !== 1 ? "ies" : "y"}`);
         if (refSync.units      > 0) refParts.push(`${refSync.units} unit${refSync.units !== 1 ? "s" : ""}`);
 
-        refreshProducts(); // Single React state refresh after all batches
+        refreshProducts();
         toast({
           title: "Import complete",
           description: [
@@ -459,6 +501,15 @@ export default function ProductsPage() {
           ].filter(Boolean).join("  •  "),
         });
         setTimeout(() => { resetImport(); setImporting(false); }, 800);
+
+      } catch (batchErr) {
+        console.error("[import] processBatch unexpected error:", batchErr);
+        toast({
+          title: "Import error",
+          description: "An unexpected error stopped the import. Check browser console for details.",
+          variant: "destructive",
+        });
+        setImporting(false);
       }
     };
 
