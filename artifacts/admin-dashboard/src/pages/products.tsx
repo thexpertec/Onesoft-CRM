@@ -248,6 +248,9 @@ export default function ProductsPage() {
   const [rawImportRows,  setRawImportRows]  = useState<ImportRow[]>([]);
   const [importMode,     setImportMode]     = useState<"insert" | "upsert">("upsert");
   const [importing,      setImporting]      = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    total: number; done: number; created: number; updated: number; failed: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── SKU check: "insert" mode flags conflicts; "upsert" mode marks them for update ──
@@ -278,7 +281,7 @@ export default function ProductsPage() {
     [rawImportRows, importMode, enrichWithSkuErrors]
   );
 
-  const resetImport = () => { setImportOpen(false); setRawImportRows([]); setImportMode("insert"); };
+  const resetImport = () => { setImportOpen(false); setRawImportRows([]); setImportMode("upsert"); setImportProgress(null); };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -307,29 +310,53 @@ export default function ProductsPage() {
   };
 
   const confirmImport = () => {
+    const valid   = importRows.filter(r => !r._error);
+    const invalid = importRows.filter(r => !!r._error);
+    const total   = importRows.length;
+    const BATCH   = 30;
+
     setImporting(true);
-    const valid = importRows.filter(r => !r._error);
-    let created = 0, updated = 0;
-    valid.forEach(r => {
-      const payload = {
-        name: r.name, sku: r.sku, brand: r.brand, category: r.category,
-        unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
-        price: r.price, wholesalePrice: r.wholesalePrice,
-        status: (r.status as Product["status"]) || "Active",
-        condition: (r.condition as Product["condition"]) || undefined,
-        description: r.description,
-      };
-      if (r._updateId) { editProduct(r._updateId, payload); updated++; }
-      else              { addProduct(payload); created++; }
-    });
-    const skipped = importRows.length - valid.length;
-    const parts: string[] = [];
-    if (created > 0) parts.push(`${created} created`);
-    if (updated > 0) parts.push(`${updated} updated`);
-    if (skipped > 0) parts.push(`${skipped} skipped`);
-    toast({ title: "Import complete", description: parts.join(" · ") });
-    resetImport();
-    setImporting(false);
+    setImportProgress({ total, done: invalid.length, created: 0, updated: 0, failed: invalid.length });
+
+    let batchIdx = 0;
+    let created  = 0;
+    let updated  = 0;
+
+    const processBatch = () => {
+      const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
+      slice.forEach(r => {
+        const payload = {
+          name: r.name, sku: r.sku, brand: r.brand, category: r.category,
+          subcategory: r.subcategory,
+          unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
+          price: r.price, wholesalePrice: r.wholesalePrice,
+          barcode: r.barcode, localName: r.localName,
+          openingStock: r.openingStock, stockAlertQty: r.stockAlertQty,
+          commissionPct: r.commissionPct,
+          status: (r.status as Product["status"]) || "Active",
+          condition: (r.condition as Product["condition"]) || undefined,
+          description: r.description,
+        };
+        if (r._updateId) { editProduct(r._updateId, payload); updated++; }
+        else             { addProduct(payload); created++; }
+      });
+      batchIdx++;
+      const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
+      setImportProgress({ total, done, created, updated, failed: invalid.length });
+
+      if (batchIdx * BATCH < valid.length) {
+        setTimeout(processBatch, 0);
+      } else {
+        const parts: string[] = [];
+        if (created > 0) parts.push(`${created} created`);
+        if (updated > 0) parts.push(`${updated} updated`);
+        if (invalid.length > 0) parts.push(`${invalid.length} skipped`);
+        toast({ title: "Import complete", description: parts.join(" · ") });
+        setTimeout(() => { resetImport(); setImporting(false); }, 600);
+      }
+    };
+
+    setTimeout(processBatch, 50);
   };
 
   // Load reference data from other stores
@@ -1098,21 +1125,29 @@ export default function ProductsPage() {
                 <FileSpreadsheet size={16} className="text-blue-600" />
                 Import Products from CSV
               </DialogTitle>
-              {rawImportRows.length > 0 && (
+              {rawImportRows.length > 0 && !importing && (
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground hidden sm:inline">Mode:</span>
-                  <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5 text-[11px]">
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline font-medium">Mode:</span>
+                  <div className="flex items-center gap-1 rounded-lg p-0.5 bg-gray-100 dark:bg-muted/60 border border-gray-200 dark:border-border text-[11px]">
                     <button
                       onClick={() => setImportMode("insert")}
-                      className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "insert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      className={`px-3 py-1.5 rounded-md font-semibold transition-all active:scale-95 flex items-center gap-1.5
+                        ${importMode === "insert"
+                          ? "bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-600"
+                          : "text-gray-500 dark:text-muted-foreground hover:bg-white dark:hover:bg-card hover:text-gray-800"}`}
                     >
+                      {importMode === "insert" && <CheckCircle2 size={11} className="shrink-0" />}
                       Insert new only
                     </button>
                     <button
                       onClick={() => setImportMode("upsert")}
-                      className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "upsert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      className={`px-3 py-1.5 rounded-md font-semibold transition-all active:scale-95 flex items-center gap-1.5
+                        ${importMode === "upsert"
+                          ? "bg-blue-500 text-white shadow-sm ring-1 ring-blue-600"
+                          : "text-gray-500 dark:text-muted-foreground hover:bg-white dark:hover:bg-card hover:text-gray-800"}`}
                     >
-                      <RefreshCw size={10} className="inline mr-1" />Update existing too
+                      {importMode === "upsert" && <CheckCircle2 size={11} className="shrink-0" />}
+                      <RefreshCw size={10} className="shrink-0" />Update existing too
                     </button>
                   </div>
                 </div>
@@ -1246,29 +1281,79 @@ export default function ProductsPage() {
             </Fragment>
           )}
 
-          <DialogFooter className="px-6 py-4 border-t bg-muted/20 flex items-center gap-2 justify-between sm:justify-between">
-            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={downloadTemplate}>
-              <Download size={13} /> Download Template
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={resetImport}>Cancel</Button>
-              {rawImportRows.length > 0 && (() => {
-                const validCount = importRows.filter(r => !r._error).length;
-                const newCount   = importRows.filter(r => !r._error && !r._updateId).length;
-                const updCount   = importRows.filter(r => !r._error && !!r._updateId).length;
-                const label = [newCount > 0 && `${newCount} new`, updCount > 0 && `${updCount} update`].filter(Boolean).join(" + ");
-                return (
-                  <Button size="sm" className="gap-1.5" disabled={importing || validCount === 0} onClick={confirmImport}>
-                    <Upload size={13} />
-                    Import {label || `${validCount} product${validCount !== 1 ? "s" : ""}`}
+          <DialogFooter className="px-6 py-4 border-t bg-muted/20 flex flex-col gap-3 sm:flex-col">
+            {/* ── Real-time progress panel ─────────────────────────────── */}
+            {importProgress && (
+              <div className="w-full space-y-2">
+                {/* Progress bar */}
+                <div className="w-full h-2 rounded-full bg-gray-100 dark:bg-muted/60 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-200"
+                    style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }}
+                  />
+                </div>
+                {/* Counters */}
+                <div className="flex items-center gap-4 text-[12px] flex-wrap">
+                  <span className="text-muted-foreground font-medium">
+                    {importProgress.done} / {importProgress.total}
+                  </span>
+                  {importProgress.created > 0 && (
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <CheckCircle2 size={12} /> {importProgress.created} created
+                    </span>
+                  )}
+                  {importProgress.updated > 0 && (
+                    <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold">
+                      <RefreshCw size={12} className={importing ? "animate-spin" : ""} /> {importProgress.updated} updated
+                    </span>
+                  )}
+                  {importProgress.failed > 0 && (
+                    <span className="flex items-center gap-1 text-red-500 dark:text-red-400 font-semibold">
+                      <AlertCircle size={12} /> {importProgress.failed} skipped
+                    </span>
+                  )}
+                  {importing && importProgress.done < importProgress.total && (
+                    <span className="text-muted-foreground ml-auto">
+                      {importProgress.total - importProgress.done} remaining…
+                    </span>
+                  )}
+                  {!importing && importProgress.done >= importProgress.total && (
+                    <span className="flex items-center gap-1 text-emerald-600 font-semibold ml-auto">
+                      <CheckCircle2 size={12} /> Done!
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Normal footer row ─────────────────────────────────────── */}
+            <div className="flex items-center gap-2 justify-between w-full">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={downloadTemplate} disabled={importing}>
+                <Download size={13} /> Download Template
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={resetImport} disabled={importing}>Cancel</Button>
+                {rawImportRows.length > 0 && (() => {
+                  const validCount = importRows.filter(r => !r._error).length;
+                  const newCount   = importRows.filter(r => !r._error && !r._updateId).length;
+                  const updCount   = importRows.filter(r => !r._error && !!r._updateId).length;
+                  const label = [newCount > 0 && `${newCount} new`, updCount > 0 && `${updCount} update`].filter(Boolean).join(" + ");
+                  return (
+                    <Button size="sm" className="gap-1.5 min-w-[140px]" disabled={importing || validCount === 0} onClick={confirmImport}>
+                      {importing ? (
+                        <><RefreshCw size={13} className="animate-spin" /> Importing…</>
+                      ) : (
+                        <><Upload size={13} /> Import {label || `${validCount} product${validCount !== 1 ? "s" : ""}`}</>
+                      )}
+                    </Button>
+                  );
+                })()}
+                {rawImportRows.length === 0 && (
+                  <Button size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                    <Upload size={13} /> Choose file…
                   </Button>
-                );
-              })()}
-              {rawImportRows.length === 0 && (
-                <Button size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                  <Upload size={13} /> Choose file…
-                </Button>
-              )}
+                )}
+              </div>
             </div>
           </DialogFooter>
         </DialogContent>
