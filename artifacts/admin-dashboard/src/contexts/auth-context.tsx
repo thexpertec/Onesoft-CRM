@@ -46,6 +46,8 @@ const AuthContext = createContext<AuthContextType>({
   currentUser:        null,
   isSuperAdmin:       false,
   isStaff:            false,
+  isSalesAgent:       false,
+  currentAgentId:     null,
   staffPermissions:   new Set(),
   currentTenantId:    null,
   currentTenant:      null,
@@ -92,10 +94,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = currentUser !== null;
   const isSuperAdmin    = currentUser?.role === "superadmin";
   const isStaff         = currentUser?.role === "staff";
+  const isSalesAgent    = currentUser?.role === "sales_agent";
   const currentTenant   = currentTenantId ? (getTenantById(currentTenantId) ?? null) : null;
 
-  /** Permissions set for the currently logged-in staff member (empty for admins). */
+  /** Raw SalesAgent.id when a sales agent is logged in, null otherwise. */
+  const currentAgentId: string | null = (() => {
+    if (!isSalesAgent || !currentUser) return null;
+    const userId = sessionStorage.getItem(AUTH_USER_ID);
+    if (userId?.startsWith("agent:")) return userId.slice(6);
+    return null;
+  })();
+
+  /** Permissions set for the currently logged-in staff member or sales agent (empty for admins). */
   const staffPermissions = (() => {
+    if (isSalesAgent) {
+      // Sales agents always have a fixed set of permissions
+      return new Set<string>([
+        "View Leads", "Manage Leads",
+        "View Customers",
+        "View Sales", "Manage Sales",
+        "View Dashboard",
+      ]);
+    }
     if (!isStaff || !currentUser) return new Set<string>();
     const staffMember = getStaff().find(s => s.id === currentUser.id);
     if (!staffMember) return new Set<string>();
@@ -194,6 +214,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
+    // 4. Check Sales Agents with portal login enabled
+    const agent = getAgentByCredentials(username, password);
+    if (agent) {
+      const agentUser = agentToAdminUser(agent);
+      setActiveTenant(null);
+      setActivityUser(agentUser.fullName || agentUser.username);
+      sessionStorage.setItem(AUTH_KEY,     "true");
+      sessionStorage.setItem(AUTH_USER_ID, `agent:${agent.id}`);
+      sessionStorage.setItem(TENANT_KEY,   "");
+      setCurrentUser(agentUser);
+      setCurrentTenantId(null);
+      return true;
+    }
+
     return false;
   };
 
@@ -233,7 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       isAuthenticated, currentUser, isSuperAdmin,
-      isStaff, staffPermissions,
+      isStaff, isSalesAgent, currentAgentId, staffPermissions,
       currentTenantId, currentTenant,
       isSyncing,
       login, logout, refreshCurrentUser, switchTenant,

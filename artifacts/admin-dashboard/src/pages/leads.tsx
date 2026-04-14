@@ -753,7 +753,7 @@ export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
   const { refresh: refreshCustomers } = useCustomers();
   const { agents: salesAgents } = useSalesAgents();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isSalesAgent, currentUser } = useAuth();
   const { toast } = useToast();
 
   const convertedLeadIds = useMemo(
@@ -827,8 +827,15 @@ export default function Leads() {
   const uniqueSources    = useMemo(() => Array.from(new Set(leads.map(l => l.source).filter(Boolean))).sort(), [leads]);
   const uniqueIndustries = useMemo(() => Array.from(new Set(leads.map(l => l.industry).filter(Boolean))).sort(), [leads]);
 
+  // When a sales agent is logged in, only show leads assigned to them
+  const agentName = isSalesAgent ? (currentUser?.fullName ?? "") : "";
+
   const filtered = useMemo(() =>
     leads.filter(l => {
+      // Sales agent sees only their own assigned leads
+      if (isSalesAgent && agentName) {
+        if (!l.assignedTo || l.assignedTo.toLowerCase() !== agentName.toLowerCase()) return false;
+      }
       const q   = search.toLowerCase();
       const mQ  = !q || [l.name, l.company, l.email, l.phone, l.industry, l.city, l.status, l.source, l.notes, l.assignedTo].some(v => v?.toLowerCase().includes(q));
       const mS  = statusFilter    === "All" || l.status    === statusFilter;
@@ -838,7 +845,7 @@ export default function Leads() {
       const mI  = industryFilter  === "All" || l.industry  === industryFilter;
       return mQ && mS && mR && mA && mSrc && mI;
     }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [leads, search, statusFilter, relevanceFilter, agentFilter, sourceFilter, industryFilter]
+    [leads, search, statusFilter, relevanceFilter, agentFilter, sourceFilter, industryFilter, isSalesAgent, agentName]
   );
 
   const hasActiveFilters = statusFilter !== "All" || relevanceFilter !== "All" || agentFilter !== "All" || sourceFilter !== "All" || industryFilter !== "All" || !!search;
@@ -969,12 +976,16 @@ export default function Leads() {
       {/* ── Header ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isSalesAgent ? "My Leads" : "Leads"}
+          </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Click any cell to edit · Tab to move · Enter to save · Esc to cancel
+            {isSalesAgent
+              ? `Showing leads assigned to you (${currentUser?.fullName})`
+              : "Click any cell to edit · Tab to move · Enter to save · Esc to cancel"}
           </p>
         </div>
-        {isAuthenticated && (
+        {isAuthenticated && !isSalesAgent && (
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={downloadTemplate} title="Download import template CSV">
               <Download size={14} /> Template
@@ -989,6 +1000,19 @@ export default function Leads() {
           </div>
         )}
       </div>
+
+      {/* ── Sales Agent Banner ─────────────────────────────────────────────── */}
+      {isSalesAgent && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
+          <UserCircle2 size={15} className="text-violet-600 dark:text-violet-400 flex-shrink-0" />
+          <span className="text-[13px] text-violet-700 dark:text-violet-300 font-medium">
+            You are viewing your assigned leads only. Contact your administrator to assign more leads to you.
+          </span>
+          <span className="ml-auto text-[12px] font-bold text-violet-500 dark:text-violet-400 flex-shrink-0">
+            {filtered.length} lead{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
 
       {/* ── KPI pills ────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">

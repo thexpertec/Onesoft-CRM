@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   Users2, Plus, Search, X, Save, Trash2, Eye, FileSpreadsheet,
   Phone, Mail, MapPin, TrendingUp, BadgeDollarSign, Target, FileText,
-  Award, Calendar,
+  Award, Calendar, KeyRound, Lock, Unlock, Eye as EyeIcon, EyeOff, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +96,31 @@ export default function SalesAgentsPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const [viewId,       setViewId]       = useState<string | null>(null);
+
+  // Portal login editing state (inside agent detail sheet)
+  const [portalEditing,  setPortalEditing]  = useState(false);
+  const [portalUsername, setPortalUsername] = useState("");
+  const [portalPassword, setPortalPassword] = useState("");
+  const [portalEnabled,  setPortalEnabled]  = useState(false);
+  const [showPwd,        setShowPwd]        = useState(false);
+
+  const openPortalEdit = (agent: SalesAgent) => {
+    setPortalUsername(agent.username ?? "");
+    setPortalPassword(agent.password ?? "");
+    setPortalEnabled(agent.loginEnabled ?? false);
+    setPortalEditing(true);
+    setShowPwd(false);
+  };
+
+  const savePortalLogin = (agentId: string) => {
+    editAgent(agentId, {
+      username: portalUsername.trim() || undefined,
+      password: portalPassword || undefined,
+      loginEnabled: portalEnabled,
+    });
+    setPortalEditing(false);
+    toast({ title: "Portal login saved", description: portalEnabled ? "Agent can now log in to the dashboard." : "Portal access disabled." });
+  };
 
   const [, nav] = useLocation();
 
@@ -671,6 +696,118 @@ export default function SalesAgentsPage() {
                     </div>
                   );
                 })()}
+
+                {/* Portal Login */}
+                {isAuthenticated && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                        <KeyRound size={11} /> Portal Login
+                      </h3>
+                      {!portalEditing && (
+                        <button onClick={() => openPortalEdit(viewAgent)}
+                          className="text-[11px] text-primary hover:underline font-medium">
+                          {viewAgent.loginEnabled ? "Edit" : "Set up"}
+                        </button>
+                      )}
+                    </div>
+
+                    {!portalEditing ? (
+                      <div className={`rounded-xl border p-4 flex items-center gap-3 ${
+                        viewAgent.loginEnabled
+                          ? "border-violet-200 dark:border-violet-800 bg-violet-50/40 dark:bg-violet-950/20"
+                          : "border-dashed border-gray-200 dark:border-border bg-gray-50/40 dark:bg-muted/10"
+                      }`}>
+                        {viewAgent.loginEnabled ? (
+                          <>
+                            <div className="w-8 h-8 rounded-full bg-violet-500 flex items-center justify-center flex-shrink-0">
+                              <CheckCircle2 size={14} className="text-white" />
+                            </div>
+                            <div>
+                              <p className="text-[13px] font-semibold text-violet-800 dark:text-violet-200">Portal Access Enabled</p>
+                              <p className="text-[11px] text-violet-600 dark:text-violet-400 font-mono mt-0.5">
+                                Username: <strong>{viewAgent.username || "—"}</strong>
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                              <Lock size={13} className="text-gray-400" />
+                            </div>
+                            <div>
+                              <p className="text-[13px] font-medium text-muted-foreground">No portal access</p>
+                              <p className="text-[11px] text-muted-foreground/70 mt-0.5">Click "Set up" to give this agent login access</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-950/10 p-4 space-y-3">
+                        {/* Enable toggle */}
+                        <div className="flex items-center justify-between">
+                          <label className="text-[13px] font-medium text-foreground flex items-center gap-2"
+                            htmlFor="portal-login-enabled">
+                            {portalEnabled ? <Unlock size={13} className="text-violet-600" /> : <Lock size={13} className="text-muted-foreground" />}
+                            Portal Access
+                          </label>
+                          <button
+                            id="portal-login-enabled"
+                            type="button"
+                            role="switch"
+                            aria-checked={portalEnabled}
+                            data-testid="portal-login-toggle"
+                            onClick={() => setPortalEnabled(v => !v)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${portalEnabled ? "bg-violet-600" : "bg-gray-300 dark:bg-gray-600"}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${portalEnabled ? "translate-x-4" : "translate-x-1"}`} />
+                          </button>
+                        </div>
+
+                        {/* Username */}
+                        <div>
+                          <label className="text-[11px] font-semibold text-muted-foreground block mb-1">Username</label>
+                          <Input
+                            value={portalUsername}
+                            onChange={e => setPortalUsername(e.target.value)}
+                            placeholder={`e.g. ${viewAgent.name.split(" ")[0].toLowerCase()}.${(viewAgent.name.split(" ")[1] ?? "agent").toLowerCase()}`}
+                            className="h-8 text-[13px]"
+                            disabled={!portalEnabled}
+                          />
+                        </div>
+
+                        {/* Password */}
+                        <div>
+                          <label className="text-[11px] font-semibold text-muted-foreground block mb-1">Password</label>
+                          <div className="relative">
+                            <Input
+                              type={showPwd ? "text" : "password"}
+                              value={portalPassword}
+                              onChange={e => setPortalPassword(e.target.value)}
+                              placeholder="Set portal password"
+                              className="h-8 text-[13px] pr-9"
+                              disabled={!portalEnabled}
+                            />
+                            <button type="button" onClick={() => setShowPwd(v => !v)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                              {showPwd ? <EyeOff size={12} /> : <EyeIcon size={12} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-2 pt-1">
+                          <Button size="sm" data-testid="portal-login-save" onClick={() => savePortalLogin(viewAgent.id)} className="h-7 text-[12px] gap-1 bg-violet-600 hover:bg-violet-700 text-white">
+                            <Save size={11} /> Save
+                          </Button>
+                          <Button size="sm" variant="outline" data-testid="portal-login-cancel" onClick={() => setPortalEditing(false)} className="h-7 text-[12px]">
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             </>

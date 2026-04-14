@@ -4,14 +4,14 @@ import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Lock, Eye, EyeOff, ShieldCheck, Users2,
+  Lock, Eye, EyeOff, ShieldCheck, Users2, UserCircle2,
   FlaskConical, CheckCircle2, Sparkles, ChevronRight, Zap,
 } from "lucide-react";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import { getTenants, Tenant } from "@/lib/store";
 import { isTenantDataSeeded } from "@/lib/demo-seed";
 
-type LoginType = "admin" | "staff";
+type LoginType = "admin" | "staff" | "agent";
 
 const FEATURES = [
   "CRM & Lead Management",
@@ -140,9 +140,11 @@ export default function Login() {
         const params = new URLSearchParams(window.location.search);
         navigate(params.get("from") || "/", { replace: true });
       } else {
-        setError(loginType === "staff"
-          ? "Invalid staff credentials, or login is not enabled for this account."
-          : "Invalid username or password.");
+        setError(
+          loginType === "staff"  ? "Invalid staff credentials, or login is not enabled for this account." :
+          loginType === "agent"  ? "Invalid agent credentials, or portal access is not enabled for your account." :
+          "Invalid username or password."
+        );
       }
     } finally { setLoading(false); }
   };
@@ -280,25 +282,33 @@ export default function Login() {
 
           {/* Heading */}
           <div className="mb-5">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-foreground">Sign in</h1>
-            <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">Access your Onesoft dashboard</p>
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-foreground">
+              {loginType === "agent" ? "Sales Agent Portal" : "Sign in"}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground mt-1">
+              {loginType === "agent"
+                ? "Log in to view your assigned leads"
+                : "Access your Onesoft dashboard"}
+            </p>
           </div>
 
           {/* Type tabs */}
           <div className="flex rounded-xl border border-gray-200 dark:border-border overflow-hidden mb-4 bg-white dark:bg-card shadow-sm">
-            {(["admin","staff"] as LoginType[]).map(t => (
+            {(["admin","staff","agent"] as LoginType[]).map(t => (
               <button
                 key={t}
                 type="button"
                 onClick={() => switchType(t)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-[13px] font-semibold transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-semibold transition-colors ${
                   loginType === t
-                    ? t === "admin" ? "bg-blue-600 text-white" : "bg-teal-600 text-white"
+                    ? t === "admin"   ? "bg-blue-600 text-white"
+                    : t === "staff"   ? "bg-teal-600 text-white"
+                    :                   "bg-violet-600 text-white"
                     : "text-gray-500 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-muted"
                 }`}
               >
-                {t === "admin" ? <ShieldCheck size={14} /> : <Users2 size={14} />}
-                {t === "admin" ? "Admin" : "Staff"}
+                {t === "admin" ? <ShieldCheck size={13} /> : t === "staff" ? <Users2 size={13} /> : <UserCircle2 size={13} />}
+                {t === "admin" ? "Admin" : t === "staff" ? "Staff" : "Sales Agent"}
               </button>
             ))}
           </div>
@@ -310,10 +320,12 @@ export default function Login() {
             <div className={`flex items-center gap-2 mb-4 px-3 py-2 rounded-lg text-[12px] font-medium ${
               loginType === "admin"
                 ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-900"
-                : "bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-400 border border-teal-100 dark:border-teal-900"
+                : loginType === "staff"
+                ? "bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-400 border border-teal-100 dark:border-teal-900"
+                : "bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400 border border-violet-100 dark:border-violet-900"
             }`}>
-              {loginType === "admin" ? <ShieldCheck size={13} /> : <Users2 size={13} />}
-              {loginType === "admin" ? "Logging in as Administrator" : "Logging in as Staff Member"}
+              {loginType === "admin" ? <ShieldCheck size={13} /> : loginType === "staff" ? <Users2 size={13} /> : <UserCircle2 size={13} />}
+              {loginType === "admin" ? "Logging in as Administrator" : loginType === "staff" ? "Logging in as Staff Member" : "Logging in as Sales Agent"}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -350,7 +362,10 @@ export default function Login() {
               )}
 
               <Button type="submit"
-                className={`w-full h-10 mt-1 font-semibold ${loginType === "staff" ? "bg-teal-600 hover:bg-teal-700 text-white" : ""}`}
+                className={`w-full h-10 mt-1 font-semibold ${
+                  loginType === "staff"  ? "bg-teal-600 hover:bg-teal-700 text-white" :
+                  loginType === "agent"  ? "bg-violet-600 hover:bg-violet-700 text-white" : ""
+                }`}
                 disabled={loading} data-testid="btn-login">
                 <Lock className="mr-2 h-3.5 w-3.5" />
                 {loading ? "Signing in…" : "Sign In"}

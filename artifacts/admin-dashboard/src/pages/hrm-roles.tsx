@@ -11,13 +11,15 @@ import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG, P
 
 // ─── Permissions catalog ──────────────────────────────────────────────────────
 const PERMISSION_GROUPS = [
-  { group: "Dashboard",  perms: ["View Dashboard"] },
-  { group: "CRM",        perms: ["View Leads", "Manage Leads", "View Customers", "Manage Customers", "View Suppliers", "Manage Suppliers"] },
-  { group: "Products",   perms: ["View Products", "Manage Products", "View Brands", "Manage Brands", "View Categories", "Manage Categories", "View Attributes", "Manage Attributes"] },
-  { group: "Purchases",  perms: ["View Purchases", "Manage Purchases"] },
-  { group: "Documents",  perms: ["View Documents", "Manage Documents"] },
-  { group: "HRM",        perms: ["View Staff", "Manage Staff", "View Roles", "Manage Roles"] },
-  { group: "System",     perms: ["Manage Admin Accounts", "Manage Settings"] },
+  { group: "Dashboard",     perms: ["View Dashboard"] },
+  { group: "CRM",           perms: ["View Leads", "Manage Leads", "View Customers", "Manage Customers", "View Suppliers", "Manage Suppliers"] },
+  { group: "Sales Agent",   perms: ["View My Leads", "Manage My Leads", "View All Leads", "View Sales Reports"] },
+  { group: "Products",      perms: ["View Products", "Manage Products", "View Brands", "Manage Brands", "View Categories", "Manage Categories", "View Attributes", "Manage Attributes"] },
+  { group: "Purchases",     perms: ["View Purchases", "Manage Purchases"] },
+  { group: "Sales",         perms: ["View Sales", "Manage Sales"] },
+  { group: "Documents",     perms: ["View Documents", "Manage Documents"] },
+  { group: "HRM",           perms: ["View Staff", "Manage Staff", "View Roles", "Manage Roles"] },
+  { group: "System",        perms: ["Manage Admin Accounts", "Manage Settings"] },
 ];
 
 type EditableField = "color" | "name" | "description";
