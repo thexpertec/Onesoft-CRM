@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -322,6 +322,61 @@ export default function ProductsPage() {
     reader.readAsText(file);
   };
 
+  // ── Sync brands / categories / subcategories / units from import rows ──────
+  const syncReferenceDataFromImport = (validRows: typeof importRows) => {
+    const trim = (s?: string) => (s ?? "").trim();
+
+    // ── Brands ────────────────────────────────────────────────────────────────
+    const existingBrands    = getBrands();
+    const existingBrandSet  = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
+    const newBrands         = [...new Set(validRows.map(r => trim(r.brand)).filter(Boolean))]
+                               .filter(b => !existingBrandSet.has(b.toLowerCase()));
+    for (const b of newBrands) {
+      createBrand({ name: b, color: "#6366f1", website: "", description: "", status: "Active" });
+    }
+
+    // ── Top-level Categories ──────────────────────────────────────────────────
+    const existingCats      = getProductCategories();
+    const existingTopSet    = new Set(existingCats.filter(c => !c.parentId).map(c => c.name.toLowerCase().trim()));
+    const newCatNames       = [...new Set(validRows.map(r => trim(r.category)).filter(Boolean))]
+                               .filter(c => !existingTopSet.has(c.toLowerCase()));
+    for (const c of newCatNames) {
+      createProductCategory({ name: c, description: "", color: "#6366f1", parentId: null });
+    }
+
+    // ── Subcategories (re-read so we get freshly created categories too) ──────
+    const allCats           = getProductCategories();
+    const topNameToId       = new Map(allCats.filter(c => !c.parentId).map(c => [c.name.toLowerCase().trim(), c.id]));
+    const existingSubByKey  = new Set(allCats.filter(c => c.parentId).map(c => `${c.parentId}||${c.name.toLowerCase().trim()}`));
+    const subPairs = [...new Set(
+      validRows.filter(r => trim(r.subcategory) && trim(r.category)).map(r => `${trim(r.category)}||${trim(r.subcategory)}`)
+    )].map(s => { const [cat, sub] = s.split("||"); return { cat, sub }; });
+    let subsAdded = 0;
+    for (const { cat, sub } of subPairs) {
+      const parentId = topNameToId.get(cat.toLowerCase());
+      if (!parentId) continue;
+      if (existingSubByKey.has(`${parentId}||${sub.toLowerCase()}`)) continue;
+      createProductCategory({ name: sub, description: "", color: "#818cf8", parentId });
+      subsAdded++;
+    }
+
+    // ── Units ─────────────────────────────────────────────────────────────────
+    const existingUnits    = getUnits();
+    const existingUnitSet  = new Set(existingUnits.map(u => u.name.toLowerCase().trim()));
+    const newUnits         = [...new Set(validRows.map(r => trim(r.unit)).filter(Boolean))]
+                               .filter(u => !existingUnitSet.has(u.toLowerCase()));
+    for (const u of newUnits) {
+      createUnit({ name: u, symbol: u.substring(0, 4).toUpperCase(), description: "" });
+    }
+
+    return {
+      brands:     newBrands.length,
+      categories: newCatNames.length,
+      subcats:    subsAdded,
+      units:      newUnits.length,
+    };
+  };
+
   const confirmImport = () => {
     const valid   = importRows.filter(r => !r._error);
     const invalid = importRows.filter(r => !!r._error);
@@ -332,6 +387,9 @@ export default function ProductsPage() {
     setImportedRowNums(new Set());
     setImportRowResults(new Map());
     setImportProgress({ total, done: invalid.length, created: 0, updated: 0, failed: invalid.length });
+
+    // Sync reference tables before processing products
+    const refSync = syncReferenceDataFromImport(valid);
 
     let batchIdx = 0;
     let created  = 0;
@@ -374,11 +432,24 @@ export default function ProductsPage() {
       if (batchIdx * BATCH < valid.length) {
         setTimeout(processBatch, 0);
       } else {
-        const parts: string[] = [];
-        if (created > 0) parts.push(`${created} created`);
-        if (updated > 0) parts.push(`${updated} updated`);
-        if (invalid.length > 0) parts.push(`${invalid.length} skipped`);
-        toast({ title: "Import complete", description: parts.join(" · ") });
+        const productParts: string[] = [];
+        if (created > 0) productParts.push(`${created} created`);
+        if (updated > 0) productParts.push(`${updated} updated`);
+        if (invalid.length > 0) productParts.push(`${invalid.length} skipped`);
+
+        const refParts: string[] = [];
+        if (refSync.brands     > 0) refParts.push(`${refSync.brands} brand${refSync.brands !== 1 ? "s" : ""}`);
+        if (refSync.categories > 0) refParts.push(`${refSync.categories} categor${refSync.categories !== 1 ? "ies" : "y"}`);
+        if (refSync.subcats    > 0) refParts.push(`${refSync.subcats} subcategor${refSync.subcats !== 1 ? "ies" : "y"}`);
+        if (refSync.units      > 0) refParts.push(`${refSync.units} unit${refSync.units !== 1 ? "s" : ""}`);
+
+        toast({
+          title: "Import complete",
+          description: [
+            productParts.join(" · "),
+            refParts.length > 0 ? `Also added: ${refParts.join(", ")}` : "",
+          ].filter(Boolean).join("  •  "),
+        });
         setTimeout(() => { resetImport(); setImporting(false); }, 800);
       }
     };
