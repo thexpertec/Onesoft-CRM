@@ -215,6 +215,10 @@ export default function ProductsPage() {
 
   const [showHelp,      setShowHelp]      = useState(false);
 
+  // ── Bulk selection ──────────────────────────────────────────────────────────
+  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   // ── Column visibility ──────────────────────────────────────────────────────
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
     try { return new Set<string>(JSON.parse(localStorage.getItem("products-hidden-cols") || "[]")); }
@@ -511,6 +515,38 @@ export default function ProductsPage() {
     setDeleteId(null);
   };
 
+  // ── Bulk selection helpers ──────────────────────────────────────────────────
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
+  const someFilteredSelected = filtered.some(p => selectedIds.has(p.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filtered.forEach(p => next.delete(p.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => new Set([...prev, ...filtered.map(p => p.id)]));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = () => {
+    const count = selectedIds.size;
+    selectedIds.forEach(id => removeProduct(id));
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    toast({ title: `${count} product${count !== 1 ? "s" : ""} deleted`, description: "Selected products have been removed." });
+  };
+
   const pills = [
     { label: "Total",         value: products.length,                                                                         filter: "All",           color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",                           activeRing: "ring-gray-400 dark:ring-gray-500"        },
     { label: "Active",        value: products.filter(p => p.status === "Active").length,                                      filter: "Active",        color: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300",             activeRing: "ring-emerald-500 dark:ring-emerald-400"  },
@@ -753,13 +789,42 @@ export default function ProductsPage() {
             <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save Row</Button>
           </div>
         )}
-        <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {products.length}</div>
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 ? (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[12px] font-medium text-foreground">{selectedIds.size} selected</span>
+            <Button size="sm" variant="ghost" className="h-8 text-[12px] text-muted-foreground" onClick={clearSelection}>
+              <X size={12} className="mr-1" /> Clear
+            </Button>
+            {isAuthenticated && (
+              <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
+                <Trash2 size={12} /> Delete {selectedIds.size}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {products.length}</div>
+        )}
       </div>
 
       {/* Excel grid */}
       <div ref={tableRef}>
         <ExcelGridShell cols={visibleCols} totalMinW={TOTAL_W} tableId="products"
-          extraLeadingCol={{ width: 28 }}
+          extraLeadingCol={{
+            width: 32,
+            header: isAuthenticated ? (
+              <div className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  className="w-3.5 h-3.5 rounded accent-indigo-500 cursor-pointer"
+                  checked={allFilteredSelected}
+                  ref={el => { if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected; }}
+                  onChange={toggleSelectAll}
+                  title={allFilteredSelected ? "Deselect all" : "Select all"}
+                />
+              </div>
+            ) : undefined,
+          }}
         >
 
           {/* New row */}
@@ -823,22 +888,36 @@ export default function ProductsPage() {
             const isDragOver  = dragOverId === prod.id;
             return (
               <tr key={prod.id} data-testid={`row-product-${prod.id}`}
-                draggable={!isFiltered && isAuthenticated}
+                draggable={!isFiltered && isAuthenticated && selectedIds.size === 0}
                 onDragStart={() => handleDragStart(prod.id)}
                 onDragOver={e => handleDragOver(e, prod.id)}
                 onDrop={() => handleDrop(prod.id)}
                 onDragEnd={handleDragEnd}
                 className={`border-b border-gray-100 dark:border-border transition-colors group select-none
+                  ${selectedIds.has(prod.id) ? "bg-indigo-50/60 dark:bg-indigo-950/20" : ""}
                   ${isDragging  ? "opacity-40 bg-blue-50 dark:bg-blue-950/20" : ""}
                   ${isDragOver  ? "border-t-2 border-t-blue-500 bg-blue-50/50 dark:bg-blue-950/10" : ""}
-                  ${!isDragging && !isDragOver ? (isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10") : ""}
+                  ${!isDragging && !isDragOver && !selectedIds.has(prod.id) ? (isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10") : ""}
                   hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
 
-                {/* Drag handle */}
-                <td className="border-r border-gray-100 dark:border-border w-7 text-center select-none" style={{ height: `${CELL_H}px` }}>
-                  {!isFiltered && isAuthenticated ? (
-                    <div className="flex items-center justify-center h-full cursor-grab active:cursor-grabbing text-gray-300 dark:text-zinc-700 group-hover:text-gray-400 dark:group-hover:text-zinc-500 transition-colors">
-                      <GripVertical size={13} />
+                {/* Checkbox / drag handle */}
+                <td className="border-r border-gray-100 dark:border-border w-8 text-center select-none" style={{ height: `${CELL_H}px` }}
+                  onClick={e => { e.stopPropagation(); if (isAuthenticated) toggleSelect(prod.id); }}>
+                  {isAuthenticated ? (
+                    <div className="flex items-center justify-center h-full">
+                      {selectedIds.has(prod.id) || selectedIds.size > 0 ? (
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 rounded accent-indigo-500 cursor-pointer"
+                          checked={selectedIds.has(prod.id)}
+                          onChange={() => toggleSelect(prod.id)}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        <div className={`cursor-grab active:cursor-grabbing text-gray-300 dark:text-zinc-700 group-hover:text-gray-400 dark:group-hover:text-zinc-500 transition-colors ${isFiltered ? "opacity-0" : ""}`}>
+                          <GripVertical size={13} />
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </td>
@@ -969,6 +1048,25 @@ export default function ProductsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="btn-confirm-delete-product">Delete Product</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirm */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} product{selectedIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove all <strong>{selectedIds.size} selected product{selectedIds.size !== 1 ? "s" : ""}</strong> from your catalogue.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkDeleteOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete {selectedIds.size} Product{selectedIds.size !== 1 ? "s" : ""}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -24,8 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
-  AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS, MODULE_KEYS,
-  clearAccountingLedger, clearStoredModule, clearAllStoredModules,
+  AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS,
+  clearAccountingLedger, clearAllStoredModules,
 } from "@/lib/store";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
@@ -78,52 +78,6 @@ function SectionHeader({ title, desc }: { title: string; desc?: string }) {
       <h3 className="text-[15px] font-semibold text-gray-800 dark:text-foreground">{title}</h3>
       {desc && <p className="text-[12px] text-muted-foreground mt-0.5">{desc}</p>}
     </div>
-  );
-}
-
-// ─── Module reset row ─────────────────────────────────────────────────────────
-function ModuleResetRow({
-  module, onReset, tenantName,
-}: { module: string; onReset: () => void; tenantName: string }) {
-  const [confirm, setConfirm] = useState(false);
-  return (
-    <>
-      <div className="flex items-center justify-between py-2.5 border-b border-gray-50 dark:border-border/50 last:border-0">
-        <div>
-          <p className="text-[13px] font-medium text-gray-700 dark:text-gray-300">{module}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {MODULE_KEYS[module].join(", ")}
-          </p>
-        </div>
-        <button
-          onClick={() => setConfirm(true)}
-          className="flex items-center gap-1 text-[12px] text-red-500 hover:text-red-700 px-2.5 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 border border-red-200 dark:border-red-800/40 transition-colors"
-        >
-          <Trash2 size={12} />
-          Clear
-        </button>
-      </div>
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clear {module} data?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete all <strong>{module}</strong> records for <strong>{tenantName}</strong>.
-              Data is removed from the server and cannot be recovered. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => { setConfirm(false); onReset(); }}
-            >
-              Yes, Clear {module}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
   );
 }
 
@@ -651,13 +605,6 @@ export default function SettingsPage() {
       }
     };
     reader.readAsText(file);
-  }
-
-  // ── Module reset ────────────────────────────────────────────────────────────
-  function clearModule(module: string) {
-    clearStoredModule(MODULE_KEYS[module]);
-    const scope = currentTenant ? currentTenant.name : "your account";
-    toast({ title: `${module} cleared`, description: `All ${module} records removed for ${scope}.` });
   }
 
   // ── Nuke all ────────────────────────────────────────────────────────────────
@@ -1528,25 +1475,6 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                {/* Per-module reset */}
-                {isSuperAdmin && (
-                  <div>
-                    <SectionHeader
-                      title="Clear Module Data"
-                      desc="Permanently delete all records for a specific module. Use with caution."
-                    />
-                    <div className="rounded-lg border border-gray-100 dark:border-border bg-gray-50/50 dark:bg-muted/10 px-4">
-                      {Object.keys(MODULE_KEYS).map(mod => (
-                        <ModuleResetRow
-                          key={mod}
-                          module={mod}
-                          onReset={() => clearModule(mod)}
-                          tenantName={currentTenant ? currentTenant.name : "your account"}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Nuclear reset */}
                 {isSuperAdmin && (
