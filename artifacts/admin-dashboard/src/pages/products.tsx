@@ -242,7 +242,7 @@ export default function ProductsPage() {
   // ── Import state ──────────────────────────────────────────────────────────
   const [importOpen,     setImportOpen]     = useState(false);
   const [rawImportRows,  setRawImportRows]  = useState<ImportRow[]>([]);
-  const [importMode,     setImportMode]     = useState<"insert" | "upsert">("insert");
+  const [importMode,     setImportMode]     = useState<"insert" | "upsert">("upsert");
   const [importing,      setImporting]      = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1001,19 +1001,22 @@ export default function ProductsPage() {
                 Import Products from CSV
               </DialogTitle>
               {rawImportRows.length > 0 && (
-                <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5 text-[11px]">
-                  <button
-                    onClick={() => setImportMode("insert")}
-                    className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "insert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Insert new only
-                  </button>
-                  <button
-                    onClick={() => setImportMode("upsert")}
-                    className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "upsert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    <RefreshCw size={10} className="inline mr-1" />Update existing too
-                  </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline">Mode:</span>
+                  <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5 text-[11px]">
+                    <button
+                      onClick={() => setImportMode("insert")}
+                      className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "insert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Insert new only
+                    </button>
+                    <button
+                      onClick={() => setImportMode("upsert")}
+                      className={`px-3 py-1 rounded-md font-medium transition-all ${importMode === "upsert" ? "bg-white dark:bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      <RefreshCw size={10} className="inline mr-1" />Update existing too
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1038,9 +1041,12 @@ export default function ProductsPage() {
                   <Download size={13} /> Download template
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground border border-dashed rounded-lg px-4 py-2.5 bg-muted/30 leading-relaxed">
-                Expected columns (in any order):<br />
-                <code className="font-mono text-[11px]">name, sku, brand, category, unit, price, status, description</code>
+              <p className="text-[11px] text-muted-foreground border border-dashed rounded-lg px-4 py-2.5 bg-muted/30 leading-relaxed max-w-md text-center">
+                Key columns: <code className="font-mono">name</code> (required) ·{" "}
+                <code className="font-mono">sku</code> · <code className="font-mono">category</code> ·{" "}
+                <code className="font-mono">subcategory</code> · <code className="font-mono">brand</code> ·{" "}
+                <code className="font-mono">retailPrice</code> · <code className="font-mono">status</code><br />
+                All other columns optional. Headers are flexible — alternative names accepted.
               </p>
             </div>
           ) : (
@@ -1062,6 +1068,48 @@ export default function ProductsPage() {
                   );
                 })()}
               </div>
+
+              {/* ── Smart banner: SKU conflict hint when in insert mode ───────── */}
+              {(() => {
+                const skuConflictCount = importRows.filter(r => r._error?.includes("already used")).length;
+                if (importMode === "insert" && skuConflictCount > 0) {
+                  return (
+                    <div className="mx-6 mt-3 mb-1 flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[12px]">
+                      <AlertCircle size={15} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-amber-800 dark:text-amber-300">
+                          {skuConflictCount} SKU{skuConflictCount !== 1 ? "s" : ""} already exist in your product catalogue
+                        </p>
+                        <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                          In <strong>Insert new only</strong> mode these rows are skipped. Switch to{" "}
+                          <button
+                            onClick={() => setImportMode("upsert")}
+                            className="underline font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+                          >
+                            Update existing too
+                          </button>{" "}
+                          to update those products with the data from your file.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                if (importMode === "upsert") {
+                  const updateRows = importRows.filter(r => !r._error && !!r._updateId).length;
+                  if (updateRows > 0) {
+                    return (
+                      <div className="mx-6 mt-3 mb-1 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-[12px]">
+                        <RefreshCw size={14} className="text-blue-500 shrink-0" />
+                        <p className="text-blue-700 dark:text-blue-300">
+                          <strong>{updateRows} existing product{updateRows !== 1 ? "s" : ""}</strong> will be updated with data from this file.{" "}
+                          New fields not in the file are left unchanged.
+                        </p>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
 
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-[12px] border-collapse">
