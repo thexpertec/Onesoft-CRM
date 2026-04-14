@@ -1,7 +1,7 @@
 import {
   useState, useMemo, useRef, useEffect, useCallback,
 } from "react";
-import { useLeads, useCustomers } from "@/hooks/use-data";
+import { useLeads, useCustomers, useSalesAgents } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
   Lead, LeadStatus, CallLog, CallOutcome,
@@ -15,7 +15,7 @@ import {
   CheckCircle2, Info, Phone, Bell, BellOff, Star, StarOff,
   Clock, PhoneCall, PhoneOff, PhoneMissed, MessageSquare,
   ChevronRight, Pencil, Globe, MapPin, Briefcase, DollarSign,
-  User, Check,
+  User, Check, UserCircle2, Filter, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes">;
+type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes" | "assignedTo">;
 
 const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"];
 const PIPELINE_STAGES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won"];
@@ -60,20 +60,21 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 };
 
 // ─── Column definitions ────────────────────────────────────────────────────────
-const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" }[] = [
-  { field: "name",     label: "Name",     minW: 160, type: "text"   },
-  { field: "company",  label: "Company",  minW: 140, type: "text"   },
-  { field: "email",    label: "Email",    minW: 190, type: "email"  },
-  { field: "phone",    label: "Phone",    minW: 130, type: "tel"    },
-  { field: "industry", label: "Industry", minW: 120, type: "text"   },
-  { field: "city",     label: "City",     minW: 110, type: "text"   },
-  { field: "status",   label: "Status",   minW: 140, type: "select" },
-  { field: "source",   label: "Source",   minW: 110, type: "text"   },
+const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" | "agent-select" }[] = [
+  { field: "name",       label: "Name",       minW: 160, type: "text"         },
+  { field: "company",    label: "Company",    minW: 140, type: "text"         },
+  { field: "email",      label: "Email",      minW: 190, type: "email"        },
+  { field: "phone",      label: "Phone",      minW: 130, type: "tel"          },
+  { field: "industry",   label: "Industry",   minW: 120, type: "text"         },
+  { field: "city",       label: "City",       minW: 110, type: "text"         },
+  { field: "status",     label: "Status",     minW: 140, type: "select"       },
+  { field: "source",     label: "Source",     minW: 110, type: "text"         },
+  { field: "assignedTo", label: "Assigned To",minW: 140, type: "agent-select" },
 ];
 
 const BLANK_ROW = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "",
-  industry: "", city: "", status: "New", source: "", notes: "",
+  industry: "", city: "", status: "New", source: "", notes: "", assignedTo: "",
 });
 
 // ─── CSV ─────────────────────────────────────────────────────────────────────
@@ -189,11 +190,12 @@ function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCan
 
 // ─── LeadDetailSheet ──────────────────────────────────────────────────────────
 function LeadDetailSheet({
-  lead, onClose, onSave, onDelete, onConvert, canEdit, isConverted,
+  lead, onClose, onSave, onDelete, onConvert, canEdit, isConverted, agents,
 }: {
   lead: Lead; onClose: () => void; onSave: (id: string, updates: Partial<Lead>) => void;
   onDelete: (id: string) => void; onConvert: (lead: Lead) => void;
   canEdit: boolean; isConverted: boolean;
+  agents: Array<{ id: string; name: string; agentCode: string }>;
 }) {
   const [tab, setTab]       = useState<"overview" | "calls" | "reminder">("overview");
   const [editing, setEditing] = useState<Record<string, string>>({});
@@ -488,23 +490,50 @@ function LeadDetailSheet({
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Deal Information</p>
               <div className="space-y-2.5">
-                {[
-                  { key: "dealValue",  label: "Deal Value (£)", Icon: DollarSign },
-                  { key: "assignedTo", label: "Assigned To",    Icon: User       },
-                ].map(({ key, label, Icon }) => (
-                  <div key={key} className="flex items-start gap-3">
-                    <Icon size={13} className="text-muted-foreground mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-muted-foreground">{label}</p>
-                      {isEditing
-                        ? <Input type={key === "dealValue" ? "number" : "text"} value={editing[key] || ""} onChange={e => setEditing(p => ({...p, [key]: e.target.value}))} className="h-7 text-[13px] mt-0.5" />
-                        : key === "dealValue" && lead.dealValue
-                          ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">£{lead.dealValue.toLocaleString()}</span>
-                          : <span className="text-sm text-foreground">{(lead as Record<string,unknown>)[key]?.toString() || "—"}</span>
-                      }
-                    </div>
+                {/* Deal value */}
+                <div className="flex items-start gap-3">
+                  <DollarSign size={13} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-muted-foreground">Deal Value (£)</p>
+                    {isEditing
+                      ? <Input type="number" value={editing.dealValue || ""} onChange={e => setEditing(p => ({...p, dealValue: e.target.value}))} className="h-7 text-[13px] mt-0.5" />
+                      : lead.dealValue
+                        ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">£{lead.dealValue.toLocaleString()}</span>
+                        : <span className="text-sm text-muted-foreground">—</span>
+                    }
                   </div>
-                ))}
+                </div>
+                {/* Assigned Sales Agent */}
+                <div className="flex items-start gap-3">
+                  <UserCircle2 size={13} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-muted-foreground">Assigned Sales Agent</p>
+                    {isEditing ? (
+                      <select
+                        value={editing.assignedTo || "__none__"}
+                        onChange={e => setEditing(p => ({...p, assignedTo: e.target.value === "__none__" ? "" : e.target.value}))}
+                        className="mt-0.5 w-full h-7 rounded-md border border-input bg-background px-2 text-[13px] focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="__none__">— Unassigned —</option>
+                        {agents.map(a => <option key={a.id} value={a.name}>{a.name} ({a.agentCode})</option>)}
+                      </select>
+                    ) : lead.assignedTo ? (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
+                          {lead.assignedTo.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm text-foreground">{lead.assignedTo}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-sm text-muted-foreground">Unassigned</span>
+                        {canEdit && (
+                          <button onClick={() => setIsEditing(true)} className="text-[11px] text-primary hover:underline">Assign</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -723,6 +752,7 @@ function LeadDetailSheet({
 export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
   const { refresh: refreshCustomers } = useCustomers();
+  const { agents: salesAgents } = useSalesAgents();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -787,20 +817,32 @@ export default function Leads() {
   }
 
   // ── Filters ────────────────────────────────────────────────────────────────
-  const [search,       setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [relevanceFilter, setRelevanceFilter] = useState("All"); // All | Relevant | Irrelevant
+  const [search,          setSearch]          = useState("");
+  const [statusFilter,    setStatusFilter]    = useState("All");
+  const [relevanceFilter, setRelevanceFilter] = useState("All");
+  const [agentFilter,     setAgentFilter]     = useState("All");
+  const [sourceFilter,    setSourceFilter]    = useState("All");
+  const [industryFilter,  setIndustryFilter]  = useState("All");
+
+  const uniqueSources    = useMemo(() => Array.from(new Set(leads.map(l => l.source).filter(Boolean))).sort(), [leads]);
+  const uniqueIndustries = useMemo(() => Array.from(new Set(leads.map(l => l.industry).filter(Boolean))).sort(), [leads]);
 
   const filtered = useMemo(() =>
     leads.filter(l => {
       const q   = search.toLowerCase();
-      const mQ  = !q || [l.name, l.company, l.email, l.phone, l.industry, l.city, l.status, l.source, l.notes].some(v => v?.toLowerCase().includes(q));
-      const mS  = statusFilter === "All" || l.status === statusFilter;
+      const mQ  = !q || [l.name, l.company, l.email, l.phone, l.industry, l.city, l.status, l.source, l.notes, l.assignedTo].some(v => v?.toLowerCase().includes(q));
+      const mS  = statusFilter    === "All" || l.status    === statusFilter;
       const mR  = relevanceFilter === "All" || (relevanceFilter === "Relevant" ? l.isRelevant !== false : l.isRelevant === false);
-      return mQ && mS && mR;
+      const mA  = agentFilter     === "All" || (agentFilter === "__unassigned__" ? !l.assignedTo : l.assignedTo === agentFilter);
+      const mSrc = sourceFilter   === "All" || l.source   === sourceFilter;
+      const mI  = industryFilter  === "All" || l.industry  === industryFilter;
+      return mQ && mS && mR && mA && mSrc && mI;
     }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [leads, search, statusFilter, relevanceFilter]
+    [leads, search, statusFilter, relevanceFilter, agentFilter, sourceFilter, industryFilter]
   );
+
+  const hasActiveFilters = statusFilter !== "All" || relevanceFilter !== "All" || agentFilter !== "All" || sourceFilter !== "All" || industryFilter !== "All" || !!search;
+  const clearAllFilters  = () => { setSearch(""); setStatusFilter("All"); setRelevanceFilter("All"); setAgentFilter("All"); setSourceFilter("All"); setIndustryFilter("All"); };
 
   // ── Inline editing state ──────────────────────────────────────────────────
   const [activeCell, setActiveCell] = useState<{ id: string; col: number } | null>(null);
@@ -966,39 +1008,86 @@ export default function Leads() {
       </div>
 
       {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search leads..." className="pl-8 h-8 text-[13px]" value={search} onChange={e=>setSearch(e.target.value)} data-testid="input-search-leads" />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36 h-8 text-[13px]" data-testid="select-filter-status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="All">All Statuses</SelectItem>
-            {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={relevanceFilter} onValueChange={setRelevanceFilter}>
-          <SelectTrigger className="w-36 h-8 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="All">All Leads</SelectItem>
-            <SelectItem value="Relevant">Relevant</SelectItem>
-            <SelectItem value="Irrelevant">Irrelevant</SelectItem>
-          </SelectContent>
-        </Select>
-        {isAuthenticated && newRow && (
-          <div className="flex items-center gap-1.5 ml-auto">
-            <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
-            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={cancelNewRow}><X size={12}/> Cancel</Button>
-            <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12}/> Save Row</Button>
+      <div className="space-y-2">
+        {/* Row 1: Search + Status + Relevance + actions */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input placeholder="Search leads..." className="pl-8 h-8 text-[13px]" value={search} onChange={e=>setSearch(e.target.value)} data-testid="input-search-leads" />
           </div>
-        )}
-        <div className="text-[12px] text-muted-foreground self-center ml-auto">
-          {filtered.length} of {leads.length} leads
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-36 h-8 text-[13px]" data-testid="select-filter-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Statuses</SelectItem>
+              {LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={relevanceFilter} onValueChange={setRelevanceFilter}>
+            <SelectTrigger className="w-32 h-8 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Leads</SelectItem>
+              <SelectItem value="Relevant">Relevant</SelectItem>
+              <SelectItem value="Irrelevant">Irrelevant</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* Agent filter */}
+          <Select value={agentFilter} onValueChange={setAgentFilter}>
+            <SelectTrigger className="w-40 h-8 text-[13px]">
+              <UserCircle2 size={12} className="mr-1 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="All Agents" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Agents</SelectItem>
+              <SelectItem value="__unassigned__">Unassigned</SelectItem>
+              {salesAgents.filter(a => a.status === "Active").map(a => (
+                <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* Source filter */}
+          {uniqueSources.length > 0 && (
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-36 h-8 text-[13px]">
+                <SelectValue placeholder="All Sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Sources</SelectItem>
+                {uniqueSources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {/* Industry filter */}
+          {uniqueIndustries.length > 0 && (
+            <Select value={industryFilter} onValueChange={setIndustryFilter}>
+              <SelectTrigger className="w-36 h-8 text-[13px]">
+                <SelectValue placeholder="All Industries" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Industries</SelectItem>
+                {uniqueIndustries.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {hasActiveFilters && (
+            <button onClick={clearAllFilters} className="flex items-center gap-1 h-8 px-2.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted transition-colors border border-border">
+              <X size={11} /> Clear
+            </button>
+          )}
+          {isAuthenticated && newRow && (
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
+              <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={cancelNewRow}><X size={12}/> Cancel</Button>
+              <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12}/> Save Row</Button>
+            </div>
+          )}
+          <div className="text-[12px] text-muted-foreground self-center ml-auto whitespace-nowrap">
+            {filtered.length} of {leads.length} leads
+            {hasActiveFilters && <span className="ml-1 text-primary font-medium">· filtered</span>}
+          </div>
         </div>
       </div>
 
@@ -1040,6 +1129,13 @@ export default function Leads() {
                           className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none">
                           {LEAD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
                         </select>
+                      ) : isActive && c.type==="agent-select" ? (
+                        <select autoFocus value={newRow[c.field]||""} onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
+                          onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();navigateNewRow(ci,e.shiftKey);}if(e.key==="Enter"){e.preventDefault();ci===COLS.length-1?commitNewRow():navigateNewRow(ci,false);}if(e.key==="Escape")cancelNewRow();}}
+                          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none">
+                          <option value="">— Unassigned —</option>
+                          {salesAgents.filter(a=>a.status==="Active").map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                        </select>
                       ) : isActive ? (
                         <input autoFocus type={c.type} value={newRow[c.field]} placeholder={c.label}
                           onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
@@ -1049,7 +1145,9 @@ export default function Leads() {
                         <div className="w-full h-full flex items-center px-3 cursor-text" onClick={() => activateNewRowCell(ci)}>
                           {c.field==="status"
                             ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[newRow.status as LeadStatus]}`}>{newRow.status}</span>
-                            : <span className={`truncate ${!newRow[c.field]?"text-gray-300":"text-gray-700 dark:text-foreground"}`}>{newRow[c.field]||c.label}</span>
+                            : c.type==="agent-select" && newRow[c.field]
+                              ? <span className="inline-flex items-center gap-1.5 text-[12px]"><UserCircle2 size={11} className="text-primary/60"/>{newRow[c.field]}</span>
+                              : <span className={`truncate ${!newRow[c.field]?"text-gray-300":"text-gray-700 dark:text-foreground"}`}>{newRow[c.field]||c.label}</span>
                           }
                         </div>
                       )}
@@ -1068,7 +1166,9 @@ export default function Leads() {
             {/* Existing rows */}
             {filtered.length === 0 ? (
               <tr><td colSpan={COLS.length+2} className="text-center py-16 text-muted-foreground text-sm">
-                {search||statusFilter!=="All"||relevanceFilter!=="All" ? "No leads match your filters." : isAuthenticated
+                {hasActiveFilters ? (
+                  <span>No leads match your filters. <button className="text-primary underline" onClick={clearAllFilters}>Clear filters</button></span>
+                ) : isAuthenticated
                   ? <span>No leads yet. Click <strong>Add Lead</strong> to start.</span> : "No leads yet."}
               </td></tr>
             ) : filtered.map((lead, rowIdx) => {
@@ -1092,19 +1192,40 @@ export default function Leads() {
                   {/* Editable columns */}
                   {COLS.map((c, ci) => {
                     const isActive = activeCell?.id===lead.id && activeCell.col===ci;
+                    const rawVal = String((lead as Record<string,unknown>)[c.field] ?? "");
                     return (
                       <td key={c.field}
                         className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
                         style={{height:`${CELL_H}px`}} onClick={() => !isActive && isAuthenticated && activateCell(lead.id, ci)}>
-                        <EditableCell
-                          value={String((lead as Record<string,string>)[c.field]??"")}
-                          col={c} active={isActive} canEdit={isAuthenticated}
-                          onActivate={()=>activateCell(lead.id,ci)}
-                          onCommit={v=>commitCell(lead.id,c.field,v)}
-                          onCancel={()=>setActiveCell(null)}
-                          onTab={shift=>navigateCell(lead.id,ci,shift)}
-                          onEnter={()=>moveCellDown(lead.id,ci)}
-                        />
+                        {c.type === "agent-select" ? (
+                          isActive && isAuthenticated ? (
+                            <select autoFocus value={rawVal}
+                              onChange={e=>{ commitCell(lead.id, c.field, e.target.value); setActiveCell(null); }}
+                              onKeyDown={e=>{if(e.key==="Escape")setActiveCell(null);if(e.key==="Tab"){e.preventDefault();navigateCell(lead.id,ci,e.shiftKey);}}}
+                              onBlur={()=>setActiveCell(null)}
+                              className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none">
+                              <option value="">— Unassigned —</option>
+                              {salesAgents.filter(a=>a.status==="Active").map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+                            </select>
+                          ) : (
+                            <div className="w-full h-full flex items-center px-3 gap-1.5 cursor-default">
+                              {rawVal
+                                ? <><div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold flex-shrink-0">{rawVal.charAt(0).toUpperCase()}</div><span className="truncate text-[12px] text-foreground">{rawVal}</span></>
+                                : <span className="text-[11px] text-muted-foreground/50 italic">—</span>
+                              }
+                            </div>
+                          )
+                        ) : (
+                          <EditableCell
+                            value={rawVal}
+                            col={c} active={isActive} canEdit={isAuthenticated}
+                            onActivate={()=>activateCell(lead.id,ci)}
+                            onCommit={v=>commitCell(lead.id,c.field,v)}
+                            onCancel={()=>setActiveCell(null)}
+                            onTab={shift=>navigateCell(lead.id,ci,shift)}
+                            onEnter={()=>moveCellDown(lead.id,ci)}
+                          />
+                        )}
                       </td>
                     );
                   })}
@@ -1172,6 +1293,7 @@ export default function Leads() {
               onConvert={handleConvert}
               canEdit={isAuthenticated}
               isConverted={convertedLeadIds.has(viewLead.id)}
+              agents={salesAgents.map(a => ({ id: a.id, name: a.name, agentCode: a.agentCode }))}
             />
           )}
         </SheetContent>
