@@ -29,7 +29,9 @@ import {
   getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff,
   getSales, getModuleGroupById, ModuleId,
   getActivities, clearActivities, ActivityEntry, ActivityAction,
+  getSettings,
 } from "@/lib/store";
+import { QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS } from "@/lib/quick-actions";
 import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
@@ -1237,34 +1239,57 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
 
-        {/* ═══ RIGHT SIDEBAR — quick-add shortcuts ═══════════════════════════ */}
-        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
+        {/* ═══ RIGHT SIDEBAR — quick-add shortcuts (tenant-configurable) ══════ */}
+        {(() => {
+          const cfg = getSettings().quickActionsRight ?? DEFAULT_QUICK_ACTIONS;
+          const visible = cfg
+            .filter(item => item.visible)
+            .map(item => QUICK_ACTIONS_REGISTRY.find(r => r.id === item.id))
+            .filter(Boolean) as typeof QUICK_ACTIONS_REGISTRY;
 
-          {/* Purchasing */}
-          <SidebarLink href="/invoices?type=purchase"   icon={ShoppingCart}  label="Purchase"  active={location.startsWith("/invoices") && location.includes("type=purchase")} navigate={navigate} titleFull="Purchase Invoices"   color="indigo" />
-          <SidebarLink href="/receipt-payment"          icon={CreditCard}    label="Receipts"  active={location.startsWith("/receipt-payment")}  navigate={navigate} titleFull="Receipts & Payments" color="green" />
+          const rows: React.ReactNode[] = [];
+          let prevGroup = "";
+          visible.forEach((def, idx) => {
+            if (idx > 0 && def.group !== prevGroup) {
+              rows.push(<SidebarDivider key={`div-${idx}`} />);
+            }
+            prevGroup = def.group;
+            // Active heuristic: match href path prefix
+            const hrefBase = def.href.split("?")[0];
+            let isActive = false;
+            if (def.id === "purchase-invoices") {
+              isActive = location.startsWith("/invoices") && location.includes("type=purchase");
+            } else if (def.id === "invoices") {
+              isActive = location.startsWith("/invoices") && !location.includes("type=");
+            } else if (def.id === "expense") {
+              isActive = false;
+            } else if (def.id === "new-sale") {
+              isActive = false;
+            } else {
+              isActive = location.startsWith(hrefBase);
+            }
+            rows.push(
+              <SidebarLink
+                key={def.id}
+                href={def.href}
+                icon={def.icon}
+                label={def.label}
+                titleFull={def.titleFull}
+                active={isActive}
+                navigate={navigate}
+                color={def.color as Parameters<typeof SidebarLink>[0]["color"]}
+              />
+            );
+          });
 
-          <SidebarDivider />
-
-          {/* Sales */}
-          <SidebarLink href="/sales"                    icon={Receipt}       label="Sales"     active={location.startsWith("/sales")}             navigate={navigate} titleFull="Sales / POS"        color="emerald" />
-          <SidebarLink href="/sales/new"                icon={PlusCircle}    label="New Sale"  active={false}                                     navigate={navigate} titleFull="New Sale (POS)"      color="teal" />
-          <SidebarLink href="/sale-return"              icon={Undo2}         label="Returns"   active={location.startsWith("/sale-return")}        navigate={navigate} titleFull="Sale Returns"        color="red" />
-
-          <SidebarDivider />
-
-          {/* Invoicing */}
-          <SidebarLink href="/invoices"                 icon={FileText}      label="Invoices"  active={location.startsWith("/invoices") && !location.includes("type=")} navigate={navigate} titleFull="Invoices"            color="blue" />
-          <SidebarLink href="/calc-invoice"             icon={Calculator}    label="Calc Inv." active={location.startsWith("/calc-invoice")}       navigate={navigate} titleFull="Calc Invoice"        color="purple" />
-
-          <SidebarDivider />
-
-          {/* Accounting */}
-          <SidebarLink href="/journal-entry?mode=expense" icon={Wallet}      label="Expense"   active={false}                                     navigate={navigate} titleFull="Record Expense"       color="amber" />
-          <SidebarLink href="/journal-entry"            icon={ClipboardList} label="Journal"   active={location.startsWith("/journal-entry")}      navigate={navigate} titleFull="Journal Entry"        color="teal" />
-          <SidebarLink href="/pls-report"               icon={TrendingUp}    label="P & L"     active={location.startsWith("/pls-report")}         navigate={navigate} titleFull="P&L Statement"        color="sky" />
-          <SidebarLink href="/balance-sheet"            icon={Landmark}      label="Balance"   active={location.startsWith("/balance-sheet")}      navigate={navigate} titleFull="Balance Sheet"        color="violet" />
-        </nav>
+          return (
+            <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-l border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
+              {rows.length > 0 ? rows : (
+                <p className="text-[9px] text-muted-foreground text-center px-1 pt-4 leading-tight">No shortcuts configured</p>
+              )}
+            </nav>
+          );
+        })()}
 
       </div>
     </div>

@@ -5,8 +5,9 @@ import {
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
-  PanelRight, Maximize2,
+  PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw,
 } from "lucide-react";
+import { QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS, QuickActionItem } from "@/lib/quick-actions";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
-type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data";
+type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface";
 
 const FORM_MODE_OPTS: { value: "dialog" | "sheet"; label: string; icon: React.ElementType }[] = [
   { value: "dialog", label: "Form",       icon: Maximize2  },
@@ -39,12 +40,13 @@ const FORM_MODE_OPTS: { value: "dialog" | "sheet"; label: string; icon: React.El
 ];
 
 const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: "company",    label: "Company Profile",   icon: Building2,   desc: "Name, logo & office contacts"         },
-  { id: "financial",  label: "Financial",          icon: DollarSign,  desc: "Currency, VAT & fiscal year"          },
-  { id: "pos",        label: "POS & Sales",        icon: ShoppingBag, desc: "Receipt, payment & tax defaults"      },
-  { id: "accounting", label: "Accounting Links",   icon: BookOpen,    desc: "Map COA accounts to POS & Invoices"   },
-  { id: "legal",      label: "Legal Documents",    icon: Scale,       desc: "Terms, conditions & privacy policy"   },
-  { id: "data",       label: "Data Management",    icon: Database,    desc: "Backup, import & reset"               },
+  { id: "company",    label: "Company Profile",   icon: Building2,      desc: "Name, logo & office contacts"         },
+  { id: "financial",  label: "Financial",          icon: DollarSign,     desc: "Currency, VAT & fiscal year"          },
+  { id: "pos",        label: "POS & Sales",        icon: ShoppingBag,    desc: "Receipt, payment & tax defaults"      },
+  { id: "accounting", label: "Accounting Links",   icon: BookOpen,       desc: "Map COA accounts to POS & Invoices"   },
+  { id: "interface",  label: "Interface",          icon: LayoutTemplate, desc: "Sidebar shortcuts & quick actions"    },
+  { id: "legal",      label: "Legal Documents",    icon: Scale,          desc: "Terms, conditions & privacy policy"   },
+  { id: "data",       label: "Data Management",    icon: Database,       desc: "Backup, import & reset"               },
 ];
 
 const FISCAL_MONTHS = [
@@ -1433,6 +1435,20 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* ══ Interface / Sidebar Quick Actions ════════════════════════════ */}
+            {tab === "interface" && (
+              <QuickActionsTab
+                value={form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS}
+                onChange={v => set("quickActionsRight", v)}
+                onSave={() => {
+                  saveSettings({ ...form, quickActionsRight: form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS });
+                  setDirty(false);
+                  setSaving(false);
+                  toast({ title: "Sidebar shortcuts saved", description: "Changes will apply immediately on the next page load." });
+                }}
+              />
+            )}
+
             {/* ══ Legal Documents ══════════════════════════════════════════════ */}
             {tab === "legal" && (
               <LegalTab form={form} set={set} />
@@ -1545,13 +1561,246 @@ export default function SettingsPage() {
           </div>
 
           {/* Saved banner */}
-          {!dirty && saving === false && tab !== "data" && (
+          {!dirty && saving === false && tab !== "data" && tab !== "interface" && (
             <div className="mt-3 flex items-center gap-2 text-[12px] text-emerald-600 dark:text-emerald-400 px-1">
               <Check size={13} />
               All changes saved
             </div>
           )}
         </main>
+      </div>
+    </div>
+  );
+}
+
+// ─── QuickActionsTab ──────────────────────────────────────────────────────────
+const GROUP_COLORS: Record<string, string> = {
+  Purchasing:    "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
+  Sales:         "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  Invoicing:     "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+  Accounting:    "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  CRM:           "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
+  Inventory:     "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300",
+  Manufacturing: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+};
+
+const SIDEBAR_PREVIEW_COLORS: Record<string, string> = {
+  indigo: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40",
+  green:  "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40",
+  emerald:"text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
+  teal:   "text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40",
+  red:    "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40",
+  blue:   "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40",
+  purple: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40",
+  amber:  "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40",
+  sky:    "text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40",
+  violet: "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40",
+  slate:  "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/40",
+  cyan:   "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40",
+  orange: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40",
+  pink:   "text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/40",
+};
+
+function QuickActionsTab({
+  value, onChange, onSave,
+}: {
+  value: QuickActionItem[];
+  onChange: (v: QuickActionItem[]) => void;
+  onSave: () => void;
+}) {
+  // Ensure every registered action exists in the list (add new ones at the end, hidden)
+  const [items, setItems] = useState<QuickActionItem[]>(() => {
+    const existing = new Map(value.map(i => [i.id, i]));
+    const merged: QuickActionItem[] = [
+      ...value.filter(i => QUICK_ACTIONS_REGISTRY.some(r => r.id === i.id)),
+      ...QUICK_ACTIONS_REGISTRY
+        .filter(r => !existing.has(r.id))
+        .map(r => ({ id: r.id, visible: false })),
+    ];
+    return merged;
+  });
+
+  const [dragId,    setDragId]    = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [saved,     setSaved]     = useState(false);
+
+  const visibleCount = items.filter(i => i.visible).length;
+
+  const toggleVisible = (id: string) => {
+    const next = items.map(i => i.id === id ? { ...i, visible: !i.visible } : i);
+    setItems(next);
+    onChange(next);
+    setSaved(false);
+  };
+
+  const resetDefaults = () => {
+    setItems(DEFAULT_QUICK_ACTIONS);
+    onChange(DEFAULT_QUICK_ACTIONS);
+    setSaved(false);
+  };
+
+  const handleSave = () => {
+    onSave();
+    setSaved(true);
+  };
+
+  // ── Drag & Drop ────────────────────────────────────────────────────────────
+  const handleDragStart = (id: string) => setDragId(id);
+  const handleDragOver  = (e: React.DragEvent, id: string) => { e.preventDefault(); setDragOverId(id); };
+  const handleDragEnd   = () => { setDragId(null); setDragOverId(null); };
+  const handleDrop      = (targetId: string) => {
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const from = items.findIndex(i => i.id === dragId);
+    const to   = items.findIndex(i => i.id === targetId);
+    if (from === -1 || to === -1) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setItems(next);
+    onChange(next);
+    setSaved(false);
+    setDragId(null);
+    setDragOverId(null);
+  };
+
+  // ── Mini preview sidebar ───────────────────────────────────────────────────
+  const previewItems = items
+    .filter(i => i.visible)
+    .map(i => QUICK_ACTIONS_REGISTRY.find(r => r.id === i.id))
+    .filter(Boolean) as typeof QUICK_ACTIONS_REGISTRY;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Right Sidebar Quick Actions"
+        desc="Drag to reorder. Toggle the eye icon to show or hide each shortcut. Changes are saved per tenant."
+      />
+
+      <div className="flex gap-5 items-start">
+
+        {/* ── Drag-and-drop list ─────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[12px] text-muted-foreground">
+              {visibleCount} of {items.length} shortcuts visible
+            </p>
+            <button
+              type="button"
+              onClick={resetDefaults}
+              className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              title="Reset to built-in defaults"
+            >
+              <RotateCw size={12} />
+              Reset defaults
+            </button>
+          </div>
+
+          {items.map(item => {
+            const def = QUICK_ACTIONS_REGISTRY.find(r => r.id === item.id);
+            if (!def) return null;
+            const Icon = def.icon;
+            const isDragging = dragId === item.id;
+            const isOver     = dragOverId === item.id;
+            const previewColor = SIDEBAR_PREVIEW_COLORS[def.color] ?? SIDEBAR_PREVIEW_COLORS.blue;
+
+            return (
+              <div
+                key={item.id}
+                draggable
+                onDragStart={() => handleDragStart(item.id)}
+                onDragOver={e => handleDragOver(e, item.id)}
+                onDragEnd={handleDragEnd}
+                onDrop={() => handleDrop(item.id)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all cursor-grab select-none
+                  ${isDragging ? "opacity-40 scale-95 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30" : ""}
+                  ${isOver && !isDragging ? "border-blue-400 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-950/20 scale-[1.01]" : ""}
+                  ${!isDragging && !isOver ? "border-gray-200 dark:border-border bg-white dark:bg-card hover:border-gray-300 dark:hover:border-zinc-600" : ""}
+                  ${!item.visible ? "opacity-60" : ""}
+                `}
+              >
+                {/* Drag handle */}
+                <GripVertical size={15} className="text-gray-300 dark:text-zinc-600 shrink-0 cursor-grab" />
+
+                {/* Icon pill */}
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${previewColor}`}>
+                  <Icon size={14} />
+                </span>
+
+                {/* Label + group */}
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className="text-[13px] font-medium text-gray-800 dark:text-foreground truncate">{def.titleFull}</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${GROUP_COLORS[def.group] ?? "bg-gray-100 text-gray-600"}`}>
+                    {def.group}
+                  </span>
+                </div>
+
+                {/* Short label preview */}
+                <span className="text-[11px] text-muted-foreground font-mono shrink-0 hidden sm:block">{def.label}</span>
+
+                {/* Visibility toggle */}
+                <button
+                  type="button"
+                  onClick={() => toggleVisible(item.id)}
+                  title={item.visible ? "Click to hide" : "Click to show"}
+                  className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors
+                    ${item.visible
+                      ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+                      : "bg-gray-100 dark:bg-muted text-gray-400 dark:text-zinc-600 hover:bg-gray-200 dark:hover:bg-muted/60"
+                    }`}
+                >
+                  {item.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Mini live preview ────────────────────────────────────────────────── */}
+        <div className="shrink-0 hidden lg:block">
+          <p className="text-[11px] text-muted-foreground mb-2 text-center font-medium uppercase tracking-wide">Preview</p>
+          <div className="w-[54px] rounded-2xl border border-gray-200 dark:border-border bg-white dark:bg-card shadow-sm overflow-hidden py-2 flex flex-col min-h-[300px]">
+            {previewItems.length === 0 ? (
+              <p className="text-[9px] text-muted-foreground text-center px-1 pt-4 leading-tight">No items visible</p>
+            ) : (() => {
+              const rows: React.ReactNode[] = [];
+              let prevGroup = "";
+              previewItems.forEach((def, idx) => {
+                if (idx > 0 && def.group !== prevGroup) {
+                  rows.push(<div key={`d${idx}`} className="mx-2 my-1 h-px bg-gray-100 dark:bg-border" />);
+                }
+                prevGroup = def.group;
+                const Icon = def.icon;
+                const previewColor = SIDEBAR_PREVIEW_COLORS[def.color] ?? "";
+                rows.push(
+                  <div key={def.id} className={`flex flex-col items-center justify-center py-2 px-1 gap-0.5 mx-1 rounded-lg ${previewColor}`}>
+                    <Icon size={14} />
+                    <span className="text-[8px] font-medium text-center leading-tight truncate w-full text-center">{def.label}</span>
+                  </div>
+                );
+              });
+              return rows;
+            })()}
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center mt-2">{visibleCount} shortcuts</p>
+        </div>
+      </div>
+
+      {/* ── Save button ────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-border">
+        <Button
+          onClick={handleSave}
+          className="gap-2 h-9 text-[13px] bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          <Save size={14} />
+          Save Sidebar Layout
+        </Button>
+        {saved && (
+          <span className="flex items-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
+            <Check size={13} />
+            Saved!
+          </span>
+        )}
       </div>
     </div>
   );
