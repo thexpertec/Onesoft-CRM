@@ -1102,6 +1102,7 @@ export const bulkImportProducts = (
   const existing = getProducts();
   const idxMap   = new Map(existing.map((p, i) => [p.id, i]));
   const now      = new Date().toISOString();
+  const today    = now.slice(0, 10);
 
   // Apply updates in-place
   const updated: Product[] = [];
@@ -1123,6 +1124,68 @@ export const bulkImportProducts = (
 
   // Single bulk write (existing already has updates applied)
   setStored(PRODUCTS_KEY, [...existing, ...created]);
+
+  // ── Create opening-balance stock entries for new products with openingStock ──
+  // Batch all new stock items then write once to avoid repeated reads
+  const currentStock = getStock();
+  const newStockItems: StockItem[] = [];
+  const ledgerEntries: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+  for (const prod of created) {
+    const qty = parseFloat((prod as Product & { openingStock?: string }).openingStock || "0");
+    if (!qty || qty <= 0) continue;
+
+    // If product has a SKU use it; otherwise leave blank so the stockBySkuMap
+    // falls back to productName-based lookup (matches getProductStock logic).
+    const sku = prod.sku?.trim() || "";
+    const alreadyExists = [...currentStock, ...newStockItems].some(s =>
+      s.store === "Warehouse" && s.stockType === "For Sale" &&
+      (sku ? s.sku === sku : s.productName.trim().toLowerCase() === prod.name.trim().toLowerCase()),
+    );
+    if (alreadyExists) continue;
+
+    const item: StockItem = {
+      id:           crypto.randomUUID(),
+      productName:  prod.name,
+      sku,
+      store:        "Warehouse",
+      stockType:    "For Sale",
+      quantity:     String(qty),
+      minLevel:     (prod as Product & { stockAlertQty?: string }).stockAlertQty || "0",
+      unit:         prod.unit || "",
+      holdCustomer: "",
+      holdReason:   "",
+      notes:        "Opening balance — imported",
+      createdAt:    now,
+      updatedAt:    now,
+    };
+    newStockItems.push(item);
+    ledgerEntries.push({
+      entityType: "product",
+      entityId:   item.id,
+      entityName: item.productName,
+      date:       today,
+      txType:     "opening-balance",
+      reference:  "IMPORT",
+      qtyBefore:  0,
+      qtyChange:  qty,
+      qtyAfter:   qty,
+      unit:       item.unit,
+      notes:      "Opening balance — imported",
+    });
+  }
+
+  if (newStockItems.length > 0) {
+    setStored(STOCK_KEY, [...currentStock, ...newStockItems]);
+    // Batch ledger write
+    const existingLedger = getStockLedger();
+    const fullEntries: StockLedgerEntry[] = ledgerEntries.map(e => ({
+      ...e,
+      id:        crypto.randomUUID(),
+      createdAt: now,
+    }));
+    setStored(LEDGER_KEY, [...existingLedger, ...fullEntries]);
+  }
 
   return { created, updated };
 };
