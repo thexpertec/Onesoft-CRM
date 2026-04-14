@@ -246,11 +246,13 @@ export default function ProductsPage() {
   // ── Import state ──────────────────────────────────────────────────────────
   const [importOpen,     setImportOpen]     = useState(false);
   const [rawImportRows,  setRawImportRows]  = useState<ImportRow[]>([]);
-  const [importMode,     setImportMode]     = useState<"insert" | "upsert">("upsert");
-  const [importing,      setImporting]      = useState(false);
-  const [importProgress, setImportProgress] = useState<{
+  const [importMode,       setImportMode]       = useState<"insert" | "upsert">("upsert");
+  const [importing,        setImporting]        = useState(false);
+  const [importProgress,   setImportProgress]   = useState<{
     total: number; done: number; created: number; updated: number; failed: number;
   } | null>(null);
+  const [importedRowNums,  setImportedRowNums]  = useState<Set<number>>(new Set());
+  const [importRowResults, setImportRowResults] = useState<Map<number, "created" | "updated">>(new Map());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── SKU check: "insert" mode flags conflicts; "upsert" mode marks them for update ──
@@ -281,7 +283,14 @@ export default function ProductsPage() {
     [rawImportRows, importMode, enrichWithSkuErrors]
   );
 
-  const resetImport = () => { setImportOpen(false); setRawImportRows([]); setImportMode("upsert"); setImportProgress(null); };
+  const resetImport = () => {
+    setImportOpen(false);
+    setRawImportRows([]);
+    setImportMode("upsert");
+    setImportProgress(null);
+    setImportedRowNums(new Set());
+    setImportRowResults(new Map());
+  };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -316,11 +325,15 @@ export default function ProductsPage() {
     const BATCH   = 30;
 
     setImporting(true);
+    setImportedRowNums(new Set());
+    setImportRowResults(new Map());
     setImportProgress({ total, done: invalid.length, created: 0, updated: 0, failed: invalid.length });
 
     let batchIdx = 0;
     let created  = 0;
     let updated  = 0;
+    const batchRowResults = new Map<number, "created" | "updated">();
+    const batchImportedNums = new Set<number>();
 
     const processBatch = () => {
       const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
@@ -337,12 +350,22 @@ export default function ProductsPage() {
           condition: (r.condition as Product["condition"]) || undefined,
           description: r.description,
         };
-        if (r._updateId) { editProduct(r._updateId, payload); updated++; }
-        else             { addProduct(payload); created++; }
+        if (r._updateId) {
+          editProduct(r._updateId, payload);
+          updated++;
+          batchRowResults.set(r._rowNum, "updated");
+        } else {
+          addProduct(payload);
+          created++;
+          batchRowResults.set(r._rowNum, "created");
+        }
+        batchImportedNums.add(r._rowNum);
       });
       batchIdx++;
       const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
       setImportProgress({ total, done, created, updated, failed: invalid.length });
+      setImportedRowNums(new Set(batchImportedNums));
+      setImportRowResults(new Map(batchRowResults));
 
       if (batchIdx * BATCH < valid.length) {
         setTimeout(processBatch, 0);
@@ -352,7 +375,7 @@ export default function ProductsPage() {
         if (updated > 0) parts.push(`${updated} updated`);
         if (invalid.length > 0) parts.push(`${invalid.length} skipped`);
         toast({ title: "Import complete", description: parts.join(" · ") });
-        setTimeout(() => { resetImport(); setImporting(false); }, 600);
+        setTimeout(() => { resetImport(); setImporting(false); }, 800);
       }
     };
 
@@ -1256,25 +1279,60 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {importRows.map(row => (
-                      <tr key={row._rowNum} className={`border-b transition-colors ${row._error ? "bg-red-50/60 dark:bg-red-950/20" : row._updateId ? "bg-blue-50/40 dark:bg-blue-950/10" : "hover:bg-muted/20"}`}>
-                        <td className="border-r px-3 py-1.5 text-muted-foreground font-mono">{row._rowNum}</td>
-                        {CSV_HEADERS.map(h => (
-                          <td key={h} className="border-r px-3 py-1.5 max-w-[180px] truncate" title={row[h]}>
-                            {row[h] || <span className="text-muted-foreground/40">—</span>}
-                          </td>
-                        ))}
-                        <td className="px-3 py-1.5">
-                          {row._error ? (
-                            <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-[11px]"><AlertCircle size={11} />{row._error}</span>
-                          ) : row._updateId ? (
-                            <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium"><RefreshCw size={11} />Update existing</span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 size={11} />New</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {importRows.map(row => {
+                      const rowResult = importRowResults.get(row._rowNum);
+                      let rowBg = "";
+                      if (row._error)             rowBg = "bg-red-50/60 dark:bg-red-950/20";
+                      else if (rowResult === "created") rowBg = "bg-emerald-50/70 dark:bg-emerald-950/20";
+                      else if (rowResult === "updated") rowBg = "bg-indigo-50/70 dark:bg-indigo-950/20";
+                      else if (row._updateId)     rowBg = "bg-blue-50/40 dark:bg-blue-950/10";
+                      else                        rowBg = "hover:bg-muted/20";
+
+                      let statusTag: React.ReactNode;
+                      if (row._error) {
+                        statusTag = (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 text-[10px] font-semibold border border-red-200 dark:border-red-800">
+                            <AlertCircle size={9} /> Failed
+                          </span>
+                        );
+                      } else if (rowResult === "created") {
+                        statusTag = (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-sm">
+                            <CheckCircle2 size={9} /> Imported
+                          </span>
+                        );
+                      } else if (rowResult === "updated") {
+                        statusTag = (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500 text-white text-[10px] font-bold shadow-sm">
+                            <RefreshCw size={9} /> Updated
+                          </span>
+                        );
+                      } else if (row._updateId) {
+                        statusTag = (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-semibold border border-blue-200 dark:border-blue-800">
+                            <RefreshCw size={9} /> Will Update
+                          </span>
+                        );
+                      } else {
+                        statusTag = (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle2 size={9} /> New Detected
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <tr key={row._rowNum} className={`border-b transition-colors duration-150 ${rowBg}`}>
+                          <td className="border-r px-3 py-1.5 text-muted-foreground font-mono">{row._rowNum}</td>
+                          {CSV_HEADERS.map(h => (
+                            <td key={h} className="border-r px-3 py-1.5 max-w-[180px] truncate" title={row[h]}>
+                              {row[h] || <span className="text-muted-foreground/40">—</span>}
+                            </td>
+                          ))}
+                          <td className="px-3 py-1.5 whitespace-nowrap">{statusTag}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
