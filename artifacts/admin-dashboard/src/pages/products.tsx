@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "rea
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
+import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
+import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine } from "lucide-react";
@@ -132,6 +134,7 @@ export default function ProductsPage() {
 
   const [search,         setSearch]         = useState("");
   const [statusFilter,   setStatusFilter]   = useState<string>("All");
+  const [scannerOpen,    setScannerOpen]    = useState(false);
   const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
   const [newRow,         setNewRow]         = useState<Record<EditableField, string> | null>(null);
@@ -267,6 +270,7 @@ export default function ProductsPage() {
     { field: "name",        label: "Product Name",       minW: 200, type: "text" },
     { field: "localName",   label: "Local Name",         minW: 160, type: "text" },
     { field: "sku",         label: "SKU",                minW: 110, type: "text" },
+    { field: "barcode",     label: "Barcode / QR",       minW: 150, type: "text" },
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
     { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
@@ -309,8 +313,30 @@ export default function ProductsPage() {
     }
   };
 
+  // ── Barcode / QR scan handler (shared by camera scanner + keyboard wedge) ──
+  const handleProductScan = useCallback((code: string) => {
+    const q = code.toLowerCase();
+    const match = products.find(
+      p => p.barcode === code || p.sku === code ||
+           (p.barcode ?? "").toLowerCase() === q ||
+           p.sku.toLowerCase() === q
+    );
+    setScannerOpen(false);
+    if (match) {
+      setSearch(match.barcode || match.sku || match.name);
+      toast({ title: `Found: ${match.name}`, description: match.barcode ? `Barcode: ${match.barcode}` : `SKU: ${match.sku}` });
+    } else {
+      // Show the code in search so user can find a partial match
+      setSearch(code);
+      toast({ title: "No exact match", description: `Showing results for "${code}"`, variant: "destructive" });
+    }
+  }, [products, toast]);
+
+  // ── Keyboard-wedge scanner (USB / Bluetooth) ─────────────────────────────
+  useKeyboardScanner({ onScan: handleProductScan, enabled: true });
+
   const filtered = products
-    .filter(p => !search || [p.name, p.localName, p.sku, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.localName, p.sku, p.barcode, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(applyStatusFilter);
 
   // Drag-and-drop reorder state
@@ -598,8 +624,16 @@ export default function ProductsPage() {
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search products or SKU..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
+          <Input placeholder="Search products, SKU or barcode…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        {/* Camera barcode / QR scan button */}
+        <button
+          onClick={() => setScannerOpen(true)}
+          className="h-8 w-8 rounded-lg flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors shrink-0"
+          title="Scan barcode / QR code to find product (or plug in a USB/Bluetooth scanner and scan directly)"
+        >
+          <ScanLine size={14} />
+        </button>
 
         {/* Columns visibility dropdown */}
         <div className="relative" ref={colsMenuRef}>
@@ -1272,6 +1306,15 @@ export default function ProductsPage() {
           </Sheet>
         );
       })()}
+
+      {/* ── Barcode / QR camera scanner ───────────────────────────────────────── */}
+      <BarcodeScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleProductScan}
+        title="Scan Product Barcode / QR"
+        hint="Point the camera at a barcode or QR code to find the product"
+      />
     </div>
   );
 }

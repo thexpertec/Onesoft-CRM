@@ -17,6 +17,7 @@ import {
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
+import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -520,6 +521,35 @@ function POSView({
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [scannerOpen,   setScannerOpen]   = useState(false);
+  const { toast } = useToast();
+
+  // ── Barcode / QR scanner — shared lookup for both camera and keyboard ──────
+  const handleScan = useCallback((code: string) => {
+    const allProducts = getProducts().filter(p => p.status !== "Inactive");
+    const q = code.toLowerCase();
+    const found = allProducts.find(
+      p => p.barcode === code || p.sku === code ||
+           (p.barcode ?? "").toLowerCase() === q ||
+           p.sku.toLowerCase() === q
+    );
+    if (found) {
+      onAddProduct(found);
+      setScannerOpen(false);
+      setProdSearch("");
+      toast({ title: `Added: ${found.name}`, description: "Scanned successfully" });
+    } else {
+      // Fall back to populating the search so user can pick manually
+      setProdSearch(code);
+      setScannerOpen(false);
+      toast({ title: "Product not found", description: `No match for "${code}" — check barcode or SKU`, variant: "destructive" });
+    }
+  }, [onAddProduct, toast]);
+
+  // ── Keyboard-wedge scanner (USB / Bluetooth hardware scanner) ─────────────
+  // When the search box is NOT focused the hook intercepts scanner keystrokes.
+  // When the search box IS focused the scanner types into it; pressing Enter
+  // then triggers the exact-match lookup in the onKeyDown handler below.
+  useKeyboardScanner({ onScan: handleScan, enabled: true, captureFromInputs: false });
 
   // ── Quick-add customer dialog ────────────────────────────────────────────
   const [qaOpen,    setQaOpen]    = useState(false);
@@ -1138,6 +1168,13 @@ function POSView({
                   type="text"
                   value={prodSearch}
                   onChange={e => setProdSearch(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && prodSearch.trim()) {
+                      // When the USB/Bluetooth scanner types into this box and presses Enter,
+                      // try an exact barcode/SKU lookup before falling back to search results
+                      handleScan(prodSearch.trim());
+                    }
+                  }}
                   placeholder="Search by name, SKU or barcode…"
                   className="w-full pl-9 pr-8 py-2.5 text-[13px] border-2 border-gray-200 dark:border-zinc-700 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-700 transition-all placeholder:text-gray-400 dark:placeholder:text-zinc-500"
                 />
@@ -1435,21 +1472,7 @@ function POSView({
     <BarcodeScanner
       open={scannerOpen}
       onClose={() => setScannerOpen(false)}
-      onScan={code => {
-        const products = getProducts().filter(p => p.status !== "Inactive");
-        const found = products.find(
-          p => p.sku === code || p.barcode === code ||
-               p.sku.toLowerCase() === code.toLowerCase() ||
-               (p.barcode ?? "").toLowerCase() === code.toLowerCase()
-        );
-        if (found) {
-          onAddProduct(found);
-          setScannerOpen(false);
-        } else {
-          setProdSearch(code);
-          setScannerOpen(false);
-        }
-      }}
+      onScan={handleScan}
       title="Scan to Add Product"
       hint="Scan a product barcode or QR code to instantly add it to the cart"
     />
