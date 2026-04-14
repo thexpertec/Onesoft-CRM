@@ -31,7 +31,10 @@ import {
   getActivities, clearActivities, ActivityEntry, ActivityAction,
   getSettings,
 } from "@/lib/store";
-import { QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS } from "@/lib/quick-actions";
+import {
+  QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS,
+  LEFT_ACTIONS_REGISTRY, DEFAULT_LEFT_QUICK_ACTIONS,
+} from "@/lib/quick-actions";
 import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 
@@ -1178,37 +1181,48 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Three-column body: left sidebar | content | right sidebar ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ═══ LEFT SIDEBAR — people & products ══════════════════════════════ */}
-        <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
+        {/* ═══ LEFT SIDEBAR — people & products (tenant-configurable) ══════════ */}
+        {(() => {
+          const leftCfg = getSettings().quickActionsLeft ?? DEFAULT_LEFT_QUICK_ACTIONS;
+          const leftVisible = leftCfg
+            .filter(item => item.visible)
+            .map(item => LEFT_ACTIONS_REGISTRY.find(r => r.id === item.id))
+            .filter(Boolean) as typeof LEFT_ACTIONS_REGISTRY;
 
-          {/* CRM */}
-          <SidebarLink href="/leads"        icon={Users}         label="Leads"     active={location.startsWith("/leads")}        navigate={navigate} titleFull="Leads"        color="violet" />
-          <SidebarLink href="/customers"    icon={UserCheck}     label="Customers" active={location.startsWith("/customers")}    navigate={navigate} titleFull="Customers"    color="emerald" />
-          <SidebarLink href="/suppliers"    icon={Truck}         label="Suppliers" active={location.startsWith("/suppliers")}    navigate={navigate} titleFull="Suppliers"    color="amber" />
-          <SidebarLink href="/sales-agents"      icon={Users2}    label="Agents"   active={location.startsWith("/sales-agents")}      navigate={navigate} titleFull="Sales Agents"       color="teal" />
-          <SidebarLink href="/agent-performance" icon={BarChart3} label="Perf"     active={location.startsWith("/agent-performance")} navigate={navigate} titleFull="Agent Performance"  color="violet" />
-          <SidebarLink href="/areas"             icon={MapPin}    label="Areas"    active={location.startsWith("/areas")}             navigate={navigate} titleFull="Areas & Regions"   color="lime" />
+          const leftRows: React.ReactNode[] = [];
+          let leftPrevGroup = "";
+          leftVisible.forEach((def, idx) => {
+            if (idx > 0 && def.group !== leftPrevGroup) {
+              leftRows.push(<SidebarDivider key={`ldiv-${idx}`} />);
+            }
+            leftPrevGroup = def.group;
+            const hrefBase = def.href.split("?")[0];
+            const isActive = location.startsWith(hrefBase);
+            leftRows.push(
+              <SidebarLink
+                key={def.id}
+                href={def.href}
+                icon={def.icon}
+                label={def.label}
+                titleFull={def.titleFull}
+                active={isActive}
+                navigate={navigate}
+                color={def.color as Parameters<typeof SidebarLink>[0]["color"]}
+              />
+            );
+          });
 
-          <SidebarDivider />
-
-          {/* HRM */}
-          <SidebarLink href="/staff"        icon={Building2}     label="Staff"     active={location.startsWith("/staff")}        navigate={navigate} titleFull="Staff / HRM"         color="rose" />
-          <SidebarLink href="/roles"        icon={KeyRound}      label="Roles"     active={location.startsWith("/roles")}        navigate={navigate} titleFull="HRM Roles"           color="pink" />
-          <SidebarLink href="/hrm-org"      icon={Layers}        label="Org"       active={location.startsWith("/hrm-org")}      navigate={navigate} titleFull="Depts & Designations" color="orange" />
-
-          <SidebarDivider />
-
-          {/* Products & stock */}
-          <SidebarLink href="/products"     icon={Package}       label="Products"  active={location.startsWith("/products")}     navigate={navigate} titleFull="Products"     color="blue" />
-          <SidebarLink href="/categories"   icon={Tag}           label="Categories"active={location.startsWith("/categories")}  navigate={navigate} titleFull="Categories"   color="fuchsia" />
-          <SidebarLink href="/stock-ledger" icon={BookOpen}      label="Ledger"    active={location.startsWith("/stock-ledger")} navigate={navigate} titleFull="Stock Ledger" color="indigo" />
-          <SidebarLink href="/raw-materials"icon={FlaskConical}  label="Raw Mtl."  active={location.startsWith("/raw-materials")} navigate={navigate} titleFull="Raw Materials" color="cyan" />
-
-          <SidebarDivider />
-
-          {/* Manufacturing */}
-          <SidebarLink href="/manufacturing" icon={Factory}      label="Mfg."     active={location.startsWith("/manufacturing") || location.startsWith("/production-guide")} navigate={navigate} titleFull="Manufacturing" color="orange" />
-        </nav>
+          return (
+            <nav className="hidden md:flex flex-col w-[54px] shrink-0 bg-white dark:bg-card border-r border-gray-100 dark:border-border overflow-y-auto py-2 scrollbar-none">
+              {leftRows.length > 0 ? leftRows : (
+                <div className="flex flex-col items-center justify-center flex-1 py-6 gap-1 text-gray-300 dark:text-zinc-700">
+                  <Layers size={16} strokeWidth={1.5} />
+                  <span className="text-[8px] text-center leading-tight px-1">Configure in Settings</span>
+                </div>
+              )}
+            </nav>
+          );
+        })()}
 
         {/* ═══ CENTER CONTENT ════════════════════════════════════════════════ */}
         <div className="flex flex-col flex-1 min-w-0 overflow-y-auto bg-gray-50 dark:bg-background">

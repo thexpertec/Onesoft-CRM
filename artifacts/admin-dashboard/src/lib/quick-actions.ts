@@ -2,6 +2,8 @@ import {
   ShoppingCart, CreditCard, Receipt, PlusCircle, Undo2, FileText,
   Calculator, Wallet, ClipboardList, TrendingUp, Landmark, Package,
   Users, PhoneCall, Truck, BarChart3, Tag, Factory, FileBarChart, BookOpen,
+  UserCheck, Users2, Building2, KeyRound, Layers, FlaskConical, MapPin,
+  Image as ImageIcon, Settings, FolderOpen, SlidersHorizontal, Ruler,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -71,4 +73,56 @@ export const DEFAULT_QUICK_ACTIONS: QuickActionItem[] = [
   { id: "stock-ledger",       visible: false },
   { id: "categories",         visible: false },
   { id: "manufacturing",      visible: false },
+];
+
+// ─── Left Sidebar Registry ────────────────────────────────────────────────────
+export const LEFT_ACTIONS_REGISTRY: QuickActionDef[] = [
+  // ── CRM ───────────────────────────────────────────────────────────────────
+  { id: "l-leads",            label: "Leads",      titleFull: "Leads Pipeline",         href: "/leads",             icon: Users,           color: "violet",  group: "CRM"           },
+  { id: "l-customers",        label: "Customers",  titleFull: "Customers",              href: "/customers",         icon: UserCheck,       color: "emerald", group: "CRM"           },
+  { id: "l-suppliers",        label: "Suppliers",  titleFull: "Suppliers",              href: "/suppliers",         icon: Truck,           color: "amber",   group: "CRM"           },
+  { id: "l-agents",           label: "Agents",     titleFull: "Sales Agents",           href: "/sales-agents",      icon: Users2,          color: "teal",    group: "CRM"           },
+  { id: "l-agent-perf",       label: "Perf",       titleFull: "Agent Performance",      href: "/agent-performance", icon: BarChart3,       color: "violet",  group: "CRM"           },
+  { id: "l-areas",            label: "Areas",      titleFull: "Areas & Regions",        href: "/areas",             icon: MapPin,          color: "lime",    group: "CRM"           },
+  // ── HRM ───────────────────────────────────────────────────────────────────
+  { id: "l-staff",            label: "Staff",      titleFull: "Staff / HRM",            href: "/staff",             icon: Building2,       color: "rose",    group: "HRM"           },
+  { id: "l-roles",            label: "Roles",      titleFull: "HRM Roles",              href: "/roles",             icon: KeyRound,        color: "pink",    group: "HRM"           },
+  { id: "l-hrm-org",          label: "Org",        titleFull: "Depts & Designations",   href: "/hrm-org",           icon: Layers,          color: "orange",  group: "HRM"           },
+  // ── Catalogue ─────────────────────────────────────────────────────────────
+  { id: "l-products",         label: "Products",   titleFull: "Products",               href: "/products",          icon: Package,         color: "blue",    group: "Catalogue"     },
+  { id: "l-categories",       label: "Categories", titleFull: "Product Categories",     href: "/categories",        icon: FolderOpen,      color: "fuchsia", group: "Catalogue"     },
+  { id: "l-brands",           label: "Brands",     titleFull: "Brands",                 href: "/brands",            icon: Tag,             color: "sky",     group: "Catalogue"     },
+  { id: "l-attributes",       label: "Attributes", titleFull: "Product Attributes",     href: "/attributes",        icon: SlidersHorizontal, color: "purple", group: "Catalogue"   },
+  { id: "l-units",            label: "Units",      titleFull: "Units of Measure",       href: "/units",             icon: Ruler,           color: "slate",   group: "Catalogue"     },
+  { id: "l-media",            label: "Media",      titleFull: "Media Library",          href: "/media",             icon: ImageIcon,       color: "indigo",  group: "Catalogue"     },
+  { id: "l-stock-ledger",     label: "Ledger",     titleFull: "Stock Ledger",           href: "/stock-ledger",      icon: BookOpen,        color: "indigo",  group: "Catalogue"     },
+  { id: "l-raw-materials",    label: "Raw Mtl.",   titleFull: "Raw Materials",          href: "/raw-materials",     icon: FlaskConical,    color: "cyan",    group: "Catalogue"     },
+  // ── Manufacturing ─────────────────────────────────────────────────────────
+  { id: "l-manufacturing",    label: "Mfg.",       titleFull: "Manufacturing",          href: "/manufacturing",     icon: Factory,         color: "orange",  group: "Manufacturing" },
+  { id: "l-prod-guide",       label: "Guide",      titleFull: "Production Guide",       href: "/production-guide",  icon: FileText,        color: "amber",   group: "Manufacturing" },
+  // ── Settings ──────────────────────────────────────────────────────────────
+  { id: "l-settings",         label: "Settings",   titleFull: "Settings",               href: "/settings",          icon: Settings,        color: "slate",   group: "Settings"      },
+];
+
+export const DEFAULT_LEFT_QUICK_ACTIONS: QuickActionItem[] = [
+  { id: "l-leads",            visible: true  },
+  { id: "l-customers",        visible: true  },
+  { id: "l-suppliers",        visible: true  },
+  { id: "l-agents",           visible: true  },
+  { id: "l-agent-perf",       visible: true  },
+  { id: "l-areas",            visible: true  },
+  { id: "l-staff",            visible: true  },
+  { id: "l-roles",            visible: true  },
+  { id: "l-hrm-org",          visible: true  },
+  { id: "l-products",         visible: true  },
+  { id: "l-categories",       visible: true  },
+  { id: "l-brands",           visible: false },
+  { id: "l-attributes",       visible: false },
+  { id: "l-units",            visible: false },
+  { id: "l-media",            visible: false },
+  { id: "l-stock-ledger",     visible: true  },
+  { id: "l-raw-materials",    visible: true  },
+  { id: "l-manufacturing",    visible: true  },
+  { id: "l-prod-guide",       visible: false },
+  { id: "l-settings",         visible: false },
 ];

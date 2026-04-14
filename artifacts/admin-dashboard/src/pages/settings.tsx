@@ -7,7 +7,6 @@ import {
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
   PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw,
 } from "lucide-react";
-import { QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS, QuickActionItem } from "@/lib/quick-actions";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +29,11 @@ import {
 } from "@/lib/store";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
+import {
+  QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS,
+  LEFT_ACTIONS_REGISTRY, DEFAULT_LEFT_QUICK_ACTIONS,
+  QuickActionItem, QuickActionDef,
+} from "@/lib/quick-actions";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
 type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface";
@@ -1437,16 +1441,39 @@ export default function SettingsPage() {
 
             {/* ══ Interface / Sidebar Quick Actions ════════════════════════════ */}
             {tab === "interface" && (
-              <QuickActionsTab
-                value={form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS}
-                onChange={v => set("quickActionsRight", v)}
-                onSave={() => {
-                  saveSettings({ ...form, quickActionsRight: form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS });
-                  setDirty(false);
-                  setSaving(false);
-                  toast({ title: "Sidebar shortcuts saved", description: "Changes will apply immediately on the next page load." });
-                }}
-              />
+              <div className="space-y-10">
+                {/* Left sidebar */}
+                <QuickActionsTab
+                  title="Left Sidebar Quick Actions"
+                  desc="Drag to reorder. Toggle the eye icon to show or hide each shortcut. Saved per tenant."
+                  registry={LEFT_ACTIONS_REGISTRY}
+                  defaultItems={DEFAULT_LEFT_QUICK_ACTIONS}
+                  value={form.quickActionsLeft ?? DEFAULT_LEFT_QUICK_ACTIONS}
+                  onChange={v => set("quickActionsLeft", v)}
+                  onSave={() => {
+                    saveSettings({ ...form, quickActionsLeft: form.quickActionsLeft ?? DEFAULT_LEFT_QUICK_ACTIONS });
+                    setDirty(false);
+                    setSaving(false);
+                    toast({ title: "Left sidebar saved", description: "Changes will apply immediately on next page load." });
+                  }}
+                />
+                <div className="border-t border-gray-100 dark:border-border" />
+                {/* Right sidebar */}
+                <QuickActionsTab
+                  title="Right Sidebar Quick Actions"
+                  desc="Drag to reorder. Toggle the eye icon to show or hide each shortcut. Saved per tenant."
+                  registry={QUICK_ACTIONS_REGISTRY}
+                  defaultItems={DEFAULT_QUICK_ACTIONS}
+                  value={form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS}
+                  onChange={v => set("quickActionsRight", v)}
+                  onSave={() => {
+                    saveSettings({ ...form, quickActionsRight: form.quickActionsRight ?? DEFAULT_QUICK_ACTIONS });
+                    setDirty(false);
+                    setSaving(false);
+                    toast({ title: "Right sidebar saved", description: "Changes will apply immediately on next page load." });
+                  }}
+                />
+              </div>
             )}
 
             {/* ══ Legal Documents ══════════════════════════════════════════════ */}
@@ -1582,6 +1609,9 @@ const GROUP_COLORS: Record<string, string> = {
   CRM:           "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
   Inventory:     "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300",
   Manufacturing: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+  HRM:           "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
+  Catalogue:     "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+  Settings:      "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300",
 };
 
 const SIDEBAR_PREVIEW_COLORS: Record<string, string> = {
@@ -1602,8 +1632,12 @@ const SIDEBAR_PREVIEW_COLORS: Record<string, string> = {
 };
 
 function QuickActionsTab({
-  value, onChange, onSave,
+  title, desc, registry, defaultItems, value, onChange, onSave,
 }: {
+  title: string;
+  desc: string;
+  registry: QuickActionDef[];
+  defaultItems: QuickActionItem[];
   value: QuickActionItem[];
   onChange: (v: QuickActionItem[]) => void;
   onSave: () => void;
@@ -1612,8 +1646,8 @@ function QuickActionsTab({
   const [items, setItems] = useState<QuickActionItem[]>(() => {
     const existing = new Map(value.map(i => [i.id, i]));
     const merged: QuickActionItem[] = [
-      ...value.filter(i => QUICK_ACTIONS_REGISTRY.some(r => r.id === i.id)),
-      ...QUICK_ACTIONS_REGISTRY
+      ...value.filter(i => registry.some(r => r.id === i.id)),
+      ...registry
         .filter(r => !existing.has(r.id))
         .map(r => ({ id: r.id, visible: false })),
     ];
@@ -1634,8 +1668,8 @@ function QuickActionsTab({
   };
 
   const resetDefaults = () => {
-    setItems(DEFAULT_QUICK_ACTIONS);
-    onChange(DEFAULT_QUICK_ACTIONS);
+    setItems(defaultItems);
+    onChange(defaultItems);
     setSaved(false);
   };
 
@@ -1666,15 +1700,12 @@ function QuickActionsTab({
   // ── Mini preview sidebar ───────────────────────────────────────────────────
   const previewItems = items
     .filter(i => i.visible)
-    .map(i => QUICK_ACTIONS_REGISTRY.find(r => r.id === i.id))
-    .filter(Boolean) as typeof QUICK_ACTIONS_REGISTRY;
+    .map(i => registry.find(r => r.id === i.id))
+    .filter(Boolean) as QuickActionDef[];
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="Right Sidebar Quick Actions"
-        desc="Drag to reorder. Toggle the eye icon to show or hide each shortcut. Changes are saved per tenant."
-      />
+      <SectionHeader title={title} desc={desc} />
 
       <div className="flex gap-5 items-start">
 
@@ -1697,7 +1728,7 @@ function QuickActionsTab({
           </div>
 
           {items.map(item => {
-            const def = QUICK_ACTIONS_REGISTRY.find(r => r.id === item.id);
+            const def = registry.find(r => r.id === item.id);
             if (!def) return null;
             const Icon = def.icon;
             const isDragging = dragId === item.id;

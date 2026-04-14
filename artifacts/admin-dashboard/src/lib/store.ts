@@ -2724,6 +2724,8 @@ export type AppSettings = {
   supplierProductPicker: boolean; // show product multi-picker in add/edit supplier forms
   // ── Right sidebar quick-action customisation ──
   quickActionsRight?: { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
+  // ── Left sidebar quick-action customisation ──
+  quickActionsLeft?:  { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
