@@ -29,18 +29,21 @@ import { Label } from "@/components/ui/label";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes" | "assignedTo">;
 
-const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"];
-const PIPELINE_STAGES: LeadStatus[] = ["New", "Contacted", "Qualified", "Proposal Sent", "Won"];
+const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Meeting Scheduled", "Demo Completed", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"];
+const PIPELINE_STAGES: LeadStatus[] = ["New", "Contacted", "Meeting Scheduled", "Demo Completed", "Qualified", "Proposal Sent", "Negotiation", "Won"];
 
 const CALL_OUTCOMES: CallOutcome[] = ["Answered", "No Answer", "Voicemail", "Busy", "Scheduled Callback"];
 
 const STATUS_STYLES: Record<LeadStatus, string> = {
-  New:              "bg-blue-100  dark:bg-blue-900  text-blue-700  dark:text-blue-300",
-  Contacted:        "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300",
-  Qualified:        "bg-cyan-100  dark:bg-cyan-900  text-cyan-700  dark:text-cyan-300",
-  "Proposal Sent":  "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300",
-  Won:              "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300",
-  Lost:             "bg-red-100   dark:bg-red-900   text-red-600   dark:text-red-400",
+  New:                  "bg-blue-100   dark:bg-blue-900   text-blue-700   dark:text-blue-300",
+  Contacted:            "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300",
+  "Meeting Scheduled":  "bg-sky-100    dark:bg-sky-900    text-sky-700    dark:text-sky-300",
+  "Demo Completed":     "bg-cyan-100   dark:bg-cyan-900   text-cyan-700   dark:text-cyan-300",
+  Qualified:            "bg-teal-100   dark:bg-teal-900   text-teal-700   dark:text-teal-300",
+  "Proposal Sent":      "bg-amber-100  dark:bg-amber-900  text-amber-700  dark:text-amber-300",
+  Negotiation:          "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300",
+  Won:                  "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300",
+  Lost:                 "bg-red-100    dark:bg-red-900    text-red-600    dark:text-red-400",
 };
 
 const OUTCOME_ICON: Record<CallOutcome, React.ElementType> = {
@@ -128,7 +131,7 @@ function mapRow(row: ParsedRow): Record<EditableField, string> {
   (Object.keys(FIELD_ALIASES) as EditableField[]).forEach(field => {
     for (const alias of FIELD_ALIASES[field]) { if (row[alias]!==undefined) { result[field]=row[alias]; break; } }
   });
-  const validStatuses=["New","Contacted","Qualified","Proposal Sent","Won","Lost"];
+  const validStatuses=["New","Contacted","Meeting Scheduled","Demo Completed","Qualified","Proposal Sent","Negotiation","Won","Lost"];
   const rawStatus=result.status.trim();
   result.status=validStatuses.find(s=>s.toLowerCase()===rawStatus.toLowerCase())??"New";
   return result;
@@ -960,12 +963,13 @@ export default function Leads() {
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => ({
-    total:     leads.length,
-    won:       leads.filter(l => l.status==="Won").length,
-    new:       leads.filter(l => l.status==="New").length,
-    qualified: leads.filter(l => l.status==="Qualified").length,
-    upcoming:  leads.filter(l => l.nextReminder && !isPast(new Date(l.nextReminder))).length,
-    overdue:   leads.filter(l => l.nextReminder && isPast(new Date(l.nextReminder)) && !isToday(new Date(l.nextReminder))).length,
+    total:       leads.length,
+    won:         leads.filter(l => l.status==="Won").length,
+    new:         leads.filter(l => l.status==="New").length,
+    qualified:   leads.filter(l => l.status==="Qualified").length,
+    inProgress:  leads.filter(l => ["Meeting Scheduled","Demo Completed","Negotiation"].includes(l.status)).length,
+    upcoming:    leads.filter(l => l.nextReminder && !isPast(new Date(l.nextReminder))).length,
+    overdue:     leads.filter(l => l.nextReminder && isPast(new Date(l.nextReminder)) && !isToday(new Date(l.nextReminder))).length,
   }), [leads]);
 
   const CELL_H = 38;
@@ -1017,10 +1021,11 @@ export default function Leads() {
       {/* ── KPI pills ────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: "Total",     value: kpis.total,     color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",           filter: () => { setStatusFilter("All"); setRelevanceFilter("All"); } },
-          { label: "New",       value: kpis.new,       color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                  filter: () => setStatusFilter("New") },
-          { label: "Qualified", value: kpis.qualified, color: "bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400",                  filter: () => setStatusFilter("Qualified") },
-          { label: "Won",       value: kpis.won,       color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",       filter: () => setStatusFilter("Won") },
+          { label: "Total",       value: kpis.total,      color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",              filter: () => { setStatusFilter("All"); setRelevanceFilter("All"); } },
+          { label: "New",         value: kpis.new,        color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                   filter: () => setStatusFilter("New") },
+          { label: "In Progress", value: kpis.inProgress, color: "bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400",                       filter: () => setStatusFilter("Meeting Scheduled") },
+          { label: "Qualified",   value: kpis.qualified,  color: "bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400",                   filter: () => setStatusFilter("Qualified") },
+          { label: "Won",         value: kpis.won,        color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",        filter: () => setStatusFilter("Won") },
           ...(kpis.overdue > 0 ? [{ label: `${kpis.overdue} Overdue`, value: null, color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 cursor-pointer", filter: () => {} }] : []),
           ...(kpis.upcoming > 0 ? [{ label: `${kpis.upcoming} Reminders`, value: null, color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 cursor-pointer", filter: () => {} }] : []),
         ].map(k => (

@@ -1,6 +1,6 @@
 import { kvPut, kvGetAll } from "./api";
 
-export type LeadStatus = "New" | "Contacted" | "Qualified" | "Proposal Sent" | "Won" | "Lost";
+export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
 export type CallOutcome = "Answered" | "No Answer" | "Voicemail" | "Busy" | "Scheduled Callback";
 
