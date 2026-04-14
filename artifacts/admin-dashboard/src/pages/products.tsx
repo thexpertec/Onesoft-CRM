@@ -205,6 +205,10 @@ export default function ProductsPage() {
 
   const [search,         setSearch]         = useState("");
   const [statusFilter,   setStatusFilter]   = useState<string>("All");
+  const [filterCategory,    setFilterCategory]    = useState("");
+  const [filterSubcategory, setFilterSubcategory] = useState("");
+  const [filterBrand,       setFilterBrand]       = useState("");
+  const [filterCondition,   setFilterCondition]   = useState("");
   const [scannerOpen,    setScannerOpen]    = useState(false);
   const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
@@ -420,7 +424,16 @@ export default function ProductsPage() {
   const visibleCols = useMemo(() => COLS.filter(c => !hiddenCols.has(c.field)), [COLS, hiddenCols]);
   const TOTAL_W = visibleCols.reduce((a, c) => a + c.minW, 0);
 
-  const isFiltered = !!(search || statusFilter !== "All");
+  // ── Dropdown filter option lists ──────────────────────────────────────────
+  const allCategories    = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort() as string[], [products]);
+  const allSubcategories = useMemo(() => {
+    const src = filterCategory ? products.filter(p => p.category === filterCategory) : products;
+    return [...new Set(src.map(p => p.subcategory).filter(Boolean))].sort() as string[];
+  }, [products, filterCategory]);
+  const allBrands        = useMemo(() => [...new Set(products.map(p => p.brand).filter(Boolean))].sort() as string[], [products]);
+  const allConditions    = useMemo(() => [...new Set(products.map(p => p.condition).filter(Boolean))].sort() as string[], [products]);
+
+  const isFiltered = !!(search || statusFilter !== "All" || filterCategory || filterSubcategory || filterBrand || filterCondition);
 
   const applyStatusFilter = (p: Product): boolean => {
     switch (statusFilter) {
@@ -462,7 +475,11 @@ export default function ProductsPage() {
 
   const filtered = products
     .filter(p => !search || [p.name, p.localName, p.sku, p.barcode, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
-    .filter(applyStatusFilter);
+    .filter(applyStatusFilter)
+    .filter(p => !filterCategory    || p.category    === filterCategory)
+    .filter(p => !filterSubcategory || p.subcategory === filterSubcategory)
+    .filter(p => !filterBrand       || p.brand       === filterBrand)
+    .filter(p => !filterCondition   || p.condition   === filterCondition);
 
   // Drag-and-drop reorder state
   const [dragId,    setDragId]    = useState<string | null>(null);
@@ -831,6 +848,93 @@ export default function ProductsPage() {
             </div>
           )}
         </div>
+
+        {/* ── Dropdown Filters ──────────────────────────────────────── */}
+        {(allCategories.length > 0 || allBrands.length > 0 || allConditions.length > 0) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Category */}
+            {allCategories.length > 0 && (
+              <div className="relative">
+                <select
+                  value={filterCategory}
+                  onChange={e => { setFilterCategory(e.target.value); setFilterSubcategory(""); }}
+                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
+                    ${filterCategory
+                      ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
+                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+                >
+                  <option value="">All Categories</option>
+                  {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Subcategory — only show when options exist */}
+            {allSubcategories.length > 0 && (
+              <div className="relative">
+                <select
+                  value={filterSubcategory}
+                  onChange={e => setFilterSubcategory(e.target.value)}
+                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
+                    ${filterSubcategory
+                      ? "border-violet-400 dark:border-violet-500 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300"
+                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+                >
+                  <option value="">All Subcategories</option>
+                  {allSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Brand */}
+            {allBrands.length > 0 && (
+              <div className="relative">
+                <select
+                  value={filterBrand}
+                  onChange={e => setFilterBrand(e.target.value)}
+                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
+                    ${filterBrand
+                      ? "border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300"
+                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+                >
+                  <option value="">All Brands</option>
+                  {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Condition */}
+            {allConditions.length > 0 && (
+              <div className="relative">
+                <select
+                  value={filterCondition}
+                  onChange={e => setFilterCondition(e.target.value)}
+                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
+                    ${filterCondition
+                      ? "border-teal-400 dark:border-teal-500 bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300"
+                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+                >
+                  <option value="">All Conditions</option>
+                  {allConditions.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+              </div>
+            )}
+
+            {/* Clear all dropdown filters */}
+            {(filterCategory || filterSubcategory || filterBrand || filterCondition) && (
+              <button
+                onClick={() => { setFilterCategory(""); setFilterSubcategory(""); setFilterBrand(""); setFilterCondition(""); }}
+                className="h-8 px-2.5 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors flex items-center gap-1"
+              >
+                <X size={11} /> Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
