@@ -46,12 +46,68 @@ const BLANK = (): Record<EditableField, string> => ({
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
-const CSV_HEADERS: EditableField[] = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "price", "wholesalePrice", "status", "condition", "description"];
-const CSV_HEADER_LABELS = ["name", "sku", "brand", "category", "unit", "purchasePrice", "costPrice", "retailPrice", "wholesalePrice", "status", "condition", "description"];
+// Canonical field order for both template download and import parsing
+const CSV_HEADERS: EditableField[] = [
+  "name", "localName", "sku", "barcode", "brand",
+  "category", "subcategory", "unit",
+  "purchasePrice", "costPrice", "price", "wholesalePrice",
+  "openingStock", "stockAlertValue", "commissionPct",
+  "status", "condition", "description",
+];
+
+// Human-readable header labels (same order as CSV_HEADERS)
+const CSV_HEADER_LABELS: string[] = [
+  "name", "localName", "sku", "barcode", "brand",
+  "category", "subcategory", "unit",
+  "purchasePrice", "costPrice", "retailPrice", "wholesalePrice",
+  "openingStock", "stockAlertQty", "commissionPct",
+  "status", "condition", "description",
+];
+
+// Alias map: each field can match multiple header spellings from user CSVs
+const HEADER_ALIASES: Record<EditableField, string[]> = {
+  name:            ["name", "productname", "itemname", "title"],
+  localName:       ["localname", "localtitle", "arabicname", "urduname", "altname"],
+  sku:             ["sku", "itemcode", "productcode", "code", "partno", "partnumber"],
+  barcode:         ["barcode", "ean", "upc", "qrcode", "barcodenumber"],
+  brand:           ["brand", "brandname", "manufacturer", "make"],
+  category:        ["category", "categoryname", "cat", "group", "productgroup"],
+  subcategory:     ["subcategory", "subcat", "subcategoryname", "sub", "subc", "subgroup"],
+  unit:            ["unit", "uom", "unitofmeasure", "unitofmeasurement", "measure"],
+  purchasePrice:   ["purchaseprice", "buyprice", "costofpurchase", "pp"],
+  costPrice:       ["costprice", "cost", "cogs", "cp"],
+  price:           ["price", "retailprice", "saleprice", "sellingprice", "sp", "rp"],
+  wholesalePrice:  ["wholesaleprice", "wholesale", "tradeprice", "wp"],
+  retailProfit:    ["retailprofit", "rprofit", "profitretail"],
+  wholesaleProfit: ["wholesaleprofit", "wprofit", "profitwholesale"],
+  openingStock:    ["openingstock", "openingqty", "initialstock", "stockqty", "qty", "quantity"],
+  stockAlertValue: ["stockalertvalue", "stockalert", "alertqty", "reorderpoint", "minstock"],
+  commissionPct:   ["commissionpct", "commission", "commissionrate", "agentcommission", "commpct"],
+  status:          ["status", "state", "availability"],
+  condition:       ["condition", "itemcondition", "productcondition"],
+  description:     ["description", "desc", "notes", "details", "remarks"],
+};
 
 function downloadTemplate() {
-  const sample = [
-    "Onesoft CRM Software", "SKU-001", "Onesoft", "Software", "Licence", "600.00", "750.00", "999.00", "799.00", "Active", "New", "Cloud-based CRM solution",
+  const sample: string[] = [
+    "Onesoft CRM Software",  // name
+    "",                       // localName
+    "SKU-001",               // sku
+    "",                       // barcode
+    "Onesoft",               // brand
+    "Software",              // category
+    "CRM",                   // subcategory ← now included
+    "Licence",               // unit
+    "600.00",                // purchasePrice
+    "750.00",                // costPrice
+    "999.00",                // retailPrice
+    "799.00",                // wholesalePrice
+    "0",                     // openingStock
+    "5",                     // stockAlertQty
+    "",                      // commissionPct
+    "Active",                // status
+    "New",                   // condition
+    "Cloud-based CRM solution", // description
   ];
   const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -83,19 +139,34 @@ function parseCSV(text: string): ImportRow[] {
     return fields;
   };
 
-  const headerRow = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z]/g, ""));
-  const colMap: Record<EditableField, number> = {} as Record<EditableField, number>;
-  CSV_HEADERS.forEach(f => {
-    const idx = headerRow.findIndex(h => h === f.toLowerCase());
-    colMap[f] = idx;
+  // Strip non-alpha chars from headers for flexible alias matching
+  const headerRow = parseLine(lines[0]).map(h =>
+    h.toLowerCase().replace(/\uFEFF/g, "").replace(/[^a-z0-9]/g, "")
+  );
+
+  // Build column index map using alias table
+  const colMap: Partial<Record<EditableField, number>> = {};
+  (Object.keys(HEADER_ALIASES) as EditableField[]).forEach(field => {
+    const idx = headerRow.findIndex(h => HEADER_ALIASES[field].includes(h));
+    if (idx !== -1) colMap[field] = idx;
+  });
+
+  // Blank row initializer covering ALL editable fields
+  const blankRow = (): Omit<ImportRow, "_rowNum"> => ({
+    name: "", localName: "", sku: "", barcode: "", brand: "",
+    category: "", subcategory: "", unit: "",
+    purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
+    retailProfit: "", wholesaleProfit: "", commissionPct: "",
+    openingStock: "", stockAlertValue: "",
+    status: "Active", condition: "", description: "",
   });
 
   return lines.slice(1).map((line, i) => {
     const cells = parseLine(line);
-    const row: ImportRow = { _rowNum: i + 2, name: "", sku: "", brand: "", category: "", unit: "", purchasePrice: "", costPrice: "", price: "", wholesalePrice: "", retailProfit: "", wholesaleProfit: "", status: "Active", condition: "", description: "" };
-    CSV_HEADERS.forEach(f => {
-      const ci = colMap[f];
-      row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci] : "";
+    const row: ImportRow = { _rowNum: i + 2, ...blankRow() };
+    (Object.keys(colMap) as EditableField[]).forEach(f => {
+      const ci = colMap[f]!;
+      row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci].trim() : "";
     });
     if (!row.name.trim()) row._error = "Name is required";
     const validStatuses = ["Active", "Inactive", "Draft"];
