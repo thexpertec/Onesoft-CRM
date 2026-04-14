@@ -501,7 +501,7 @@ interface POSViewProps {
   onPriceModeChange: (mode: "retail" | "wholesale") => void;
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
-  onAddCustomer: (name: string, phone: string, email: string) => void;
+  onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
 }
 
 function POSView({
@@ -522,10 +522,11 @@ function POSView({
   const [scannerOpen,   setScannerOpen]   = useState(false);
 
   // ── Quick-add customer dialog ────────────────────────────────────────────
-  const [qaOpen,  setQaOpen]  = useState(false);
-  const [qaName,  setQaName]  = useState("");
-  const [qaPhone, setQaPhone] = useState("");
-  const [qaEmail, setQaEmail] = useState("");
+  const [qaOpen,    setQaOpen]    = useState(false);
+  const [qaName,    setQaName]    = useState("");
+  const [qaCompany, setQaCompany] = useState("");
+  const [qaPhone,   setQaPhone]   = useState("");
+  const [qaEmail,   setQaEmail]   = useState("");
 
   const customerExists = customerComboOpts.some(
     o => o.value.toLowerCase() === localMeta.customer.toLowerCase().trim()
@@ -534,13 +535,13 @@ function POSView({
 
   const openQuickAdd = () => {
     setQaName(localMeta.customer.trim());
-    setQaPhone(""); setQaEmail("");
+    setQaCompany(""); setQaPhone(""); setQaEmail("");
     setQaOpen(true);
   };
 
   const confirmQuickAdd = () => {
     if (!qaName.trim()) return;
-    onAddCustomer(qaName.trim(), qaPhone.trim(), qaEmail.trim());
+    onAddCustomer(qaName.trim(), qaPhone.trim(), qaEmail.trim(), qaCompany.trim());
     onMetaChange({ customer: qaName.trim() });
     onSaveMeta();
     setQaOpen(false);
@@ -1366,12 +1367,18 @@ function POSView({
             <Input value={qaName} onChange={e => setQaName(e.target.value)} placeholder="Full name" autoFocus className="h-9 text-[13px]" />
           </div>
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Phone</label>
-            <Input value={qaPhone} onChange={e => setQaPhone(e.target.value)} placeholder="+44 7xxx xxxxxx" className="h-9 text-[13px]" />
+            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Company</label>
+            <Input value={qaCompany} onChange={e => setQaCompany(e.target.value)} placeholder="Company / organisation name" className="h-9 text-[13px]" />
           </div>
-          <div>
-            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Email</label>
-            <Input value={qaEmail} onChange={e => setQaEmail(e.target.value)} placeholder="email@example.com" className="h-9 text-[13px]" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Phone</label>
+              <Input value={qaPhone} onChange={e => setQaPhone(e.target.value)} placeholder="+44 7xxx xxxxxx" className="h-9 text-[13px]" />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Email</label>
+              <Input value={qaEmail} onChange={e => setQaEmail(e.target.value)} placeholder="email@example.com" className="h-9 text-[13px]" />
+            </div>
           </div>
         </div>
         <DialogFooter>
@@ -1951,14 +1958,14 @@ export default function SalesPage() {
         onPriceModeChange={setPriceMode}
         onSetStatus={setStatus}
         onComplete={handleComplete}
-        onAddCustomer={(name, phone, email) => {
+        onAddCustomer={(name, phone, email, company) => {
           addCustomer({
             name, phone, email,
-            company: "", industry: "", city: "", status: "Active",
+            company: company || "", industry: "", city: "", status: "Active",
             source: "direct", customerSince: new Date().toISOString().slice(0, 10),
             totalValue: "0", currency: "GBP", notes: "", tags: [],
           });
-          toast({ title: "Customer added", description: `"${name}" added to Customers.` });
+          toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
         }}
       />
     );
