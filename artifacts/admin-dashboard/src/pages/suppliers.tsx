@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useSuppliers, useCities, useAreas, useProducts } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Supplier, SupplierStatus, Product } from "@/lib/store";
+import { Supplier, SupplierStatus, Product, getSettings } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Plus, Search, Trash2, Eye, X, Save, Star as StarIcon, Filter, Upload, FileDown, Package, Check, ChevronDown } from "lucide-react";
@@ -292,6 +292,8 @@ export default function SuppliersPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
+  const showProductPicker = useMemo(() => getSettings().supplierProductPicker !== false, []);
+
   const cityOptions   = useMemo(() => cities.map(c => c.name), [cities]);
   const areaOptions   = useMemo(() => areas.map(a => a.name), [areas]);
   const cityComboOpts = useMemo<ComboOption[]>(() => cities.map(c => ({ value: c.name, label: c.name })), [cities]);
@@ -552,11 +554,13 @@ export default function SuppliersPage() {
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
-            <ProductMultiPicker
-              allProducts={products}
-              selectedIds={newRowProductIds}
-              onChange={setNewRowProductIds}
-            />
+            {showProductPicker && (
+              <ProductMultiPicker
+                allProducts={products}
+                selectedIds={newRowProductIds}
+                onChange={setNewRowProductIds}
+              />
+            )}
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); setNewRowProductIds([]); }}><X size={12} /> Cancel</Button>
             <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save Row</Button>
           </div>
@@ -713,45 +717,47 @@ export default function SuppliersPage() {
                 </div>
               )}
 
-              {/* Linked Products */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked Products</p>
-                  {isAuthenticated && (
-                    <ProductMultiPicker
-                      allProducts={products}
-                      selectedIds={viewSupp.productIds ?? []}
-                      onChange={ids => {
-                        editSupplier(viewSupp.id, { productIds: ids });
-                        setViewSupp(s => s ? { ...s, productIds: ids } : s);
-                      }}
-                      trigger={
-                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-[11px]">
-                          <Package size={11} className="text-indigo-500" />
-                          {(viewSupp.productIds?.length ?? 0) > 0 ? `${viewSupp.productIds!.length} linked` : "Link products"}
-                          <ChevronDown size={11} className="text-muted-foreground" />
-                        </Button>
-                      }
-                    />
+              {/* Linked Products — shown only when setting is ON */}
+              {showProductPicker && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked Products</p>
+                    {isAuthenticated && (
+                      <ProductMultiPicker
+                        allProducts={products}
+                        selectedIds={viewSupp.productIds ?? []}
+                        onChange={ids => {
+                          editSupplier(viewSupp.id, { productIds: ids });
+                          setViewSupp(s => s ? { ...s, productIds: ids } : s);
+                        }}
+                        trigger={
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-[11px]">
+                            <Package size={11} className="text-indigo-500" />
+                            {(viewSupp.productIds?.length ?? 0) > 0 ? `${viewSupp.productIds!.length} linked` : "Link products"}
+                            <ChevronDown size={11} className="text-muted-foreground" />
+                          </Button>
+                        }
+                      />
+                    )}
+                  </div>
+                  {(viewSupp.productIds?.length ?? 0) > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {viewSupp.productIds!.map(pid => {
+                        const prod = products.find(p => p.id === pid);
+                        if (!prod) return null;
+                        return (
+                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                            <Package size={10} />
+                            {prod.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground italic">No products linked yet</p>
                   )}
                 </div>
-                {(viewSupp.productIds?.length ?? 0) > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {viewSupp.productIds!.map(pid => {
-                      const prod = products.find(p => p.id === pid);
-                      if (!prod) return null;
-                      return (
-                        <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-                          <Package size={10} />
-                          {prod.name}
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[12px] text-muted-foreground italic">No products linked yet</p>
-                )}
-              </div>
+              )}
 
               {isAuthenticated && (
                 <div className="pt-4 border-t">

@@ -856,6 +856,22 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Supplier product picker toggle */}
+                <div className="rounded-xl border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">Products picker in Supplier form</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        When enabled, a multi-select product picker appears in the Add/Edit Supplier form so you can link products to a supplier.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={form.supplierProductPicker !== false}
+                      onCheckedChange={v => set("supplierProductPicker", v)}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 

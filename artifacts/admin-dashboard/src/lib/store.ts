@@ -2720,6 +2720,8 @@ export type AppSettings = {
   showPosProfit:        boolean; // show green profit amount under each line subtotal in POS
   // ── CRM / HRM form display ──
   crmFormMode:          "dialog" | "sheet"; // default open mode for all CRM/HRM add-forms
+  // ── Supplier form options ──
+  supplierProductPicker: boolean; // show product multi-picker in add/edit supplier forms
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2765,6 +2767,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   referenceDigits:      4,
   showPosProfit:        true,
   crmFormMode:          "dialog",
+  supplierProductPicker: true,
 };
 
 export function getSettings(): AppSettings {
