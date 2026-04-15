@@ -1739,6 +1739,14 @@ export default function SalesPage() {
   const [filterDateTo,   setFilterDateTo]   = useState("");
   const [filterPayMode,  setFilterPayMode]  = useState("");
   const [filterPayStatus,setFilterPayStatus]= useState("");
+  const [wrapText,       setWrapText]       = useState<boolean>(() => {
+    try { return localStorage.getItem("sales-wrap-text") === "true"; } catch { return false; }
+  });
+  const toggleWrap = () => setWrapText(v => {
+    const next = !v;
+    try { localStorage.setItem("sales-wrap-text", String(next)); } catch {}
+    return next;
+  });
 
   const clearAdvFilters = () => {
     setFilterArea(""); setFilterCustomer(""); setFilterAgent("");
@@ -2337,6 +2345,23 @@ export default function SalesPage() {
           </button>
         )}
 
+        {/* Wrap text toggle */}
+        <button
+          onClick={toggleWrap}
+          title={wrapText ? "Disable text wrap" : "Enable text wrap"}
+          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
+            wrapText
+              ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+            <polyline points="9 15 6 18 9 21"/><line x1="3" y1="18" x2="6" y2="18"/>
+          </svg>
+          Wrap
+        </button>
+
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 font-medium">1 unsaved sale</span>
@@ -2472,14 +2497,14 @@ export default function SalesPage() {
           {/* New row */}
           {isAuthenticated && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
-              <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: CELL_H }}>★</td>
+              <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>★</td>
               {COLS.map((c, ci) => {
                 const isA = newRowActive === ci;
                 const val = newRow[c.field] ?? "";
                 return (
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : c.type === "readonly" ? "bg-gray-50/60 dark:bg-gray-800/20" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`}
-                    style={{ height: CELL_H }}>
+                    style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>
                     {c.type === "readonly" ? (
                       <div className="w-full h-full flex items-center px-3"><span className="text-[12px] text-gray-400">auto</span></div>
                     ) : isA && c.type === "select" ? (
@@ -2511,18 +2536,18 @@ export default function SalesPage() {
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); commitNewRow(); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none placeholder:text-gray-300" />
                     ) : (
-                      <div className="w-full h-full flex items-center px-3 cursor-text" onClick={() => c.type !== "readonly" && setNewRowActive(ci)}>
+                      <div className={`w-full flex items-center px-3 cursor-text ${wrapText ? "py-2" : "h-full"}`} onClick={() => c.type !== "readonly" && setNewRowActive(ci)}>
                         {c.field === "status" && val ? (
                           <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${STATUS_BG[val as SaleStatus] ?? ""}`}>{val}</span>
                         ) : (
-                          <span className={`truncate text-[13px] ${!val ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>{val || c.label}</span>
+                          <span className={`${wrapText ? "break-words" : "truncate"} text-[13px] ${!val ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>{val || c.label}</span>
                         )}
                       </div>
                     )}
                   </td>
                 );
               })}
-              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: CELL_H }}>
+              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>
                 <div className="flex items-center justify-center gap-1">
                   <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50" title="Save"><Save size={13} /></button>
                   <button onClick={() => { setNewRow(null); setNewRowActive(null); }} className="p-1 rounded text-red-400 hover:bg-red-50" title="Cancel"><X size={13} /></button>
@@ -2539,7 +2564,7 @@ export default function SalesPage() {
           ) : filtered.map((sale, ri) => (
             <tr key={sale.id}
               className={`border-b border-gray-100 dark:border-border transition-colors group ${activeCell?.id === sale.id ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
-              <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 font-mono select-none" style={{ height: CELL_H }}>{ri + 1}</td>
+              <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 font-mono select-none" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>{ri + 1}</td>
               {COLS.map((c, ci) => {
                 const isA = activeCell?.id === sale.id && activeCell.col === ci;
                 const rawVal = cellValue(sale, c.field);
@@ -2547,19 +2572,19 @@ export default function SalesPage() {
                 return (
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${c.type === "readonly" ? "bg-gray-50/40 dark:bg-gray-800/10" : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
-                    style={{ height: CELL_H }}
+                    style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}
                     onClick={() => canEdit && !isA && setActiveCell({ id: sale.id, col: ci })}>
                     {c.field === "status" && !isA ? (
-                      <div className="w-full h-full flex items-center px-3 cursor-pointer">
+                      <div className={`w-full flex items-center px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
                         <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${STATUS_BG[rawVal as SaleStatus] ?? ""}`}>{rawVal}</span>
                       </div>
                     ) : c.field === "paymentMethod" && !isA ? (
-                      <div className="w-full h-full flex items-center gap-1.5 px-3 cursor-pointer">
+                      <div className={`w-full flex items-center gap-1.5 px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
                         {PAYMENT_ICON[rawVal as SalePayment]}
                         <span className="text-[12px] text-gray-600 dark:text-gray-400">{rawVal}</span>
                       </div>
                     ) : (c.field === "total" || c.field === "amountPaid" || c.field === "balance") ? (
-                      <div className="w-full h-full flex items-center px-3">
+                      <div className={`w-full flex items-center px-3 ${wrapText ? "py-2" : "h-full"}`}>
                         <span className={`text-[13px] font-mono font-semibold tabular-nums ${
                           c.field === "balance" && parseFloat(rawVal) > 0
                             ? "text-red-500 dark:text-red-400"
@@ -2571,7 +2596,7 @@ export default function SalesPage() {
                         </span>
                       </div>
                     ) : c.field === "payStatus" ? (
-                      <div className="w-full h-full flex items-center px-3">
+                      <div className={`w-full flex items-center px-3 ${wrapText ? "py-2" : "h-full"}`}>
                         {rawVal === "N/A" ? (
                           <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
                         ) : (
@@ -2586,6 +2611,7 @@ export default function SalesPage() {
                     ) : (
                       <EditableCell
                         value={rawVal} col={c} active={isA} canEdit={canEdit}
+                        wrapText={wrapText}
                         onActivate={() => setActiveCell({ id: sale.id, col: ci })}
                         onCommit={v => commitCell(sale.id, c.field, v)}
                         onCancel={() => setActiveCell(null)}
@@ -2597,7 +2623,7 @@ export default function SalesPage() {
                   </td>
                 );
               })}
-              <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
+              <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }} onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
                     title="Open POS" onClick={() => openDetail(sale.id)}>
@@ -2617,9 +2643,9 @@ export default function SalesPage() {
           {/* ── Totals row ── */}
           {filtered.length > 0 && (
             <tr className="border-t-2 border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20 sticky bottom-0 z-10">
-              <td className="border-r border-blue-200 dark:border-blue-800 text-center text-[11px] font-bold text-blue-500 dark:text-blue-400 select-none" style={{ height: CELL_H }}>Σ</td>
+              <td className="border-r border-blue-200 dark:border-blue-800 text-center text-[11px] font-bold text-blue-500 dark:text-blue-400 select-none" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>Σ</td>
               {COLS.map((c) => (
-                <td key={c.field} className="border-r border-blue-100 dark:border-blue-900/50 px-3" style={{ height: CELL_H }}>
+                <td key={c.field} className="border-r border-blue-100 dark:border-blue-900/50 px-3" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>
                   {c.field === "saleNumber" ? (
                     <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                       {filtered.length} sale{filtered.length !== 1 ? "s" : ""}
@@ -2643,7 +2669,7 @@ export default function SalesPage() {
                   ) : null}
                 </td>
               ))}
-              <td className="sticky right-0 bg-blue-50/60 dark:bg-blue-950/20 border-l border-blue-100 dark:border-blue-900/50" style={{ height: CELL_H }} />
+              <td className="sticky right-0 bg-blue-50/60 dark:bg-blue-950/20 border-l border-blue-100 dark:border-blue-900/50" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }} />
             </tr>
           )}
 

@@ -324,6 +324,14 @@ export default function SuppliersPage() {
   const [newRowActive,     setNewRowActive]     = useState<number | null>(null);
   const [newRowProductIds, setNewRowProductIds] = useState<string[]>([]);
   const [showImport,       setShowImport]       = useState(false);
+  const [wrapText,         setWrapText]         = useState<boolean>(() => {
+    try { return localStorage.getItem("suppliers-wrap-text") === "true"; } catch { return false; }
+  });
+  const toggleWrap = () => setWrapText(v => {
+    const next = !v;
+    try { localStorage.setItem("suppliers-wrap-text", String(next)); } catch {}
+    return next;
+  });
 
   const [, nav] = useLocation();
 
@@ -551,6 +559,22 @@ export default function SuppliersPage() {
             {SUPPLIER_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
+        {/* Wrap text toggle */}
+        <button
+          onClick={toggleWrap}
+          title={wrapText ? "Disable text wrap" : "Enable text wrap"}
+          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
+            wrapText
+              ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+            <polyline points="9 15 6 18 9 21"/><line x1="3" y1="18" x2="6" y2="18"/>
+          </svg>
+          Wrap
+        </button>
         {isAuthenticated && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
@@ -575,12 +599,12 @@ export default function SuppliersPage() {
           {/* New row */}
           {isAuthenticated && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
-              <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
+              <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>★</td>
               {COLS.map((c, ci) => {
                 const isA = newRowActive === ci;
                 const val = newRow[c.field as EditableField];
                 return (
-                  <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={{ height: `${CELL_H}px` }}>
+                  <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
                     {isA && c.type === "select" ? (
                       <select autoFocus value={val}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
@@ -607,20 +631,20 @@ export default function SuppliersPage() {
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Enter") { e.preventDefault(); ci === COLS.length - 1 ? commitNewRow() : navigateNewRow(ci, false); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
                         className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
                     ) : (
-                      <div className="w-full h-full flex items-center px-3 cursor-text" onClick={() => setNewRowActive(ci)}>
+                      <div className={`w-full flex items-center px-3 cursor-text ${wrapText ? "py-2" : "h-full"}`} onClick={() => setNewRowActive(ci)}>
                         {c.field === "status" ? (
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[newRow.status]}`}>{newRow.status}</span>
                         ) : c.field === "rating" ? (
                           <Stars n={parseInt(val) || 0} />
                         ) : (
-                          <span className={`truncate ${!val ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>{val || c.label}</span>
+                          <span className={`${wrapText ? "break-words" : "truncate"} ${!val ? "text-gray-300" : "text-gray-700 dark:text-foreground"}`}>{val || c.label}</span>
                         )}
                       </div>
                     )}
                   </td>
                 );
               })}
-              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }}>
+              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
                 <div className="flex items-center justify-center gap-1">
                   <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50" title="Save"><Save size={13} /></button>
                   <button onClick={() => { setNewRow(null); setNewRowActive(null); setNewRowProductIds([]); }} className="p-1 rounded text-red-400 hover:bg-red-50" title="Cancel"><X size={13} /></button>
@@ -639,16 +663,17 @@ export default function SuppliersPage() {
             return (
               <tr key={supp.id} data-testid={`row-supplier-${supp.id}`}
                 className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
-                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
+                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>{ri + 1}</td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === supp.id && activeCell.col === ci;
                   const rawVal = c.field === "rating" ? String(supp.rating) : String((supp as unknown as Record<string, string>)[c.field] ?? "");
                   return (
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
-                      style={{ height: `${CELL_H}px` }}
+                      style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
                       onClick={() => !isA && isAuthenticated && setActiveCell({ id: supp.id, col: ci })}>
                       <EditableCell
                         value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                        wrapText={wrapText}
                         onActivate={() => setActiveCell({ id: supp.id, col: ci })}
                         onCommit={v => commitCell(supp.id, c.field as EditableField, v)}
                         onCancel={() => setActiveCell(null)}
@@ -658,7 +683,7 @@ export default function SuppliersPage() {
                     </td>
                   );
                 })}
-                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="View" onClick={() => setViewSupp(supp)}><Eye size={13} /></button>
                     <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete" onClick={() => setDeleteId(supp.id)}><Trash2 size={13} /></button>

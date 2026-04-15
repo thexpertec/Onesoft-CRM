@@ -1390,6 +1390,14 @@ export default function InvoicesPage() {
 
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
   const [search,       setSearch]       = useState("");
+  const [wrapText,     setWrapText]     = useState<boolean>(() => {
+    try { return localStorage.getItem("invoices-wrap-text") === "true"; } catch { return false; }
+  });
+  const toggleWrap = () => setWrapText(v => {
+    const next = !v;
+    try { localStorage.setItem("invoices-wrap-text", String(next)); } catch {}
+    return next;
+  });
 
   // Invoice type colour palette
   const isPurchase = typeFilter === "purchase";
@@ -1544,8 +1552,8 @@ export default function InvoicesPage() {
       </div>
 
       {/* ── Search ── */}
-      <div className="px-6 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
-        <div className="relative max-w-sm">
+      <div className="px-6 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800 flex items-center gap-3">
+        <div className="relative max-w-sm flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
@@ -1555,6 +1563,22 @@ export default function InvoicesPage() {
           />
           {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={13} /></button>}
         </div>
+        {/* Wrap text toggle */}
+        <button
+          onClick={toggleWrap}
+          title={wrapText ? "Disable text wrap" : "Enable text wrap"}
+          className={`shrink-0 h-9 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
+            wrapText
+              ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+              : "border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:border-gray-300"
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+            <polyline points="9 15 6 18 9 21"/><line x1="3" y1="18" x2="6" y2="18"/>
+          </svg>
+          Wrap
+        </button>
       </div>
 
       {/* ── Invoice List ── */}
@@ -1601,15 +1625,15 @@ export default function InvoicesPage() {
                 <div
                   key={inv.id}
                   onClick={() => navigate(`/invoices/${inv.id}`)}
-                  className="grid grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto] gap-0 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors items-center group"
+                  className={`grid grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto] gap-0 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
                 >
                   {/* Invoice # */}
-                  <div className="font-mono text-[12px] font-bold text-gray-900 dark:text-gray-100 truncate pr-2">
+                  <div className={`font-mono text-[12px] font-bold text-gray-900 dark:text-gray-100 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
                     {inv.invoiceNumber}
                   </div>
 
                   {/* Customer / Supplier */}
-                  <div className="text-[12px] text-gray-700 dark:text-gray-300 truncate pr-2">
+                  <div className={`text-[12px] text-gray-700 dark:text-gray-300 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
                     {inv.customer || <span className="text-gray-400 italic">{isPurchase ? "—" : "Walk-in"}</span>}
                   </div>
 
