@@ -1067,12 +1067,23 @@ export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);
 
 /**
  * Force-write all in-memory products to PostgreSQL.
- * Use when the store hasn't received a subset of products yet.
+ * Throws on failure so the caller can surface the error.
  */
 export async function syncProductsToStore(tenantId?: string | null): Promise<number> {
   const products = getProducts();
+  if (products.length === 0) return 0;
   const ns = tenantId ? `t:${tenantId}` : "global";
-  await kvPut(ns, PRODUCTS_KEY, products);
+  // Use a direct fetch that throws on error instead of the fire-and-forget helper
+  const url = `/api/kv/${encodeURIComponent(ns)}/${encodeURIComponent(PRODUCTS_KEY)}`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value: products }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.status.toString());
+    throw new Error(`Server returned ${res.status}: ${text}`);
+  }
   return products.length;
 }
 
@@ -3988,6 +3999,23 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     if (globalData) {
       for (const [key, value] of Object.entries(globalData)) {
         if (value !== undefined && value !== null) {
+          // For array keys: compare local vs server count and keep the larger one.
+          // If local has more records, the server is stale — push local up to the DB.
+          if (Array.isArray(value)) {
+            const localRaw = _lsGet(key);
+            if (localRaw) {
+              try {
+                const localArr = JSON.parse(localRaw);
+                if (Array.isArray(localArr) && localArr.length > (value as unknown[]).length) {
+                  // Local has more data — server is behind. Push local to DB and keep local.
+                  console.info(`[sync] local "${key}" has ${localArr.length} vs server ${(value as unknown[]).length} — pushing local to DB`);
+                  kvPut("global", key, localArr).catch(() => {});
+                  // _memRaw already has the local data; skip overwrite
+                  continue;
+                }
+              } catch { /* malformed local JSON — fall through to server value */ }
+            }
+          }
           // Populate both in-memory cache and best-effort localStorage
           _lsSet(key, value);
         }
@@ -4021,7 +4049,22 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       if (tenantData) {
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
-            _lsSet(`t:${tenantId}:${key}`, value);
+            const lsKey = `t:${tenantId}:${key}`;
+            // For arrays: prefer local if it has more records (server may be stale)
+            if (Array.isArray(value)) {
+              const localRaw = _lsGet(lsKey);
+              if (localRaw) {
+                try {
+                  const localArr = JSON.parse(localRaw);
+                  if (Array.isArray(localArr) && localArr.length > (value as unknown[]).length) {
+                    console.info(`[sync] tenant "${key}" local ${localArr.length} > server ${(value as unknown[]).length} — pushing local to DB`);
+                    kvPut(ns, key, localArr).catch(() => {});
+                    continue;
+                  }
+                } catch { /* fall through */ }
+              }
+            }
+            _lsSet(lsKey, value);
           }
         }
       }
