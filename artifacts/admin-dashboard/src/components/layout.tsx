@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
-  MapPin, BarChart3, ExternalLink, Store,
+  MapPin, BarChart3,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -312,8 +312,7 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "website", label: "Website", icon: Globe,
     items: [
-      { label: "Homepage CMS",  href: "/website-cms", icon: Globe,     desc: "Edit hero, banners, trust badges" },
-      { label: "View Store",    href: "/tenant-store/", icon: Store,   desc: "Open the live tenant store"        },
+      { label: "Homepage CMS", href: "/website-cms", icon: Globe, desc: "Edit hero, banners, trust badges" },
     ],
   },
   { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
@@ -589,25 +588,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:text-muted-foreground dark:hover:text-foreground hover:bg-gray-100 dark:hover:bg-muted transition-colors">
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-
-            {/* View Store */}
-            {(() => {
-              const tenantParam = currentTenantId ? `?tenant=${encodeURIComponent(currentTenantId)}` : "";
-              const storeUrl = `${window.location.origin}/tenant-store/${tenantParam}`;
-              return (
-                <a
-                  href={storeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={currentTenantId ? `View store for this tenant` : "View global store"}
-                  className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/50 text-[12px] font-semibold transition-colors"
-                >
-                  <Store size={13} />
-                  Store
-                  <ExternalLink size={11} className="opacity-60" />
-                </a>
-              );
-            })()}
 
             {/* Activity Log */}
             <Popover open={activityOpen} onOpenChange={handleActivityOpen}>
