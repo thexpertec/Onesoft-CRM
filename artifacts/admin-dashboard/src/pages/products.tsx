@@ -1495,6 +1495,7 @@ export default function ProductsPage() {
               </div>
             ) : undefined,
           }}
+          extraAfterNumberCol={{ width: 72, header: "IMG" }}
         >
 
           {/* New row */}
@@ -1502,6 +1503,7 @@ export default function ProductsPage() {
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-100 dark:border-border w-7" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
+              <td className="border-r border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }} />
               {visibleCols.map((c, ci) => {
                 const isA = newRowActive === ci;
                 const val = newRow[c.field as EditableField] ?? "";
@@ -1593,6 +1595,23 @@ export default function ProductsPage() {
                 </td>
 
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>{ri + 1}</td>
+
+                {/* Product image thumbnail */}
+                <td className="border-r border-gray-100 dark:border-border text-center select-none align-middle p-1"
+                  style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                  {prod.images?.[0] ? (
+                    <img
+                      src={prod.images[0]}
+                      alt={prod.name}
+                      className="w-14 h-14 object-cover rounded-md mx-auto shadow-sm border border-gray-200 dark:border-zinc-700"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-md mx-auto bg-gray-100 dark:bg-zinc-800 border border-dashed border-gray-200 dark:border-zinc-700 flex items-center justify-center">
+                      <Package size={18} className="text-gray-300 dark:text-zinc-600" />
+                    </div>
+                  )}
+                </td>
+
                 {visibleCols.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
                   // Compute readonly profit columns
