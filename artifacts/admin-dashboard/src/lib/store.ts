@@ -1094,6 +1094,7 @@ export type Product = {
   id: string;
   name: string;
   localName?: string;        // Local / alternate name of the product (optional)
+  model?: string;            // Model number or variant identifier
   sku: string;
   barcode?: string;          // Barcode / QR code value for scanning
   brand: string;
