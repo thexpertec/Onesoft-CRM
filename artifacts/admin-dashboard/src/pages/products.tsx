@@ -648,8 +648,8 @@ export default function ProductsPage() {
       case "has-wholesale":return !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0);
       case "no-wholesale": return !(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0);
       case "no-category":  return !p.category;
-      case "with-images":  return !!(p.images && p.images.length > 0);
-      case "no-image":     return !(p.images && p.images.length > 0);
+      case "with-images":  return !!(p.thumbnail || (p.images && p.images.length > 0));
+      case "no-image":     return !(p.thumbnail || (p.images && p.images.length > 0));
       case "no-sku":       return !p.sku?.trim();
       case "no-barcode":   return !p.barcode?.trim();
       case "loss-making":  { const cost = parseFloat(p.costPrice ?? "0") || 0; const price = parseFloat(p.price ?? "0") || 0; return price > 0 && cost > price; }
@@ -920,8 +920,8 @@ export default function ProductsPage() {
     { label: "Has Wholesale", value: products.filter(p => !!(p.wholesalePrice && parseFloat(p.wholesalePrice) > 0)).length,  filter: "has-wholesale", color: "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300",                activeRing: "ring-purple-400 dark:ring-purple-500"    },
     { label: "No Wholesale",  value: stats.noWholesale,                                                                       filter: "no-wholesale",  color: "bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400",                     activeRing: "ring-slate-400 dark:ring-slate-500"      },
     { label: "No Category",   value: products.filter(p => !p.category).length,                                               filter: "no-category",   color: "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400",                        activeRing: "ring-zinc-400 dark:ring-zinc-500"        },
-    { label: "With Images",   value: products.filter(p => !!(p.images && p.images.length > 0)).length,                       filter: "with-images",   color: "bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",                           activeRing: "ring-sky-400 dark:ring-sky-500"          },
-    { label: "No Image",      value: products.filter(p => !(p.images && p.images.length > 0)).length,                        filter: "no-image",      color: "bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400",                        activeRing: "ring-gray-300 dark:ring-gray-600"        },
+    { label: "With Images",   value: products.filter(p => !!(p.thumbnail || (p.images && p.images.length > 0))).length,    filter: "with-images",   color: "bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",                           activeRing: "ring-sky-400 dark:ring-sky-500"          },
+    { label: "No Image",      value: products.filter(p => !(p.thumbnail || (p.images && p.images.length > 0))).length,     filter: "no-image",      color: "bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400",                        activeRing: "ring-gray-300 dark:ring-gray-600"        },
   ];
 
   const hasRefData = brandOptions.length === 0 || categoryOptions.length === 0 || unitOptions.length === 0;
@@ -1633,9 +1633,9 @@ export default function ProductsPage() {
                 {/* Product image thumbnail */}
                 <td className="border-r border-gray-100 dark:border-border text-center select-none align-middle p-1"
                   style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
-                  {prod.images?.[0] ? (
+                  {(prod.thumbnail ?? prod.images?.[0]) ? (
                     <img
-                      src={prod.images[0]}
+                      src={prod.thumbnail ?? prod.images![0]}
                       alt={prod.name}
                       className="w-14 h-14 object-cover rounded-md mx-auto shadow-sm border border-gray-200 dark:border-zinc-700"
                     />
