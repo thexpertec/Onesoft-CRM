@@ -11,6 +11,7 @@ import { HomePage } from "@/pages/home";
 import { ShopPage } from "@/pages/shop";
 import { ProductDetailPage } from "@/pages/product-detail";
 import { CategoryPage } from "@/pages/category";
+import { CheckoutPage } from "@/pages/checkout";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ function Router() {
           <Route path="/shop" component={ShopPage} />
           <Route path="/product/:id" component={ProductDetailPage} />
           <Route path="/category/:slug" component={CategoryPage} />
+          <Route path="/checkout" component={CheckoutPage} />
           <Route component={NotFound} />
         </Switch>
       </main>
