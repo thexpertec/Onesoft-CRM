@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { ProductCard } from "@/components/product-card";
-import { cn } from "@/lib/utils";
+import { cn, getStockQty } from "@/lib/utils";
 import type { Product } from "@/types/product";
 
 // ─── Types & constants ──────────────────────────────────────────────────────────
@@ -145,10 +145,8 @@ export function ShopPage() {
     if (!isNaN(pMax)) res = res.filter(p => ep(p) <= pMax);
 
     if (inStockOnly) {
-      res = res.filter(p => {
-        const s = parseFloat(p.openingStock || "");
-        return isNaN(s) || s > 0;
-      });
+      // Use same getStockQty logic as the product card so results match badges
+      res = res.filter(p => getStockQty(p.openingStock) > 0);
     }
 
     if (selectedConditions.length > 0) {
