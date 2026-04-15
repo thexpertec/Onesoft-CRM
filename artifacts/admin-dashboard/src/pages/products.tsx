@@ -272,22 +272,46 @@ export default function ProductsPage() {
 
   // ── SKU check: "insert" mode flags conflicts; "upsert" mode marks them for update ──
   const enrichWithSkuErrors = useCallback((rows: ImportRow[], mode: "insert" | "upsert"): ImportRow[] => {
+    // Primary match: by SKU (trimmed, case-insensitive)
     const existingSkuMap = new Map(
-      products.filter(p => p.sku.trim()).map(p => [p.sku.trim().toLowerCase(), { name: p.name, id: p.id }])
+      products.filter(p => p.sku?.trim()).map(p => [p.sku.trim().toLowerCase(), { name: p.name, id: p.id }])
     );
-    const seenInFile = new Map<string, number>();
+    // Fallback match: by name (trimmed, case-insensitive) — catches re-imports where
+    // the same file was previously imported but SKUs weren't persisted correctly.
+    const existingNameMap = new Map(
+      products.map(p => [p.name.trim().toLowerCase(), { name: p.name, id: p.id }])
+    );
+    const seenSkuInFile  = new Map<string, number>();
+    const seenNameInFile = new Map<string, number>();
     return rows.map(r => {
       if (r._error) return r;
-      if (!r.sku.trim()) return r;
-      const key = r.sku.trim().toLowerCase();
-      if (existingSkuMap.has(key)) {
-        const existing = existingSkuMap.get(key)!;
+      const skuKey  = r.sku.trim().toLowerCase();
+      const nameKey = r.name.trim().toLowerCase();
+
+      // 1. SKU match against existing products
+      if (skuKey && existingSkuMap.has(skuKey)) {
+        const existing = existingSkuMap.get(skuKey)!;
         if (mode === "upsert") return { ...r, _updateId: existing.id };
         return { ...r, _error: `SKU "${r.sku}" already used by "${existing.name}"` };
       }
-      if (seenInFile.has(key))
-        return { ...r, _error: `SKU "${r.sku}" duplicated in this file (first at row ${seenInFile.get(key)})` };
-      seenInFile.set(key, r._rowNum);
+
+      // 2. Name-based fallback match (only for upsert mode; insert mode should still error)
+      if (mode === "upsert" && nameKey && existingNameMap.has(nameKey)) {
+        const existing = existingNameMap.get(nameKey)!;
+        return { ...r, _updateId: existing.id };
+      }
+
+      // 3. Duplicate-in-file check
+      if (skuKey) {
+        if (seenSkuInFile.has(skuKey))
+          return { ...r, _error: `SKU "${r.sku}" duplicated in this file (first at row ${seenSkuInFile.get(skuKey)})` };
+        seenSkuInFile.set(skuKey, r._rowNum);
+      } else {
+        if (seenNameInFile.has(nameKey))
+          return { ...r, _error: `Name "${r.name}" duplicated in this file (first at row ${seenNameInFile.get(nameKey)})` };
+        seenNameInFile.set(nameKey, r._rowNum);
+      }
+
       return r;
     });
   }, [products]);
@@ -430,7 +454,7 @@ export default function ProductsPage() {
     const batchRowResults   = new Map<number, "created" | "updated">();
     const batchImportedNums = new Set<number>();
 
-    const processBatch = () => {
+    const processBatch = async () => {
       try {
         const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
 
@@ -473,9 +497,9 @@ export default function ProductsPage() {
           return;
         }
 
-        // ── Last batch: now do the ONE bulk write ──────────────────────────
+        // ── Last batch: now do the ONE bulk write (await so DB write completes) ──
         try {
-          bulkImportProducts(
+          await bulkImportProducts(
             allToCreate.map(t => t.payload),
             allToUpdate.map(t => ({ id: t.id, data: t.payload })),
           );
@@ -484,8 +508,8 @@ export default function ProductsPage() {
           toast({
             title: "Storage error",
             description:
-              "Products were processed but could not be saved locally (storage full). " +
-              "Try clearing browser storage or refreshing.",
+              "Products were processed but could not be saved. " +
+              "Check your connection and try again.",
             variant: "destructive",
           });
           setImporting(false);
@@ -506,7 +530,7 @@ export default function ProductsPage() {
         refreshProducts();
         refreshStock();
         toast({
-          title: "Import complete",
+          title: "Import complete — saved to server",
           description: [
             productParts.join(" · "),
             refParts.length > 0 ? `Also added: ${refParts.join(", ")}` : "",

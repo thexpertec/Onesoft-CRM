@@ -1123,10 +1123,10 @@ export const reorderProducts = (orderedIds: string[]): void => {
  * batch instead of N individual read→append→write cycles.
  * This avoids the ~5 MB localStorage quota that blocks single-row imports at ~600 rows.
  */
-export const bulkImportProducts = (
+export const bulkImportProducts = async (
   toCreate: Omit<Product, "id" | "createdAt" | "updatedAt">[],
   toUpdate: { id: string; data: Partial<Omit<Product, "id" | "createdAt">> }[],
-): { created: Product[]; updated: Product[] } => {
+): Promise<{ created: Product[]; updated: Product[] }> => {
   const existing = getProducts();
   const idxMap   = new Map(existing.map((p, i) => [p.id, i]));
   const now      = new Date().toISOString();
@@ -1153,7 +1153,22 @@ export const bulkImportProducts = (
   // Single bulk write (existing already has updates applied)
   const finalList = [...existing, ...created];
   console.info(`[bulkImport] products: ${existing.length} existing + ${created.length} new = ${finalList.length} total`);
-  setStored(PRODUCTS_KEY, finalList);
+
+  // Write to memory + localStorage immediately (so UI can update)
+  const _lsSetLocal = (storageKey: string, value: unknown) => {
+    const json = JSON.stringify(value);
+    _memRaw.set(storageKey, json);
+    try { localStorage.setItem(storageKey, json); } catch { /* quota */ }
+  };
+
+  // Helper: resolve namespace + key for kvPut from a storageKey
+  const _resolveNsKey = (sk: string): [string, string] => {
+    const m = sk.match(/^t:([^:]+):(.+)$/);
+    return m ? [`t:${m[1]}`, m[2]] : ["global", sk];
+  };
+
+  const productsSk = tenantKey(PRODUCTS_KEY);
+  _lsSetLocal(productsSk, finalList);
 
   // ── Create opening-balance stock entries for new AND updated products ──
   // For updates: only create a stock item if openingStock > 0 and none exists yet.
@@ -1226,15 +1241,43 @@ export const bulkImportProducts = (
   }
 
   console.info(`[bulkImport] stock: ${newStockItems.length} new items created (${candidates.length} candidates checked, ${currentStock.length} existing)`);
+
+  const finalStock = newStockItems.length > 0 ? [...currentStock, ...newStockItems] : currentStock;
+  const stockSk = tenantKey(STOCK_KEY);
+  let finalLedger: StockLedgerEntry[] | null = null;
+
   if (newStockItems.length > 0) {
-    setStored(STOCK_KEY, [...currentStock, ...newStockItems]);
+    _lsSetLocal(stockSk, finalStock);
     const existingLedger = getStockLedger();
     const fullEntries: StockLedgerEntry[] = ledgerEntries.map(e => ({
       ...e,
       id:        crypto.randomUUID(),
       createdAt: now,
     }));
-    setStored(LEDGER_KEY, [...existingLedger, ...fullEntries]);
+    finalLedger = [...existingLedger, ...fullEntries];
+    const ledgerSk = tenantKey(LEDGER_KEY);
+    _lsSetLocal(ledgerSk, finalLedger);
+  }
+
+  // ── Await PostgreSQL writes so data survives page refresh ──────────────────
+  const [productsNs, productsKey] = _resolveNsKey(productsSk);
+  const writes: Promise<void>[] = [kvPut(productsNs, productsKey, finalList)];
+
+  if (newStockItems.length > 0) {
+    const [stockNs, stockKey] = _resolveNsKey(stockSk);
+    writes.push(kvPut(stockNs, stockKey, finalStock));
+    if (finalLedger) {
+      const ledgerSk = tenantKey(LEDGER_KEY);
+      const [ledgerNs, ledgerKey] = _resolveNsKey(ledgerSk);
+      writes.push(kvPut(ledgerNs, ledgerKey, finalLedger));
+    }
+  }
+
+  try {
+    await Promise.all(writes);
+    console.info(`[bulkImport] ✓ ${writes.length} key(s) persisted to server`);
+  } catch (err) {
+    console.warn("[bulkImport] ✗ server write failed — data only in memory:", err);
   }
 
   return { created, updated };
@@ -3949,4 +3992,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
   } catch {
     // Network unavailable — in-memory cache / localStorage data will be used as fallback
   }
+
+  // Notify all data hooks that the server sync has completed so they can re-read
+  // their slice of _memRaw. This is critical on page refresh, where hooks mount
+  // before the async sync finishes and would otherwise show stale data.
+  try {
+    window.dispatchEvent(new CustomEvent("onesoft:data-synced"));
+  } catch { /* SSR guard */ }
 }

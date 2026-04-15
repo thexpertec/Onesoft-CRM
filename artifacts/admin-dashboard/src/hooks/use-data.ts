@@ -173,7 +173,11 @@ export function useProducts() {
   useEffect(() => {
     fetchProducts();
     window.addEventListener("storage", fetchProducts);
-    return () => window.removeEventListener("storage", fetchProducts);
+    window.addEventListener("onesoft:data-synced", fetchProducts);
+    return () => {
+      window.removeEventListener("storage", fetchProducts);
+      window.removeEventListener("onesoft:data-synced", fetchProducts);
+    };
   }, [fetchProducts]);
 
   const addProduct    = (data: Parameters<typeof createProduct>[0]) => { const p = createProduct(data); fetchProducts(); return p; };
@@ -327,7 +331,15 @@ export function useSales() {
 export function useStock() {
   const [stock, setStock] = useState<StockItem[]>([]);
   const fetch = useCallback(() => setStock(getStock()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useEffect(() => {
+    fetch();
+    window.addEventListener("storage", fetch);
+    window.addEventListener("onesoft:data-synced", fetch);
+    return () => {
+      window.removeEventListener("storage", fetch);
+      window.removeEventListener("onesoft:data-synced", fetch);
+    };
+  }, [fetch]);
   const addItem    = (d: Parameters<typeof createStockItem>[0])                   => { const s = createStockItem(d);    fetch(); return s; };
   const editItem   = (id: string, u: Parameters<typeof updateStockItem>[1])       => { const s = updateStockItem(id, u); fetch(); return s; };
   const removeItem = (id: string)                                                  => { deleteStockItem(id);              fetch(); };
