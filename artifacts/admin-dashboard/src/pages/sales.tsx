@@ -1204,6 +1204,23 @@ function POSView({
               >
                 <ScanLine size={16} />
               </button>
+              {/* Image / List view toggle */}
+              <div className="flex rounded-xl border-2 border-gray-200 dark:border-zinc-700 overflow-hidden shrink-0">
+                <button
+                  onClick={() => { setProdView("image"); saveSettings({ ...getSettings(), posProductView: "image" }); }}
+                  className={`w-9 h-9 flex items-center justify-center transition-colors ${prodView === "image" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                  title="Image grid (4 columns)"
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  onClick={() => { setProdView("list"); saveSettings({ ...getSettings(), posProductView: "list" }); }}
+                  className={`w-9 h-9 flex items-center justify-center border-l border-gray-200 dark:border-zinc-700 transition-colors ${prodView === "list" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                  title="List view (2 columns)"
+                >
+                  <List size={14} />
+                </button>
+              </div>
               {/* Collapse / expand filters toggle */}
               <button
                 onClick={() => setFiltersOpen(o => !o)}
@@ -1312,7 +1329,87 @@ function POSView({
                   )}
                 </div>
               </div>
+            ) : prodView === "list" ? (
+              /* ── 2-column text list ─────────────────────────────────────────── */
+              <div className="grid grid-cols-2 gap-1.5 content-start">
+                {filteredProds.map((product) => {
+                  const catIdx   = allCats.indexOf(product.category);
+                  const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
+                  const inCart       = cartQtyMap[product.sku] || 0;
+                  const stockQty     = stockMap[product.sku] ?? null;
+                  const availableQty = (stockQty ?? 0) - inCart;
+                  const lowStock     = stockQty !== null && availableQty > 0 && availableQty <= 5;
+                  const stockBlocked = !allowNegativeStock && stockQty !== null && availableQty <= 0;
+                  const isDisabled   = !isDraft || stockBlocked;
+                  const salePrice    = parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : product.price) || "0");
+                  return (
+                    <button
+                      key={product.id}
+                      disabled={isDisabled}
+                      onClick={() => onAddProduct(product)}
+                      title={
+                        !isDraft       ? `Sale is ${sale.status}`
+                        : stockBlocked ? `${product.name} — out of stock (overselling disabled)`
+                        : `Add ${product.name}`
+                      }
+                      className={`group relative text-left bg-white dark:bg-zinc-900 border rounded-xl px-3 py-2.5 flex flex-col gap-1 transition-all ${
+                        !isDraft
+                          ? "border-gray-100 dark:border-zinc-800 opacity-40 cursor-not-allowed"
+                          : stockBlocked
+                            ? "border-red-200 dark:border-red-900 opacity-70 cursor-not-allowed"
+                            : inCart > 0
+                              ? "border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-blue-950/20 hover:border-blue-400 hover:shadow-sm cursor-pointer active:scale-[0.99]"
+                              : "border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm cursor-pointer active:scale-[0.99]"
+                      }`}
+                    >
+                      {/* In-cart badge */}
+                      {inCart > 0 && !stockBlocked && (
+                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                          {inCart}
+                        </div>
+                      )}
+
+                      {/* Full product name — wraps */}
+                      <div className="text-[12px] font-bold text-gray-900 dark:text-gray-100 leading-snug pr-6 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        {product.name}
+                      </div>
+
+                      {/* Category + price row */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {product.category && (
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${catColor}`}>
+                            {product.category}
+                          </span>
+                        )}
+                        <span className={`text-[13px] font-extrabold font-mono tabular-nums ml-auto ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {getSettingsCurrencySymbol()}{salePrice.toFixed(dp)}
+                        </span>
+                      </div>
+
+                      {/* Stock pill */}
+                      <div>
+                        {stockBlocked ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 tabular-nums">
+                            No Stock {stockQty !== null ? `(${stockQty})` : ""}
+                          </span>
+                        ) : stockQty === null ? (
+                          <span className="text-[9px] text-gray-300 dark:text-zinc-600">No record</span>
+                        ) : availableQty < 0 ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 tabular-nums">⚠ {availableQty}</span>
+                        ) : availableQty === 0 ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 tabular-nums">0 left</span>
+                        ) : lowStock ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 tabular-nums">⚠ {availableQty} left</span>
+                        ) : (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 tabular-nums">{availableQty} in stock</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             ) : (
+              /* ── 4-column image grid ────────────────────────────────────────── */
               <div className="grid grid-cols-4 gap-2 content-start">
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
