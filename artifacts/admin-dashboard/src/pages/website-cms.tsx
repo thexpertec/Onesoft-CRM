@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp,
   Image as ImageIcon, Phone, Share2, LayoutTemplate, Navigation,
-  Star, Megaphone, Plus, Trash2, Layers,
+  Star, Megaphone, Plus, Trash2, Layers, ShoppingBag,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -66,6 +66,7 @@ export type StoreCms = {
   featuredSection:    { title: string; subtitle: string };
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
+  shop: { showStockBadge: boolean; allowBackorder: boolean };
 };
 
 export const CMS_DEFAULTS: StoreCms = {
@@ -135,6 +136,7 @@ export const CMS_DEFAULTS: StoreCms = {
   featuredSection:    { title: "Featured Products", subtitle: "Handpicked for quality and value" },
   newArrivalsSection: { title: "New Arrivals",      subtitle: "Just landed in our store"        },
   seo: { title: "Onesoft Tech Store", description: "Premium tech products delivered fast across the UK.", keywords: "tech, smartphones, laptops, accessories" },
+  shop: { showStockBadge: true, allowBackorder: false },
 };
 
 // ─── KV helpers ───────────────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ function mergeCms(saved: Partial<StoreCms>): StoreCms {
     featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(saved.featuredSection ?? {}) },
     newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(saved.newArrivalsSection ?? {}) },
     seo:                { ...CMS_DEFAULTS.seo,                ...(saved.seo ?? {}) },
+    shop:               { ...CMS_DEFAULTS.shop,               ...(saved.shop ?? {}) },
   };
 }
 
@@ -634,6 +637,56 @@ export default function WebsiteCmsPage() {
             <Field label="Subtitle">
               <input className={inp} value={cms.newArrivalsSection.subtitle} onChange={e => patch("newArrivalsSection", { subtitle: e.target.value })} placeholder="Just landed in our store" />
             </Field>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── SHOP SETTINGS ────────────────────────────────────────────────── */}
+      <Section title="Shop Settings" icon={<ShoppingBag size={16} />} defaultOpen={false}>
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 dark:border-zinc-800">
+            <div>
+              <p className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Show Stock Badge on Product Images</p>
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                Display "Out of Stock" and "Low Stock" labels on product cards and the product detail page.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => patch("shop", { showStockBadge: !cms.shop.showStockBadge })}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                cms.shop.showStockBadge ? "bg-blue-600" : "bg-gray-200 dark:bg-zinc-700"
+              }`}
+              aria-pressed={cms.shop.showStockBadge}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  cms.shop.showStockBadge ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <div>
+              <p className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Allow Orders on Out-of-Stock Products</p>
+              <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                When enabled, customers can add out-of-stock items to cart (backorder). When disabled, the Add to Cart button is greyed out.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => patch("shop", { allowBackorder: !cms.shop.allowBackorder })}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                cms.shop.allowBackorder ? "bg-blue-600" : "bg-gray-200 dark:bg-zinc-700"
+              }`}
+              aria-pressed={cms.shop.allowBackorder}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  cms.shop.allowBackorder ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </div>
       </Section>

@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch } from "lucide-react";
 import type { Product } from "@/types/product";
 import { useCart } from "@/lib/cart";
+import { useStore } from "@/contexts/store-context";
 import { cn, formatPrice, getStockQty, stockLabel } from "@/lib/utils";
 
 interface ProductCardProps {
@@ -46,20 +47,24 @@ export function getProductTheme(product: Product) {
 
 export function ProductCard({ product, className }: ProductCardProps) {
   const { addItem } = useCart();
+  const { cms } = useStore();
   const [, navigate] = useLocation();
   const [wishlist, setWishlist] = useState(false);
   const [adding, setAdding] = useState(false);
 
   const qty = getStockQty(product.openingStock);
   const stock = stockLabel(qty, product.stockAlertQty);
+  const isOutOfStock = stock === "out";
   const theme = getProductTheme(product);
   const { Icon } = theme;
 
   const hasImage = Boolean(product.thumbnail);
+  const cartDisabled = isOutOfStock && !cms.shop.allowBackorder;
 
   async function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (cartDisabled) return;
     setAdding(true);
     addItem(product, 1);
     setTimeout(() => setAdding(false), 800);
@@ -115,12 +120,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
         {/* Badges */}
         <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-          {stock === "out" && (
+          {cms.shop.showStockBadge && isOutOfStock && (
             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 shadow-sm">
               Out of Stock
             </span>
           )}
-          {stock === "low" && (
+          {cms.shop.showStockBadge && stock === "low" && (
             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 shadow-sm">
               Low Stock
             </span>
@@ -202,10 +207,10 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
           <button
             onClick={handleAdd}
-            disabled={stock === "out" || adding}
+            disabled={cartDisabled || adding}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm",
-              stock === "out"
+              cartDisabled
                 ? "bg-gray-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
                 : adding
                   ? "bg-green-500 text-white scale-95 shadow-green-200"

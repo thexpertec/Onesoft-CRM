@@ -44,12 +44,13 @@ export function ProductDetailPage() {
   const stockQty = getStockQty(product.openingStock);
   const stock = stockLabel(stockQty, product.stockAlertQty);
   const isOutOfStock = stock === "out";
+  const cartDisabled = isOutOfStock && !cms.shop.allowBackorder;
   const theme = getProductTheme(product);
   const ThemeIcon = theme.Icon;
   const hasImage = Boolean(product.thumbnail);
 
   function handleAdd() {
-    if (isOutOfStock) return;
+    if (cartDisabled) return;
     addItem(product, qty);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
@@ -118,12 +119,12 @@ export function ProductDetailPage() {
             )}
 
             {/* Stock badges */}
-            {isOutOfStock && (
+            {cms.shop.showStockBadge && isOutOfStock && (
               <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-red-600 text-white text-xs font-bold shadow-lg">
                 Out of Stock
               </div>
             )}
-            {stock === "low" && !isOutOfStock && (
+            {cms.shop.showStockBadge && stock === "low" && !isOutOfStock && (
               <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-lg">
                 Only {stockQty} left!
               </div>
@@ -231,10 +232,10 @@ export function ProductDetailPage() {
 
             <button
               onClick={handleAdd}
-              disabled={isOutOfStock}
+              disabled={cartDisabled}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all",
-                isOutOfStock
+                cartDisabled
                   ? "bg-gray-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
                   : added
                     ? "bg-green-500 text-white"
@@ -242,7 +243,7 @@ export function ProductDetailPage() {
               )}
             >
               {added ? <Check size={16} /> : <ShoppingCart size={16} />}
-              {added ? "Added to Cart!" : isOutOfStock ? "Out of Stock" : "Add to Cart"}
+              {added ? "Added to Cart!" : cartDisabled ? "Out of Stock" : "Add to Cart"}
             </button>
 
             <button

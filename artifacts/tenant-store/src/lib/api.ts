@@ -67,6 +67,7 @@ export type StoreCms = {
   featuredSection:    { title: string; subtitle: string };
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
+  shop: { showStockBadge: boolean; allowBackorder: boolean };
 };
 
 export const CMS_DEFAULTS: StoreCms = {
@@ -136,6 +137,7 @@ export const CMS_DEFAULTS: StoreCms = {
   featuredSection:    { title: "Featured Products", subtitle: "Handpicked for quality and value" },
   newArrivalsSection: { title: "New Arrivals",      subtitle: "Just landed in our store"        },
   seo: { title: "Onesoft Tech Store", description: "Premium tech products delivered fast across the UK.", keywords: "tech, smartphones, laptops, accessories" },
+  shop: { showStockBadge: true, allowBackorder: false },
 };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -187,6 +189,7 @@ export async function fetchStoreCms(): Promise<StoreCms> {
       featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(v.featuredSection ?? {}) },
       newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(v.newArrivalsSection ?? {}) },
       seo:                { ...CMS_DEFAULTS.seo,                ...(v.seo ?? {}) },
+      shop:               { ...CMS_DEFAULTS.shop,               ...(v.shop ?? {}) },
     };
   } catch {
     return CMS_DEFAULTS;
