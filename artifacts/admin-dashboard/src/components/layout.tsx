@@ -549,14 +549,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems: NavItem[] = [
     ...OTHER_NAV.filter(item => {
       switch (item.key) {
-        case "crm":       return allowedCrmColumns.length > 0;
-        case "products":  return isModuleAllowed("products");
-        case "stock":     return isModuleAllowed("stock");
-        case "sales":     return isModuleAllowed("sales") || isModuleAllowed("invoices");
-        case "documents": return isModuleAllowed("documents");
-        case "accounts":  return true; // Chart of Accounts — always visible, standalone
-        case "settings":  return isModuleAllowed("settings");
-        default:          return true; // dashboard always shown
+        case "crm":           return allowedCrmColumns.length > 0;
+        case "products":      return isModuleAllowed("products");
+        case "stock":         return isModuleAllowed("stock");
+        case "sales":         return isModuleAllowed("sales") || isModuleAllowed("invoices");
+        case "documents":     return isModuleAllowed("documents");
+        case "accounts":      return (
+          isModuleAllowed("accounting_coa") || isModuleAllowed("accounting_journal") ||
+          isModuleAllowed("accounting_balance") || isModuleAllowed("accounting_ledger") ||
+          isModuleAllowed("accounting_pls") || isModuleAllowed("accounting_income") ||
+          isModuleAllowed("accounting_expense") || isModuleAllowed("accounting_receipts")
+        );
+        case "investments":   return isModuleAllowed("shareholders") || isModuleAllowed("investment_plans");
+        case "manufacturing": return isModuleAllowed("manufacturing") || isModuleAllowed("production_guide") || isModuleAllowed("raw_materials");
+        case "website":       return isModuleAllowed("website_cms");
+        case "repair":        return isModuleAllowed("repair");
+        case "settings":      return isModuleAllowed("settings");
+        default:              return true; // dashboard always shown
       }
     }),
     ...(hrmItems.length > 0 ? [HRM_NAV] : []),
@@ -1043,15 +1052,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </>}
 
                 {/* Accounts */}
-                <SectionLabel label="Accounts" />
-                <NavLink href="/chart-of-accounts" icon={BookOpen}       label="Chart of Accounts" />
-                <NavLink href="/journal-entry"     icon={ClipboardList}  label="Journal Entry" />
-                <NavLink href="/receipt-payment"   icon={CreditCard}     label="Receipt & Payment" />
-                <NavLink href="/balance-sheet"     icon={LayoutDashboard}label="Balance Sheet" />
-                <NavLink href="/pls-report"        icon={TrendingUp}     label="P&L Statement" />
-                <NavLink href="/ledger-report"     icon={FileBarChart}   label="Ledger Report" />
-                <NavLink href="/income-report"     icon={TrendingUp}     label="Income Report" />
-                <NavLink href="/expense-report"    icon={TrendingDown}   label="Expense Report" />
+                {(isModuleAllowed("accounting_coa") || isModuleAllowed("accounting_journal") ||
+                  isModuleAllowed("accounting_balance") || isModuleAllowed("accounting_ledger") ||
+                  isModuleAllowed("accounting_pls") || isModuleAllowed("accounting_income") ||
+                  isModuleAllowed("accounting_expense") || isModuleAllowed("accounting_receipts")) && <>
+                  <SectionLabel label="Accounts" />
+                  {isModuleAllowed("accounting_coa")      && <NavLink href="/chart-of-accounts" icon={BookOpen}        label="Chart of Accounts" />}
+                  {isModuleAllowed("accounting_journal")  && <NavLink href="/journal-entry"     icon={ClipboardList}   label="Journal Entry" />}
+                  {isModuleAllowed("accounting_receipts") && <NavLink href="/receipt-payment"   icon={CreditCard}      label="Receipt & Payment" />}
+                  {isModuleAllowed("accounting_balance")  && <NavLink href="/balance-sheet"     icon={LayoutDashboard} label="Balance Sheet" />}
+                  {isModuleAllowed("accounting_pls")      && <NavLink href="/pls-report"        icon={TrendingUp}      label="P&L Statement" />}
+                  {isModuleAllowed("accounting_ledger")   && <NavLink href="/ledger-report"     icon={FileBarChart}    label="Ledger Report" />}
+                  {isModuleAllowed("accounting_income")   && <NavLink href="/income-report"     icon={TrendingUp}      label="Income Report" />}
+                  {isModuleAllowed("accounting_expense")  && <NavLink href="/expense-report"    icon={TrendingDown}    label="Expense Report" />}
+                </>}
 
                 {/* HRM */}
                 {hrmItems.length > 0 && <>
@@ -1067,9 +1081,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </>}
 
                 {/* Investments */}
-                <SectionLabel label="Investments" />
-                <NavLink href="/shareholders"     icon={Landmark}   label="Shareholders" />
-                <NavLink href="/investment-plans" icon={TrendingUp} label="Investment Plans" />
+                {(isModuleAllowed("shareholders") || isModuleAllowed("investment_plans")) && <>
+                  <SectionLabel label="Investments" />
+                  {isModuleAllowed("shareholders")     && <NavLink href="/shareholders"     icon={Landmark}   label="Shareholders" />}
+                  {isModuleAllowed("investment_plans") && <NavLink href="/investment-plans" icon={TrendingUp} label="Investment Plans" />}
+                </>}
 
                 {/* Settings / Admin */}
                 {isModuleAllowed("settings") && <>
