@@ -10,6 +10,14 @@ import { cn, getStockQty } from "@/lib/utils";
 import type { Product } from "@/types/product";
 
 // ─── Types & constants ──────────────────────────────────────────────────────────
+
+/** Split "Main Cat > Sub Cat" into { main, sub }. Falls back to subcategory field. */
+function parseCategory(raw: string, subField?: string): { main: string; sub: string } {
+  const gt = raw.indexOf(" > ");
+  if (gt !== -1) return { main: raw.slice(0, gt).trim(), sub: raw.slice(gt + 3).trim() };
+  return { main: raw, sub: subField ?? "" };
+}
+
 type SortKey = "default" | "price_asc" | "price_desc" | "newest" | "name_asc";
 
 const SORTS: { key: SortKey; label: string }[] = [
@@ -77,10 +85,11 @@ export function ShopPage() {
     const tree: Record<string, { subs: Record<string, number>; total: number }> = {};
     products.forEach(p => {
       if (!p.category) return;
-      if (!tree[p.category]) tree[p.category] = { subs: {}, total: 0 };
-      tree[p.category].total++;
-      if (p.subcategory) {
-        tree[p.category].subs[p.subcategory] = (tree[p.category].subs[p.subcategory] || 0) + 1;
+      const { main, sub } = parseCategory(p.category, p.subcategory);
+      if (!tree[main]) tree[main] = { subs: {}, total: 0 };
+      tree[main].total++;
+      if (sub) {
+        tree[main].subs[sub] = (tree[main].subs[sub] || 0) + 1;
       }
     });
     return Object.entries(tree)
@@ -119,9 +128,15 @@ export function ShopPage() {
     let res = products;
 
     if (selectedSubcat) {
-      res = res.filter(p => p.category === selectedCat && p.subcategory === selectedSubcat);
+      res = res.filter(p => {
+        const { main, sub } = parseCategory(p.category || "", p.subcategory);
+        return main === selectedCat && sub === selectedSubcat;
+      });
     } else if (selectedCat) {
-      res = res.filter(p => p.category === selectedCat);
+      res = res.filter(p => {
+        const { main } = parseCategory(p.category || "", p.subcategory);
+        return main === selectedCat;
+      });
     }
 
     if (selectedBrands.length > 0) {
