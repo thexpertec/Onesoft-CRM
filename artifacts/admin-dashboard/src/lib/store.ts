@@ -192,7 +192,9 @@ function _apiWrite(storageKey: string, value: unknown): void {
     ns = "global";
     key = storageKey;
   }
-  kvPut(ns, key, value).catch(() => {/* silently ignore network errors */});
+  kvPut(ns, key, value).catch((err) => {
+    console.warn(`[kv] write failed for ${ns}/${key}:`, err instanceof Error ? err.message : err);
+  });
 }
 
 /** Tenant-namespaced read (all business data). */
@@ -1149,7 +1151,9 @@ export const bulkImportProducts = (
   }));
 
   // Single bulk write (existing already has updates applied)
-  setStored(PRODUCTS_KEY, [...existing, ...created]);
+  const finalList = [...existing, ...created];
+  console.info(`[bulkImport] products: ${existing.length} existing + ${created.length} new = ${finalList.length} total`);
+  setStored(PRODUCTS_KEY, finalList);
 
   // ── Create opening-balance stock entries for new AND updated products ──
   // For updates: only create a stock item if openingStock > 0 and none exists yet.
@@ -1221,6 +1225,7 @@ export const bulkImportProducts = (
     });
   }
 
+  console.info(`[bulkImport] stock: ${newStockItems.length} new items created (${candidates.length} candidates checked, ${currentStock.length} existing)`);
   if (newStockItems.length > 0) {
     setStored(STOCK_KEY, [...currentStock, ...newStockItems]);
     const existingLedger = getStockLedger();

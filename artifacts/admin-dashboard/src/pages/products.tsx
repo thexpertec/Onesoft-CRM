@@ -179,7 +179,7 @@ function parseCSV(text: string): ImportRow[] {
 
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
-  const { stock } = useStock();
+  const { stock, refresh: refreshStock } = useStock();
   const { isAuthenticated } = useAuth();
   const dp = getSettingsDecimalPlaces();
 
@@ -504,6 +504,7 @@ export default function ProductsPage() {
         if (refSync.units      > 0) refParts.push(`${refSync.units} unit${refSync.units !== 1 ? "s" : ""}`);
 
         refreshProducts();
+        refreshStock();
         toast({
           title: "Import complete",
           description: [
