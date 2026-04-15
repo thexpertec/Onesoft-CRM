@@ -613,9 +613,9 @@ export function CheckoutPage() {
       <div className={cn("grid gap-8", step === "confirm" ? "" : "lg:grid-cols-[1fr_380px]")}>
         {/* Main form area */}
         <div>
-          {step === "info"    && <InfoStep />}
-          {step === "payment" && <PaymentStep />}
-          {step === "confirm" && <ConfirmStep />}
+          {step === "info"    && InfoStep()}
+          {step === "payment" && PaymentStep()}
+          {step === "confirm" && ConfirmStep()}
         </div>
 
         {/* Order summary (hidden on confirm) */}
