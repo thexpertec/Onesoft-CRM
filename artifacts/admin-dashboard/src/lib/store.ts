@@ -1697,6 +1697,11 @@ export type Sale = {
   jeId?:        string;   // journal entry ID auto-created on completion (prevents duplicates)
   agentId?:     string;   // linked SalesAgent.id
   agentName?:   string;   // denormalised agent name
+  saleMode?:         "Retail" | "Wholesale";
+  deliveryStatus?:   "Pending" | "Processing" | "Shipped" | "Delivered";
+  deliveryCharges?:  string;
+  invoiceDiscount?:  string;
+  invoiceDiscountType?: "pct" | "amt";
   createdAt: string;
   updatedAt: string;
 };
