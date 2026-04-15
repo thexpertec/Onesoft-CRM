@@ -1058,7 +1058,8 @@ export type Product = {
   thumbnail?: string;
   images?: string[];
   showOnWeb?: boolean;       // Whether the product is visible on the tenant store website
-  websitePrice?: string;     // Separate price shown on the website (overrides retail price online)
+  websitePrice?: string;     // Current/sale price shown on the website
+  websitePriceWas?: string;  // Original "was" price shown crossed out on the website
   createdAt: string;
   updatedAt: string;
 };

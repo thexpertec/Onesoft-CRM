@@ -20,6 +20,7 @@ export interface Product {
   tags?: string;
   showOnWeb?: boolean;
   websitePrice?: string;
+  websitePriceWas?: string;
   createdAt: string;
   updatedAt: string;
 }

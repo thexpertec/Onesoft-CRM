@@ -134,9 +134,12 @@ export function ProductDetailPage() {
 
           <div className="flex items-end gap-3 mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
             {(() => {
-              const webPrice = product.websitePrice && parseFloat(product.websitePrice) > 0 ? product.websitePrice : null;
-              const displayPrice = webPrice ?? product.price;
-              const wasPrice = webPrice && parseFloat(product.price) > 0 && parseFloat(product.price) !== parseFloat(webPrice) ? product.price : null;
+              const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
+                ? product.websitePrice
+                : product.price;
+              const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
+                ? product.websitePriceWas
+                : null;
               return (
                 <>
                   <div className="text-3xl font-bold text-slate-900 dark:text-white">

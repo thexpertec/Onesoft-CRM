@@ -180,9 +180,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
         <div className="flex items-center justify-between gap-2">
           <div>
             {(() => {
-              const webPrice = product.websitePrice && parseFloat(product.websitePrice) > 0 ? product.websitePrice : null;
-              const displayPrice = webPrice ?? product.price;
-              const wasPrice = webPrice && parseFloat(product.price) > 0 && parseFloat(product.price) !== parseFloat(webPrice) ? product.price : null;
+              const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
+                ? product.websitePrice
+                : product.price;
+              const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
+                ? product.websitePriceWas
+                : null;
               return (
                 <>
                   <div className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
