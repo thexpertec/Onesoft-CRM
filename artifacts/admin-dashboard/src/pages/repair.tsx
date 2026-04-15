@@ -72,6 +72,18 @@ function formatDateShort(iso: string) {
   } catch { return iso; }
 }
 
+const LEGACY_STATUS_MAP: Record<string, BookingStatus> = {
+  "In Progress": "In Repair",
+  "Resolved":    "Completed",
+};
+
+function normaliseBooking(b: RepairBooking): RepairBooking {
+  const status: BookingStatus = STATUS_META[b.status]
+    ? b.status
+    : (LEGACY_STATUS_MAP[b.status] ?? "New");
+  return { ...b, status };
+}
+
 export default function RepairPage() {
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
@@ -89,7 +101,7 @@ export default function RepairPage() {
     try {
       const res  = await fetch(API);
       const data = await res.json() as { value: RepairBooking[] };
-      const arr  = Array.isArray(data.value) ? data.value : [];
+      const arr  = (Array.isArray(data.value) ? data.value : []).map(normaliseBooking);
       setBookings(arr.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
       toast({ title: "Failed to load bookings", variant: "destructive" });
