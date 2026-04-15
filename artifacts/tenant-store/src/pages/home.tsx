@@ -4,6 +4,7 @@ import {
   ArrowRight, Cpu, Laptop, Smartphone, Headphones,
   Gamepad2, Tablet, Cable, Camera, Tv, Watch,
   ShieldCheck, Truck, RotateCcw, HeadphonesIcon, Zap, Star, Heart, Package, Globe,
+  Battery, Plug, Speaker, Mouse, Printer, MonitorSmartphone, Wrench, ShoppingBag,
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { ProductCard } from "@/components/product-card";
@@ -15,10 +16,38 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  default: Cpu, Laptops: Laptop, Laptop, Smartphones: Smartphone, Smartphone,
-  Phones: Smartphone, Phone: Smartphone, Audio: Headphones, Headphones,
-  Gaming: Gamepad2, Tablets: Tablet, Tablet, Cables: Cable, Accessories: Cable,
-  Cameras: Camera, Camera, "TV & Home": Tv, TV: Tv, Wearables: Watch, Smartwatch: Watch,
+  default: Cpu,
+  // Laptops / Computers
+  Laptops: Laptop, Laptop, "Laptops & Computers": Laptop, Computers: Laptop,
+  // Phones
+  Smartphones: Smartphone, Smartphone, Phones: Smartphone, Phone: Smartphone,
+  "Mobile Smart Phones": Smartphone, "Mobile & Smart Phones": Smartphone,
+  // Audio
+  Audio: Headphones, Headphones, "Audio & Headphones": Headphones,
+  Speakers: Speaker, Speaker,
+  // Gaming
+  Gaming: Gamepad2, Consoles: Gamepad2,
+  // Tablets
+  Tablets: Tablet, Tablet,
+  // Cables & Charging
+  Cables: Cable, Cable, "Cables & Adapters": Cable, Adapters: Cable,
+  "Chargers & Docks": Plug, Chargers: Plug, Docks: Plug,
+  // Batteries
+  Batteries: Battery, Battery,
+  // Cameras
+  Cameras: Camera, Camera,
+  // TVs
+  "TV & Home": Tv, TV: Tv, Televisions: Tv,
+  // Wearables / Watches
+  Wearables: Watch, Smartwatch: Watch, Watches: Watch,
+  // Accessories
+  Accessories: ShoppingBag, "Mobile Accessories": ShoppingBag,
+  // Peripherals
+  Mouse, Mice: Mouse, Keyboards: Cpu, Printers: Printer, Printer,
+  // Repair / Services
+  Repair: Wrench, Services: Wrench,
+  // General
+  MonitorSmartphone,
 };
 
 export function HomePage() {
@@ -29,9 +58,13 @@ export function HomePage() {
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   ).slice(0, 4), [products]);
 
-  const displayCats = categories.length > 0 ? categories.slice(0, 8) : [
-    "Smartphones", "Laptops", "Tablets", "Gaming", "Audio", "Cameras", "Accessories", "Wearables"
-  ];
+  const displayCats = useMemo(() => {
+    const raw = categories.length > 0 ? categories : [
+      "Smartphones", "Laptops", "Tablets", "Gaming", "Audio & Headphones", "Cameras", "Accessories", "Wearables",
+    ];
+    const mains = [...new Set(raw.map(c => c.includes(" > ") ? c.split(" > ")[0].trim() : c))].sort();
+    return mains.slice(0, 8);
+  }, [categories]);
 
   // ── Apply SEO meta tags ───────────────────────────────────────────────────
   useEffect(() => {
@@ -128,7 +161,7 @@ export function HomePage() {
           {displayCats.map(cat => {
             const Icon = CATEGORY_ICONS[cat] ?? CATEGORY_ICONS.default;
             return (
-              <Link key={cat} href={`/category/${encodeURIComponent(cat)}`}
+              <Link key={cat} href={`/shop?cat=${encodeURIComponent(cat)}`}
                 className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 hover:border-blue-200 dark:hover:border-blue-800/50 hover:shadow-md hover:shadow-blue-500/5 hover:-translate-y-0.5 transition-all duration-200 group"
               >
                 <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 flex items-center justify-center transition-colors">
