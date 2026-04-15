@@ -197,6 +197,29 @@ export function HomePage() {
         </section>
       )}
 
+      {/* ── Repair Services Banner ───────────────────────────────────────── */}
+      <section className="py-4 px-4 sm:px-6 max-w-7xl mx-auto">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 p-8 sm:p-12">
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "32px 32px" }} />
+          <div className="absolute top-1/2 right-12 -translate-y-1/2 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-24 w-40 h-40 bg-fuchsia-400/20 rounded-full blur-2xl" />
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div>
+              <div className="text-sm font-semibold text-purple-200 mb-2 uppercase tracking-wide flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                Professional Repair Service
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">We Fix What Others Can't</h3>
+              <p className="text-purple-200 text-sm">Phones, laptops, tablets &amp; more — fast turnaround, genuine parts, warranty included.</p>
+            </div>
+            <Link href="/services" className="shrink-0 inline-flex items-center gap-2 px-6 py-3 bg-white text-purple-600 rounded-xl font-bold text-sm hover:bg-purple-50 transition-colors shadow-lg">
+              Book a Repair
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── New Arrivals ─────────────────────────────────────────────────── */}
       {newArrivals.length > 0 && (
         <section className="py-8 px-4 sm:px-6 max-w-7xl mx-auto">
