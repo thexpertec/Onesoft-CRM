@@ -35,7 +35,7 @@ const FALLBACK_GRADIENTS = [
   { gradient: "from-amber-500 via-orange-600 to-red-700",        Icon: Package },
 ];
 
-function getTheme(product: Product) {
+export function getProductTheme(product: Product) {
   const cat = (product.category ?? "").toLowerCase().trim();
   if (cat && CATEGORY_THEMES[cat]) return { ...CATEGORY_THEMES[cat] };
   // Deterministic fallback based on product name hash
@@ -52,7 +52,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
   const qty = getStockQty(product.openingStock);
   const stock = stockLabel(qty, product.stockAlertQty);
-  const theme = getTheme(product);
+  const theme = getProductTheme(product);
   const { Icon } = theme;
 
   const hasImage = Boolean(product.thumbnail);

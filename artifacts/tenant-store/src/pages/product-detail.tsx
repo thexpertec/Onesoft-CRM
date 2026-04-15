@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft, ShoppingCart, Heart, Share2, Star,
-  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus
+  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
-import { ProductCard } from "@/components/product-card";
+import { ProductCard, getProductTheme } from "@/components/product-card";
 import { formatPrice, getStockQty, stockLabel, cn } from "@/lib/utils";
 
 export function ProductDetailPage() {
@@ -44,6 +44,9 @@ export function ProductDetailPage() {
   const stockQty = getStockQty(product.openingStock);
   const stock = stockLabel(stockQty, product.stockAlertQty);
   const isOutOfStock = stock === "out";
+  const theme = getProductTheme(product);
+  const ThemeIcon = theme.Icon;
+  const hasImage = Boolean(product.thumbnail);
 
   function handleAdd() {
     if (isOutOfStock) return;
@@ -72,31 +75,56 @@ export function ProductDetailPage() {
       <div className="grid lg:grid-cols-2 gap-10 mb-16">
         {/* Image */}
         <div>
-          <div className="aspect-square rounded-3xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex items-center justify-center p-12 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
-            {product.thumbnail ? (
-              <img
-                src={product.thumbnail}
-                alt={product.name}
-                className="relative w-full h-full object-contain"
-              />
+          <div className={cn(
+            "aspect-square rounded-3xl overflow-hidden relative",
+            hasImage
+              ? "bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 p-10"
+              : `bg-gradient-to-br ${theme.gradient}`
+          )}>
+            {hasImage ? (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
+                <img
+                  src={product.thumbnail}
+                  alt={product.name}
+                  className="relative w-full h-full object-contain"
+                />
+              </>
             ) : (
-              <div className="relative flex flex-col items-center gap-4 text-slate-300 dark:text-slate-600">
-                <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="0.8">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <path d="M8 21h8M12 17v4" />
-                </svg>
-                <p className="text-sm font-medium">{product.category ?? "Product"}</p>
-              </div>
+              <>
+                {/* Decorative circles — same as ProductCard */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10" />
+                  <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-white/10" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-white/5" />
+                  <div className="absolute top-1/4 right-1/4 w-24 h-24 rounded-full bg-white/5" />
+                </div>
+                {/* Shimmer overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/0 via-white/10 to-white/0" />
+                {/* Centred icon + label */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
+                  <div className={cn("rounded-3xl p-7 backdrop-blur-sm shadow-xl", theme.iconBg)}>
+                    <ThemeIcon size={72} className="text-white drop-shadow-lg" strokeWidth={1.2} />
+                  </div>
+                  <p className={cn("text-sm font-bold tracking-widest uppercase", theme.accent)}>
+                    {product.subcategory
+                      ? `${product.category} › ${product.subcategory}`
+                      : (product.category ?? "Product")}
+                  </p>
+                </div>
+                {/* Bottom accent bar */}
+                <div className={cn("absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r", theme.gradient, "opacity-60")} />
+              </>
             )}
 
+            {/* Stock badges */}
             {isOutOfStock && (
-              <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 text-xs font-bold">
+              <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-red-600 text-white text-xs font-bold shadow-lg">
                 Out of Stock
               </div>
             )}
             {stock === "low" && !isOutOfStock && (
-              <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 text-xs font-bold">
+              <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-lg">
                 Only {stockQty} left!
               </div>
             )}
