@@ -21,10 +21,14 @@ const StoreContext = createContext<StoreContextType>({
   refresh: () => {},
 });
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const params = new URLSearchParams(window.location.search);
-  const tenantId = params.get("tenant") ?? null;
-
+// tenantId is now passed as a prop (extracted from the URL path by App.tsx)
+export function StoreProvider({
+  children,
+  tenantId,
+}: {
+  children: React.ReactNode;
+  tenantId: string | null;
+}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [adminStoreName, setAdminStoreName] = useState("TechZone");
   const [cms, setCms] = useState<StoreCms>(CMS_DEFAULTS);

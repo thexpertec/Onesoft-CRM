@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch } from "lucide-react";
 import type { Product } from "@/types/product";
 import { useCart } from "@/lib/cart";
@@ -46,6 +46,7 @@ function getTheme(product: Product) {
 
 export function ProductCard({ product, className }: ProductCardProps) {
   const { addItem } = useCart();
+  const [, navigate] = useLocation();
   const [wishlist, setWishlist] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -146,7 +147,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
             <Heart size={13} className={wishlist ? "fill-white" : ""} />
           </button>
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.assign(`/tenant-store/product/${product.id}`); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/product/${product.id}`); }}
             className="w-8 h-8 rounded-full shadow-md bg-white dark:bg-slate-800 text-slate-500 hover:text-blue-600 flex items-center justify-center transition-colors"
             aria-label="Quick view"
           >

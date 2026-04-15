@@ -46,11 +46,11 @@ export function Header() {
   }
 
   const navLinks = [
-    { label: "Home",     href: "/" },
-    { label: "Shop",     href: "/shop" },
+    { label: "Home",     href: "/home"     },
+    { label: "Shop",     href: "/shop"     },
     { label: "Services", href: "/services" },
-    { label: "About Us", href: "/about" },
-    { label: "Contact",  href: "/contact" },
+    { label: "About Us", href: "/about"    },
+    { label: "Contact",  href: "/contact"  },
   ];
 
   return (
@@ -80,7 +80,7 @@ export function Header() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0">
+            <Link href="/home" className="flex items-center gap-2 shrink-0">
               {brand.logoUrl ? (
                 <img src={brand.logoUrl} alt={storeName} className="h-8 w-auto object-contain"
                   onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -96,17 +96,21 @@ export function Header() {
 
             {/* Desktop Nav */}
             <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map(link => (
-                <Link key={link.href} href={link.href}
-                  className={cn(
-                    "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                    location === link.href
-                      ? "text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/40"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
-                  )}>
-                  {link.label}
-                </Link>
-              ))}
+              {navLinks.map(link => {
+                const isActive = location === link.href ||
+                  (link.href === "/home" && (location === "/" || location === ""));
+                return (
+                  <Link key={link.href} href={link.href}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                      isActive
+                        ? "text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/40"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
+                    )}>
+                    {link.label}
+                  </Link>
+                );
+              })}
             </nav>
 
             {/* Actions */}

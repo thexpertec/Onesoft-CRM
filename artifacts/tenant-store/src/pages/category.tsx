@@ -22,7 +22,7 @@ export function CategoryPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {cms.breadcrumbs.enabled && (
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
-          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
+          <Link href="/home" className="hover:text-blue-600 transition-colors">Home</Link>
           <span className="opacity-50">{sep}</span>
           <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
           <span className="opacity-50">{sep}</span>
