@@ -96,10 +96,28 @@ function Chip({ label, onRemove, color = "blue" }: { label: string; onRemove: ()
   );
 }
 
+type LocalMeta = {
+  customer: string; saleDate: string; paymentMethod: SalePayment; notes: string;
+  agentId?: string; agentName?: string;
+  saleMode?: "Retail" | "Wholesale";
+  deliveryStatus?: "Pending" | "Processing" | "Shipped" | "Delivered";
+  deliveryCharges?: string;
+  invoiceDiscount?: string;
+  invoiceDiscountType?: "pct" | "amt";
+  taxRate?: string;
+};
+
+const DELIVERY_STATUSES = ["Pending", "Processing", "Shipped", "Delivered"] as const;
+const DELIVERY_STATUS_COLOR: Record<string, string> = {
+  Pending: "#9ca3af", Processing: "#f59e0b", Shipped: "#3b82f6", Delivered: "#10b981",
+};
+
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
   customer: "", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
   taxRate: "0", amountPaid: "0", paidAt: "", stockDeducted: false,
+  saleMode: "Retail", deliveryStatus: "Pending",
+  deliveryCharges: "0", invoiceDiscount: "0", invoiceDiscountType: "pct",
 });
 
 const blankNewRow = (): Record<string, string> => ({
@@ -157,15 +175,21 @@ function SaleCompleteModal({
   const sym = getSettingsCurrencySymbol();
   const dp  = getSettingsDecimalPlaces();
 
-  const subtotal    = sale.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
-  const discAmt     = discountTotal(sale.items);
-  const afterDisc   = subtotal - discAmt;
-  const taxRate     = parseFloat(sale.taxRate || "0") || 0;
-  const taxAmt      = afterDisc * taxRate / 100;
-  const total       = afterDisc + taxAmt;
-  const paid        = parseFloat(sale.amountPaid || "0") || 0;
-  const change      = Math.max(0, paid - total);
-  const balance     = Math.max(0, total - paid);
+  const subtotal      = sale.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
+  const lineDiscAmt   = discountTotal(sale.items);
+  const afterLineDisc = subtotal - lineDiscAmt;
+  const invDiscVal    = parseFloat(sale.invoiceDiscount || "0") || 0;
+  const invDiscAmt    = sale.invoiceDiscountType === "amt"
+    ? Math.min(invDiscVal, afterLineDisc) : afterLineDisc * invDiscVal / 100;
+  const afterDisc     = Math.max(0, afterLineDisc - invDiscAmt);
+  const taxRate       = parseFloat(sale.taxRate || "0") || 0;
+  const taxAmt        = afterDisc * taxRate / 100;
+  const deliveryAmt   = parseFloat(sale.deliveryCharges || "0") || 0;
+  const total         = afterDisc + taxAmt + deliveryAmt;
+  const paid          = parseFloat(sale.amountPaid || "0") || 0;
+  const change        = Math.max(0, paid - total);
+  const balance       = Math.max(0, total - paid);
+  const discAmt       = lineDiscAmt + invDiscAmt;
   const fmt = (n: number) => `${sym}${n.toFixed(dp)}`;
 
   function handlePrint() {
@@ -224,6 +248,11 @@ function SaleCompleteModal({
                 <span>Tax ({taxRate}%)</span><span>{fmt(taxAmt)}</span>
               </div>
             )}
+            {deliveryAmt > 0 && (
+              <div className="flex justify-between text-gray-500 text-xs">
+                <span>Delivery</span><span>+{fmt(deliveryAmt)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-base text-gray-900 dark:text-gray-100">
               <span>Total</span><span>{fmt(total)}</span>
             </div>
@@ -274,11 +303,9 @@ function SaleCompleteModal({
 // ─── Payment Modal ────────────────────────────────────────────────────────────
 interface PaymentModalProps {
   saleNumber: string;
-  billedAmount: number;
-  discountAmt: number;
-  afterDiscount: number;
+  total: number;
   defaultPaymentMethod?: SalePayment;
-  onConfirm: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
+  onConfirm: (amountPaid: string, paymentMethod: SalePayment) => void;
   onCancel: () => void;
 }
 
@@ -290,192 +317,95 @@ const PAY_METHOD_META: { method: SalePayment; icon: React.ReactNode; color: stri
   { method: "Credit",          icon: <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
 ];
 
-function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, defaultPaymentMethod = "Cash", onConfirm, onCancel }: PaymentModalProps) {
-  const [taxRate,    setTaxRate]    = useState("0");
-  const [payAmount,  setPayAmount]  = useState("0");
-  const [payMethod,  setPayMethod]  = useState<SalePayment>(defaultPaymentMethod);
+function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConfirm, onCancel }: PaymentModalProps) {
+  const [payAmount, setPayAmount] = useState("0");
+  const [payMethod, setPayMethod] = useState<SalePayment>(defaultPaymentMethod);
 
-  const taxPct   = Math.max(0, parseFloat(taxRate) || 0);
-  const taxAmt   = afterDiscount * taxPct / 100;
-  const total    = afterDiscount + taxAmt;
-  const paid     = parseFloat(payAmount) || 0;
+  const sym  = getSettingsCurrencySymbol();
+  const dp   = getSettingsDecimalPlaces();
+  const fmt  = (n: number) => `${sym}${n.toFixed(dp)}`;
+  const paid = parseFloat(payAmount) || 0;
   const remaining = total - paid;
-  const overPaid  = paid > total;
-
-  const sym = getSettingsCurrencySymbol();
-  const dp  = getSettingsDecimalPlaces();
-  const fmt = (n: number) => `${sym}${n.toFixed(dp)}`;
 
   const presets = [
     { label: "Exact", value: total.toFixed(dp) },
-    ...([5, 10, 20, 50, 100, 200].filter(v => v >= Math.ceil(paid)).slice(0, 4).map(v => ({ label: `${sym}${v}`, value: String(Math.min(v, total)) }))),
+    ...([5, 10, 20, 50, 100, 200, 500].filter(v => v >= Math.ceil(total)).slice(0, 5).map(v => ({ label: `${sym}${v}`, value: String(v) }))),
   ];
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex">
 
-      {/* Card — extra-wide, compact height */}
-      <div className="relative w-full max-w-5xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex">
-
-        {/* ── LEFT PANEL — Order summary ───────────────────────────────── */}
-        <div className="w-[340px] flex-shrink-0 flex flex-col border-r border-gray-100 dark:border-zinc-800">
-
-          {/* Header */}
-          <div className="px-6 pt-5 pb-3 border-b border-gray-100 dark:border-zinc-800">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Payment</div>
-            <div className="text-[15px] font-bold text-gray-900 dark:text-gray-100 font-mono tracking-wide">{saleNumber}</div>
+        {/* ── LEFT: Amount ─────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col px-6 pt-5 pb-5 gap-4">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Payment · {saleNumber}</div>
+            <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mt-3 mb-1">Total to Collect</div>
+            <div className="text-[44px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums leading-none">{fmt(total)}</div>
           </div>
 
-          {/* Breakdown rows */}
-          <div className="px-6 py-4 space-y-3 flex-1">
-
-            {/* Billed Amount */}
-            <div className="flex justify-between items-baseline">
-              <span className="text-[13px] text-gray-500 dark:text-gray-400">Billed Amount</span>
-              <span className="text-[18px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
-                {fmt(billedAmount)}
-              </span>
-            </div>
-
-            {/* Discount */}
-            {discountAmt > 0 && (
-              <div className="flex justify-between items-baseline">
-                <span className="text-[13px] text-gray-500 dark:text-gray-400">Discount</span>
-                <span className="text-[18px] font-bold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
-                  −{fmt(discountAmt)}
-                </span>
-              </div>
-            )}
-
-            {/* Tax */}
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] text-gray-500 dark:text-gray-400">Tax</span>
-                <div className="flex items-center border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-                  <input
-                    type="number" min="0" max="100" step="0.5"
-                    value={taxRate}
-                    onChange={e => setTaxRate(e.target.value)}
-                    className="w-12 text-center text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-zinc-800 outline-none py-1 px-1"
-                  />
-                  <span className="px-1.5 text-[11px] text-gray-400 bg-gray-50 dark:bg-zinc-700 border-l border-gray-200 dark:border-zinc-700 py-1 select-none">%</span>
-                </div>
-              </div>
-              <span className="text-[18px] font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">
-                {fmt(taxAmt)}
-              </span>
-            </div>
-
-            {/* Dashed divider */}
-            <div className="border-t-2 border-dashed border-gray-200 dark:border-zinc-700" />
-
-            {/* Total to Pay */}
-            <div className="space-y-0.5">
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total to Pay</div>
-              <div className="text-[38px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums leading-none">
-                {fmt(total)}
-              </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Amount Received</div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[22px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">{sym}</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={payAmount}
+                onChange={e => setPayAmount(e.target.value)}
+                onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
+                className="w-full pl-10 pr-3 py-3 text-[32px] font-black text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-xl outline-none focus:border-blue-400 dark:focus:border-blue-500 font-mono tabular-nums transition-colors"
+              />
             </div>
           </div>
 
-          {/* Cancel button — bottom of left panel */}
-          <div className="px-6 pb-5 pt-2">
-            <button
-              onClick={onCancel}
-              className="w-full h-10 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-            >
+          <div className="grid grid-cols-3 gap-1.5">
+            {presets.map(p => (
+              <button key={p.label} onClick={() => setPayAmount(p.value)}
+                className="py-2 text-[12px] font-bold rounded-lg bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 text-gray-700 dark:text-gray-200 transition-all">
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {remaining > 0.005 ? (
+            <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-xl px-4 py-2.5">
+              <span className="text-[12px] font-semibold text-orange-600 dark:text-orange-400">Remaining</span>
+              <span className="text-[22px] font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums leading-none">{fmt(remaining)}</span>
+            </div>
+          ) : paid > 0 ? (
+            <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl px-4 py-2.5">
+              <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Fully paid</span>
+              {paid > total + 0.005 && <span className="text-[12px] text-blue-600 font-semibold">Change: {fmt(paid - total)}</span>}
+            </div>
+          ) : null}
+
+          <div className="flex gap-2 mt-auto">
+            <button onClick={() => onConfirm(payAmount, payMethod)}
+              className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none">
+              <Check size={16} /> Confirm Payment
+            </button>
+            <button onClick={onCancel}
+              className="h-11 px-5 rounded-xl border-2 border-gray-200 dark:border-zinc-700 text-[13px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
               Cancel
             </button>
           </div>
         </div>
 
-        {/* ── RIGHT PANEL — Payment method + input ─────────────────────── */}
-        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-800/60">
-
-          {/* Payment method tiles + amount input side by side */}
-          <div className="flex flex-1 divide-x divide-gray-100 dark:divide-zinc-700/60">
-
-            {/* Payment method section */}
-            <div className="flex-1 px-5 pt-5 pb-4">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
-              <div className="grid grid-cols-3 gap-2">
-                {PAY_METHOD_META.map(m => {
-                  const isSelected = payMethod === m.method;
-                  return (
-                    <button
-                      key={m.method}
-                      onClick={() => setPayMethod(m.method)}
-                      className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all
-                        ${m.color}
-                        ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}
-                    >
-                      {m.icon}
-                      <span className="leading-tight text-center">{m.method}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Amount received section */}
-            <div className="flex-1 px-5 pt-5 pb-4 flex flex-col gap-3">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Amount Received</div>
-
-              {/* Amount input */}
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[22px] font-black text-gray-400 dark:text-zinc-500 pointer-events-none">{sym}</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={payAmount}
-                  onChange={e => setPayAmount(e.target.value)}
-                  onBlur={e => {
-                    const v = parseFloat(e.target.value) || 0;
-                    setPayAmount(Math.min(v, total).toFixed(dp));
-                  }}
-                  onFocus={e => { if (e.target.value === "0") setPayAmount(""); }}
-                  className="w-full pl-10 pr-3 py-3 text-[32px] font-black text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 rounded-xl outline-none focus:border-blue-400 dark:focus:border-blue-500 font-mono tabular-nums transition-colors"
-                />
-              </div>
-
-              {/* Quick-amount presets */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {presets.map(p => (
-                  <button
-                    key={p.label}
-                    onClick={() => setPayAmount(p.value)}
-                    className="py-2 text-[12px] font-bold rounded-lg bg-white dark:bg-zinc-700 border-2 border-gray-200 dark:border-zinc-600 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 text-gray-700 dark:text-gray-200 transition-all"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Remaining / fully paid */}
-              {remaining > 0.005 ? (
-                <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-xl px-4 py-2.5">
-                  <span className="text-[12px] font-semibold text-orange-600 dark:text-orange-400">Remaining</span>
-                  <span className="text-[22px] font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums leading-none">{fmt(remaining)}</span>
-                </div>
-              ) : paid > 0 ? (
-                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl px-4 py-2.5">
-                  <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Fully paid</span>
-                  <span className="text-[22px] font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums leading-none">{fmt(paid)}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Confirm button — full width at bottom */}
-          <div className="px-5 pb-5 pt-0">
-            <button
-              onClick={() => onConfirm(payAmount, taxRate, payMethod)}
-              disabled={overPaid}
-              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none"
-            >
-              <Check size={16} /> Confirm Payment
-            </button>
+        {/* ── RIGHT: Payment method ─────────────────────────────────────── */}
+        <div className="w-[240px] flex-shrink-0 flex flex-col border-l border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/60 px-4 pt-5 pb-5">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
+          <div className="grid grid-cols-2 gap-2">
+            {PAY_METHOD_META.map(m => {
+              const isSelected = payMethod === m.method;
+              return (
+                <button key={m.method} onClick={() => setPayMethod(m.method)}
+                  className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${m.color} ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
+                  {m.icon}
+                  <span className="leading-tight text-center">{m.method}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -487,12 +417,12 @@ function PaymentModal({ saleNumber, billedAmount, discountAmt, afterDiscount, de
 interface POSViewProps {
   sale: Sale;
   localItems: SaleItem[];
-  localMeta: { customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string };
+  localMeta: LocalMeta;
   customerComboOpts: ComboOption[];
   productComboOpts: ComboOption[];
   agentOpts: { id: string; code: string; name: string }[];
   onClose: () => void;
-  onMetaChange: (meta: Partial<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string }>) => void;
+  onMetaChange: (meta: Partial<LocalMeta>) => void;
   onSaveMeta: () => void;
   onItemChange: (itemId: string, field: keyof SaleItem, value: string) => void;
   onItemBlur: () => void;
@@ -502,7 +432,7 @@ interface POSViewProps {
   priceMode: "retail" | "wholesale";
   onPriceModeChange: (mode: "retail" | "wholesale") => void;
   onSetStatus: (status: SaleStatus) => void;
-  onComplete: (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => void;
+  onComplete: (amountPaid: string, paymentMethod: SalePayment) => void;
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
 }
 
