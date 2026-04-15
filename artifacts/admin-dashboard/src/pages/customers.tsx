@@ -176,11 +176,12 @@ const STATUS_COLORS: Record<string, string> = {
   Churned:  "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
-type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes";
+type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes" | "customerType";
 
 const BLANK = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "", industry: "", city: "", area: "",
   status: "Active", customerSince: new Date().toISOString().split("T")[0], totalValue: "", notes: "",
+  customerType: "Regular Customer",
 });
 
 const TABS = ["All Customers", "Convert from Leads"] as const;
@@ -208,6 +209,8 @@ export default function CustomersPage() {
     { field: "city",          label: "City",          minW: 120, type: cityOptions.length ? "select" : "text", options: cityOptions },
     { field: "area",          label: "Area / Region", minW: 130, type: areaOptions.length ? "select" : "text", options: areaOptions },
     { field: "status",        label: "Status",        minW: 130, type: "select", options: CUSTOMER_STATUSES, optionColors: STATUS_COLORS },
+    { field: "customerType",  label: "Type",          minW: 140, type: "select", options: ["Regular Customer", "POS Customer"],
+      optionColors: { "Regular Customer": "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300", "POS Customer": "bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300" } },
     { field: "customerSince", label: "Since",         minW: 120, type: "date"   },
     { field: "totalValue",    label: "Value",         minW: 110, type: "text"   },
     { field: "notes",         label: "Notes",         minW: 180, type: "text"   },
@@ -217,6 +220,7 @@ export default function CustomersPage() {
   const [activeTab,    setActiveTab]    = useState<Tab>("All Customers");
   const [search,       setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [typeFilter,   setTypeFilter]   = useState("All");
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
   const [viewCust,     setViewCust]     = useState<Customer | null>(null);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
@@ -272,9 +276,10 @@ export default function CustomersPage() {
       const q = search.toLowerCase();
       const mQ = !q || [c.name, c.company, c.email, c.phone, c.industry, c.city, c.status, c.notes, ...(c.tags ?? [])].some(v => v?.toLowerCase().includes(q));
       const mS = statusFilter === "All" || c.status === statusFilter;
-      return mQ && mS;
+      const mT = typeFilter   === "All" || (c.customerType ?? "Regular Customer") === typeFilter;
+      return mQ && mS && mT;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [customers, search, statusFilter]
+    [customers, search, statusFilter, typeFilter]
   );
 
   const tableRef = useRef<HTMLDivElement>(null);
@@ -337,6 +342,7 @@ export default function CustomersPage() {
       name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
       industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
       status: newRow.status as CustomerStatus,
+      customerType: (newRow.customerType as "POS Customer" | "Regular Customer") || "Regular Customer",
       customerSince: newRow.customerSince, totalValue: newRow.totalValue, notes: newRow.notes,
       currency: "GBP", tags: [], source: "direct",
     });
@@ -461,6 +467,14 @@ export default function CustomersPage() {
               <SelectContent>
                 <SelectItem value="All">All Statuses</SelectItem>
                 {CUSTOMER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-40 h-8 text-[13px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Types</SelectItem>
+                <SelectItem value="Regular Customer">Regular Customer</SelectItem>
+                <SelectItem value="POS Customer">POS Customer</SelectItem>
               </SelectContent>
             </Select>
             {isAuthenticated && newRow && (

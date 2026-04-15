@@ -390,6 +390,7 @@ export type Customer = {
   area?: string;   // managed area/region
   status: CustomerStatus;
   source: "from_lead" | "direct";
+  customerType?: "POS Customer" | "Regular Customer";
   leadId?: string;
   customerSince: string;
   totalValue: string;

@@ -2136,7 +2136,8 @@ export default function SalesPage() {
           addCustomer({
             name, phone, email,
             company: company || "", industry: "", city: "", status: "Active",
-            source: "direct", customerSince: new Date().toISOString().slice(0, 10),
+            source: "direct", customerType: "POS Customer",
+            customerSince: new Date().toISOString().slice(0, 10),
             totalValue: "0", currency: "GBP", notes: "", tags: [],
           });
           toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });

@@ -69,7 +69,7 @@ export default function CustomerNewPage() {
       totalValue: form.totalValue.trim(),
       currency: form.currency.trim() || "GBP",
       openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : undefined,
-      notes: form.notes.trim(), source: "direct",
+      notes: form.notes.trim(), source: "direct", customerType: "Regular Customer",
       tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
     });
     toast({ title: "Customer added", description: `${form.name.trim()} has been added.` });
