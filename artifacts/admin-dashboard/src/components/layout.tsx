@@ -393,6 +393,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [openMega]);
 
+  // ── Font-size injection ───────────────────────────────────────────────────
+  useEffect(() => {
+    function applyFontSizes() {
+      const s = getSettings();
+      const head   = s.fontHeadRow  ?? 12;
+      const data   = s.fontDataRow  ?? 13;
+      const btn    = s.fontButton   ?? 13;
+      const tag    = s.fontTag      ?? 11;
+      const filter = s.fontFilter   ?? 12;
+      const root = document.documentElement;
+      root.style.setProperty("--admin-font-head",   `${head}px`);
+      root.style.setProperty("--admin-font-data",   `${data}px`);
+      root.style.setProperty("--admin-font-btn",    `${btn}px`);
+      root.style.setProperty("--admin-font-tag",    `${tag}px`);
+      root.style.setProperty("--admin-font-filter", `${filter}px`);
+      let styleEl = document.getElementById("admin-font-override") as HTMLStyleElement | null;
+      if (!styleEl) {
+        styleEl = document.createElement("style");
+        styleEl.id = "admin-font-override";
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = [
+        `#admin-app table thead th,`,
+        `#admin-app table thead td { font-size: var(--admin-font-head) !important; }`,
+        `#admin-app table tbody td,`,
+        `#admin-app table tbody th { font-size: var(--admin-font-data) !important; }`,
+        `#admin-app .ht_master thead th { font-size: var(--admin-font-head) !important; }`,
+        `#admin-app .ht_master tbody td { font-size: var(--admin-font-data) !important; }`,
+        `#admin-app button { font-size: var(--admin-font-btn) !important; }`,
+        `#admin-app .admin-tag { font-size: var(--admin-font-tag) !important; }`,
+        `#admin-app .admin-filter, #admin-app .admin-filter * { font-size: var(--admin-font-filter) !important; }`,
+      ].join("\n");
+    }
+    applyFontSizes();
+    window.addEventListener("admin-settings-changed", applyFontSizes);
+    return () => window.removeEventListener("admin-settings-changed", applyFontSizes);
+  }, []);
+
   // Close on route change
   useEffect(() => { setOpenMega(null); setMobileOpen(false); }, [location]);
 
@@ -559,7 +597,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
      searchResults.docs.length) > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col">
+    <div id="admin-app" className="min-h-screen bg-gray-50 dark:bg-background flex flex-col">
 
       {/* ═══════════════════════════════════════════════════════════════
           ROW 1 — Brand · Search · Actions

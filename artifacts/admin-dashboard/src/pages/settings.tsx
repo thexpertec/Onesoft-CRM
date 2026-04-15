@@ -1392,6 +1392,64 @@ export default function SettingsPage() {
             {/* ══ Interface / Sidebar Quick Actions ════════════════════════════ */}
             {tab === "interface" && (
               <div className="space-y-10">
+
+                {/* ── Font Sizes ───────────────────────────────────────────── */}
+                <div>
+                  <SectionHeader
+                    title="Font Sizes"
+                    desc="Control text size for each UI element category. Changes apply immediately across the dashboard."
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {([
+                      { key: "fontHeadRow" as const, label: "Header Row",  desc: "Column headers in tables & grids",    min: 8, max: 20, def: 12 },
+                      { key: "fontDataRow" as const, label: "Data Row",    desc: "Data cells in tables & grids",        min: 8, max: 20, def: 13 },
+                      { key: "fontButton"  as const, label: "Button",      desc: "Text inside all buttons",             min: 8, max: 20, def: 13 },
+                      { key: "fontTag"     as const, label: "Tag / Badge",  desc: "Status pills, count badges & tags",   min: 7, max: 18, def: 11 },
+                      { key: "fontFilter"  as const, label: "Filter Bar",   desc: "Toolbar, filter & search bar text",   min: 8, max: 20, def: 12 },
+                    ] as const).map(({ key, label, desc, min, max, def }) => {
+                      const val = (form[key] as number | undefined) ?? def;
+                      return (
+                        <div key={key} className="rounded-xl border border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/40 p-4 flex flex-col gap-3">
+                          <div>
+                            <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground leading-tight">{label}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={val <= min}
+                              onClick={() => set(key, Math.max(min, val - 1) as AppSettings[typeof key])}
+                              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
+                            >−</button>
+                            <div className="flex-1 text-center">
+                              <span className="text-[17px] font-bold font-mono text-gray-900 dark:text-gray-100">{val}</span>
+                              <span className="text-[11px] text-gray-400 ml-0.5">px</span>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={val >= max}
+                              onClick={() => set(key, Math.min(max, val + 1) as AppSettings[typeof key])}
+                              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
+                            >+</button>
+                          </div>
+                          <div className="h-8 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
+                            <span style={{ fontSize: `${val}px` }} className="text-gray-600 dark:text-gray-300 select-none">Sample text {val}px</span>
+                          </div>
+                          {val !== def && (
+                            <button
+                              type="button"
+                              onClick={() => set(key, def as AppSettings[typeof key])}
+                              className="text-[11px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 text-center transition-colors"
+                            >Reset to default ({def}px)</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 dark:border-border" />
+
                 {/* Left sidebar */}
                 <QuickActionsTab
                   title="Left Sidebar Quick Actions"

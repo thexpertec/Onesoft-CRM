@@ -2951,6 +2951,12 @@ export type AppSettings = {
   quickActionsRight?: { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
   // ── Left sidebar quick-action customisation ──
   quickActionsLeft?:  { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
+  // ── Font sizes (px) ──
+  fontHeadRow?:    number;   // table/grid column header font size (default 12)
+  fontDataRow?:    number;   // table/grid data row font size (default 13)
+  fontButton?:     number;   // button text font size (default 13)
+  fontTag?:        number;   // badge/tag/pill font size (default 11)
+  fontFilter?:     number;   // filter bar / toolbar text font size (default 12)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -2998,6 +3004,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   posProductView:       "image",
   crmFormMode:          "dialog",
   supplierProductPicker: true,
+  fontHeadRow:          12,
+  fontDataRow:          13,
+  fontButton:           13,
+  fontTag:              11,
+  fontFilter:           12,
 };
 
 export function getSettings(): AppSettings {
@@ -3044,6 +3055,7 @@ export function saveSettings(s: AppSettings): void {
   const sk = tenantKey(SETTINGS_KEY);
   _lsSet(sk, s);
   _apiWrite(sk, s);
+  window.dispatchEvent(new CustomEvent("admin-settings-changed"));
 }
 
 // All localStorage keys for export/import/reset
