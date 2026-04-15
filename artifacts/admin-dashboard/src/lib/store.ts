@@ -1065,6 +1065,17 @@ const PRODUCTS_KEY = "admin-products";
 
 export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);
 
+/**
+ * Force-write all in-memory products to PostgreSQL.
+ * Use when the store hasn't received a subset of products yet.
+ */
+export async function syncProductsToStore(tenantId?: string | null): Promise<number> {
+  const products = getProducts();
+  const ns = tenantId ? `t:${tenantId}` : "global";
+  await kvPut(ns, PRODUCTS_KEY, products);
+  return products.length;
+}
+
 // ── SKU uniqueness helper ──────────────────────────────────────────────────
 const skuConflict = (sku: string, excludeId?: string): string | null => {
   if (!sku.trim()) return null;

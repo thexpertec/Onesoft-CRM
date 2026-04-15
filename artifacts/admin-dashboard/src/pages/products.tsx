@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit, bulkImportProducts } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -180,7 +180,7 @@ function parseCSV(text: string): ImportRow[] {
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
   const { stock, refresh: refreshStock } = useStock();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, currentTenantId } = useAuth();
   const dp = getSettingsDecimalPlaces();
 
   // Build a map: SKU (lowercased) → total qty across all stock entries
@@ -265,6 +265,21 @@ export default function ProductsPage() {
       localStorage.setItem("products-hidden-cols", JSON.stringify([...next]));
       return next;
     });
+  };
+
+  // ── Sync-to-store state ────────────────────────────────────────────────────
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncToStore = async () => {
+    setSyncing(true);
+    try {
+      const count = await syncProductsToStore(currentTenantId);
+      toast({ title: "Synced to store", description: `${count} product${count === 1 ? "" : "s"} pushed to the public store.` });
+    } catch {
+      toast({ title: "Sync failed", description: "Could not push products to the store. Please try again.", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // ── Import state ──────────────────────────────────────────────────────────
@@ -948,6 +963,15 @@ export default function ProductsPage() {
               ]);
             }} className="gap-1.5 h-8 text-[13px]">
               <FileDown size={13} /> Export Excel
+            </Button>
+
+            <Button size="sm" variant="outline"
+              onClick={handleSyncToStore}
+              disabled={syncing}
+              className="gap-1.5 h-8 text-[13px] border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+              title="Push all products to the public storefront database">
+              <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing…" : "Sync to Store"}
             </Button>
 
             <Button size="sm"
