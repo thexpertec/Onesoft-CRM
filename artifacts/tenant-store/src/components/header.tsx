@@ -32,9 +32,11 @@ export function Header() {
   }
 
   const navLinks = [
-    { label: "Home", href: "/" },
-    { label: "Shop", href: "/shop" },
-    ...categories.slice(0, 3).map(cat => ({ label: cat, href: `/category/${encodeURIComponent(cat)}` })),
+    { label: "Home",     href: "/" },
+    { label: "Shop",     href: "/shop" },
+    { label: "Services", href: "/services" },
+    { label: "About Us", href: "/about" },
+    { label: "Contact",  href: "/contact" },
   ];
 
   return (

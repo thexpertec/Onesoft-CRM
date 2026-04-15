@@ -12,6 +12,9 @@ import { ShopPage } from "@/pages/shop";
 import { ProductDetailPage } from "@/pages/product-detail";
 import { CategoryPage } from "@/pages/category";
 import { CheckoutPage } from "@/pages/checkout";
+import { ServicesPage } from "@/pages/services";
+import { AboutPage } from "@/pages/about";
+import { ContactPage } from "@/pages/contact";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -27,6 +30,9 @@ function Router() {
           <Route path="/product/:id" component={ProductDetailPage} />
           <Route path="/category/:slug" component={CategoryPage} />
           <Route path="/checkout" component={CheckoutPage} />
+          <Route path="/services" component={ServicesPage} />
+          <Route path="/about" component={AboutPage} />
+          <Route path="/contact" component={ContactPage} />
           <Route component={NotFound} />
         </Switch>
       </main>
