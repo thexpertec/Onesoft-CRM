@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, formatPrice, getDisplayPrice } from "@/lib/utils";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 interface CustomerForm {
@@ -169,9 +169,9 @@ export function CheckoutPage() {
         productId: i.product.id,
         name: i.product.name,
         sku: i.product.sku,
-        price: i.product.price,
+        price: getDisplayPrice(i.product),
         quantity: i.quantity,
-        lineTotal: (parseFloat(i.product.price || "0") * i.quantity).toFixed(2),
+        lineTotal: (parseFloat(getDisplayPrice(i.product)) * i.quantity).toFixed(2),
       })),
       shipping: { option: shipping.id, label: shipping.label, cost: shipping.price },
       payment: payment,
@@ -536,7 +536,7 @@ export function CheckoutPage() {
                 <p className="text-xs text-slate-400 mt-0.5">Qty: {item.quantity}</p>
               </div>
               <span className="text-xs font-bold text-slate-900 dark:text-white shrink-0">
-                {formatPrice(parseFloat(item.product.price || "0") * item.quantity)}
+                {formatPrice(parseFloat(getDisplayPrice(item.product)) * item.quantity)}
               </span>
             </div>
           ))}

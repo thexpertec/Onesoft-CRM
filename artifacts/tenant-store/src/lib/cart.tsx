@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { Product, CartItem } from "@/types/product";
+import { getDisplayPrice } from "@/lib/utils";
 
 interface CartContextType {
   items: CartItem[];
@@ -58,7 +59,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = useCallback(() => setItems([]), []);
 
   const totalItems = items.reduce((s, i) => s + i.quantity, 0);
-  const totalPrice = items.reduce((s, i) => s + (parseFloat(i.product.price || "0") || 0) * i.quantity, 0);
+  const totalPrice = items.reduce((s, i) => s + (parseFloat(getDisplayPrice(i.product)) || 0) * i.quantity, 0);
 
   return (
     <CartContext.Provider value={{

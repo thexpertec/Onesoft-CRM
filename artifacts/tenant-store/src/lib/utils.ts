@@ -11,6 +11,12 @@ export function formatPrice(val: string | number | undefined, currency = "£"): 
   return `${currency}${n.toFixed(2)}`;
 }
 
+/** Returns websitePrice when set and > 0, otherwise falls back to price. */
+export function getDisplayPrice(product: { price: string; websitePrice?: string }): string {
+  if (product.websitePrice && parseFloat(product.websitePrice) > 0) return product.websitePrice;
+  return product.price || "0";
+}
+
 export function getStockQty(openingStock?: string): number {
   const n = parseFloat(openingStock ?? "0");
   return isNaN(n) ? 0 : Math.max(0, n);

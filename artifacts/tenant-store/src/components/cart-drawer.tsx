@@ -1,7 +1,7 @@
 import { X, ShoppingCart, Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { useCart } from "@/lib/cart";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, getDisplayPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export function CartDrawer() {
@@ -91,7 +91,7 @@ export function CartDrawer() {
                     {item.product.name}
                   </p>
                   <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                    {formatPrice(item.product.price)}
+                    {formatPrice(getDisplayPrice(item.product))}
                   </p>
 
                   {/* Qty controls */}
