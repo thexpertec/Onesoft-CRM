@@ -6,7 +6,7 @@ import {
   Sale, SaleItem, SaleStatus, SalePayment,
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
-  deductStockForSale, restoreStockForSale, getSettings, autoPostSaleJE,
+  deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ import {
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
+  LayoutGrid, List,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -522,6 +523,7 @@ function POSView({
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [scannerOpen,   setScannerOpen]   = useState(false);
   const [filtersOpen,   setFiltersOpen]   = useState(true);
+  const [prodView, setProdView] = useState<"image" | "list">(() => getSettings().posProductView ?? "image");
   const { toast } = useToast();
 
   // ── Barcode / QR scanner — shared lookup for both camera and keyboard ──────
