@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft, ShoppingCart, Heart, Share2, Star,
-  Check, Truck, ShieldCheck, RotateCcw, ChevronRight, Minus, Plus
+  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
@@ -11,7 +11,7 @@ import { formatPrice, getStockQty, stockLabel, cn } from "@/lib/utils";
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { products } = useStore();
+  const { products, cms } = useStore();
   const { addItem } = useCart();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
@@ -55,19 +55,19 @@ export function ProductDetailPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
-        <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
-        <ChevronRight size={12} />
-        <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
-        {product.category && (
-          <>
-            <ChevronRight size={12} />
-            <Link href={`/category/${encodeURIComponent(product.category)}`} className="hover:text-blue-600 transition-colors">{product.category}</Link>
-          </>
-        )}
-        <ChevronRight size={12} />
-        <span className="text-slate-600 dark:text-slate-300 font-medium truncate max-w-[200px]">{product.name}</span>
-      </nav>
+      {cms.breadcrumbs.enabled && (() => {
+        const sep = <span className="opacity-50">{cms.breadcrumbs.separator}</span>;
+        return (
+          <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
+            <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
+            {sep}
+            <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
+            {product.category && (<>{sep}<Link href={`/category/${encodeURIComponent(product.category)}`} className="hover:text-blue-600 transition-colors">{product.category}</Link></>)}
+            {sep}
+            <span className="text-slate-600 dark:text-slate-300 font-medium truncate max-w-[200px]">{product.name}</span>
+          </nav>
+        );
+      })()}
 
       <div className="grid lg:grid-cols-2 gap-10 mb-16">
         {/* Image */}

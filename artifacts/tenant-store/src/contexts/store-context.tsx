@@ -26,7 +26,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const tenantId = params.get("tenant") ?? null;
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [storeName, setStoreName] = useState("TechZone");
+  const [adminStoreName, setAdminStoreName] = useState("TechZone");
   const [cms, setCms] = useState<StoreCms>(CMS_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         fetchStoreCms(),
       ]);
       setProducts(prods);
-      if (cfg?.companyName) setStoreName(cfg.companyName as string);
+      if (cfg?.companyName) setAdminStoreName(cfg.companyName as string);
       setCms(cmsData);
     } catch {
       setError("Could not load products.");
@@ -53,6 +53,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { load(); }, [load]);
 
   const categories = [...new Set(products.map(p => p.category).filter(Boolean) as string[])].sort();
+
+  // CMS brand.storeName overrides admin setting if set
+  const storeName = (cms.brand.storeName?.trim()) || adminStoreName;
 
   return (
     <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, cms, refresh: load }}>

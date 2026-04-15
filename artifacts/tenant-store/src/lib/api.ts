@@ -8,8 +8,39 @@ function apiBase(): string {
   return `${proto}//${host}${BASE.replace(/\/tenant-store.*/, "")}/api`;
 }
 
+// ─── CMS Types ────────────────────────────────────────────────────────────────
 export type StoreCmsTrustBadge = { icon: string; title: string; desc: string };
+
 export type StoreCms = {
+  brand: {
+    logoUrl: string;
+    storeName: string;
+    tagline: string;
+    description: string;
+  };
+  contact: {
+    address: string;
+    phone: string;
+    email: string;
+  };
+  social: {
+    twitter: string;
+    instagram: string;
+    facebook: string;
+    youtube: string;
+    linkedin: string;
+    tiktok: string;
+  };
+  header: {
+    announcementEnabled: boolean;
+    announcementText: string;
+    announcementLink: string;
+    announcementBg: "blue" | "emerald" | "amber" | "red" | "purple" | "slate";
+  };
+  breadcrumbs: {
+    enabled: boolean;
+    separator: string;
+  };
   hero: {
     badge: string; headline1: string; headline2: string; subtitle: string;
     btn1Text: string; btn2Text: string;
@@ -17,14 +48,35 @@ export type StoreCms = {
     stat2Value: string; stat2Label: string;
     stat3Value: string; stat3Label: string;
   };
-  promoBanner: { enabled: boolean; label: string; headline: string; subtitle: string; btnText: string };
+  promoBanner: {
+    enabled: boolean; label: string; headline: string; subtitle: string; btnText: string;
+  };
   trustBadges: StoreCmsTrustBadge[];
-  featuredSection: { title: string; subtitle: string };
+  featuredSection:    { title: string; subtitle: string };
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
 };
 
 export const CMS_DEFAULTS: StoreCms = {
+  brand: {
+    logoUrl: "",
+    storeName: "",
+    tagline: "Premium Tech, Delivered Fast",
+    description: "Your one-stop destination for the latest in technology. Premium products, competitive prices, fast delivery.",
+  },
+  contact: {
+    address: "Hull, United Kingdom & Islamabad, Pakistan",
+    phone: "+44 1234 567890",
+    email: "hello@onesoft.com",
+  },
+  social: { twitter: "", instagram: "", facebook: "", youtube: "", linkedin: "", tiktok: "" },
+  header: {
+    announcementEnabled: false,
+    announcementText: "Free delivery on all orders this week!",
+    announcementLink: "/shop",
+    announcementBg: "blue",
+  },
+  breadcrumbs: { enabled: true, separator: "/" },
   hero: {
     badge: "New Arrivals Every Week",
     headline1: "Premium Tech,", headline2: "Delivered Fast",
@@ -51,6 +103,7 @@ export const CMS_DEFAULTS: StoreCms = {
   seo: { title: "Onesoft Tech Store", description: "Premium tech products delivered fast across the UK.", keywords: "tech, smartphones, laptops, accessories" },
 };
 
+// ─── API helpers ──────────────────────────────────────────────────────────────
 export async function fetchProducts(tenantId?: string | null): Promise<Product[]> {
   const ns = tenantId ? encodeURIComponent(`t:${tenantId}`) : "global";
   const key = "admin-products";
@@ -59,7 +112,6 @@ export async function fetchProducts(tenantId?: string | null): Promise<Product[]
     if (!res.ok) return [];
     const data = await res.json() as { value: Product[] };
     const arr = Array.isArray(data.value) ? data.value : [];
-    // Show all products except those explicitly set to Inactive
     return arr.filter((p) => p.status !== "Inactive");
   } catch {
     return [];
@@ -83,17 +135,22 @@ export async function fetchStoreCms(): Promise<StoreCms> {
   try {
     const res = await fetch(`${apiBase()}/kv/global/website-cms`);
     if (!res.ok) return CMS_DEFAULTS;
-    const data = await res.json() as { value?: StoreCms };
+    const data = await res.json() as { value?: Partial<StoreCms> };
     if (!data.value) return CMS_DEFAULTS;
+    const v = data.value;
     return {
-      ...CMS_DEFAULTS,
-      ...data.value,
-      hero:               { ...CMS_DEFAULTS.hero,               ...(data.value.hero ?? {}) },
-      promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(data.value.promoBanner ?? {}) },
-      trustBadges:        data.value.trustBadges ?? CMS_DEFAULTS.trustBadges,
-      featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(data.value.featuredSection ?? {}) },
-      newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(data.value.newArrivalsSection ?? {}) },
-      seo:                { ...CMS_DEFAULTS.seo,                ...(data.value.seo ?? {}) },
+      ...CMS_DEFAULTS, ...v,
+      brand:              { ...CMS_DEFAULTS.brand,              ...(v.brand ?? {}) },
+      contact:            { ...CMS_DEFAULTS.contact,            ...(v.contact ?? {}) },
+      social:             { ...CMS_DEFAULTS.social,             ...(v.social ?? {}) },
+      header:             { ...CMS_DEFAULTS.header,             ...(v.header ?? {}) },
+      breadcrumbs:        { ...CMS_DEFAULTS.breadcrumbs,        ...(v.breadcrumbs ?? {}) },
+      hero:               { ...CMS_DEFAULTS.hero,               ...(v.hero ?? {}) },
+      promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(v.promoBanner ?? {}) },
+      trustBadges:        v.trustBadges ?? CMS_DEFAULTS.trustBadges,
+      featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(v.featuredSection ?? {}) },
+      newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(v.newArrivalsSection ?? {}) },
+      seo:                { ...CMS_DEFAULTS.seo,                ...(v.seo ?? {}) },
     };
   } catch {
     return CMS_DEFAULTS;

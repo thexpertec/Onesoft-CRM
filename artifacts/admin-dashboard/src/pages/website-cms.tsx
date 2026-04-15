@@ -1,63 +1,100 @@
 import { useState, useEffect } from "react";
-import { Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp,
+  Image as ImageIcon, Phone, Share2, LayoutTemplate, Navigation,
+  Star, Megaphone,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type StoreCmsTrustBadge = {
-  icon: string;
-  title: string;
-  desc: string;
-};
+export type StoreCmsTrustBadge = { icon: string; title: string; desc: string };
 
 export type StoreCms = {
+  brand: {
+    logoUrl: string;
+    storeName: string;
+    tagline: string;
+    description: string;
+  };
+  contact: {
+    address: string;
+    phone: string;
+    email: string;
+  };
+  social: {
+    twitter: string;
+    instagram: string;
+    facebook: string;
+    youtube: string;
+    linkedin: string;
+    tiktok: string;
+  };
+  header: {
+    announcementEnabled: boolean;
+    announcementText: string;
+    announcementLink: string;
+    announcementBg: "blue" | "emerald" | "amber" | "red" | "purple" | "slate";
+  };
+  breadcrumbs: {
+    enabled: boolean;
+    separator: string;
+  };
   hero: {
-    badge: string;
-    headline1: string;
-    headline2: string;
-    subtitle: string;
-    btn1Text: string;
-    btn2Text: string;
+    badge: string; headline1: string; headline2: string; subtitle: string;
+    btn1Text: string; btn2Text: string;
     stat1Value: string; stat1Label: string;
     stat2Value: string; stat2Label: string;
     stat3Value: string; stat3Label: string;
   };
   promoBanner: {
-    enabled: boolean;
-    label: string;
-    headline: string;
-    subtitle: string;
-    btnText: string;
+    enabled: boolean; label: string; headline: string; subtitle: string; btnText: string;
   };
   trustBadges: StoreCmsTrustBadge[];
-  featuredSection: { title: string; subtitle: string };
+  featuredSection:    { title: string; subtitle: string };
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
 };
 
 export const CMS_DEFAULTS: StoreCms = {
+  brand: {
+    logoUrl: "",
+    storeName: "",
+    tagline: "Premium Tech, Delivered Fast",
+    description: "Your one-stop destination for the latest in technology. Premium products, competitive prices, fast delivery.",
+  },
+  contact: {
+    address: "Hull, United Kingdom & Islamabad, Pakistan",
+    phone: "+44 1234 567890",
+    email: "hello@onesoft.com",
+  },
+  social: { twitter: "", instagram: "", facebook: "", youtube: "", linkedin: "", tiktok: "" },
+  header: {
+    announcementEnabled: false,
+    announcementText: "Free delivery on all orders this week!",
+    announcementLink: "/shop",
+    announcementBg: "blue",
+  },
+  breadcrumbs: { enabled: true, separator: "/" },
   hero: {
     badge: "New Arrivals Every Week",
-    headline1: "Premium Tech,",
-    headline2: "Delivered Fast",
+    headline1: "Premium Tech,", headline2: "Delivered Fast",
     subtitle: "Discover the latest smartphones, laptops, audio gear, and accessories. Handpicked for quality, priced for value.",
-    btn1Text: "Shop All Products",
-    btn2Text: "New Arrivals",
+    btn1Text: "Shop All Products", btn2Text: "New Arrivals",
     stat1Value: "500+", stat1Label: "Products",
     stat2Value: "Free",  stat2Label: "UK Delivery",
     stat3Value: "24/7",  stat3Label: "Support",
   },
   promoBanner: {
-    enabled: true,
-    label: "Limited Time Offer",
+    enabled: true, label: "Limited Time Offer",
     headline: "Free Delivery on All Orders Today",
     subtitle: "No minimum spend. Available across the UK & internationally.",
     btnText: "Shop Now",
   },
   trustBadges: [
-    { icon: "Truck",          title: "Free UK Delivery", desc: "On all orders, every day"  },
-    { icon: "ShieldCheck",    title: "2-Year Warranty",  desc: "All products covered"       },
-    { icon: "RotateCcw",      title: "30-Day Returns",   desc: "Hassle-free returns"        },
-    { icon: "HeadphonesIcon", title: "24/7 Support",     desc: "Always here to help"        },
+    { icon: "Truck",          title: "Free UK Delivery", desc: "On all orders, every day" },
+    { icon: "ShieldCheck",    title: "2-Year Warranty",  desc: "All products covered"      },
+    { icon: "RotateCcw",      title: "30-Day Returns",   desc: "Hassle-free returns"       },
+    { icon: "HeadphonesIcon", title: "24/7 Support",     desc: "Always here to help"       },
   ],
   featuredSection:    { title: "Featured Products", subtitle: "Handpicked for quality and value" },
   newArrivalsSection: { title: "New Arrivals",      subtitle: "Just landed in our store"        },
@@ -68,20 +105,30 @@ export const CMS_DEFAULTS: StoreCms = {
 const CMS_KEY = "website-cms";
 const API_BASE = "/api/kv/global";
 
+function mergeCms(saved: Partial<StoreCms>): StoreCms {
+  return {
+    ...CMS_DEFAULTS, ...saved,
+    brand:              { ...CMS_DEFAULTS.brand,              ...(saved.brand ?? {}) },
+    contact:            { ...CMS_DEFAULTS.contact,            ...(saved.contact ?? {}) },
+    social:             { ...CMS_DEFAULTS.social,             ...(saved.social ?? {}) },
+    header:             { ...CMS_DEFAULTS.header,             ...(saved.header ?? {}) },
+    breadcrumbs:        { ...CMS_DEFAULTS.breadcrumbs,        ...(saved.breadcrumbs ?? {}) },
+    hero:               { ...CMS_DEFAULTS.hero,               ...(saved.hero ?? {}) },
+    promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(saved.promoBanner ?? {}) },
+    trustBadges:        saved.trustBadges ?? CMS_DEFAULTS.trustBadges,
+    featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(saved.featuredSection ?? {}) },
+    newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(saved.newArrivalsSection ?? {}) },
+    seo:                { ...CMS_DEFAULTS.seo,                ...(saved.seo ?? {}) },
+  };
+}
+
 async function loadCms(): Promise<StoreCms> {
   try {
     const r = await fetch(`${API_BASE}/${CMS_KEY}`);
     if (!r.ok) return CMS_DEFAULTS;
-    const d = await r.json() as { value?: StoreCms };
+    const d = await r.json() as { value?: Partial<StoreCms> };
     if (!d.value) return CMS_DEFAULTS;
-    return { ...CMS_DEFAULTS, ...d.value,
-      hero:               { ...CMS_DEFAULTS.hero,               ...(d.value.hero ?? {}) },
-      promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(d.value.promoBanner ?? {}) },
-      trustBadges:        d.value.trustBadges ?? CMS_DEFAULTS.trustBadges,
-      featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(d.value.featuredSection ?? {}) },
-      newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(d.value.newArrivalsSection ?? {}) },
-      seo:                { ...CMS_DEFAULTS.seo,                ...(d.value.seo ?? {}) },
-    };
+    return mergeCms(d.value);
   } catch { return CMS_DEFAULTS; }
 }
 
@@ -128,6 +175,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const inp = "w-full px-3 py-2 text-[13px] border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition placeholder:text-gray-300 dark:placeholder:text-zinc-600";
 
+const ANNOUNCEMENT_COLORS: { value: StoreCms["header"]["announcementBg"]; label: string; cls: string }[] = [
+  { value: "blue",    label: "Blue",    cls: "bg-blue-600"   },
+  { value: "emerald", label: "Green",   cls: "bg-emerald-600"},
+  { value: "amber",   label: "Amber",   cls: "bg-amber-500"  },
+  { value: "red",     label: "Red",     cls: "bg-red-600"    },
+  { value: "purple",  label: "Purple",  cls: "bg-purple-600" },
+  { value: "slate",   label: "Dark",    cls: "bg-slate-800"  },
+];
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function WebsiteCmsPage() {
   const { toast } = useToast();
@@ -158,7 +214,7 @@ export default function WebsiteCmsPage() {
     try {
       await saveCms(cms);
       setDirty(false);
-      toast({ title: "CMS saved", description: "Store homepage content has been updated." });
+      toast({ title: "CMS saved", description: "Store content has been updated." });
     } catch {
       toast({ title: "Save failed", description: "Could not save CMS content.", variant: "destructive" });
     } finally { setSaving(false); }
@@ -183,33 +239,26 @@ export default function WebsiteCmsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
-      {/* Header */}
+      {/* Header row */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Globe size={22} className="text-blue-600" />
             Website CMS
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Control the content displayed on your tenant store homepage</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Control content displayed on your tenant store</p>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="/tenant-store/" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
-          >
+          <a href="/tenant-store/" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700">
             <Eye size={13} /> Preview Store <ExternalLink size={11} />
           </a>
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
-          >
+          <button onClick={handleReset}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700">
             <RotateCcw size={13} /> Reset
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !dirty}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
+          <button onClick={handleSave} disabled={saving || !dirty}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors">
             <Save size={13} /> {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
@@ -222,8 +271,117 @@ export default function WebsiteCmsPage() {
         </div>
       )}
 
+      {/* ── BRAND & IDENTITY ─────────────────────────────────────────────── */}
+      <Section title="Brand & Identity" icon={<ImageIcon size={16} />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Logo URL" hint="Paste a direct image URL (PNG/SVG). Leave blank to use the default icon.">
+            <input className={inp} value={cms.brand.logoUrl} onChange={e => patch("brand", { logoUrl: e.target.value })} placeholder="https://example.com/logo.png" />
+          </Field>
+          <Field label="Store Name Override" hint="Overrides the name from admin settings. Leave blank to use admin setting.">
+            <input className={inp} value={cms.brand.storeName} onChange={e => patch("brand", { storeName: e.target.value })} placeholder="TechZone" />
+          </Field>
+          <Field label="Tagline" hint="Short line shown beside/below the logo in the footer">
+            <input className={inp} value={cms.brand.tagline} onChange={e => patch("brand", { tagline: e.target.value })} placeholder="Premium Tech, Delivered Fast" />
+          </Field>
+          <Field label="Footer Description" hint="Paragraph shown under logo in the footer">
+            <textarea className={inp + " resize-none h-20"} value={cms.brand.description} onChange={e => patch("brand", { description: e.target.value })} />
+          </Field>
+        </div>
+        {cms.brand.logoUrl && (
+          <div className="mt-4 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-100 dark:border-zinc-700 flex items-center gap-3">
+            <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Preview:</span>
+            <img src={cms.brand.logoUrl} alt="Logo preview" className="h-8 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          </div>
+        )}
+      </Section>
+
+      {/* ── CONTACT INFO ─────────────────────────────────────────────────── */}
+      <Section title="Contact Information" icon={<Phone size={16} />}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Address" hint="Shown in footer and contact page">
+            <textarea className={inp + " resize-none h-16"} value={cms.contact.address} onChange={e => patch("contact", { address: e.target.value })} placeholder="Hull, United Kingdom & Islamabad, Pakistan" />
+          </Field>
+          <div className="space-y-4">
+            <Field label="Phone Number">
+              <input className={inp} value={cms.contact.phone} onChange={e => patch("contact", { phone: e.target.value })} placeholder="+44 1234 567890" />
+            </Field>
+            <Field label="Email Address">
+              <input className={inp} value={cms.contact.email} onChange={e => patch("contact", { email: e.target.value })} placeholder="hello@onesoft.com" type="email" />
+            </Field>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── SOCIAL LINKS ─────────────────────────────────────────────────── */}
+      <Section title="Social Media Links" icon={<Share2 size={16} />}>
+        <p className="text-[12px] text-gray-400 dark:text-zinc-500 mb-4">Enter full URLs (e.g. https://twitter.com/yourhandle). Leave blank to hide the icon.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {(["twitter", "instagram", "facebook", "youtube", "linkedin", "tiktok"] as const).map(network => (
+            <Field key={network} label={network.charAt(0).toUpperCase() + network.slice(1)}>
+              <input className={inp} value={cms.social[network]} onChange={e => patch("social", { [network]: e.target.value } as Partial<StoreCms["social"]>)} placeholder={`https://${network}.com/…`} />
+            </Field>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── HEADER / ANNOUNCEMENT BAR ────────────────────────────────────── */}
+      <Section title="Header & Announcement Bar" icon={<Megaphone size={16} />}>
+        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={cms.header.announcementEnabled}
+              onChange={e => patch("header", { announcementEnabled: e.target.checked })}
+              className="w-4 h-4 accent-blue-600" />
+            <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Show announcement bar at top of store</span>
+          </label>
+        </div>
+        <div className={`space-y-4 ${!cms.header.announcementEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Announcement Text">
+              <input className={inp} value={cms.header.announcementText} onChange={e => patch("header", { announcementText: e.target.value })} placeholder="Free delivery on all orders this week!" />
+            </Field>
+            <Field label="Link URL" hint="Optional — clicking the bar navigates here">
+              <input className={inp} value={cms.header.announcementLink} onChange={e => patch("header", { announcementLink: e.target.value })} placeholder="/shop" />
+            </Field>
+          </div>
+          <Field label="Background Colour">
+            <div className="flex items-center gap-2 flex-wrap">
+              {ANNOUNCEMENT_COLORS.map(c => (
+                <button key={c.value} onClick={() => patch("header", { announcementBg: c.value })}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all border-2 ${c.cls} ${cms.header.announcementBg === c.value ? "border-gray-800 dark:border-white scale-105" : "border-transparent opacity-70 hover:opacity-100"}`}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+      </Section>
+
+      {/* ── BREADCRUMBS ──────────────────────────────────────────────────── */}
+      <Section title="Breadcrumbs" icon={<Navigation size={16} />}>
+        <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={cms.breadcrumbs.enabled}
+              onChange={e => patch("breadcrumbs", { enabled: e.target.checked })}
+              className="w-4 h-4 accent-blue-600" />
+            <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Show breadcrumbs on product & category pages</span>
+          </label>
+        </div>
+        <div className={`${!cms.breadcrumbs.enabled ? "opacity-40 pointer-events-none" : ""}`}>
+          <Field label="Separator" hint="Character shown between breadcrumb items">
+            <div className="flex items-center gap-2">
+              {["/", ">", "→", "·", "\\"].map(sep => (
+                <button key={sep} onClick={() => patch("breadcrumbs", { separator: sep })}
+                  className={`w-10 h-9 rounded-lg text-[15px] font-bold border-2 transition-all ${cms.breadcrumbs.separator === sep ? "border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400" : "border-gray-200 dark:border-zinc-700 text-gray-500 hover:border-gray-400"}`}>
+                  {sep}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+      </Section>
+
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <Section title="Hero Section" icon={<Globe size={16} />}>
+      <Section title="Hero Section" icon={<LayoutTemplate size={16} />}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Badge Text" hint="Small pill above the headline">
             <input className={inp} value={cms.hero.badge} onChange={e => patch("hero", { badge: e.target.value })} placeholder="New Arrivals Every Week" />
@@ -244,15 +402,10 @@ export default function WebsiteCmsPage() {
             <input className={inp} value={cms.hero.btn2Text} onChange={e => patch("hero", { btn2Text: e.target.value })} placeholder="New Arrivals" />
           </Field>
         </div>
-
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
           <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Hero Stats (3 badges)</p>
           <div className="grid grid-cols-3 gap-3">
-            {([
-              ["stat1Value", "stat1Label"],
-              ["stat2Value", "stat2Label"],
-              ["stat3Value", "stat3Label"],
-            ] as const).map(([vk, lk], i) => (
+            {([ ["stat1Value", "stat1Label"], ["stat2Value", "stat2Label"], ["stat3Value", "stat3Label"] ] as const).map(([vk, lk], i) => (
               <div key={i} className="space-y-2 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-100 dark:border-zinc-700">
                 <Field label={`Stat ${i + 1} Value`}>
                   <input className={inp} value={(cms.hero as Record<string, string>)[vk]} onChange={e => patch("hero", { [vk]: e.target.value } as Partial<StoreCms["hero"]>)} placeholder="500+" />
@@ -267,15 +420,12 @@ export default function WebsiteCmsPage() {
       </Section>
 
       {/* ── PROMO BANNER ─────────────────────────────────────────────────── */}
-      <Section title="Promo Banner" icon={<Globe size={16} />}>
+      <Section title="Promo Banner" icon={<Star size={16} />}>
         <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cms.promoBanner.enabled}
+            <input type="checkbox" checked={cms.promoBanner.enabled}
               onChange={e => patch("promoBanner", { enabled: e.target.checked })}
-              className="w-4 h-4 accent-blue-600"
-            />
+              className="w-4 h-4 accent-blue-600" />
             <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Show promo banner on homepage</span>
           </label>
         </div>
@@ -296,9 +446,9 @@ export default function WebsiteCmsPage() {
       </Section>
 
       {/* ── TRUST BADGES ─────────────────────────────────────────────────── */}
-      <Section title="Trust Badges (4 icons)" icon={<Globe size={16} />}>
+      <Section title="Trust Badges" icon={<Globe size={16} />}>
         <p className="text-[12px] text-gray-400 dark:text-zinc-500 mb-3">
-          Icon names: Truck, ShieldCheck, RotateCcw, HeadphonesIcon, Zap, Star, Heart, Package, Globe
+          Icon names: Truck · ShieldCheck · RotateCcw · HeadphonesIcon · Zap · Star · Heart · Package · Globe
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {cms.trustBadges.map((badge, i) => (
@@ -360,11 +510,8 @@ export default function WebsiteCmsPage() {
       {/* Bottom save bar */}
       {dirty && (
         <div className="sticky bottom-4 flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-xl shadow-blue-600/30 transition-colors"
-          >
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-xl shadow-blue-600/30 transition-colors">
             <Save size={15} /> {saving ? "Saving…" : "Save & Publish"}
           </button>
         </div>

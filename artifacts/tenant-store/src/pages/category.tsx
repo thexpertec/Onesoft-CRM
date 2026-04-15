@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 import { useParams, Link } from "wouter";
-import { ChevronRight, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { ProductCard } from "@/components/product-card";
 
 export function CategoryPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { products, loading } = useStore();
+  const { products, loading, cms } = useStore();
+  const sep = cms.breadcrumbs.separator;
 
   const category = useMemo(() => {
     try { return decodeURIComponent(slug); } catch { return slug; }
@@ -19,13 +20,15 @@ export function CategoryPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
-        <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
-        <ChevronRight size={12} />
-        <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
-        <ChevronRight size={12} />
-        <span className="text-slate-700 dark:text-slate-300 font-medium">{category}</span>
-      </nav>
+      {cms.breadcrumbs.enabled && (
+        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
+          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
+          <span className="opacity-50">{sep}</span>
+          <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
+          <span className="opacity-50">{sep}</span>
+          <span className="text-slate-700 dark:text-slate-300 font-medium">{category}</span>
+        </nav>
+      )}
 
       <div className="flex items-center justify-between mb-8">
         <div>
