@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/tenant-store/"
+title = "Tenant Store"
+version = "1.0.0"
+id = "artifacts/tenant-store"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/tenant-store/" ]
+localPort = 23993
+
+[services.development]
+run = "pnpm --filter @workspace/tenant-store run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tenant-store", "run", "build" ]
+publicDir = "artifacts/tenant-store/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23993"
+BASE_PATH = "/tenant-store/"
