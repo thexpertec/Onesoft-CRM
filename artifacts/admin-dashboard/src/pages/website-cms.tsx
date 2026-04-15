@@ -251,18 +251,27 @@ export default function WebsiteCmsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Control content displayed on your tenant store</p>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={currentTenantId
-              ? `/tenant-store/?tenant=${encodeURIComponent(currentTenantId)}`
-              : "/tenant-store/"}
-            target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
-            title={currentTenantId ? `Preview store for tenant: ${currentTenantId}` : "Preview global store"}
-          >
-            <Eye size={13} />
-            {currentTenantId ? "Preview Tenant Store" : "Preview Store"}
-            <ExternalLink size={11} />
-          </a>
+          {currentTenantId ? (
+            <a
+              href={`/tenant-store/${encodeURIComponent(currentTenantId)}/home`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
+              title={`Open store: /tenant-store/${currentTenantId}/home`}
+            >
+              <Eye size={13} />
+              Preview Tenant Store
+              <ExternalLink size={11} />
+            </a>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-not-allowed opacity-60"
+              title="Log in as a specific tenant to preview their store"
+            >
+              <Eye size={13} />
+              Preview Store
+              <ExternalLink size={11} />
+            </span>
+          )}
           <button onClick={handleReset}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700">
             <RotateCcw size={13} /> Reset
