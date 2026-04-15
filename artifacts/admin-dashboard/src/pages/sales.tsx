@@ -445,6 +445,7 @@ function POSView({
   const { stock } = useStock();
   const settings = getSettings();
   const dp  = getSettingsDecimalPlaces();
+  const sym = getSettingsCurrencySymbol();
   const [prodSearch,    setProdSearch]    = useState("");
   const [catFilter,     setCatFilter]     = useState("All");
   const [prodSort,      setProdSort]      = useState("listing");
@@ -588,13 +589,23 @@ function POSView({
     return sorted;
   }, [allProducts, catFilter, prodSearch, prodSort, saleSummary, stockMap]);
 
-  const grandTotal   = localItems.reduce((s, i) => s + lineTotal(i), 0);
-  const discountAmt  = discountTotal(localItems);
-  const sym          = getSettingsCurrencySymbol();
-  const isDraft      = sale.status === "Draft";
-  const isCompleted  = sale.status === "Completed";
-  const isOnCredit   = sale.status === "On Credit";
-  const isCredit     = localMeta.paymentMethod === "Credit";
+  // ── Invoice totals (full breakdown) ─────────────────────────────────────────
+  const subTotalAmt   = subTotal(localItems);
+  const lineDiscAmt   = discountTotal(localItems);
+  const afterLineDisc = subTotalAmt - lineDiscAmt;
+  const invDiscVal    = parseFloat(localMeta.invoiceDiscount || "0") || 0;
+  const invDiscAmt    = localMeta.invoiceDiscountType === "amt"
+    ? Math.min(invDiscVal, afterLineDisc) : afterLineDisc * invDiscVal / 100;
+  const afterInvDisc  = Math.max(0, afterLineDisc - invDiscAmt);
+  const liveTaxPct    = parseFloat(localMeta.taxRate || "0") || 0;
+  const liveTaxAmt    = afterInvDisc * liveTaxPct / 100;
+  const deliveryAmt   = parseFloat(localMeta.deliveryCharges || "0") || 0;
+  const grandTotal    = afterInvDisc + liveTaxAmt + deliveryAmt;
+  const discountAmt   = lineDiscAmt;   // kept for in-line badge display
+  const isDraft       = sale.status === "Draft";
+  const isCompleted   = sale.status === "Completed";
+  const isOnCredit    = sale.status === "On Credit";
+  const isCredit      = localMeta.paymentMethod === "Credit";
 
   // Blue badge on product card showing how many are already in cart
   const cartQtyMap = useMemo(() => {
@@ -690,6 +701,42 @@ function POSView({
               <span className="text-[13px] font-bold text-blue-600 dark:text-blue-400 pl-2 border-l border-gray-200 dark:border-zinc-700">
                 {sym}{grandTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
+            </div>
+          </div>
+
+          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+          {/* SALE MODE */}
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Mode</span>
+            <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-bold">
+              {(["Retail", "Wholesale"] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => { onMetaChange({ saleMode: mode }); onPriceModeChange(mode === "Retail" ? "retail" : "wholesale"); onSaveMeta(); }}
+                  className={`px-2.5 py-0.5 transition-colors ${mode !== "Retail" ? "border-l border-gray-200 dark:border-zinc-700" : ""} ${(localMeta.saleMode ?? "Retail") === mode ? (mode === "Retail" ? "bg-blue-600 text-white" : "bg-purple-600 text-white") : "bg-white dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
+
+          {/* DELIVERY STATUS */}
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Delivery</span>
+            <div className="relative flex items-center">
+              <select
+                value={localMeta.deliveryStatus || "Pending"}
+                onChange={e => { onMetaChange({ deliveryStatus: e.target.value as LocalMeta["deliveryStatus"] }); onSaveMeta(); }}
+                className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pr-5 pb-0.5 text-[13px] font-semibold bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
+                style={{ color: DELIVERY_STATUS_COLOR[localMeta.deliveryStatus || "Pending"] }}
+              >
+                {DELIVERY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
             </div>
           </div>
 
@@ -951,22 +998,132 @@ function POSView({
           {/* ── Totals + Actions ─────────────────────────────────────────────── */}
           <div className="shrink-0 border-t border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             <div className="px-5 pt-3.5 pb-2 space-y-1.5">
+              {/* Subtotal */}
               <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
                 <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
-                <span className="font-mono font-semibold">{sym}{subTotal(localItems).toFixed(dp)}</span>
+                <span className="font-mono font-semibold">{sym}{subTotalAmt.toFixed(dp)}</span>
               </div>
-              {discountAmt > 0 && (
+
+              {/* Line discounts */}
+              {lineDiscAmt > 0 && (
                 <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
-                  <span>Discount savings</span>
-                  <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(dp)}</span>
+                  <span>Item Discounts</span>
+                  <span className="font-mono font-semibold">−{sym}{lineDiscAmt.toFixed(dp)}</span>
                 </div>
               )}
+
+              {/* Invoice Discount */}
+              <div className="flex justify-between items-center text-[12px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500 dark:text-gray-400">Invoice Discount</span>
+                  {isDraft && (
+                    <button
+                      onClick={() => { onMetaChange({ invoiceDiscountType: localMeta.invoiceDiscountType === "amt" ? "pct" : "amt" }); onSaveMeta(); }}
+                      className="text-[10px] font-bold px-1.5 py-0 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors leading-5"
+                    >
+                      {localMeta.invoiceDiscountType === "amt" ? sym : "%"}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {invDiscAmt > 0 && <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">−{sym}{invDiscAmt.toFixed(dp)}</span>}
+                  {isDraft ? (
+                    <input
+                      type="number" min="0"
+                      value={localMeta.invoiceDiscount || ""}
+                      onChange={e => onMetaChange({ invoiceDiscount: e.target.value })}
+                      onBlur={onSaveMeta}
+                      placeholder="0"
+                      className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                    />
+                  ) : (
+                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">
+                      {localMeta.invoiceDiscountType === "amt" ? `${sym}${parseFloat(localMeta.invoiceDiscount || "0").toFixed(dp)}` : `${parseFloat(localMeta.invoiceDiscount || "0").toFixed(1)}%`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Tax */}
+              <div className="flex justify-between items-center text-[12px]">
+                <span className="text-gray-500 dark:text-gray-400">Tax</span>
+                <div className="flex items-center gap-1">
+                  {liveTaxAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{liveTaxAmt.toFixed(dp)}</span>}
+                  {isDraft ? (
+                    <>
+                      <input
+                        type="number" min="0" max="100"
+                        value={localMeta.taxRate || ""}
+                        onChange={e => onMetaChange({ taxRate: e.target.value })}
+                        onBlur={onSaveMeta}
+                        placeholder="0"
+                        className="w-12 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                      />
+                      <span className="text-gray-400 text-[11px]">%</span>
+                    </>
+                  ) : (
+                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{parseFloat(sale.taxRate || "0").toFixed(1)}%</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Delivery Charges */}
+              <div className="flex justify-between items-center text-[12px]">
+                <span className="text-gray-500 dark:text-gray-400">Delivery</span>
+                <div className="flex items-center gap-1">
+                  {deliveryAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{deliveryAmt.toFixed(dp)}</span>}
+                  {isDraft ? (
+                    <>
+                      <span className="text-[11px] text-gray-400">{sym}</span>
+                      <input
+                        type="number" min="0"
+                        value={localMeta.deliveryCharges || ""}
+                        onChange={e => onMetaChange({ deliveryCharges: e.target.value })}
+                        onBlur={onSaveMeta}
+                        placeholder="0"
+                        className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                      />
+                    </>
+                  ) : (
+                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{sym}{parseFloat(sale.deliveryCharges || "0").toFixed(dp)}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Grand Total */}
               <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-zinc-800">
                 <span className="text-[14px] font-bold text-gray-600 dark:text-gray-300">Total to Pay</span>
                 <span className="text-[26px] font-black font-mono tabular-nums text-blue-600 dark:text-blue-400 leading-none">
                   {sym}{grandTotal.toFixed(dp)}
                 </span>
               </div>
+
+              {/* Received / Balance (for completed/credit sales) */}
+              {(isCompleted || isOnCredit) && parseFloat(sale.amountPaid || "0") > 0 && (() => {
+                const paid = parseFloat(sale.amountPaid) || 0;
+                const change = Math.max(0, paid - grandTotal);
+                const balance = Math.max(0, grandTotal - paid);
+                return (
+                  <>
+                    <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
+                      <span>Received</span>
+                      <span className="font-mono font-semibold">{sym}{paid.toFixed(dp)}</span>
+                    </div>
+                    {change > 0.005 && (
+                      <div className="flex justify-between text-[12px] text-blue-600 dark:text-blue-400">
+                        <span>Change</span>
+                        <span className="font-mono font-semibold">{sym}{change.toFixed(dp)}</span>
+                      </div>
+                    )}
+                    {balance > 0.005 && (
+                      <div className="flex justify-between text-[12px] text-orange-600 dark:text-orange-400 font-semibold">
+                        <span>Balance Due</span>
+                        <span className="font-mono">{sym}{balance.toFixed(dp)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="px-5 pb-4 space-y-2">
@@ -1441,13 +1598,11 @@ function POSView({
     {payModalOpen && (
       <PaymentModal
         saleNumber={sale.saleNumber}
-        billedAmount={subTotal(localItems)}
-        discountAmt={discountAmt}
-        afterDiscount={grandTotal}
+        total={grandTotal}
         defaultPaymentMethod={localMeta.paymentMethod}
-        onConfirm={(amountPaid, taxRate, paymentMethod) => {
+        onConfirm={(amountPaid, paymentMethod) => {
           setPayModalOpen(false);
-          onComplete(amountPaid, taxRate, paymentMethod);
+          onComplete(amountPaid, paymentMethod);
         }}
         onCancel={() => setPayModalOpen(false)}
       />
@@ -1613,7 +1768,7 @@ export default function SalesPage() {
   const [detailId,               setDetailId]               = useState<string | null>(null);
   const [localItems,             setLocalItems]             = useState<SaleItem[]>([]);
   const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale">("retail");
-  const [localMeta,              setLocalMeta]              = useState<{ customer: string; saleDate: string; paymentMethod: SalePayment; notes: string; agentId?: string; agentName?: string } | null>(null);
+  const [localMeta,              setLocalMeta]              = useState<LocalMeta | null>(null);
   const [completedSaleForReceipt, setCompletedSaleForReceipt] = useState<Sale | null>(null);
 
   // Refs so callbacks always see latest values without stale-closure issues
@@ -1681,7 +1836,17 @@ export default function SalesPage() {
   // ── Open POS — accepts a Sale object directly (avoids stale-state lookup) ──
   const openDetailDirect = useCallback((sale: Sale) => {
     setLocalItems([...sale.items]);
-    setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName });
+    setPriceMode((sale.saleMode === "Wholesale" ? "wholesale" : "retail") as "retail" | "wholesale");
+    setLocalMeta({
+      customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod,
+      notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName,
+      saleMode: sale.saleMode ?? "Retail",
+      deliveryStatus: sale.deliveryStatus ?? "Pending",
+      deliveryCharges: sale.deliveryCharges ?? "0",
+      invoiceDiscount: sale.invoiceDiscount ?? "0",
+      invoiceDiscountType: sale.invoiceDiscountType ?? "pct",
+      taxRate: sale.taxRate ?? "0",
+    });
     setDetailId(sale.id);
   }, []);
 
@@ -1700,7 +1865,17 @@ export default function SalesPage() {
       const sale = sales.find(s => s.id === detailId);
       if (sale) {
         setLocalItems([...sale.items]);
-        setLocalMeta({ customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod, notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName });
+        setPriceMode((sale.saleMode === "Wholesale" ? "wholesale" : "retail") as "retail" | "wholesale");
+        setLocalMeta({
+          customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod,
+          notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName,
+          saleMode: sale.saleMode ?? "Retail",
+          deliveryStatus: sale.deliveryStatus ?? "Pending",
+          deliveryCharges: sale.deliveryCharges ?? "0",
+          invoiceDiscount: sale.invoiceDiscount ?? "0",
+          invoiceDiscountType: sale.invoiceDiscountType ?? "pct",
+          taxRate: sale.taxRate ?? "0",
+        });
       }
     }
   }, [detailId, sales]);
@@ -1800,9 +1975,10 @@ export default function SalesPage() {
     // Auto-post JE for On Credit sales (only once)
     let jeId: string | undefined = detailSale?.jeId;
     if (status === "On Credit" && !jeId) {
-      const subtotal  = saleTotal(localItems);
-      const taxPct    = Math.max(0, parseFloat(localMeta.taxRate ?? "0") || 0);
-      const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
+      const sub_     = saleTotal(localItems);
+      const taxPct_  = Math.max(0, parseFloat(localMeta.taxRate || "0") || 0);
+      const taxAmt_  = parseFloat((sub_ * taxPct_ / 100).toFixed(2));
+      const delAmt_  = parseFloat(localMeta.deliveryCharges || "0") || 0;
       const costTotal = localItems.reduce((sum, item) => {
         const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
         return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
@@ -1813,9 +1989,9 @@ export default function SalesPage() {
         customer:      localMeta.customer || "Walk-in",
         date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
         paymentMethod: "Credit",
-        subtotal,
-        taxAmount,
-        grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+        subtotal:      sub_,
+        taxAmount:     taxAmt_,
+        grandTotal:    parseFloat((sub_ + taxAmt_ + delAmt_).toFixed(2)),
         costTotal:     parseFloat(costTotal.toFixed(2)),
       });
       if (je) jeId = je.id;
@@ -1845,7 +2021,7 @@ export default function SalesPage() {
     setLocalItems([]);
   };
 
-  const handleComplete = (amountPaid: string, taxRate: string, paymentMethod: SalePayment) => {
+  const handleComplete = (amountPaid: string, paymentMethod: SalePayment) => {
     if (!detailId || !localMeta) return;
 
     try {
@@ -1854,12 +2030,25 @@ export default function SalesPage() {
         deductStockForSale(localItems, detailSale?.saleNumber || "");
       }
 
+      // Compute grand total from localMeta (tax, delivery, invoice discount)
+      const subtotal_     = saleTotal(localItems);
+      const lineDiscAmt_  = localItems.reduce((s, i) => {
+        const p = parseFloat(i.unitPrice) || 0, q = parseFloat(i.qty) || 0, d = parseFloat(i.discount) || 0;
+        return s + (i.discountType === "amt" ? Math.min(d, p) * q : p * q * d / 100);
+      }, 0);
+      const afterLine_    = subtotal_ - lineDiscAmt_;
+      const invDiscVal_   = parseFloat(localMeta.invoiceDiscount || "0") || 0;
+      const invDiscAmt_   = localMeta.invoiceDiscountType === "amt"
+        ? Math.min(invDiscVal_, afterLine_) : afterLine_ * invDiscVal_ / 100;
+      const afterInvDisc_ = Math.max(0, afterLine_ - invDiscAmt_);
+      const taxPct_       = Math.max(0, parseFloat(localMeta.taxRate || "0") || 0);
+      const taxAmount     = parseFloat((afterInvDisc_ * taxPct_ / 100).toFixed(2));
+      const deliveryAmt_  = parseFloat(localMeta.deliveryCharges || "0") || 0;
+      const grandTotal_   = parseFloat((afterInvDisc_ + taxAmount + deliveryAmt_).toFixed(2));
+
       // Auto-post journal entry (only once — skip if already linked)
       let jeId: string | undefined = detailSale?.jeId;
       if (!jeId) {
-        const subtotal  = saleTotal(localItems);
-        const taxPct    = Math.max(0, parseFloat(taxRate) || 0);
-        const taxAmount = parseFloat((subtotal * taxPct / 100).toFixed(2));
         const costTotal = allProducts.length > 0
           ? localItems.reduce((sum, item) => {
               const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
@@ -1872,9 +2061,9 @@ export default function SalesPage() {
           customer:      localMeta.customer || "Walk-in",
           date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
           paymentMethod,
-          subtotal,
+          subtotal:      subtotal_,
           taxAmount,
-          grandTotal:    parseFloat((subtotal + taxAmount).toFixed(2)),
+          grandTotal:    grandTotal_,
           costTotal:     parseFloat(costTotal.toFixed(2)),
         });
         if (je) jeId = je.id;
@@ -1886,7 +2075,7 @@ export default function SalesPage() {
         status: "Completed",
         items: localItems,
         amountPaid,
-        taxRate,
+        taxRate: localMeta.taxRate ?? "0",
         paidAt: new Date().toISOString(),
         stockDeducted: true,
         ...(jeId ? { jeId } : {}),
@@ -2059,7 +2248,7 @@ export default function SalesPage() {
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
         priceMode={priceMode}
-        onPriceModeChange={setPriceMode}
+        onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : "Wholesale" } : m); }}
         onSetStatus={setStatus}
         onComplete={handleComplete}
         onAddCustomer={(name, phone, email, company) => {

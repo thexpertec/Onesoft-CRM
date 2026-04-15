@@ -58,14 +58,20 @@ export function buildSaleReceiptHtml(sale: Sale, settings: AppSettings): string 
   const fmt = (n: number) => `${sym}${n.toFixed(2)}`;
 
   const subtotal    = sale.items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
-  const discountAmt = sale.items.reduce((s, i) => {
+  const lineDiscAmt = sale.items.reduce((s, i) => {
     const q = parseFloat(i.qty) || 0, p = parseFloat(i.unitPrice) || 0, d = parseFloat(i.discount) || 0;
-    return s + q * p * (d / 100);
+    return s + (i.discountType === "amt" ? Math.min(d, p) * q : q * p * d / 100);
   }, 0);
-  const afterDiscount = subtotal - discountAmt;
+  const afterLineDisc  = subtotal - lineDiscAmt;
+  const invDiscVal     = parseFloat(sale.invoiceDiscount || "0") || 0;
+  const invDiscAmt     = sale.invoiceDiscountType === "amt"
+    ? Math.min(invDiscVal, afterLineDisc) : afterLineDisc * invDiscVal / 100;
+  const afterDiscount  = Math.max(0, afterLineDisc - invDiscAmt);
+  const discountAmt    = lineDiscAmt + invDiscAmt;
   const taxRate = parseFloat(sale.taxRate) || 0;
   const taxAmt  = afterDiscount * taxRate / 100;
-  const total   = afterDiscount + taxAmt;
+  const deliveryAmt = parseFloat(sale.deliveryCharges || "0") || 0;
+  const total   = afterDiscount + taxAmt + deliveryAmt;
   const paid    = parseFloat(sale.amountPaid) || 0;
   const change  = Math.max(0, paid - total);
   const balance = Math.max(0, total - paid);
@@ -286,6 +292,7 @@ export function buildSaleReceiptHtml(sale: Sale, settings: AppSettings): string 
     <div class="row"><span class="lbl">Subtotal</span><span class="val">${fmt(subtotal)}</span></div>
     ${discountAmt > 0 ? `<div class="row disc"><span class="lbl">Discount</span><span class="val">-${fmt(discountAmt)}</span></div>` : ""}
     ${taxRate > 0     ? `<div class="row"><span class="lbl">Tax (${taxRate}%)</span><span class="val">${fmt(taxAmt)}</span></div>` : ""}
+    ${deliveryAmt > 0 ? `<div class="row"><span class="lbl">Delivery</span><span class="val">+${fmt(deliveryAmt)}</span></div>` : ""}
   </div>
 
   <div class="sep">${esc(DSEP)}</div>
