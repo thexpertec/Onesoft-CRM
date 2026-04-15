@@ -239,6 +239,15 @@ export default function ProductsPage() {
     try { return new Set<string>(JSON.parse(localStorage.getItem("products-hidden-cols") || "[]")); }
     catch { return new Set<string>(); }
   });
+  const [wrapText, setWrapText] = useState<boolean>(() => {
+    try { return localStorage.getItem("products-wrap-text") === "true"; } catch { return false; }
+  });
+  const toggleWrap = () => setWrapText(v => {
+    const next = !v;
+    try { localStorage.setItem("products-wrap-text", String(next)); } catch {}
+    return next;
+  });
+
   const [colsMenuOpen, setColsMenuOpen] = useState(false);
   const colsMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1209,6 +1218,25 @@ export default function ProductsPage() {
           )}
         </button>
 
+        {/* Wrap text toggle */}
+        <button
+          onClick={toggleWrap}
+          title={wrapText ? "Disable text wrap" : "Enable text wrap (Excel-style)"}
+          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
+            wrapText
+              ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+            <polyline points="9 15 6 18 9 21"/>
+            <line x1="3" y1="18" x2="6" y2="18"/>
+          </svg>
+          Wrap
+        </button>
+
         {/* ── Dropdown Filters ──────────────────────────────────────── */}
         {(allCategories.length > 0 || allBrands.length > 0 || allConditions.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -1516,7 +1544,7 @@ export default function ProductsPage() {
                   hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
 
                 {/* Checkbox / drag handle */}
-                <td className="border-r border-gray-100 dark:border-border w-8 text-center select-none" style={{ height: `${CELL_H}px` }}
+                <td className="border-r border-gray-100 dark:border-border w-8 text-center select-none" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
                   onClick={e => { e.stopPropagation(); if (isAuthenticated) toggleSelect(prod.id); }}>
                   {isAuthenticated ? (
                     <div className="flex items-center justify-center h-full">
@@ -1537,7 +1565,7 @@ export default function ProductsPage() {
                   ) : null}
                 </td>
 
-                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
+                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>{ri + 1}</td>
                 {visibleCols.map((c, ci) => {
                   const isA = activeCell?.id === prod.id && activeCell.col === ci;
                   // Compute readonly profit columns
@@ -1567,7 +1595,7 @@ export default function ProductsPage() {
                     const isOut = qty !== null && qty === 0;
                     return (
                       <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
-                        style={{ height: `${CELL_H}px` }}>
+                        style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
                         <div className="w-full h-full flex items-center justify-end px-2.5">
                           {qty === null ? (
                             <span className="text-[11px] text-muted-foreground/40">—</span>
@@ -1586,10 +1614,10 @@ export default function ProductsPage() {
 
                   return (
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
-                      style={{ height: `${CELL_H}px` }}
+                      style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
                       onClick={() => !isA && isAuthenticated && c.type !== "readonly" && setActiveCell({ id: prod.id, col: ci })}>
                       {isProfitCol ? (
-                        <div className={`w-full h-full flex items-center px-3 text-[12px] truncate select-none ${rawVal ? profitColor : "text-muted-foreground/40"}`}>
+                        <div className={`w-full flex items-center px-3 text-[12px] select-none ${wrapText ? "py-2 break-words" : "h-full truncate"} ${rawVal ? profitColor : "text-muted-foreground/40"}`}>
                           {rawVal || "—"}
                         </div>
                       ) : (
@@ -1600,12 +1628,13 @@ export default function ProductsPage() {
                           onCancel={() => setActiveCell(null)}
                           onTab={s => navigateCell(prod.id, ci, s)}
                           onEnter={() => moveCellDown(prod.id, ci)}
+                          wrapText={wrapText}
                         />
                       )}
                     </td>
                   );
                 })}
-                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px`, width: 70 }} onClick={e => e.stopPropagation()}>
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={wrapText ? { minHeight: `${CELL_H}px`, width: 70 } : { height: `${CELL_H}px`, width: 70 }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 h-full px-1">
                     {/* Thumbnail indicator — always visible */}
                     {prod.thumbnail ? (

@@ -43,6 +43,7 @@ export function EditableCell({
   onTab,
   onEnter,
   suggestions,
+  wrapText,
 }: {
   value: string;
   col: ColDef;
@@ -54,6 +55,7 @@ export function EditableCell({
   onTab: (shift: boolean) => void;
   onEnter: () => void;
   suggestions?: ComboOption[];
+  wrapText?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
   const inputRef  = useRef<HTMLInputElement>(null);
@@ -81,7 +83,7 @@ export function EditableCell({
   // ── Readonly ─────────────────────────────────────────────────────────────
   if (col.type === "readonly") {
     return (
-      <div className="w-full h-full flex items-center px-3 text-[12px] text-muted-foreground truncate select-none">
+      <div className={`w-full flex px-3 text-[12px] text-muted-foreground select-none ${wrapText ? "py-2 items-start break-words" : "h-full items-center truncate"}`}>
         {value}
       </div>
     );
@@ -211,6 +213,19 @@ export function EditableCell({
           ? <><span className="w-4 h-4 rounded-full flex-shrink-0 ring-1 ring-black/10" style={{ backgroundColor: value }} />
              <span className="text-[12px] text-muted-foreground truncate">{PRESET_COLORS.find(c => c.hex === value)?.label ?? value}</span></>
           : <span className="text-[13px] text-gray-300">—</span>}
+      </div>
+    );
+  }
+
+  if (wrapText) {
+    return (
+      <div
+        {...clickProps}
+        className={`w-full flex items-start px-3 py-2 text-[13px] ${clickProps.className}`}
+      >
+        <span className={`break-words min-w-0 w-full leading-snug ${!value ? "text-gray-300 dark:text-muted-foreground/30" : "text-gray-700 dark:text-foreground"}`}>
+          {value || (canEdit ? "—" : "")}
+        </span>
       </div>
     );
   }
