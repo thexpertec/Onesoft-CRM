@@ -309,6 +309,13 @@ const OTHER_NAV: NavItem[] = [
       { label: "Investment Plans", href: "/investment-plans", icon: TrendingUp, desc: "Define & manage investment plans" },
     ],
   },
+  {
+    key: "website", label: "Website", icon: Globe,
+    items: [
+      { label: "Homepage CMS",  href: "/website-cms", icon: Globe,     desc: "Edit hero, banners, trust badges" },
+      { label: "View Store",    href: "/tenant-store/", icon: Store,   desc: "Open the live tenant store"        },
+    ],
+  },
   { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
 ];
 

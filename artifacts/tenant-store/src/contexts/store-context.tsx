@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { Product } from "@/types/product";
-import { fetchProducts, fetchStoreConfig } from "@/lib/api";
+import { fetchProducts, fetchStoreConfig, fetchStoreCms, CMS_DEFAULTS } from "@/lib/api";
+import type { StoreCms } from "@/lib/api";
 
 interface StoreContextType {
   products: Product[];
@@ -9,12 +10,14 @@ interface StoreContextType {
   tenantId: string | null;
   storeName: string;
   categories: string[];
+  cms: StoreCms;
   refresh: () => void;
 }
 
 const StoreContext = createContext<StoreContextType>({
   products: [], loading: true, error: null,
   tenantId: null, storeName: "TechZone", categories: [],
+  cms: CMS_DEFAULTS,
   refresh: () => {},
 });
 
@@ -24,6 +27,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [storeName, setStoreName] = useState("TechZone");
+  const [cms, setCms] = useState<StoreCms>(CMS_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,12 +35,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [prods, cfg] = await Promise.all([
+      const [prods, cfg, cmsData] = await Promise.all([
         fetchProducts(tenantId),
         fetchStoreConfig(tenantId),
+        fetchStoreCms(),
       ]);
       setProducts(prods);
       if (cfg?.companyName) setStoreName(cfg.companyName as string);
+      setCms(cmsData);
     } catch {
       setError("Could not load products.");
     } finally {
@@ -49,7 +55,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const categories = [...new Set(products.map(p => p.category).filter(Boolean) as string[])].sort();
 
   return (
-    <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, refresh: load }}>
+    <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, cms, refresh: load }}>
       {children}
     </StoreContext.Provider>
   );
