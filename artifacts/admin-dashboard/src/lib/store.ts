@@ -3944,6 +3944,32 @@ export function postRPVoucherJE(id: string): JournalEntry {
   return je;
 }
 
+/**
+ * After the DB sync, deduplicate a stored array by a key function.
+ * Keeps the entry with the EARLIEST createdAt per key group.
+ * Returns the clean array (same reference if no changes).
+ */
+function _dedupeByKey<T extends { createdAt?: string }>(
+  items: T[],
+  keyFn: (item: T) => string,
+): T[] {
+  const seen = new Map<string, T>();
+  for (const item of items) {
+    const k = keyFn(item);
+    if (!k) continue;
+    const ex = seen.get(k);
+    if (!ex) {
+      seen.set(k, item);
+    } else {
+      // Keep the earlier one (original entry, not the import duplicate)
+      const exDate = ex.createdAt ? new Date(ex.createdAt).getTime() : Infinity;
+      const itDate = item.createdAt ? new Date(item.createdAt).getTime() : Infinity;
+      if (itDate < exDate) seen.set(k, item);
+    }
+  }
+  return seen.size < items.length ? Array.from(seen.values()) : items;
+}
+
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
     // Always sync global data (users, tenants, module groups)
@@ -3987,6 +4013,59 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
             _lsSet(`t:${tenantId}:${key}`, value);
           }
         }
+      }
+    }
+
+    // ── Auto-repair: deduplicate products and stock by name ─────────────────
+    // The DB may contain duplicate records from repeated CSV imports run before
+    // the name-based dedup guard was added. This block detects and removes them
+    // in one pass, then writes the clean list back to the DB so the fix is
+    // permanent (it becomes a no-op on every subsequent sync).
+    {
+      const prodsStorageKey = tenantId ? `t:${tenantId}:${PRODUCTS_KEY}` : PRODUCTS_KEY;
+      const prodsRaw = _memRaw.get(prodsStorageKey);
+      if (prodsRaw) {
+        try {
+          const prods = JSON.parse(prodsRaw) as Product[];
+          if (Array.isArray(prods)) {
+            const clean = _dedupeByKey(
+              prods,
+              p => ((p as Product).name || "").trim().toLowerCase(),
+            );
+            if (clean !== prods) {
+              console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length} (removed ${prods.length - clean.length} duplicates)`);
+              _lsSet(prodsStorageKey, clean);
+              const ns = tenantId ? `t:${tenantId}` : "global";
+              kvPut(ns, PRODUCTS_KEY, clean).catch(() => {});
+            }
+          }
+        } catch { /* malformed JSON — leave as-is */ }
+      }
+
+      // Also deduplicate stock: keep one entry per (productName, sku, store, stockType)
+      const stockStorageKey = tenantId ? `t:${tenantId}:${STOCK_KEY}` : STOCK_KEY;
+      const stockRaw = _memRaw.get(stockStorageKey);
+      if (stockRaw) {
+        try {
+          const items = JSON.parse(stockRaw) as StockItem[];
+          if (Array.isArray(items)) {
+            const clean = _dedupeByKey(
+              items,
+              s => [
+                ((s as StockItem).productName || "").trim().toLowerCase(),
+                ((s as StockItem).sku || "").trim().toLowerCase(),
+                ((s as StockItem).store || ""),
+                ((s as StockItem).stockType || ""),
+              ].join("|"),
+            );
+            if (clean !== items) {
+              console.info(`[sync] Auto-dedup stock: ${items.length} → ${clean.length} (removed ${items.length - clean.length} duplicates)`);
+              _lsSet(stockStorageKey, clean);
+              const ns = tenantId ? `t:${tenantId}` : "global";
+              kvPut(ns, STOCK_KEY, clean).catch(() => {});
+            }
+          }
+        } catch { /* malformed JSON */ }
       }
     }
   } catch {
