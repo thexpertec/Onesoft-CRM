@@ -43,13 +43,16 @@ const STATUS_BG: Record<SaleStatus, string> = {
 };
 
 
-const PAYMENT_ICON: Record<SalePayment, React.ReactNode> = {
-  Cash:            <Banknote size={12} className="text-emerald-500" />,
-  Card:            <CreditCard size={12} className="text-blue-500" />,
-  "Bank Transfer": <CreditCard size={12} className="text-violet-500" />,
-  Cheque:          <Receipt size={12} className="text-gray-500" />,
-  Credit:          <CreditCard size={12} className="text-orange-500" />,
-};
+function getPaymentIcon(method: string): React.ReactNode {
+  switch (method) {
+    case "Cash":            return <Banknote size={12} className="text-emerald-500" />;
+    case "Card":            return <CreditCard size={12} className="text-blue-500" />;
+    case "Bank Transfer":   return <CreditCard size={12} className="text-violet-500" />;
+    case "Cheque":          return <Receipt size={12} className="text-gray-500" />;
+    case "Credit":          return <CreditCard size={12} className="text-orange-500" />;
+    default:                return null;
+  }
+}
 
 const lineTotal = (item: SaleItem): number => {
   const q = parseFloat(item.qty) || 0;
@@ -311,12 +314,12 @@ interface PaymentModalProps {
   onCancel: () => void;
 }
 
-const PAY_METHOD_META: { method: SalePayment; icon: React.ReactNode; color: string; ring: string }[] = [
-  { method: "Cash",            icon: <Banknote  size={26} />, color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700", ring: "ring-emerald-500" },
-  { method: "Card",            icon: <CreditCard size={26} />, color: "text-blue-600    bg-blue-50     dark:bg-blue-950/40    border-blue-200    dark:border-blue-700",    ring: "ring-blue-500"    },
-  { method: "Bank Transfer",   icon: <CreditCard size={26} />, color: "text-violet-600  bg-violet-50   dark:bg-violet-950/40  border-violet-200  dark:border-violet-700",  ring: "ring-violet-500"  },
-  { method: "Cheque",          icon: <Receipt    size={26} />, color: "text-gray-600    bg-gray-50     dark:bg-zinc-800       border-gray-200    dark:border-zinc-700",     ring: "ring-gray-400"    },
-  { method: "Credit",          icon: <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
+const PAY_METHOD_META: { method: SalePayment; icon: () => React.ReactNode; color: string; ring: string }[] = [
+  { method: "Cash",            icon: () => <Banknote  size={26} />, color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700", ring: "ring-emerald-500" },
+  { method: "Card",            icon: () => <CreditCard size={26} />, color: "text-blue-600    bg-blue-50     dark:bg-blue-950/40    border-blue-200    dark:border-blue-700",    ring: "ring-blue-500"    },
+  { method: "Bank Transfer",   icon: () => <CreditCard size={26} />, color: "text-violet-600  bg-violet-50   dark:bg-violet-950/40  border-violet-200  dark:border-violet-700",  ring: "ring-violet-500"  },
+  { method: "Cheque",          icon: () => <Receipt    size={26} />, color: "text-gray-600    bg-gray-50     dark:bg-zinc-800       border-gray-200    dark:border-zinc-700",     ring: "ring-gray-400"    },
+  { method: "Credit",          icon: () => <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
 ];
 
 function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConfirm, onCancel }: PaymentModalProps) {
@@ -403,7 +406,7 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConf
               return (
                 <button key={m.method} onClick={() => setPayMethod(m.method)}
                   className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${m.color} ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
-                  {m.icon}
+                  {m.icon()}
                   <span className="leading-tight text-center">{m.method}</span>
                 </button>
               );
@@ -689,7 +692,7 @@ function POSView({
           <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Payment</span>
             <div className="flex items-center gap-2">
-              <span className="text-gray-400 shrink-0 text-base leading-none">{PAYMENT_ICON[localMeta.paymentMethod]}</span>
+              <span className="text-gray-400 shrink-0 text-base leading-none">{getPaymentIcon(localMeta.paymentMethod)}</span>
               <div className="relative flex items-center">
                 <select
                   value={localMeta.paymentMethod}
@@ -1671,7 +1674,7 @@ export default function SalesPage() {
   const isNewSale = location.includes("/new");
   const { sales, addSale, editSale, removeSale, refresh } = useSales();
   const { customers, addCustomer } = useCustomers();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, currentTenantId } = useAuth();
   const { toast } = useToast();
 
   const products          = useMemo(() => getProducts(), []);
@@ -1731,8 +1734,10 @@ export default function SalesPage() {
     }
   }, [refresh, toast]);
 
-  // Auto-sync online orders when the sales list mounts
-  useEffect(() => { syncOnlineOrders(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-sync online orders when the sales list mounts (global/admin context only)
+  useEffect(() => {
+    if (!currentTenantId) syncOnlineOrders();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearAdvFilters = () => {
     setFilterArea(""); setFilterCustomer(""); setFilterAgent("");
@@ -2589,7 +2594,7 @@ export default function SalesPage() {
                       </div>
                     ) : c.field === "paymentMethod" && !isA ? (
                       <div className={`w-full flex items-center gap-1.5 px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
-                        {PAYMENT_ICON[rawVal as SalePayment]}
+                        {getPaymentIcon(rawVal)}
                         <span className="text-[12px] text-gray-600 dark:text-gray-400">{rawVal}</span>
                       </div>
                     ) : (c.field === "total" || c.field === "amountPaid" || c.field === "balance") ? (
