@@ -5,6 +5,7 @@ import {
   Star, Megaphone,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type StoreCmsTrustBadge = { icon: string; title: string; desc: string };
@@ -187,6 +188,7 @@ const ANNOUNCEMENT_COLORS: { value: StoreCms["header"]["announcementBg"]; label:
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function WebsiteCmsPage() {
   const { toast } = useToast();
+  const { currentTenantId } = useAuth();
   const [cms, setCms] = useState<StoreCms>(CMS_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -249,9 +251,17 @@ export default function WebsiteCmsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Control content displayed on your tenant store</p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/tenant-store/" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700">
-            <Eye size={13} /> Preview Store <ExternalLink size={11} />
+          <a
+            href={currentTenantId
+              ? `/tenant-store/?tenant=${encodeURIComponent(currentTenantId)}`
+              : "/tenant-store/"}
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700"
+            title={currentTenantId ? `Preview store for tenant: ${currentTenantId}` : "Preview global store"}
+          >
+            <Eye size={13} />
+            {currentTenantId ? "Preview Tenant Store" : "Preview Store"}
+            <ExternalLink size={11} />
           </a>
           <button onClick={handleReset}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-colors border border-gray-200 dark:border-zinc-700">
