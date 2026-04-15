@@ -724,24 +724,6 @@ function POSView({
 
           <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
 
-          {/* DELIVERY STATUS */}
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Delivery</span>
-            <div className="relative flex items-center">
-              <select
-                value={localMeta.deliveryStatus || "Pending"}
-                onChange={e => { onMetaChange({ deliveryStatus: e.target.value as LocalMeta["deliveryStatus"] }); onSaveMeta(); }}
-                className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pr-5 pb-0.5 text-[13px] font-semibold bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
-                style={{ color: DELIVERY_STATUS_COLOR[localMeta.deliveryStatus || "Pending"] }}
-              >
-                {DELIVERY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-
-          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
-
           {/* NOTES */}
           <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Notes</span>
@@ -1330,26 +1312,8 @@ function POSView({
               className={`overflow-hidden transition-all duration-200 ${filtersOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0 !mt-0 !space-y-0"}`}
             >
               <div className="space-y-2.5">
-                {/* Retail / Wholesale toggle + Sort by — same row */}
+                {/* Sort by */}
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
-                    <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
-                      <button
-                        onClick={() => onPriceModeChange("retail")}
-                        className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                      >
-                        Retail
-                      </button>
-                      <button
-                        onClick={() => onPriceModeChange("wholesale")}
-                        className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                      >
-                        Wholesale
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
                     <select
