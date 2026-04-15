@@ -52,7 +52,6 @@ function apiBase(): string {
 
 async function saveOrder(order: Record<string, unknown>, tenantId: string | null): Promise<void> {
   const ns = tenantId ? encodeURIComponent(`t:${tenantId}`) : "global";
-  // Append to existing orders array
   let existing: unknown[] = [];
   try {
     const r = await fetch(`${apiBase()}/kv/${ns}/store-orders`);
@@ -63,6 +62,28 @@ async function saveOrder(order: Record<string, unknown>, tenantId: string | null
   } catch { /* ignore */ }
   existing.push(order);
   await fetch(`${apiBase()}/kv/${ns}/store-orders`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value: existing }),
+  });
+}
+
+async function saveToAdminSales(saleRecord: Record<string, unknown>): Promise<void> {
+  // Append to global online-orders list so the admin sales page can import it
+  let existing: unknown[] = [];
+  try {
+    const r = await fetch(`${apiBase()}/kv/global/online-orders`);
+    if (r.ok) {
+      const d = await r.json() as { value: unknown[] };
+      if (Array.isArray(d.value)) existing = d.value;
+    }
+  } catch { /* ignore */ }
+  // Avoid duplicates (by id)
+  const id = saleRecord.id as string;
+  if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
+    existing.push(saleRecord);
+  }
+  await fetch(`${apiBase()}/kv/global/online-orders`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value: existing }),
@@ -139,9 +160,10 @@ export function CheckoutPage() {
   async function placeOrder() {
     setPlacing(true);
     const id = `ORD-${Date.now().toString(36).toUpperCase()}`;
+    const now = new Date().toISOString();
     const order = {
       id,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       customer: form,
       items: items.map(i => ({
         productId: i.product.id,
@@ -158,9 +180,52 @@ export function CheckoutPage() {
       total: total.toFixed(2),
       status: "pending",
     };
+
+    // Build a Sale-compatible record for the admin sales list
+    const customerName = `${form.firstName} ${form.lastName}`.trim();
+    const paymentMethod = payment === "bank" ? "Bank Transfer" : "Cash";
+    const adminSaleRecord = {
+      id,
+      saleNumber: id,
+      saleDate: now.slice(0, 10),
+      customer: customerName,
+      status: "Completed",
+      paymentMethod,
+      notes: form.notes ? form.notes : `Online order · ${form.address1}, ${form.city} ${form.postcode}`,
+      items: items.map(i => ({
+        id: crypto.randomUUID(),
+        productName: i.product.name,
+        sku: i.product.sku || "",
+        qty: String(i.quantity),
+        unit: "pcs",
+        unitPrice: (i.product.websitePrice && parseFloat(i.product.websitePrice) > 0
+          ? i.product.websitePrice
+          : (i.product.price || "0")),
+        discount: "0",
+        discountType: "pct",
+        notes: "",
+        itemStatus: "Pending",
+      })),
+      taxRate: "0",
+      amountPaid: "0",
+      paidAt: "",
+      stockDeducted: false,
+      orderType: "Online",
+      onlineCustomer: `${customerName} · ${form.email} · ${form.phone}`,
+      deliveryStatus: "Pending",
+      deliveryCharges: String(shipping.price),
+      invoiceDiscount: "0",
+      invoiceDiscountType: "pct",
+      createdAt: now,
+      updatedAt: now,
+    };
+
     try {
       await saveOrder(order, tenantId);
-    } catch { /* non-fatal — order is confirmed client-side regardless */ }
+    } catch { /* non-fatal */ }
+    try {
+      await saveToAdminSales(adminSaleRecord);
+    } catch { /* non-fatal */ }
     setOrderId(id);
     clearCart();
     setStep("confirm");

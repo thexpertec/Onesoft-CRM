@@ -7,6 +7,7 @@ import {
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
   deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
+  importOnlineSalesFromKv,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +16,7 @@ import {
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
-  LayoutGrid, List,
+  LayoutGrid, List, RefreshCw, Globe,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -118,6 +119,7 @@ const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"
   taxRate: "0", amountPaid: "0", paidAt: "", stockDeducted: false,
   saleMode: "Retail", deliveryStatus: "Pending",
   deliveryCharges: "0", invoiceDiscount: "0", invoiceDiscountType: "pct",
+  orderType: "POS",
 });
 
 const blankNewRow = (): Record<string, string> => ({
@@ -1667,7 +1669,7 @@ export default function SalesPage() {
   const [location, navigate] = useLocation();
   const dp = getSettingsDecimalPlaces();
   const isNewSale = location.includes("/new");
-  const { sales, addSale, editSale, removeSale } = useSales();
+  const { sales, addSale, editSale, removeSale, refresh } = useSales();
   const { customers, addCustomer } = useCustomers();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
@@ -1711,6 +1713,26 @@ export default function SalesPage() {
     try { localStorage.setItem("sales-wrap-text", String(next)); } catch {}
     return next;
   });
+
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncCount, setLastSyncCount] = useState<number | null>(null);
+
+  const syncOnlineOrders = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const n = await importOnlineSalesFromKv("global");
+      setLastSyncCount(n);
+      if (n > 0) {
+        refresh();
+        toast({ title: `${n} online order${n !== 1 ? "s" : ""} imported`, description: "Online orders synced from the store." });
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [refresh, toast]);
+
+  // Auto-sync online orders when the sales list mounts
+  useEffect(() => { syncOnlineOrders(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearAdvFilters = () => {
     setFilterArea(""); setFilterCustomer(""); setFilterAgent("");
@@ -1758,6 +1780,7 @@ export default function SalesPage() {
 
   const COLS: ColDef[] = useMemo(() => [
     { field: "saleNumber",    label: "Sale #",          minW: 145, type: "readonly" },
+    { field: "orderType",     label: "Type",            minW: 90,  type: "readonly" },
     { field: "saleDate",      label: "Date",            minW: 130, type: "date"     },
     { field: "customer",      label: "Customer",        minW: 180, type: "text"     },
     { field: "agentName",     label: "Sales Agent",     minW: 150, type: agentNameOpts.length ? "select" : "text", options: agentNameOpts },
@@ -2251,16 +2274,22 @@ export default function SalesPage() {
             Click any cell to edit · Click <Eye size={11} className="inline" /> to open POS terminal
           </p>
         </div>
-        {isAuthenticated && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-sale-row">
-              <Plus size={14} /> New Sale
-            </Button>
-            <Button size="sm" onClick={() => { const s = addSale(blankSale()); freshSaleIdRef.current = s.id; openDetailDirect(s); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
-              <ShoppingCart size={14} /> Open POS
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2 items-center">
+          <Button size="sm" variant="outline" onClick={syncOnlineOrders} disabled={syncing} className="gap-1.5 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30" title="Sync online orders from store">
+            <Globe size={13} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Syncing…" : lastSyncCount !== null && lastSyncCount === 0 ? "Synced" : "Sync Online"}
+          </Button>
+          {isAuthenticated && (
+            <>
+              <Button size="sm" variant="outline" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-sale-row">
+                <Plus size={14} /> New Sale
+              </Button>
+              <Button size="sm" onClick={() => { const s = addSale(blankSale()); freshSaleIdRef.current = s.id; openDetailDirect(s); }} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+                <ShoppingCart size={14} /> Open POS
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* KPI pills */}
@@ -2538,7 +2567,23 @@ export default function SalesPage() {
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${c.type === "readonly" ? "bg-gray-50/40 dark:bg-gray-800/10" : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                     style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}
                     onClick={() => canEdit && !isA && setActiveCell({ id: sale.id, col: ci })}>
-                    {c.field === "status" && !isA ? (
+                    {c.field === "orderType" ? (
+                      <div className={`w-full flex items-center px-3 ${wrapText ? "py-2" : "h-full"}`}>
+                        {rawVal === "Online" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                            <Globe size={9} /> Online
+                          </span>
+                        ) : rawVal === "Invoice" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+                            <Receipt size={9} /> Invoice
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                            <ShoppingCart size={9} /> POS
+                          </span>
+                        )}
+                      </div>
+                    ) : c.field === "status" && !isA ? (
                       <div className={`w-full flex items-center px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
                         <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${STATUS_BG[rawVal as SaleStatus] ?? ""}`}>{rawVal}</span>
                       </div>

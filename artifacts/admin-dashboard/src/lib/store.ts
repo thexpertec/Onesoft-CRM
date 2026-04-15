@@ -1,4 +1,4 @@
-import { kvPut, kvGetAll } from "./api";
+import { kvPut, kvGetAll, kvGet } from "./api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -1757,6 +1757,8 @@ export type Sale = {
   deliveryCharges?:  string;
   invoiceDiscount?:  string;
   invoiceDiscountType?: "pct" | "amt";
+  orderType?:        "POS" | "Invoice" | "Online";
+  onlineCustomer?:   string; // full name + contact for online orders
   createdAt: string;
   updatedAt: string;
 };
@@ -1807,6 +1809,20 @@ export const deleteSale = (id: string): void => {
   setStored(SALES_KEY, getSales().filter(s => s.id !== id));
   addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
 };
+
+/** Pull any online orders saved by the tenant store and merge them into admin-sales. Returns count of new records imported. */
+export async function importOnlineSalesFromKv(ns = "global"): Promise<number> {
+  try {
+    const raw = await kvGet(ns, "online-orders");
+    if (!Array.isArray(raw)) return 0;
+    const existing = getSales();
+    const existingIds = new Set(existing.map(s => s.id));
+    const newOnes = (raw as Sale[]).filter(o => o && o.id && !existingIds.has(o.id));
+    if (!newOnes.length) return 0;
+    setStored(SALES_KEY, [...existing, ...newOnes]);
+    return newOnes.length;
+  } catch { return 0; }
+}
 
 // ─── Sale Returns ─────────────────────────────────────────────────────────────
 export const SR_KEY = "admin-sale-returns";
