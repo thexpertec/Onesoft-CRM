@@ -896,14 +896,20 @@ function POSView({
                             </span>
                           )}
                           {(() => {
-                            const avail = item.sku ? (stockMap[item.sku] ?? null) : null;
+                            if (!item.sku) return null;
+                            const rawStock = stockMap[item.sku];
+                            const avail = rawStock !== undefined ? rawStock : null;
                             if (avail === null) return null;
-                            const low = avail <= 5;
+                            const isNeg  = avail < 0;
+                            const isZero = avail === 0;
+                            const isLow  = avail > 0 && avail <= 5;
                             return (
-                              <span className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md ${
-                                low
-                                  ? "bg-red-50 dark:bg-red-950/30 text-red-500 dark:text-red-400"
-                                  : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
+                              <span className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md tabular-nums ${
+                                isNeg || isZero
+                                  ? "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                                  : isLow
+                                    ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400"
+                                    : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
                               }`}>
                                 Stock: {avail}
                               </span>
@@ -977,8 +983,8 @@ function POSView({
                           {sym}{lineTotal(item).toFixed(dp)}
                         </div>
                         {lineDiscAmt(item) > 0 && (
-                          <div className="text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 font-mono">
-                            −{sym}{lineDiscAmt(item).toFixed(dp)}
+                          <div className="text-[11px] font-semibold text-red-500 dark:text-red-400 font-mono">
+                            −{lineDiscAmt(item).toFixed(dp)}
                           </div>
                         )}
                         {settings.showPosProfit !== false && (() => {
@@ -989,7 +995,7 @@ function POSView({
                           if (profit <= 0) return null;
                           return (
                             <div className="text-[11px] font-bold font-mono text-green-600 dark:text-green-400 tabular-nums">
-                              +{sym}{profit.toFixed(dp)}
+                              +{profit.toFixed(dp)}
                             </div>
                           );
                         })()}
@@ -1345,10 +1351,15 @@ function POSView({
 
                       {/* Blocked overlay — shown when overselling is disabled & stock exhausted */}
                       {stockBlocked && (
-                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-50/80 dark:bg-red-950/60 rounded-xl">
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-50/80 dark:bg-red-950/60 rounded-xl gap-0.5">
                           <div className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide text-center px-1 leading-tight">
                             No Stock
                           </div>
+                          {stockQty !== null && (
+                            <div className="text-[9px] font-bold text-red-500 dark:text-red-400 tabular-nums">
+                              ({stockQty})
+                            </div>
+                          )}
                         </div>
                       )}
 
