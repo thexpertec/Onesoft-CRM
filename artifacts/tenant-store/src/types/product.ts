@@ -18,6 +18,8 @@ export interface Product {
   stockAlertQty?: string;
   unit?: string;
   tags?: string;
+  showOnWeb?: boolean;
+  websitePrice?: string;
   createdAt: string;
   updatedAt: string;
 }

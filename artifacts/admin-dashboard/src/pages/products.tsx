@@ -21,7 +21,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "localName" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description";
+type EditableField = "name" | "localName" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -42,7 +42,7 @@ const BLANK = (): Record<EditableField, string> => ({
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
-  status: "Active", condition: "", description: "",
+  status: "Active", condition: "", description: "", websitePrice: "",
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
@@ -599,6 +599,8 @@ export default function ProductsPage() {
     { field: "retailProfit",    label: `Retail Profit (${sym})`,    minW: 125, type: "readonly" },
     { field: "wholesalePrice",  label: `Wholesale (${sym})`,        minW: 120, type: "text"     },
     { field: "wholesaleProfit", label: `Wholesale Profit (${sym})`, minW: 140, type: "readonly" },
+    { field: "websitePrice",    label: `Web Price (${sym})`,        minW: 115, type: "text"     },
+    { field: "showOnWeb",       label: "Show on Web",               minW: 105, type: "readonly" },
     { field: "stock",           label: "Stock",                     minW: 90,  type: "readonly" },
     { field: "status",      label: "Status",             minW: 120, type: "select",
       options: ["Active", "Inactive", "Draft"],
@@ -1611,6 +1613,35 @@ export default function ProductsPage() {
                       : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
                       : "text-muted-foreground")
                     : "";
+
+                  // showOnWeb — clickable toggle pill
+                  if (c.field === "showOnWeb") {
+                    const visible = prod.showOnWeb !== false;
+                    return (
+                      <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
+                        style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                        <div className="w-full h-full flex items-center justify-center px-2">
+                          {isAuthenticated ? (
+                            <button
+                              onClick={() => editProduct(prod.id, { showOnWeb: !visible })}
+                              title={visible ? "Shown on website — click to hide" : "Hidden from website — click to show"}
+                              className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition-colors cursor-pointer
+                                ${visible
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/60"
+                                  : "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60"
+                                }`}>
+                              {visible ? "Show" : "Hide"}
+                            </button>
+                          ) : (
+                            <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full
+                              ${visible ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                              {visible ? "Show" : "Hide"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  }
 
                   // Stock column — read-only pill
                   if (c.field === "stock") {

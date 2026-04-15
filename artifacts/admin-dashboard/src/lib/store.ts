@@ -1057,6 +1057,8 @@ export type Product = {
   condition?: ProductCondition; // Physical condition of the product
   thumbnail?: string;
   images?: string[];
+  showOnWeb?: boolean;       // Whether the product is visible on the tenant store website
+  websitePrice?: string;     // Separate price shown on the website (overrides retail price online)
   createdAt: string;
   updatedAt: string;
 };

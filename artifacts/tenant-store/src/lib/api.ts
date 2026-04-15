@@ -112,7 +112,7 @@ export async function fetchProducts(tenantId?: string | null): Promise<Product[]
     if (!res.ok) return [];
     const data = await res.json() as { value: Product[] };
     const arr = Array.isArray(data.value) ? data.value : [];
-    return arr.filter((p) => p.status !== "Inactive");
+    return arr.filter((p) => p.status !== "Inactive" && p.showOnWeb !== false);
   } catch {
     return [];
   }

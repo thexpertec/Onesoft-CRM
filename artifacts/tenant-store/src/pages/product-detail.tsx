@@ -133,14 +133,23 @@ export function ProductDetailPage() {
           </div>
 
           <div className="flex items-end gap-3 mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
-            <div className="text-3xl font-bold text-slate-900 dark:text-white">
-              {formatPrice(product.price)}
-            </div>
-            {product.wholesalePrice && parseFloat(product.wholesalePrice) > 0 && parseFloat(product.wholesalePrice) !== parseFloat(product.price) && (
-              <div className="text-lg text-slate-400 line-through mb-0.5">
-                {formatPrice(product.wholesalePrice)}
-              </div>
-            )}
+            {(() => {
+              const webPrice = product.websitePrice && parseFloat(product.websitePrice) > 0 ? product.websitePrice : null;
+              const displayPrice = webPrice ?? product.price;
+              const wasPrice = webPrice && parseFloat(product.price) > 0 && parseFloat(product.price) !== parseFloat(webPrice) ? product.price : null;
+              return (
+                <>
+                  <div className="text-3xl font-bold text-slate-900 dark:text-white">
+                    {formatPrice(displayPrice)}
+                  </div>
+                  {wasPrice && (
+                    <div className="text-lg text-slate-400 line-through mb-0.5">
+                      {formatPrice(wasPrice)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {product.description && (

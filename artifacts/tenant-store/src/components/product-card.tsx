@@ -179,12 +179,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
         {/* Price + Cart */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatPrice(product.price)}
-            </div>
-            {product.wholesalePrice && parseFloat(product.wholesalePrice) > 0 && parseFloat(product.wholesalePrice) !== parseFloat(product.price) && (
-              <div className="text-xs text-slate-400 line-through">{formatPrice(product.wholesalePrice)}</div>
-            )}
+            {(() => {
+              const webPrice = product.websitePrice && parseFloat(product.websitePrice) > 0 ? product.websitePrice : null;
+              const displayPrice = webPrice ?? product.price;
+              const wasPrice = webPrice && parseFloat(product.price) > 0 && parseFloat(product.price) !== parseFloat(webPrice) ? product.price : null;
+              return (
+                <>
+                  <div className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                    {formatPrice(displayPrice)}
+                  </div>
+                  {wasPrice && (
+                    <div className="text-xs text-slate-400 line-through">{formatPrice(wasPrice)}</div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           <button
