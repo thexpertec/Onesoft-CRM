@@ -21,7 +21,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "localName" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas";
+type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -38,7 +38,7 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
+  name: "", localName: "", model: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
@@ -48,7 +48,7 @@ const BLANK = (): Record<EditableField, string> => ({
 // ── CSV helpers ─────────────────────────────────────────────────────────────
 // Canonical field order for both template download and import parsing
 const CSV_HEADERS: EditableField[] = [
-  "name", "localName", "sku", "barcode", "brand",
+  "name", "localName", "model", "sku", "barcode", "brand",
   "category", "subcategory", "unit",
   "purchasePrice", "costPrice", "price", "wholesalePrice",
   "openingStock", "stockAlertValue", "commissionPct",
@@ -57,7 +57,7 @@ const CSV_HEADERS: EditableField[] = [
 
 // Human-readable header labels (same order as CSV_HEADERS)
 const CSV_HEADER_LABELS: string[] = [
-  "name", "localName", "sku", "barcode", "brand",
+  "name", "localName", "model", "sku", "barcode", "brand",
   "category", "subcategory", "unit",
   "purchasePrice", "costPrice", "retailPrice", "wholesalePrice",
   "openingStock", "stockAlertQty", "commissionPct",
@@ -68,6 +68,7 @@ const CSV_HEADER_LABELS: string[] = [
 const HEADER_ALIASES: Record<EditableField, string[]> = {
   name:            ["name", "productname", "itemname", "title"],
   localName:       ["localname", "localtitle", "arabicname", "urduname", "altname"],
+  model:           ["model", "modelnumber", "partmodel", "modelno", "modelnum", "modelnr"],
   sku:             ["sku", "itemcode", "productcode", "code", "partno", "partnumber"],
   barcode:         ["barcode", "ean", "upc", "qrcode", "barcodenumber"],
   brand:           ["brand", "brandname", "manufacturer", "make"],
@@ -597,6 +598,7 @@ export default function ProductsPage() {
   const COLS: ColDef[] = useMemo(() => [
     { field: "name",        label: "Product Name",       minW: 200, type: "text" },
     { field: "localName",   label: "Local Name",         minW: 160, type: "text" },
+    { field: "model",       label: "Model",              minW: 130, type: "text" },
     { field: "sku",         label: "SKU",                minW: 110, type: "text" },
     { field: "barcode",     label: "Barcode / QR",       minW: 150, type: "text" },
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
@@ -951,6 +953,7 @@ export default function ProductsPage() {
                 { header: "#",               key: "id",            getValue: r => displayRows.indexOf(r) + 1, width: 5 },
                 { header: "Product Name",    key: "name",          width: 32 },
                 { header: "Local Name",      key: "localName",     width: 24 },
+                { header: "Model",           key: "model",         width: 20 },
                 { header: "SKU",             key: "sku",           width: 18 },
                 { header: "Brand",           key: "brand",         width: 16 },
                 { header: "Category",        key: "category",      width: 20 },
