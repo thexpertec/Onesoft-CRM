@@ -738,14 +738,16 @@ function FilterSidebar({
         </label>
       </FilterSection>
 
-      {/* ─ Active filter tag summary (desktop only) ────────────────────── */}
+      {/* ─ Total count footer (desktop only) ────────────────────────────── */}
       {!inline && (
-        <div className="pt-2">
+        <div className="pt-1">
           <div className="h-px bg-gray-100 dark:bg-slate-700/50 mb-3" />
           <div className="flex items-center gap-2 flex-wrap">
             <Tag size={11} className="text-slate-400" />
             <span className="text-xs text-slate-400">
-              {catTree.reduce((s, n) => s + n.total, 0)} products total
+              {catTree.length > 0
+                ? catTree.reduce((s, n) => s + n.total, 0)
+                : "All"} products in catalogue
             </span>
           </div>
         </div>
