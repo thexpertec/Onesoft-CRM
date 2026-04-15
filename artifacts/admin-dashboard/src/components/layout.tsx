@@ -454,40 +454,69 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   /** Map from moduleId → HRM permission strings required (any one is sufficient). */
   const STAFF_MODULE_PERMS: Partial<Record<ModuleId, string[]>> = {
-    crm_leads:     ["View Leads",     "Manage Leads"],
-    crm_customers: ["View Customers", "Manage Customers"],
-    crm_suppliers: ["View Suppliers", "Manage Suppliers"],
-    products:      ["View Products",  "Manage Products"],
-    stock:         ["View Products",  "Manage Products"],
-    purchases:     ["View Purchases", "Manage Purchases"],
-    sales:         ["View Sales",     "Manage Sales"],
-    invoices:      ["View Sales",     "Manage Sales"],
-    documents:     ["View Documents", "Manage Documents"],
-    hrm_staff:     ["View Staff",     "Manage Staff"],
-    hrm_roles:     ["View Roles",     "Manage Roles"],
-    hrm_org:       ["View Staff",     "Manage Staff"],
-    settings:      ["Manage Settings"],
-    media:         ["View Products",  "Manage Products"],
+    // CRM
+    crm_leads:           ["View Leads",     "Manage Leads"],
+    crm_customers:       ["View Customers", "Manage Customers"],
+    crm_suppliers:       ["View Suppliers", "Manage Suppliers"],
+    // Products & Inventory
+    products:            ["View Products",  "Manage Products"],
+    categories:          ["View Products",  "Manage Products"],
+    brands:              ["View Products",  "Manage Products"],
+    product_groups:      ["View Products",  "Manage Products"],
+    attributes:          ["View Products",  "Manage Products"],
+    units:               ["View Products",  "Manage Products"],
+    stock:               ["View Products",  "Manage Products"],
+    raw_materials:       ["View Products",  "Manage Products"],
+    purchases:           ["View Purchases", "Manage Purchases"],
+    // Sales
+    sales:               ["View Sales",     "Manage Sales"],
+    invoices:            ["View Sales",     "Manage Sales"],
+    sale_return:         ["View Sales",     "Manage Sales"],
+    calc_invoice:        ["View Sales",     "Manage Sales"],
+    sales_agents:        ["View Sales",     "Manage Sales"],
+    agent_performance:   ["View Sales",     "Manage Sales"],
+    areas:               ["View Sales",     "Manage Sales"],
+    // HRM
+    hrm_staff:           ["View Staff",     "Manage Staff"],
+    hrm_roles:           ["View Roles",     "Manage Roles"],
+    hrm_org:             ["View Staff",     "Manage Staff"],
+    // Accounting
+    accounting_coa:      ["View Accounts",  "Manage Accounts"],
+    accounting_journal:  ["View Accounts",  "Manage Accounts"],
+    accounting_balance:  ["View Accounts",  "Manage Accounts"],
+    accounting_ledger:   ["View Accounts",  "Manage Accounts"],
+    accounting_pls:      ["View Accounts",  "Manage Accounts"],
+    accounting_income:   ["View Accounts",  "Manage Accounts"],
+    accounting_expense:  ["View Accounts",  "Manage Accounts"],
+    accounting_receipts: ["View Accounts",  "Manage Accounts"],
+    shareholders:        ["View Accounts",  "Manage Accounts"],
+    investment_plans:    ["View Accounts",  "Manage Accounts"],
+    // Manufacturing
+    manufacturing:       ["View Products",  "Manage Products"],
+    production_guide:    ["View Products",  "Manage Products"],
+    // Website
+    website_cms:         ["Manage Settings"],
+    // Repairs
+    repair:              ["View Sales",     "Manage Sales"],
+    // Other
+    documents:           ["View Documents", "Manage Documents"],
+    media:               ["View Products",  "Manage Products"],
+    settings:            ["Manage Settings"],
   };
 
   /** Modules a Sales Agent can access (always, regardless of configured HRM role) */
-  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices"];
+  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices", "repair", "calc_invoice"];
 
   const isModuleAllowed = (moduleId: ModuleId): boolean => {
     // Sales Agent: only their allowed modules
     if (isSalesAgent) {
       return AGENT_ALLOWED_MODULES.includes(moduleId);
     }
-    // Staff: check their HRM role permissions
+    // Staff: check their HRM role permissions via the perms map
     if (isStaff) {
-      if (moduleId === "crm_leads" || moduleId === "crm_customers" || moduleId === "crm_suppliers" ||
-          moduleId === "products" || moduleId === "stock" || moduleId === "purchases" ||
-          moduleId === "sales" || moduleId === "invoices" || moduleId === "documents" ||
-          moduleId === "hrm_staff" || moduleId === "hrm_roles" || moduleId === "hrm_org" || moduleId === "media" || moduleId === "settings") {
-        const required = STAFF_MODULE_PERMS[moduleId] ?? [];
-        return required.some(p => staffPermissions.has(p));
-      }
-      // Dashboard is always allowed for staff
+      const required = STAFF_MODULE_PERMS[moduleId];
+      if (required) return required.some(p => staffPermissions.has(p));
+      // Module not in the perms map → always visible for staff (e.g. dashboard)
       return true;
     }
     if (isSuperAdmin && !currentTenantId) return true; // superadmin in own context

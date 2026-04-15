@@ -3,7 +3,7 @@ import {
   Layers, Plus, Pencil, Trash2, Check, X, Shield, AlertTriangle,
   ChevronDown, ChevronRight, CheckSquare, Square, LayoutGrid,
   Users2, Package, ShoppingCart, Receipt, FileText, Image as ImageIcon,
-  Settings, Copy, Sparkles, Users,
+  Settings, Copy, Sparkles, Users, DollarSign, Hammer, Globe, Wrench,
 } from "lucide-react";
 import {
   ModuleGroup, ModuleId, ModuleDef,
@@ -27,11 +27,15 @@ import { useAuth } from "@/contexts/auth-context";
 
 // ─── Module group colours by category ─────────────────────────────────────────
 const GROUP_META: Record<string, { color: string; bg: string; icon: React.ElementType }> = {
-  CRM:      { color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/40",    icon: Users2       },
-  Products: { color: "text-violet-600",  bg: "bg-violet-50 dark:bg-violet-950/40",icon: Package      },
-  Sales:    { color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/40",icon: Receipt     },
-  HRM:      { color: "text-orange-600",  bg: "bg-orange-50 dark:bg-orange-950/40", icon: Users       },
-  Other:    { color: "text-gray-600",    bg: "bg-gray-50 dark:bg-zinc-800/40",     icon: Settings    },
+  CRM:           { color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/40",       icon: Users2      },
+  Products:      { color: "text-violet-600",  bg: "bg-violet-50 dark:bg-violet-950/40",   icon: Package     },
+  Sales:         { color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/40", icon: Receipt     },
+  HRM:           { color: "text-orange-600",  bg: "bg-orange-50 dark:bg-orange-950/40",   icon: Users       },
+  Accounting:    { color: "text-teal-600",    bg: "bg-teal-50 dark:bg-teal-950/40",       icon: DollarSign  },
+  Manufacturing: { color: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-950/40",     icon: Hammer      },
+  Website:       { color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-950/40",   icon: Globe       },
+  Repairs:       { color: "text-rose-600",    bg: "bg-rose-50 dark:bg-rose-950/40",       icon: Wrench      },
+  Other:         { color: "text-gray-600",    bg: "bg-gray-50 dark:bg-zinc-800/40",       icon: Settings    },
 };
 
 // Group module definitions by their category
@@ -40,25 +44,32 @@ const MODULE_GROUPS_BY_CAT = MODULE_DEFINITIONS.reduce<Record<string, ModuleDef[
   return acc;
 }, {});
 
-const CAT_ORDER = ["CRM", "Products", "Sales", "HRM", "Other"];
+const CAT_ORDER = ["CRM", "Products", "Sales", "HRM", "Accounting", "Manufacturing", "Website", "Repairs", "Other"];
 
 // Presets
 const PRESETS: { name: string; description: string; modules: ModuleId[]; color: string }[] = [
   {
     name: "Starter",
-    description: "Basic CRM and sales capabilities for small teams.",
-    modules: ["crm_leads", "crm_customers", "sales", "settings"],
+    description: "Basic CRM, sales & invoicing for small teams.",
+    modules: ["crm_leads", "crm_customers", "sales", "invoices", "media", "settings"],
     color: "text-gray-600 bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-zinc-800/40 dark:border-zinc-700",
   },
   {
     name: "Professional",
-    description: "Full CRM, products, stock and sales for growing businesses.",
-    modules: ["crm_leads","crm_customers","crm_suppliers","products","stock","purchases","sales","documents","settings"],
+    description: "Full CRM, products, stock, sales, accounting & HRM for growing businesses.",
+    modules: [
+      "crm_leads","crm_customers","crm_suppliers",
+      "products","categories","brands","stock","purchases",
+      "sales","invoices","sale_return","sales_agents",
+      "hrm_staff","hrm_roles",
+      "accounting_coa","accounting_journal","accounting_pls","accounting_receipts",
+      "documents","media","settings",
+    ],
     color: "text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/40 dark:border-blue-800",
   },
   {
     name: "Enterprise",
-    description: "All modules unlocked — complete platform access.",
+    description: "Every module unlocked — complete platform access.",
     modules: ALL_MODULE_IDS,
     color: "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100 dark:bg-violet-950/40 dark:border-violet-800",
   },
@@ -544,7 +555,6 @@ export default function ModuleGroupsPage() {
                   <Button
                     size="sm" variant="ghost"
                     className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                    title="Delete"
                     onClick={() => setDeleteId(g.id)}
                     disabled={tenantCount > 0}
                     title={tenantCount > 0 ? `${tenantCount} tenant(s) use this group — reassign first` : "Delete"}

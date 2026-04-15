@@ -747,13 +747,31 @@ export const deleteProductGroup = (id: string): void => {
 
 // ─── Module Definitions (platform-level feature catalogue) ───────────────────
 export type ModuleId =
+  // CRM
   | "crm_leads" | "crm_customers" | "crm_suppliers"
-  | "products" | "stock" | "purchases"
-  | "sales" | "invoices" | "sales_agents"
-  | "documents"
+  // Products & Inventory
+  | "products" | "categories" | "brands" | "product_groups" | "attributes" | "units"
+  | "stock" | "raw_materials"
+  // Purchases
+  | "purchases"
+  // Sales
+  | "sales" | "invoices" | "sale_return" | "calc_invoice"
+  | "sales_agents" | "agent_performance" | "areas"
+  // HRM
   | "hrm_staff" | "hrm_roles" | "hrm_org"
-  | "media"
-  | "settings";
+  // Accounting
+  | "accounting_coa" | "accounting_journal" | "accounting_balance"
+  | "accounting_ledger" | "accounting_pls" | "accounting_income"
+  | "accounting_expense" | "accounting_receipts"
+  | "shareholders" | "investment_plans"
+  // Manufacturing
+  | "manufacturing" | "production_guide"
+  // Website / CMS
+  | "website_cms"
+  // Repairs
+  | "repair"
+  // Other
+  | "documents" | "media" | "users" | "settings";
 
 export type ModuleDef = {
   id:    ModuleId;
@@ -764,27 +782,63 @@ export type ModuleDef = {
 };
 
 export const MODULE_DEFINITIONS: ModuleDef[] = [
-  // CRM
-  { id: "crm_leads",     label: "Leads",          desc: "Lead pipeline & prospecting",    group: "CRM",      href: "/leads"     },
-  { id: "crm_customers", label: "Customers",       desc: "Customer records & history",     group: "CRM",      href: "/customers" },
-  { id: "crm_suppliers", label: "Suppliers",       desc: "Supplier contacts & details",    group: "CRM",      href: "/suppliers" },
-  // Products & Inventory
-  { id: "products",      label: "Products",        desc: "Catalogue, brands, categories",  group: "Products", href: "/products"  },
-  { id: "stock",         label: "Stock",           desc: "Inventory & stock holds",        group: "Products", href: "/stock"     },
-  { id: "purchases",     label: "Purchases",       desc: "Purchase orders from suppliers", group: "Products", href: "/purchases" },
-  // Sales
-  { id: "sales",         label: "Sales & POS",     desc: "Sales, invoices & POS terminal", group: "Sales",    href: "/sales"        },
-  { id: "invoices",      label: "Invoices",         desc: "Invoice management & tracking",  group: "Sales",    href: "/invoices"     },
-  { id: "sales_agents",  label: "Sales Agents",     desc: "Agent management & commissions", group: "Sales",    href: "/sales-agents" },
-  // Documents
-  { id: "documents",     label: "Documents",       desc: "Requirement & client docs",      group: "Other",    href: "/documents" },
-  // HRM
-  { id: "hrm_staff",     label: "Staff",           desc: "Employee records & departments", group: "HRM",      href: "/staff"     },
-  { id: "hrm_roles",     label: "Roles",           desc: "Permission roles",               group: "HRM",      href: "/roles"     },
-  { id: "hrm_org",       label: "Departments & Designations", desc: "Org structure, JDs", group: "HRM",      href: "/hrm-org"   },
-  // Other
-  { id: "media",         label: "Media Library",   desc: "File & image management",        group: "Other",    href: "/media"     },
-  { id: "settings",      label: "Settings",        desc: "Company profile & app config",   group: "Other",    href: "/settings"  },
+  // ── CRM ───────────────────────────────────────────────────────────────────
+  { id: "crm_leads",      label: "Leads",              desc: "Lead pipeline & prospecting",       group: "CRM",           href: "/leads"             },
+  { id: "crm_customers",  label: "Customers",           desc: "Customer records & history",        group: "CRM",           href: "/customers"         },
+  { id: "crm_suppliers",  label: "Suppliers",           desc: "Supplier contacts & details",       group: "CRM",           href: "/suppliers"         },
+
+  // ── Products & Inventory ───────────────────────────────────────────────────
+  { id: "products",       label: "Products",            desc: "Product catalogue management",      group: "Products",      href: "/products"          },
+  { id: "categories",     label: "Categories",          desc: "Product categories & sub-tree",     group: "Products",      href: "/categories"        },
+  { id: "brands",         label: "Brands",              desc: "Brand management",                  group: "Products",      href: "/brands"            },
+  { id: "product_groups", label: "Product Groups",      desc: "Group products into bundles",       group: "Products",      href: "/product-groups"    },
+  { id: "attributes",     label: "Attributes",          desc: "Custom product attributes",         group: "Products",      href: "/attributes"        },
+  { id: "units",          label: "Units of Measure",    desc: "Weight, volume & size units",       group: "Products",      href: "/units"             },
+  { id: "stock",          label: "Stock & Inventory",   desc: "Inventory levels & stock holds",    group: "Products",      href: "/stock-ledger"      },
+  { id: "raw_materials",  label: "Raw Materials",       desc: "Raw material inventory & tracking", group: "Products",      href: "/raw-materials"     },
+  { id: "purchases",      label: "Purchases",           desc: "Purchase orders from suppliers",    group: "Products",      href: "/purchases"         },
+
+  // ── Sales ─────────────────────────────────────────────────────────────────
+  { id: "sales",             label: "Sales & POS",       desc: "Sales orders & point-of-sale terminal", group: "Sales", href: "/sales"             },
+  { id: "invoices",          label: "Invoices",           desc: "Invoice creation & tracking",           group: "Sales", href: "/invoices"          },
+  { id: "sale_return",       label: "Sale Returns",       desc: "Customer return management",            group: "Sales", href: "/sale-return"       },
+  { id: "calc_invoice",      label: "Invoice Calculator", desc: "Quick invoice estimate tool",           group: "Sales", href: "/calc-invoice"      },
+  { id: "sales_agents",      label: "Sales Agents",       desc: "Agent accounts & commission tracking",  group: "Sales", href: "/sales-agents"      },
+  { id: "agent_performance", label: "Agent Performance",  desc: "Sales performance analytics & reports", group: "Sales", href: "/agent-performance" },
+  { id: "areas",             label: "Delivery Areas",     desc: "Regional delivery zones & coverage",    group: "Sales", href: "/areas"             },
+
+  // ── HRM ───────────────────────────────────────────────────────────────────
+  { id: "hrm_staff",  label: "Staff",                       desc: "Employee records & departments",    group: "HRM",           href: "/staff"    },
+  { id: "hrm_roles",  label: "Roles",                       desc: "Permission roles & access control", group: "HRM",           href: "/roles"    },
+  { id: "hrm_org",    label: "Departments & Designations",  desc: "Org chart & job descriptions",      group: "HRM",           href: "/hrm-org"  },
+
+  // ── Accounting ────────────────────────────────────────────────────────────
+  { id: "accounting_coa",      label: "Chart of Accounts",  desc: "Account structure & COA",           group: "Accounting",    href: "/chart-of-accounts" },
+  { id: "accounting_journal",  label: "Journal Entry",      desc: "Manual journal posting & ledger",   group: "Accounting",    href: "/journal-entry"     },
+  { id: "accounting_balance",  label: "Balance Sheet",      desc: "Assets, liabilities & equity",      group: "Accounting",    href: "/balance-sheet"     },
+  { id: "accounting_ledger",   label: "Ledger Report",      desc: "Account-by-account ledger detail",  group: "Accounting",    href: "/ledger-report"     },
+  { id: "accounting_pls",      label: "P&L Statement",      desc: "Profit & loss report",              group: "Accounting",    href: "/pls-report"        },
+  { id: "accounting_income",   label: "Income Report",      desc: "Revenue breakdown & analysis",      group: "Accounting",    href: "/income-report"     },
+  { id: "accounting_expense",  label: "Expense Report",     desc: "Expense breakdown & analysis",      group: "Accounting",    href: "/expense-report"    },
+  { id: "accounting_receipts", label: "Receipts & Payments",desc: "Cash receipts & payments log",      group: "Accounting",    href: "/receipt-payment"   },
+  { id: "shareholders",        label: "Shareholders",       desc: "Investor & shareholder records",    group: "Accounting",    href: "/shareholders"      },
+  { id: "investment_plans",    label: "Investment Plans",   desc: "Investment tracking & plans",       group: "Accounting",    href: "/investment-plans"  },
+
+  // ── Manufacturing ─────────────────────────────────────────────────────────
+  { id: "manufacturing",    label: "Manufacturing",       desc: "Production orders & job tracking",  group: "Manufacturing", href: "/manufacturing"   },
+  { id: "production_guide", label: "Production Guide",    desc: "Manufacturing guides & BOMs",       group: "Manufacturing", href: "/production-guide"},
+
+  // ── Website / CMS ─────────────────────────────────────────────────────────
+  { id: "website_cms", label: "Website CMS", desc: "Store & website content management", group: "Website", href: "/website-cms" },
+
+  // ── Repairs ───────────────────────────────────────────────────────────────
+  { id: "repair", label: "Repair Services", desc: "Repair job tracking & management", group: "Repairs", href: "/repair" },
+
+  // ── Other ─────────────────────────────────────────────────────────────────
+  { id: "documents", label: "Documents",     desc: "Requirement & client documents",  group: "Other",  href: "/documents" },
+  { id: "media",     label: "Media Library", desc: "File & image management",         group: "Other",  href: "/media"     },
+  { id: "users",     label: "Users",         desc: "User accounts & access control",  group: "Other",  href: "/users"     },
+  { id: "settings",  label: "Settings",      desc: "Company profile & app config",    group: "Other",  href: "/settings"  },
 ];
 
 export const ALL_MODULE_IDS: ModuleId[] = MODULE_DEFINITIONS.map(m => m.id);
