@@ -3,7 +3,7 @@ import {
   Wrench, RefreshCw, Trash2, CheckCircle2, Clock, AlertCircle,
   Phone, User, CalendarDays, Tag, Loader2, Search, ChevronDown,
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
-  Settings2, TruckIcon, Flag,
+  Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -21,6 +21,7 @@ type BookingStatus =
   | "Completed";
 
 type Priority = "Low" | "Normal" | "High" | "Urgent";
+type RequestSource = "Online" | "Shop Visitor";
 
 interface RepairBooking {
   id: string;
@@ -34,10 +35,16 @@ interface RepairBooking {
   priority?: Priority;
   estimatedDate?: string;
   notes?: string;
+  source?: RequestSource;
 }
 
 const STATUS_ORDER: BookingStatus[] = [
   "New", "Diagnosing", "Quoted", "Awaiting Parts", "In Repair", "Ready", "Completed",
+];
+
+const SERVICE_OPTIONS = [
+  "Device Repair", "Phone Unlocking", "Network & IT Setup",
+  "PC & Laptop Services", "Warranty & Protection", "Delivery & Collection", "Other",
 ];
 
 const STATUS_META: Record<BookingStatus, { color: string; dot: string; icon: React.ElementType; label: string }> = {
@@ -56,6 +63,14 @@ const PRIORITY_META: Record<Priority, { color: string; dot: string }> = {
   "High":   { color: "text-orange-600 bg-orange-50  dark:bg-orange-950/40 border-orange-200 dark:border-orange-800", dot: "bg-orange-500" },
   "Urgent": { color: "text-red-600    bg-red-50     dark:bg-red-950/40  border-red-200   dark:border-red-800",    dot: "bg-red-500"    },
 };
+
+const SOURCE_META: Record<RequestSource, { icon: React.ElementType; color: string; label: string }> = {
+  "Online":       { icon: Globe,  color: "text-sky-600   bg-sky-50   dark:bg-sky-950/40  border-sky-200   dark:border-sky-800",   label: "Online"       },
+  "Shop Visitor": { icon: Store,  color: "text-violet-600 bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800", label: "Shop Visitor" },
+};
+
+const FIELD_CLS = "w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-muted-foreground/50";
+const LABEL_CLS = "block text-xs font-semibold text-muted-foreground mb-1";
 
 function formatDate(iso: string) {
   try {
@@ -84,17 +99,29 @@ function normaliseBooking(b: RepairBooking): RepairBooking {
   return { ...b, status };
 }
 
+const EMPTY_FORM = {
+  name: "", phone: "", service: "Device Repair",
+  deviceIssue: "", notes: "", estimatedDate: "",
+  status: "New" as BookingStatus,
+  priority: "Normal" as Priority,
+  source: "Shop Visitor" as RequestSource,
+};
+
 export default function RepairPage() {
   const { toast } = useToast();
-  const { isAuthenticated } = useAuth();
-  const [bookings, setBookings]       = useState<RepairBooking[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [saving, setSaving]           = useState<string | null>(null);
-  const [search, setSearch]           = useState("");
+  const { isAuthenticated, currentTenantId } = useAuth();
+  const [bookings, setBookings]         = useState<RepairBooking[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState<string | null>(null);
+  const [search, setSearch]             = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | BookingStatus>("All");
   const [priorityFilter, setPriorityFilter] = useState<"All" | Priority>("All");
-  const [deleteId, setDeleteId]       = useState<string | null>(null);
-  const [expanded, setExpanded]       = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<"All" | RequestSource>("All");
+  const [deleteId, setDeleteId]         = useState<string | null>(null);
+  const [expanded, setExpanded]         = useState<string | null>(null);
+  const [addOpen, setAddOpen]           = useState(false);
+  const [addForm, setAddForm]           = useState({ ...EMPTY_FORM });
+  const [addSaving, setAddSaving]       = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +174,35 @@ export default function RepairPage() {
     }
   }
 
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setAddSaving(true);
+    try {
+      const newBooking: RepairBooking = {
+        id: crypto.randomUUID(),
+        name: addForm.name.trim(),
+        phone: addForm.phone.trim(),
+        service: addForm.service,
+        deviceIssue: addForm.deviceIssue.trim() || undefined,
+        tenantId: currentTenantId || "admin",
+        createdAt: new Date().toISOString(),
+        status: addForm.status,
+        priority: addForm.priority,
+        source: addForm.source,
+        estimatedDate: addForm.estimatedDate || undefined,
+        notes: addForm.notes.trim() || undefined,
+      };
+      await saveAll([...bookings, newBooking]);
+      setAddOpen(false);
+      setAddForm({ ...EMPTY_FORM });
+      toast({ title: "Repair request added" });
+    } catch {
+      toast({ title: "Failed to add request", variant: "destructive" });
+    } finally {
+      setAddSaving(false);
+    }
+  }
+
   const filtered = bookings.filter(b => {
     const q = search.toLowerCase();
     const matchSearch = !q ||
@@ -157,7 +213,8 @@ export default function RepairPage() {
       (b.tenantId || "").toLowerCase().includes(q);
     const matchStatus   = statusFilter   === "All" || b.status   === statusFilter;
     const matchPriority = priorityFilter === "All" || b.priority === priorityFilter;
-    return matchSearch && matchStatus && matchPriority;
+    const matchSource   = sourceFilter   === "All" || (b.source ?? "Online") === sourceFilter;
+    return matchSearch && matchStatus && matchPriority && matchSource;
   });
 
   const stageCounts = STATUS_ORDER.reduce((acc, s) => {
@@ -168,6 +225,8 @@ export default function RepairPage() {
   const openCount   = bookings.filter(b => ["New", "Diagnosing", "Quoted"].includes(b.status)).length;
   const activeCount = bookings.filter(b => ["Awaiting Parts", "In Repair"].includes(b.status)).length;
   const doneCount   = bookings.filter(b => ["Ready", "Completed"].includes(b.status)).length;
+  const onlineCount = bookings.filter(b => (b.source ?? "Online") === "Online").length;
+  const walkInCount = bookings.filter(b => b.source === "Shop Visitor").length;
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -181,13 +240,22 @@ export default function RepairPage() {
           <div>
             <h1 className="text-xl font-bold text-foreground leading-tight">Repair Bookings</h1>
             <p className="text-xs text-muted-foreground">
-              {bookings.length} total {bookings.length === 1 ? "query" : "queries"} · {openCount} open · {activeCount} active · {doneCount} done
+              {bookings.length} total · {openCount} open · {activeCount} active · {doneCount} done
+              {" · "}<Globe size={10} className="inline" /> {onlineCount} online
+              {" · "}<Store size={10} className="inline" /> {walkInCount} walk-in
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 text-xs">
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 text-xs">
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+          </Button>
+          {isAuthenticated && (
+            <Button size="sm" onClick={() => setAddOpen(true)} className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
+              <Plus size={13} /> Add Request
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Pipeline stages */}
@@ -235,6 +303,12 @@ export default function RepairPage() {
           <option value="High">High</option>
           <option value="Urgent">Urgent</option>
         </select>
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as typeof sourceFilter)}
+          className="px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All sources</option>
+          <option value="Online">Online</option>
+          <option value="Shop Visitor">Shop Visitor</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -245,8 +319,10 @@ export default function RepairPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <Wrench size={36} className="mx-auto mb-3 opacity-20" />
-          <p className="font-medium text-sm">{search || statusFilter !== "All" || priorityFilter !== "All" ? "No bookings match your filters." : "No repair bookings yet."}</p>
-          <p className="text-xs mt-1 opacity-70">Bookings submitted from the store will appear here.</p>
+          <p className="font-medium text-sm">{search || statusFilter !== "All" || priorityFilter !== "All" || sourceFilter !== "All" ? "No bookings match your filters." : "No repair bookings yet."}</p>
+          <p className="text-xs mt-1 opacity-70">
+            {isAuthenticated ? <>Click <strong>Add Request</strong> to log a walk-in, or bookings from the store appear here automatically.</> : "Bookings submitted from the store will appear here."}
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-card">
@@ -259,6 +335,7 @@ export default function RepairPage() {
                   <th className="px-3 py-3 text-left font-medium"><Phone size={11} className="inline mr-1" />Phone</th>
                   <th className="px-3 py-3 text-left font-medium"><Tag size={11} className="inline mr-1" />Service</th>
                   <th className="px-3 py-3 text-left font-medium"><MessageSquare size={11} className="inline mr-1" />Issue</th>
+                  <th className="px-3 py-3 text-left font-medium">Source</th>
                   <th className="px-3 py-3 text-left font-medium"><CalendarDays size={11} className="inline mr-1" />Received</th>
                   <th className="px-3 py-3 text-left font-medium">Stage</th>
                   <th className="px-3 py-3 text-left font-medium"><Flag size={11} className="inline mr-1" />Priority</th>
@@ -267,10 +344,13 @@ export default function RepairPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((b, i) => {
-                  const sm   = STATUS_META[b.status];
-                  const Icon = sm.icon;
+                  const sm     = STATUS_META[b.status];
+                  const Icon   = sm.icon;
                   const isOpen = expanded === b.id;
-                  const pm   = b.priority ? PRIORITY_META[b.priority] : null;
+                  const pm     = b.priority ? PRIORITY_META[b.priority] : null;
+                  const src    = b.source ?? "Online";
+                  const srcMeta = SOURCE_META[src as RequestSource] ?? SOURCE_META["Online"];
+                  const SrcIcon = srcMeta.icon;
 
                   return (
                     <>
@@ -294,6 +374,11 @@ export default function RepairPage() {
                           ) : (
                             <span className="text-xs text-muted-foreground/40 italic">—</span>
                           )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border whitespace-nowrap ${srcMeta.color}`}>
+                            <SrcIcon size={10} /> {src}
+                          </span>
                         </td>
                         <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(b.createdAt)}</td>
                         <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
@@ -355,7 +440,7 @@ export default function RepairPage() {
                       {/* Expanded detail row */}
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
-                          <td colSpan={isAuthenticated ? 9 : 8} className="px-4 py-4">
+                          <td colSpan={isAuthenticated ? 10 : 9} className="px-4 py-4">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
                               {/* Device issue */}
@@ -397,6 +482,13 @@ export default function RepairPage() {
                                   <Clock size={11} /> Details
                                 </div>
                                 <div className="space-y-2 text-xs">
+                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
+                                    <span className="text-muted-foreground font-medium">Source</span>
+                                    <span className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded border ${SOURCE_META[b.source ?? "Online"].color}`}>
+                                      {b.source === "Shop Visitor" ? <Store size={10} /> : <Globe size={10} />}
+                                      {b.source ?? "Online"}
+                                    </span>
+                                  </div>
                                   <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
                                     <span className="text-muted-foreground font-medium">Booking ID</span>
                                     <span className="font-mono text-[10px] text-foreground/70 truncate max-w-28">{b.id.slice(0, 8)}…</span>
@@ -468,6 +560,139 @@ export default function RepairPage() {
           <div className="px-4 py-2.5 border-t border-border bg-gray-50/60 dark:bg-muted/10 text-[11px] text-muted-foreground flex items-center gap-1.5">
             <ChevronDown size={11} />
             Click any row to expand details, notes, and pipeline progress
+          </div>
+        </div>
+      )}
+
+      {/* ─── Add Request Modal ─────────────────────────────────────────── */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAddOpen(false)} />
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-slate-700 max-h-[92vh] flex flex-col">
+
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center">
+                  <Plus size={15} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-foreground text-base leading-tight">New Repair Request</h2>
+                  <p className="text-xs text-muted-foreground">Log a walk-in or add an offline booking</p>
+                </div>
+              </div>
+              <button onClick={() => setAddOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-muted-foreground transition-colors">
+                <X size={17} />
+              </button>
+            </div>
+
+            {/* Modal form */}
+            <form onSubmit={handleAdd} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
+              {/* Source type toggle */}
+              <div>
+                <label className={LABEL_CLS}>Request type <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["Online", "Shop Visitor"] as RequestSource[]).map(src => {
+                    const m   = SOURCE_META[src];
+                    const Ico = m.icon;
+                    const sel = addForm.source === src;
+                    return (
+                      <button key={src} type="button"
+                        onClick={() => setAddForm(f => ({ ...f, source: src }))}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${sel ? m.color + " ring-2 ring-current/20" : "border-border bg-background text-foreground hover:border-blue-300"}`}>
+                        <Ico size={15} />
+                        {src}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Name + Phone */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={LABEL_CLS}>Customer name <span className="text-red-500">*</span></label>
+                  <input required type="text" placeholder="e.g. John Smith"
+                    value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                    className={FIELD_CLS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLS}>Phone number <span className="text-red-500">*</span></label>
+                  <input required type="tel" placeholder="e.g. 07700 900123"
+                    value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                    className={FIELD_CLS} />
+                </div>
+              </div>
+
+              {/* Service */}
+              <div>
+                <label className={LABEL_CLS}>Service required <span className="text-red-500">*</span></label>
+                <select required value={addForm.service}
+                  onChange={e => setAddForm(f => ({ ...f, service: e.target.value }))}
+                  className={FIELD_CLS}>
+                  {SERVICE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Device issue */}
+              <div>
+                <label className={LABEL_CLS}>Device issue / description</label>
+                <textarea rows={3} placeholder="e.g. Cracked screen, won't turn on, battery draining fast…"
+                  value={addForm.deviceIssue} onChange={e => setAddForm(f => ({ ...f, deviceIssue: e.target.value }))}
+                  className={FIELD_CLS + " resize-none"} />
+              </div>
+
+              {/* Status + Priority */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={LABEL_CLS}>Initial stage</label>
+                  <select value={addForm.status}
+                    onChange={e => setAddForm(f => ({ ...f, status: e.target.value as BookingStatus }))}
+                    className={FIELD_CLS}>
+                    {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL_CLS}>Priority</label>
+                  <select value={addForm.priority}
+                    onChange={e => setAddForm(f => ({ ...f, priority: e.target.value as Priority }))}
+                    className={FIELD_CLS}>
+                    <option value="Low">Low</option>
+                    <option value="Normal">Normal</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Est. date + Notes */}
+              <div>
+                <label className={LABEL_CLS}>Estimated completion date</label>
+                <input type="date" value={addForm.estimatedDate}
+                  onChange={e => setAddForm(f => ({ ...f, estimatedDate: e.target.value }))}
+                  className={FIELD_CLS} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Technician notes</label>
+                <textarea rows={2} placeholder="Initial diagnosis, quote, or instructions…"
+                  value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
+                  className={FIELD_CLS + " resize-none"} />
+              </div>
+
+              {/* Submit */}
+              <div className="flex gap-2 pt-1 pb-1">
+                <button type="button" onClick={() => setAddOpen(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-foreground hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={addSaving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white transition-colors">
+                  {addSaving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : <><Plus size={14} /> Add Request</>}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
