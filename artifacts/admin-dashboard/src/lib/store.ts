@@ -1151,22 +1151,42 @@ export const bulkImportProducts = (
   // Single bulk write (existing already has updates applied)
   setStored(PRODUCTS_KEY, [...existing, ...created]);
 
-  // ── Create opening-balance stock entries for new products with openingStock ──
-  // Batch all new stock items then write once to avoid repeated reads
+  // ── Create opening-balance stock entries for new AND updated products ──
+  // For updates: only create a stock item if openingStock > 0 and none exists yet.
+  // This makes re-imports "fill in" missing stock without overwriting manually
+  // adjusted quantities.
   const currentStock = getStock();
   const newStockItems: StockItem[] = [];
   const ledgerEntries: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
-  for (const prod of created) {
-    const qty = parseFloat((prod as Product & { openingStock?: string }).openingStock || "0");
+  // Build a unified list of product records to check for stock: new + updated
+  type StockCandidate = { id: string; name: string; sku?: string; unit?: string;
+    openingStock?: string; stockAlertQty?: string };
+  const candidates: StockCandidate[] = [
+    ...created,
+    // For updates, merge the original product with the incoming data so we have
+    // the latest name/sku/openingStock.
+    ...toUpdate.map(({ id, data }) => {
+      const orig = existing.find(p => p.id === id) || {} as Product;
+      return { ...orig, ...data, id } as StockCandidate;
+    }),
+  ];
+
+  for (const prod of candidates) {
+    const qty = parseFloat((prod as StockCandidate & { openingStock?: string }).openingStock || "0");
     if (!qty || qty <= 0) continue;
 
     // If product has a SKU use it; otherwise leave blank so the stockBySkuMap
     // falls back to productName-based lookup (matches getProductStock logic).
     const sku = prod.sku?.trim() || "";
+
+    // Only create a stock item if none already exists for this product in Warehouse/For Sale.
+    // This prevents double-counting on re-import while still filling in missing entries.
     const alreadyExists = [...currentStock, ...newStockItems].some(s =>
       s.store === "Warehouse" && s.stockType === "For Sale" &&
-      (sku ? s.sku === sku : s.productName.trim().toLowerCase() === prod.name.trim().toLowerCase()),
+      (sku
+        ? s.sku?.trim() === sku
+        : s.productName.trim().toLowerCase() === prod.name.trim().toLowerCase()),
     );
     if (alreadyExists) continue;
 
@@ -1177,7 +1197,7 @@ export const bulkImportProducts = (
       store:        "Warehouse",
       stockType:    "For Sale",
       quantity:     String(qty),
-      minLevel:     (prod as Product & { stockAlertQty?: string }).stockAlertQty || "0",
+      minLevel:     prod.stockAlertQty || "0",
       unit:         prod.unit || "",
       holdCustomer: "",
       holdReason:   "",
@@ -1203,7 +1223,6 @@ export const bulkImportProducts = (
 
   if (newStockItems.length > 0) {
     setStored(STOCK_KEY, [...currentStock, ...newStockItems]);
-    // Batch ledger write
     const existingLedger = getStockLedger();
     const fullEntries: StockLedgerEntry[] = ledgerEntries.map(e => ({
       ...e,
