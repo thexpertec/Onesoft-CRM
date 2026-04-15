@@ -59,6 +59,7 @@ import RawMaterialsPage from "@/pages/raw-materials";
 import ManufacturingPage from "@/pages/manufacturing";
 import ProductionGuidePage from "@/pages/production-guide";
 import WebsiteCmsPage from "@/pages/website-cms";
+import RepairPage from "@/pages/repair";
 
 const queryClient = new QueryClient();
 
@@ -168,6 +169,7 @@ function Router() {
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
               <Route path="/sale-return" component={SaleReturnPage} />
               <Route path="/website-cms" component={WebsiteCmsPage} />
+              <Route path="/repair" component={RepairPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>

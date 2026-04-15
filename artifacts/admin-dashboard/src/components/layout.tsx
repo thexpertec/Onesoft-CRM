@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
-  MapPin, BarChart3,
+  MapPin, BarChart3, Wrench,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -313,6 +313,12 @@ const OTHER_NAV: NavItem[] = [
     key: "website", label: "Website", icon: Globe,
     items: [
       { label: "Homepage CMS", href: "/website-cms", icon: Globe, desc: "Edit hero, banners, trust badges" },
+    ],
+  },
+  {
+    key: "repair", label: "Repair", icon: Wrench,
+    items: [
+      { label: "Repair Bookings", href: "/repair", icon: Wrench, desc: "Service queries from the store" },
     ],
   },
   { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },

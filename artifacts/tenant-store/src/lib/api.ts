@@ -2,7 +2,7 @@ import type { Product } from "@/types/product";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function apiBase(): string {
+export function apiBase(): string {
   const host = window.location.host;
   const proto = window.location.protocol;
   return `${proto}//${host}${BASE.replace(/\/tenant-store.*/, "")}/api`;
