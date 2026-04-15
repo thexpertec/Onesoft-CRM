@@ -521,6 +521,7 @@ function POSView({
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [scannerOpen,   setScannerOpen]   = useState(false);
+  const [filtersOpen,   setFiltersOpen]   = useState(true);
   const { toast } = useToast();
 
   // ── Barcode / QR scanner — shared lookup for both camera and keyboard ──────
@@ -1159,7 +1160,7 @@ function POSView({
 
           {/* Search + filters */}
           <div className="px-4 pt-3 pb-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 space-y-2.5 shrink-0">
-            {/* Search + Scan button */}
+            {/* Search + Scan button + collapse toggle */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -1195,74 +1196,96 @@ function POSView({
               >
                 <ScanLine size={16} />
               </button>
+              {/* Collapse / expand filters toggle */}
+              <button
+                onClick={() => setFiltersOpen(o => !o)}
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center border-2 transition-colors ${
+                  filtersOpen
+                    ? "bg-gray-50 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                }`}
+                title={filtersOpen ? "Collapse filters" : "Expand filters"}
+              >
+                <ChevronUp
+                  size={16}
+                  className={`transition-transform duration-200 ${filtersOpen ? "rotate-0" : "rotate-180"}`}
+                />
+              </button>
             </div>
 
-            {/* Retail / Wholesale toggle + Sort by — same row */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
-                <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
-                  <button
-                    onClick={() => onPriceModeChange("retail")}
-                    className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                  >
-                    Retail
-                  </button>
-                  <button
-                    onClick={() => onPriceModeChange("wholesale")}
-                    className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
-                  >
-                    Wholesale
-                  </button>
+            {/* Collapsible: Price/Sort + Category pills + count */}
+            <div
+              className={`overflow-hidden transition-all duration-200 ${filtersOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0 !mt-0 !space-y-0"}`}
+            >
+              <div className="space-y-2.5">
+                {/* Retail / Wholesale toggle + Sort by — same row */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Price:</span>
+                    <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-semibold">
+                      <button
+                        onClick={() => onPriceModeChange("retail")}
+                        className={`px-3 py-1 transition-colors ${priceMode === "retail" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                      >
+                        Retail
+                      </button>
+                      <button
+                        onClick={() => onPriceModeChange("wholesale")}
+                        className={`px-3 py-1 transition-colors border-l border-gray-200 dark:border-zinc-700 ${priceMode === "wholesale" ? "bg-purple-600 text-white" : "bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                      >
+                        Wholesale
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
+                    <select
+                      value={prodSort}
+                      onChange={e => setProdSort(e.target.value)}
+                      className="text-[11px] font-semibold border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                    >
+                      <option value="listing">Listing Sequence</option>
+                      <option value="qty">Top Selling (Qty)</option>
+                      <option value="orders">Top Selling (Orders)</option>
+                      <option value="az">A – Z</option>
+                      <option value="price-high">Highest Price</option>
+                      <option value="price-low">Lowest Price</option>
+                      <option value="stock-high">Highest Stock</option>
+                      <option value="stock-low">Lowest Stock</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Category pills */}
+                {allCats.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {["All", ...allCats].map((cat, i) => {
+                      const isActive = catFilter === cat;
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setCatFilter(prev => prev === cat && cat !== "All" ? "All" : cat)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                            cat === "All"
+                              ? isActive
+                                ? "bg-gray-800 dark:bg-white text-white dark:text-gray-900 shadow-sm"
+                                : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                              : `${CAT_COLOURS[(i-1) % CAT_COLOURS.length]} ${isActive ? "ring-2 ring-offset-1 ring-blue-400 opacity-100" : "opacity-55 hover:opacity-90"}`
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="text-[11px] text-gray-400 font-medium">
+                  {filteredProds.length} product{filteredProds.length !== 1 ? "s" : ""}
+                  {!isDraft && <span className="ml-2 text-amber-500">(view only — sale is {sale.status})</span>}
                 </div>
               </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Sort:</span>
-                <select
-                  value={prodSort}
-                  onChange={e => setProdSort(e.target.value)}
-                  className="text-[11px] font-semibold border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
-                >
-                  <option value="listing">Listing Sequence</option>
-                  <option value="qty">Top Selling (Qty)</option>
-                  <option value="orders">Top Selling (Orders)</option>
-                  <option value="az">A – Z</option>
-                  <option value="price-high">Highest Price</option>
-                  <option value="price-low">Lowest Price</option>
-                  <option value="stock-high">Highest Stock</option>
-                  <option value="stock-low">Lowest Stock</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Category pills */}
-            {allCats.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap">
-                {["All", ...allCats].map((cat, i) => {
-                  const isActive = catFilter === cat;
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setCatFilter(prev => prev === cat && cat !== "All" ? "All" : cat)}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                        cat === "All"
-                          ? isActive
-                            ? "bg-gray-800 dark:bg-white text-white dark:text-gray-900 shadow-sm"
-                            : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
-                          : `${CAT_COLOURS[(i-1) % CAT_COLOURS.length]} ${isActive ? "ring-2 ring-offset-1 ring-blue-400 opacity-100" : "opacity-55 hover:opacity-90"}`
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="text-[11px] text-gray-400 font-medium">
-              {filteredProds.length} product{filteredProds.length !== 1 ? "s" : ""}
-              {!isDraft && <span className="ml-2 text-amber-500">(view only — sale is {sale.status})</span>}
             </div>
           </div>
 
