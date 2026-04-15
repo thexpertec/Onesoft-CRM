@@ -1,10 +1,11 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight, Cpu, Laptop, Smartphone, Headphones,
   Gamepad2, Tablet, Cable, Camera, Tv, Watch,
   ShieldCheck, Truck, RotateCcw, HeadphonesIcon, Zap, Star, Heart, Package, Globe,
   Battery, Plug, Speaker, Mouse, Printer, MonitorSmartphone, Wrench, ShoppingBag,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { ProductCard } from "@/components/product-card";
@@ -78,75 +79,126 @@ export function HomePage() {
     if (cms.seo.keywords)    setMeta("keywords",    cms.seo.keywords);
   }, [cms.seo]);
 
-  const { hero, promoBanner, trustBadges, featuredSection, newArrivalsSection } = cms;
+  const { hero, heroSlides, promoBanner, trustBadges, featuredSection, newArrivalsSection } = cms;
+  const slides = heroSlides?.length ? heroSlides : [{
+    badge: hero.badge, headline1: hero.headline1, headline2: hero.headline2,
+    subtitle: hero.subtitle, btn1Text: hero.btn1Text, btn1Url: "/shop",
+    btn2Text: hero.btn2Text, btn2Url: "/shop?sort=newest",
+  }];
 
   const heroStat1Value = products.length > 0 ? `${products.length}+` : hero.stat1Value;
 
+  // ── Slider state ──────────────────────────────────────────────────────────
+  const [displayIdx, setDisplayIdx] = useState(0);
+  const [visible,    setVisible]    = useState(true);
+  const busyRef = useRef(false);
+
+  const goTo = useCallback((next: number) => {
+    if (busyRef.current || next === displayIdx) return;
+    busyRef.current = true;
+    setVisible(false);
+    setTimeout(() => {
+      setDisplayIdx(next);
+      setVisible(true);
+      busyRef.current = false;
+    }, 380);
+  }, [displayIdx]);
+
+  const goNext = useCallback(() => goTo((displayIdx + 1) % slides.length), [goTo, displayIdx, slides.length]);
+  const goPrev = useCallback(() => goTo((displayIdx - 1 + slides.length) % slides.length), [goTo, displayIdx, slides.length]);
+
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const id = setInterval(goNext, 5500);
+    return () => clearInterval(id);
+  }, [goNext, slides.length]);
+
+  const slide = slides[displayIdx];
+
   return (
     <div className="min-h-screen">
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950">
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(99,102,241,0.4) 1px, transparent 0)", backgroundSize: "40px 40px" }}
-        />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+      {/* ── Hero Slider ───────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 min-h-[520px] flex flex-col">
+        {/* Dot grid */}
+        <div className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(99,102,241,0.5) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+        {/* Glow orbs */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-700/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-28 flex flex-col lg:flex-row items-center gap-12">
-          <div className="flex-1 text-center lg:text-left">
-            {hero.badge && (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                {hero.badge}
-              </div>
-            )}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
-              {hero.headline1}{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                {hero.headline2}
-              </span>
-            </h1>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto lg:mx-0 mb-8 leading-relaxed">
-              {hero.subtitle}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
-              <Link href="/shop" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm transition-all hover:shadow-lg hover:shadow-blue-600/30 active:scale-95">
-                {hero.btn1Text}
-                <ArrowRight size={15} />
-              </Link>
-              <Link href="/shop?sort=newest" className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-white/20 text-white hover:bg-white/10 rounded-xl font-semibold text-sm transition-all">
-                {hero.btn2Text}
-              </Link>
-            </div>
-            <div className="flex items-center gap-8 mt-10 justify-center lg:justify-start">
-              {[
-                { value: heroStat1Value,  label: hero.stat1Label },
-                { value: hero.stat2Value, label: hero.stat2Label },
-                { value: hero.stat3Value, label: hero.stat3Label },
-              ].map(stat => (
-                <div key={stat.label} className="text-center">
-                  <div className="text-xl font-bold text-white">{stat.value}</div>
-                  <div className="text-xs text-slate-400">{stat.label}</div>
+        {/* Slide content */}
+        <div className="relative flex-1 flex items-center">
+          <div
+            className={`w-full transition-all duration-[380ms] ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}
+          >
+            <div className="max-w-4xl mx-auto px-6 sm:px-10 py-20 sm:py-28 text-center">
+              {slide.badge && (
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-600/25 border border-blue-500/40 text-blue-200 text-xs font-semibold mb-7 backdrop-blur-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                  {slide.badge}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="hidden lg:flex flex-1 items-center justify-center">
-            <div className="relative w-80 h-80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/30 to-purple-600/30 rounded-3xl blur-2xl" />
-              <div className="relative w-full h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-sm flex items-center justify-center">
-                <div className="grid grid-cols-2 gap-4 p-8">
-                  {[Smartphone, Laptop, Headphones, Gamepad2, Camera, Watch, Tablet, Tv].map((Icon, i) => (
-                    <div key={i} className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center text-slate-300 hover:text-blue-400 hover:bg-blue-600/20 transition-all duration-300">
-                      <Icon size={20} />
-                    </div>
-                  ))}
-                </div>
+              )}
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-5 leading-tight tracking-tight">
+                {slide.headline1}{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
+                  {slide.headline2}
+                </span>
+              </h1>
+              <p className="text-slate-400 text-lg max-w-2xl mx-auto mb-10 leading-relaxed">
+                {slide.subtitle}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link href={slide.btn1Url || "/shop"}
+                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm transition-all hover:shadow-xl hover:shadow-blue-600/30 active:scale-95">
+                  {slide.btn1Text} <ArrowRight size={15} />
+                </Link>
+                <Link href={slide.btn2Url || "/shop"}
+                  className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white/10 border border-white/20 text-white hover:bg-white/20 rounded-2xl font-bold text-sm transition-all active:scale-95">
+                  {slide.btn2Text} <ArrowRight size={14} />
+                </Link>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Stats row */}
+        <div className="relative border-t border-white/10 bg-white/5 backdrop-blur-sm">
+          <div className="max-w-4xl mx-auto px-6 py-5 flex items-center justify-center gap-12">
+            {[
+              { value: heroStat1Value,  label: hero.stat1Label },
+              { value: hero.stat2Value, label: hero.stat2Label },
+              { value: hero.stat3Value, label: hero.stat3Label },
+            ].map(stat => (
+              <div key={stat.label} className="text-center">
+                <div className="text-xl font-bold text-white">{stat.value}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Prev / Next arrows */}
+        {slides.length > 1 && (<>
+          <button onClick={goPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all z-10 backdrop-blur-sm">
+            <ChevronLeft size={18} />
+          </button>
+          <button onClick={goNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all z-10 backdrop-blur-sm">
+            <ChevronRight size={18} />
+          </button>
+        </>)}
+
+        {/* Dot indicators */}
+        {slides.length > 1 && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+            {slides.map((_, i) => (
+              <button key={i} onClick={() => goTo(i)}
+                className={`rounded-full transition-all duration-300 ${i === displayIdx ? "w-6 h-2 bg-blue-400" : "w-2 h-2 bg-white/30 hover:bg-white/60"}`}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── Category Strip ───────────────────────────────────────────────── */}

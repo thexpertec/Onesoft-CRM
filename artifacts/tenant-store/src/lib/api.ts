@@ -11,6 +11,17 @@ export function apiBase(): string {
 // ─── CMS Types ────────────────────────────────────────────────────────────────
 export type StoreCmsTrustBadge = { icon: string; title: string; desc: string };
 
+export type HeroSlide = {
+  badge: string;
+  headline1: string;
+  headline2: string;
+  subtitle: string;
+  btn1Text: string;
+  btn1Url: string;
+  btn2Text: string;
+  btn2Url: string;
+};
+
 export type StoreCms = {
   brand: {
     logoUrl: string;
@@ -48,6 +59,7 @@ export type StoreCms = {
     stat2Value: string; stat2Label: string;
     stat3Value: string; stat3Label: string;
   };
+  heroSlides: HeroSlide[];
   promoBanner: {
     enabled: boolean; label: string; headline: string; subtitle: string; btnText: string;
   };
@@ -86,6 +98,29 @@ export const CMS_DEFAULTS: StoreCms = {
     stat2Value: "Free",  stat2Label: "UK Delivery",
     stat3Value: "24/7",  stat3Label: "Support",
   },
+  heroSlides: [
+    {
+      badge: "New Arrivals Every Week",
+      headline1: "Premium Tech,", headline2: "Delivered Fast",
+      subtitle: "Discover the latest smartphones, laptops, audio gear, and accessories. Handpicked for quality, priced for value.",
+      btn1Text: "Shop All Products", btn1Url: "/shop",
+      btn2Text: "New Arrivals",      btn2Url: "/shop?sort=newest",
+    },
+    {
+      badge: "Professional Repair Service",
+      headline1: "We keep your tech", headline2: "running perfectly",
+      subtitle: "From device repairs to network setup — trusted by hundreds of customers across Hull, the UK, and Pakistan.",
+      btn1Text: "Book a Repair", btn1Url: "/services",
+      btn2Text: "Browse Products", btn2Url: "/shop",
+    },
+    {
+      badge: "Best Prices Guaranteed",
+      headline1: "Unbeatable Deals,", headline2: "Every Single Day",
+      subtitle: "Top brands at the lowest prices. Free UK delivery on all orders with no minimum spend required.",
+      btn1Text: "View Deals", btn1Url: "/shop",
+      btn2Text: "Learn More",   btn2Url: "/about",
+    },
+  ],
   promoBanner: {
     enabled: true, label: "Limited Time Offer",
     headline: "Free Delivery on All Orders Today",
@@ -146,6 +181,7 @@ export async function fetchStoreCms(): Promise<StoreCms> {
       header:             { ...CMS_DEFAULTS.header,             ...(v.header ?? {}) },
       breadcrumbs:        { ...CMS_DEFAULTS.breadcrumbs,        ...(v.breadcrumbs ?? {}) },
       hero:               { ...CMS_DEFAULTS.hero,               ...(v.hero ?? {}) },
+      heroSlides:         v.heroSlides ?? CMS_DEFAULTS.heroSlides,
       promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(v.promoBanner ?? {}) },
       trustBadges:        v.trustBadges ?? CMS_DEFAULTS.trustBadges,
       featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(v.featuredSection ?? {}) },

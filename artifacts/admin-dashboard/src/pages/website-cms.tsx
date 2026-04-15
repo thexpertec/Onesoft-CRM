@@ -2,13 +2,24 @@ import { useState, useEffect } from "react";
 import {
   Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp,
   Image as ImageIcon, Phone, Share2, LayoutTemplate, Navigation,
-  Star, Megaphone,
+  Star, Megaphone, Plus, Trash2, Layers,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type StoreCmsTrustBadge = { icon: string; title: string; desc: string };
+
+export type HeroSlide = {
+  badge: string;
+  headline1: string;
+  headline2: string;
+  subtitle: string;
+  btn1Text: string;
+  btn1Url: string;
+  btn2Text: string;
+  btn2Url: string;
+};
 
 export type StoreCms = {
   brand: {
@@ -47,6 +58,7 @@ export type StoreCms = {
     stat2Value: string; stat2Label: string;
     stat3Value: string; stat3Label: string;
   };
+  heroSlides: HeroSlide[];
   promoBanner: {
     enabled: boolean; label: string; headline: string; subtitle: string; btnText: string;
   };
@@ -85,6 +97,29 @@ export const CMS_DEFAULTS: StoreCms = {
     stat2Value: "Free",  stat2Label: "UK Delivery",
     stat3Value: "24/7",  stat3Label: "Support",
   },
+  heroSlides: [
+    {
+      badge: "New Arrivals Every Week",
+      headline1: "Premium Tech,", headline2: "Delivered Fast",
+      subtitle: "Discover the latest smartphones, laptops, audio gear, and accessories. Handpicked for quality, priced for value.",
+      btn1Text: "Shop All Products", btn1Url: "/shop",
+      btn2Text: "New Arrivals",      btn2Url: "/shop?sort=newest",
+    },
+    {
+      badge: "Professional Repair Service",
+      headline1: "We keep your tech", headline2: "running perfectly",
+      subtitle: "From device repairs to network setup — trusted by hundreds of customers across Hull, the UK, and Pakistan.",
+      btn1Text: "Book a Repair", btn1Url: "/services",
+      btn2Text: "Browse Products", btn2Url: "/shop",
+    },
+    {
+      badge: "Best Prices Guaranteed",
+      headline1: "Unbeatable Deals,", headline2: "Every Single Day",
+      subtitle: "Top brands at the lowest prices. Free UK delivery on all orders with no minimum spend required.",
+      btn1Text: "View Deals", btn1Url: "/shop",
+      btn2Text: "Learn More",   btn2Url: "/about",
+    },
+  ],
   promoBanner: {
     enabled: true, label: "Limited Time Offer",
     headline: "Free Delivery on All Orders Today",
@@ -115,6 +150,7 @@ function mergeCms(saved: Partial<StoreCms>): StoreCms {
     header:             { ...CMS_DEFAULTS.header,             ...(saved.header ?? {}) },
     breadcrumbs:        { ...CMS_DEFAULTS.breadcrumbs,        ...(saved.breadcrumbs ?? {}) },
     hero:               { ...CMS_DEFAULTS.hero,               ...(saved.hero ?? {}) },
+    heroSlides:         saved.heroSlides ?? CMS_DEFAULTS.heroSlides,
     promoBanner:        { ...CMS_DEFAULTS.promoBanner,        ...(saved.promoBanner ?? {}) },
     trustBadges:        saved.trustBadges ?? CMS_DEFAULTS.trustBadges,
     featuredSection:    { ...CMS_DEFAULTS.featuredSection,    ...(saved.featuredSection ?? {}) },
@@ -432,6 +468,97 @@ export default function WebsiteCmsPage() {
                 <Field label="Label">
                   <input className={inp} value={(cms.hero as Record<string, string>)[lk]} onChange={e => patch("hero", { [lk]: e.target.value } as Partial<StoreCms["hero"]>)} placeholder="Products" />
                 </Field>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Hero Slider Slides ─────────────────────────────────────────── */}
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Layers size={14} className="text-indigo-500" />
+              <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                Hero Slider Slides ({cms.heroSlides.length})
+              </p>
+            </div>
+            <button
+              onClick={() => setCms(prev => ({
+                ...prev,
+                heroSlides: [...prev.heroSlides, {
+                  badge: "New Slide", headline1: "Headline", headline2: "Line Two",
+                  subtitle: "Subtitle text here.", btn1Text: "Shop Now", btn1Url: "/shop",
+                  btn2Text: "Learn More", btn2Url: "/about",
+                }],
+              }))}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 rounded-lg text-[12px] font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+            >
+              <Plus size={13} /> Add Slide
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 mb-4">
+            These slides cycle automatically every 5.5 s on the storefront hero. The stats row (above) is shared across all slides.
+          </p>
+          <div className="space-y-4">
+            {cms.heroSlides.map((slide, i) => (
+              <div key={i} className="p-4 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600/15 border border-indigo-600/30 flex items-center justify-center text-[10px]">{i + 1}</span>
+                    Slide {i + 1}
+                  </span>
+                  {cms.heroSlides.length > 1 && (
+                    <button
+                      onClick={() => setCms(prev => ({ ...prev, heroSlides: prev.heroSlides.filter((_, j) => j !== i) }))}
+                      className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                      title="Remove slide"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Badge">
+                    <input className={inp} value={slide.badge}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], badge: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="New Arrivals Every Week" />
+                  </Field>
+                  <Field label="Headline Line 1">
+                    <input className={inp} value={slide.headline1}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], headline1: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="Premium Tech," />
+                  </Field>
+                  <Field label="Headline Line 2 (gradient)">
+                    <input className={inp} value={slide.headline2}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], headline2: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="Delivered Fast" />
+                  </Field>
+                  <Field label="Subtitle">
+                    <input className={inp} value={slide.subtitle}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], subtitle: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="Short description…" />
+                  </Field>
+                  <Field label="Button 1 Text">
+                    <input className={inp} value={slide.btn1Text}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], btn1Text: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="Shop All Products" />
+                  </Field>
+                  <Field label="Button 1 URL">
+                    <input className={inp} value={slide.btn1Url}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], btn1Url: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="/shop" />
+                  </Field>
+                  <Field label="Button 2 Text">
+                    <input className={inp} value={slide.btn2Text}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], btn2Text: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="New Arrivals" />
+                  </Field>
+                  <Field label="Button 2 URL">
+                    <input className={inp} value={slide.btn2Url}
+                      onChange={e => setCms(prev => { const s = [...prev.heroSlides]; s[i] = { ...s[i], btn2Url: e.target.value }; return { ...prev, heroSlides: s }; })}
+                      placeholder="/shop?sort=newest" />
+                  </Field>
+                </div>
               </div>
             ))}
           </div>
