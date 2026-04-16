@@ -505,7 +505,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   /** Modules a Sales Agent can access (always, regardless of configured HRM role) */
-  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices", "repair", "calc_invoice"];
+  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices", "calc_invoice"];
 
   const isModuleAllowed = (moduleId: ModuleId): boolean => {
     // Sales Agent: only their allowed modules
@@ -524,6 +524,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const group = getModuleGroupById(currentTenant.moduleGroupId);
     if (!group) return false; // group assigned but not found → deny (safer default)
     return group.modules.includes(moduleId);
+  };
+
+  // ── Sidebar item → module mapping (used to role-filter both sidebars) ────────
+  const LEFT_ITEM_MODULE: Partial<Record<string, ModuleId>> = {
+    "l-leads":         "crm_leads",
+    "l-customers":     "crm_customers",
+    "l-suppliers":     "crm_suppliers",
+    "l-agents":        "sales_agents",
+    "l-agent-perf":    "agent_performance",
+    "l-areas":         "areas",
+    "l-staff":         "hrm_staff",
+    "l-roles":         "hrm_roles",
+    "l-hrm-org":       "hrm_org",
+    "l-products":      "products",
+    "l-categories":    "products",
+    "l-brands":        "products",
+    "l-attributes":    "products",
+    "l-units":         "products",
+    "l-media":         "media",
+    "l-stock-ledger":  "stock",
+    "l-raw-materials": "manufacturing",
+    "l-manufacturing": "manufacturing",
+    "l-prod-guide":    "production_guide",
+    "l-settings":      "settings",
+  };
+  const RIGHT_ITEM_MODULE: Partial<Record<string, ModuleId>> = {
+    "purchase-invoices": "purchases",
+    "receipts-payments": "accounting_receipts",
+    "sales":             "sales",
+    "new-sale":          "sales",
+    "sale-return":       "sale_return",
+    "invoices":          "invoices",
+    "calc-invoice":      "calc_invoice",
+    "expense":           "accounting_journal",
+    "journal-entry":     "accounting_journal",
+    "pls-report":        "accounting_pls",
+    "balance-sheet":     "accounting_balance",
+    "chart-of-accounts": "accounting_coa",
+    "income-report":     "accounting_income",
+    "leads":             "crm_leads",
+    "customers":         "crm_customers",
+    "suppliers":         "crm_suppliers",
+    "products":          "products",
+    "stock-ledger":      "stock",
+    "categories":        "products",
+    "manufacturing":     "manufacturing",
   };
 
   const allowedCrmColumns = CRM_COLUMNS.filter(col =>
@@ -1282,7 +1328,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           const leftVisible = leftCfg
             .filter(item => item.visible)
             .map(item => LEFT_ACTIONS_REGISTRY.find(r => r.id === item.id))
-            .filter(Boolean) as typeof LEFT_ACTIONS_REGISTRY;
+            .filter(Boolean)
+            .filter(def => {
+              const moduleId = LEFT_ITEM_MODULE[def!.id];
+              return moduleId ? isModuleAllowed(moduleId) : true;
+            }) as typeof LEFT_ACTIONS_REGISTRY;
 
           const leftRows: React.ReactNode[] = [];
           let leftPrevGroup = "";
@@ -1354,7 +1404,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           const visible = cfg
             .filter(item => item.visible)
             .map(item => QUICK_ACTIONS_REGISTRY.find(r => r.id === item.id))
-            .filter(Boolean) as typeof QUICK_ACTIONS_REGISTRY;
+            .filter(Boolean)
+            .filter(def => {
+              const moduleId = RIGHT_ITEM_MODULE[def!.id];
+              return moduleId ? isModuleAllowed(moduleId) : true;
+            }) as typeof QUICK_ACTIONS_REGISTRY;
 
           const rows: React.ReactNode[] = [];
           let prevGroup = "";
