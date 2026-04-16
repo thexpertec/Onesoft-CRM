@@ -106,7 +106,7 @@ function InlineInput({ value, onChange, onSave, onEscape, autoFocus }: {
 
 // ─── Main page ───────────────────────────────────────────────────────────────
 export default function HrmOrgPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const { departments, addDepartment, editDepartment, removeDepartment } = useDepartments();
@@ -230,7 +230,7 @@ export default function HrmOrgPage() {
           ))}
         </div>
 
-        {isAuthenticated && (
+        {can("Add Staff") && (
           <Button size="sm" className={`gap-1.5 text-[12px] ${
             activeTab === "departments"
               ? "bg-rose-600 hover:bg-rose-700"
@@ -302,7 +302,7 @@ export default function HrmOrgPage() {
                         <td key={col.field}
                           className={`border-r border-gray-100 dark:border-border p-0 ${isActive ? "ring-2 ring-inset ring-blue-500 z-10" : ""}`}
                           style={{ height: CELL_H }}
-                          onDoubleClick={() => isAuthenticated && startDeptCellEdit(dept.id, field, val)}>
+                          onDoubleClick={() => can("Edit Staff") && startDeptCellEdit(dept.id, field, val)}>
                           {isActive ? (
                             <InlineInput
                               value={deptEditData[field]}
@@ -321,7 +321,7 @@ export default function HrmOrgPage() {
                     })}
 
                     <td className="px-2" style={{ height: CELL_H }}>
-                      {isAuthenticated && (
+                      {can("Edit Staff") && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {isEditing ? (
                             <>
@@ -367,7 +367,7 @@ export default function HrmOrgPage() {
               )}
 
               {/* Add row footer */}
-              {isAuthenticated && !deptNewRow && (
+              {can("Add Staff") && !deptNewRow && (
                 <tr><td colSpan={DEPT_COLS.length + 2}>
                   <button onClick={() => setDeptNewRow(DEPT_BLANK())}
                     className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-colors">
@@ -434,7 +434,7 @@ export default function HrmOrgPage() {
                             ) : (
                               <span className="text-[11px] text-muted-foreground/40 italic">No JD yet</span>
                             )}
-                            {isAuthenticated && (
+                            {can("Edit Staff") && (
                               <button onClick={() => setJdDesig(d)}
                                 className="ml-auto flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-200 shrink-0 px-2 py-0.5 rounded hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors">
                                 <FileText size={11} />
@@ -480,7 +480,7 @@ export default function HrmOrgPage() {
                         <td key={col.field}
                           className={`border-r border-gray-100 dark:border-border p-0 ${isActive ? "ring-2 ring-inset ring-blue-500 z-10" : ""}`}
                           style={{ height: CELL_H }}
-                          onDoubleClick={() => isAuthenticated && startDesigCellEdit(d.id, field)}>
+                          onDoubleClick={() => can("Edit Staff") && startDesigCellEdit(d.id, field)}>
                           {isActive ? (
                             <InlineInput
                               value={desigEditData[field]}
@@ -499,7 +499,7 @@ export default function HrmOrgPage() {
                     })}
 
                     <td className="px-2" style={{ height: CELL_H }}>
-                      {isAuthenticated && (
+                      {can("Edit Staff") && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {isEditing ? (
                             <>
@@ -563,7 +563,7 @@ export default function HrmOrgPage() {
               )}
 
               {/* Add row footer */}
-              {isAuthenticated && !desigNewRow && (
+              {can("Add Staff") && !desigNewRow && (
                 <tr><td colSpan={DESIG_COLS.length + 2}>
                   <button onClick={() => setDesigNewRow(DESIG_BLANK())}
                     className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-colors">

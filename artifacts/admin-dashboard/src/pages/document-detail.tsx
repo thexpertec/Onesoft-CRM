@@ -16,7 +16,7 @@ export default function DocumentDetail() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { docs, editDoc, removeDoc } = useDocs();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const [doc, setDoc] = useState<RequirementDoc | null>(null);
@@ -73,7 +73,7 @@ export default function DocumentDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isAuthenticated ? (
+          {can("Edit Documents") ? (
             isEditing ? (
               <>
                 <Button variant="outline" onClick={() => { setIsEditing(false); setFormData(doc); }}>Cancel</Button>

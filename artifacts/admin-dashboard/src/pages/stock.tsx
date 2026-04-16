@@ -76,7 +76,7 @@ export default function StockPage() {
   const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
   const { stock, addItem, editItem, removeItem } = useStock();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
@@ -215,7 +215,7 @@ export default function StockPage() {
               : "Monitor quantities, stock levels, and store locations · Click any cell to edit"}
           </p>
         </div>
-        {isAuthenticated && (
+        {can("Edit Stock") && (
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => {
               downloadExcel(
@@ -327,7 +327,7 @@ export default function StockPage() {
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search product, store…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {isAuthenticated && newRow && (
+        {can("Edit Stock") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved item</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -344,7 +344,7 @@ export default function StockPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="stock">
 
           {/* ── New row ── */}
-          {isAuthenticated && newRow && (
+          {can("Edit Stock") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: CELL_H }}>★</td>
               {COLS.map((c, ci) => {
@@ -436,7 +436,7 @@ export default function StockPage() {
                   const isA = activeCell?.id === item.id && activeCell.col === ci;
                   const rawVal = String((item as unknown as Record<string, string>)[c.field] ?? "");
                   const isProductLocked = PRODUCT_LOCKED.has(c.field);
-                  const canEdit = isAuthenticated && !isProductLocked;
+                  const canEdit = can("Edit Stock") && !isProductLocked;
                   return (
                     <td key={c.field}
                       className={`border-r border-gray-100 dark:border-border relative p-0 ${
@@ -515,7 +515,7 @@ export default function StockPage() {
                       title="Stock History" onClick={() => setHistoryItemId(item.id)}>
                       <History size={13} />
                     </button>
-                    {isAuthenticated && (
+                    {can("Edit Stock") && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                         title="Remove" onClick={() => setDeleteId(item.id)}>
                         <Trash2 size={13} />
@@ -528,7 +528,7 @@ export default function StockPage() {
           })}
 
           {/* Add row button */}
-          {isAuthenticated && !newRow && (
+          {can("Edit Stock") && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => { setNewRow(BLANK(isHoldsView)); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"

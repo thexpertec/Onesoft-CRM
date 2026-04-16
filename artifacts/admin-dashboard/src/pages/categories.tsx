@@ -64,7 +64,7 @@ function InlineCell({
 
 export default function CategoriesPage() {
   const { categories, addCategory, editCategory, removeCategory } = useProductCategories();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const [search,       setSearch]       = useState("");
@@ -132,7 +132,7 @@ export default function CategoriesPage() {
 
   // ── Edit existing cell ───────────────────────────────────────────────────────
   const activateEdit = (id: string, field: EditableField) => {
-    if (!isAuthenticated) return;
+    if (!can("Edit Categories")) return;
     const cat = categories.find(c => c.id === id);
     if (!cat) return;
     setEditCell({ id, field });
@@ -234,14 +234,14 @@ export default function CategoriesPage() {
       const isA = editCell?.id === cat.id && editCell?.field === field;
       const val = String((cat as Record<string, unknown>)[field] ?? "");
       return (
-        <td key={field} className={`${tdBase} ${isA ? "ring-2 ring-inset ring-blue-500 z-10" : isAuthenticated ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer" : ""}`}
+        <td key={field} className={`${tdBase} ${isA ? "ring-2 ring-inset ring-blue-500 z-10" : can("Edit Categories") ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer" : ""}`}
           style={{ height: CELL_H, width: field === "color" ? COL.color : field === "name" ? COL.name : COL.desc, minWidth: field === "color" ? COL.color : field === "name" ? COL.name : COL.desc }}>
           <InlineCell
             value={isA ? editVal : val}
             field={field}
             active={isA}
             placeholder={field === "name" ? (isSubRow ? "Sub-category name" : "Category name") : field === "description" ? "Description (optional)" : ""}
-            canEdit={isAuthenticated}
+            canEdit={can("Edit Categories")}
             onActivate={() => activateEdit(cat.id, field)}
             onChange={v => {
               if (field === "color") {
@@ -294,7 +294,7 @@ export default function CategoriesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Product Categories</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Two-level hierarchy: Categories &amp; Sub-categories</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Categories") && (
           <Button size="sm" onClick={startNewParent} className="gap-1.5" data-testid="btn-add-category">
             <Plus size={14} /> Add Category
           </Button>
@@ -320,7 +320,7 @@ export default function CategoriesPage() {
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search categories..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {isAuthenticated && newRow && (
+        {can("Add Categories") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => setNewRow(null)}><X size={12} /> Cancel</Button>
@@ -348,7 +348,7 @@ export default function CategoriesPage() {
             <tbody>
 
               {/* New TOP-LEVEL row (no parentId) */}
-              {isAuthenticated && newRow && !newRow.parentId && (
+              {can("Add Categories") && newRow && !newRow.parentId && (
                 <tr className="border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20">
                   <td className="text-center text-[11px] text-amber-400 font-bold border-r border-gray-100 dark:border-border" style={{ height: CELL_H, width: COL.idx }}>★</td>
                   {renderNewRowCells(false)}
@@ -428,24 +428,24 @@ export default function CategoriesPage() {
                     {/* Actions */}
                     <td style={{ height: CELL_H, width: COL.actions }}>
                       <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isAuthenticated && (
-                          <>
-                            <button
-                              className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                              title="Add sub-category"
-                              onClick={() => startNewSub(parent.id)}
-                            >
-                              <Plus size={13} />
-                            </button>
-                            <button
-                              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                              title="Delete category"
-                              onClick={() => requestDelete(parent.id)}
-                              data-testid={`btn-delete-category-${parent.id}`}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </>
+                        {can("Add Categories") && (
+                          <button
+                            className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                            title="Add sub-category"
+                            onClick={() => startNewSub(parent.id)}
+                          >
+                            <Plus size={13} />
+                          </button>
+                        )}
+                        {can("Delete Categories") && (
+                          <button
+                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            title="Delete category"
+                            onClick={() => requestDelete(parent.id)}
+                            data-testid={`btn-delete-category-${parent.id}`}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -481,7 +481,7 @@ export default function CategoriesPage() {
                           {/* Actions */}
                           <td style={{ height: CELL_H, width: COL.actions }}>
                             <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {isAuthenticated && (
+                              {can("Delete Categories") && (
                                 <button
                                   className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                                   title="Delete sub-category"
@@ -498,7 +498,7 @@ export default function CategoriesPage() {
                     }),
 
                     /* Inline new sub-category row (when adding under THIS parent) */
-                    ...(isAuthenticated && newRow?.parentId === parent.id ? [
+                    ...(can("Add Categories") && newRow?.parentId === parent.id ? [
                       <tr key={`new-sub-${parent.id}`} className="border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20">
                         <td className="text-center text-[11px] text-amber-400 font-bold border-r border-gray-100 dark:border-border" style={{ height: CELL_H, width: COL.idx }}>
                           <CornerDownRight size={11} className="mx-auto text-amber-400" />
@@ -520,7 +520,7 @@ export default function CategoriesPage() {
                     ] : []),
 
                     /* "Add sub-category" inline prompt when expanded and no active new row */
-                    ...(isAuthenticated && (!newRow || newRow.parentId !== parent.id) && isExpanded ? [
+                    ...(can("Add Categories") && (!newRow || newRow.parentId !== parent.id) && isExpanded ? [
                       <tr key={`add-sub-btn-${parent.id}`}>
                         <td colSpan={7}>
                           <button onClick={() => startNewSub(parent.id)}
@@ -536,7 +536,7 @@ export default function CategoriesPage() {
               })}
 
               {/* Bottom add row */}
-              {isAuthenticated && !newRow && (
+              {can("Add Categories") && !newRow && (
                 <tr>
                   <td colSpan={7}>
                     <button onClick={startNewParent}

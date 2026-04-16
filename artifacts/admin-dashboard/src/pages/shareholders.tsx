@@ -930,7 +930,7 @@ export default function ShareholdersPage() {
   const { plans, addPlan, editPlan, removePlan } = useInvestmentPlans();
   const { products }   = useProducts();
   const { categories } = useProductCategories();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const productOptions  = useMemo(() => [...new Set(products.map(p => p.name).filter(Boolean))].sort(), [products]);
@@ -1099,7 +1099,7 @@ export default function ShareholdersPage() {
           <h1 className="text-2xl font-bold tracking-tight">Shareholders</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
-        {isAuthenticated && (
+        {can("Edit Accounts") && (
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={downloadTemplate} className="gap-1.5 h-8 text-[13px]" title="Download CSV template">
               <Download size={13} /> Template
@@ -1138,7 +1138,7 @@ export default function ShareholdersPage() {
             <X size={12} /> Clear
           </Button>
         )}
-        {isAuthenticated && newRow && (
+        {can("Edit Accounts") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -1153,7 +1153,7 @@ export default function ShareholdersPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Edit Accounts") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
               {COLS.map((c, ci) => {
@@ -1211,11 +1211,11 @@ export default function ShareholdersPage() {
                   const rawVal = String((s as unknown as Record<string,string>)[c.field] ?? "");
                   return (
                     <td key={c.field}
-                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : can("Edit Accounts") ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && setActiveCell({ id: s.id, col: ci })}>
+                      onClick={() => !isA && can("Edit Accounts") && setActiveCell({ id: s.id, col: ci })}>
                       <EditableCell
-                        value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                        value={rawVal} col={c} active={isA} canEdit={can("Edit Accounts")}
                         onActivate={() => setActiveCell({ id: s.id, col: ci })}
                         onCommit={v => commitCell(s.id, c.field as EditableField, v)}
                         onCancel={() => setActiveCell(null)}
@@ -1229,7 +1229,7 @@ export default function ShareholdersPage() {
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px`, width: 80 }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 h-full px-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {/* Share Plan button */}
-                    {isAuthenticated && (
+                    {can("Edit Accounts") && (
                       <button
                         className="relative p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
                         title="Share Plans"
@@ -1244,7 +1244,7 @@ export default function ShareholdersPage() {
                       </button>
                     )}
                     {/* Delete button */}
-                    {isAuthenticated && (
+                    {can("Delete Accounts") && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
                         onClick={() => setDeleteId(s.id)} data-testid={`btn-delete-shareholder-${s.id}`}>
                         <Trash2 size={13} />

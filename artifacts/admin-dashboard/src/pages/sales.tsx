@@ -1674,7 +1674,7 @@ export default function SalesPage() {
   const isNewSale = location.includes("/new");
   const { sales, addSale, editSale, removeSale, refresh } = useSales();
   const { customers, addCustomer } = useCustomers();
-  const { isAuthenticated, currentTenantId } = useAuth();
+  const { isAuthenticated, currentTenantId, can } = useAuth();
   const { toast } = useToast();
 
   const products          = useMemo(() => getProducts(), []);
@@ -1825,7 +1825,7 @@ export default function SalesPage() {
 
   // ── Auto-open POS for /sales/new ──
   useEffect(() => {
-    if (isNewSale && isAuthenticated) {
+    if (isNewSale && can("Add Sales")) {
       const draft = addSale(blankSale());
       freshSaleIdRef.current = draft.id;
       openDetailDirect(draft);
@@ -2284,7 +2284,7 @@ export default function SalesPage() {
             <Globe size={13} className={syncing ? "animate-spin" : ""} />
             {syncing ? "Syncing…" : lastSyncCount !== null && lastSyncCount === 0 ? "Synced" : "Sync Online"}
           </Button>
-          {isAuthenticated && (
+          {can("Add Sales") && (
             <>
               <Button size="sm" variant="outline" onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow} data-testid="btn-new-sale-row">
                 <Plus size={14} /> New Sale
@@ -2360,7 +2360,7 @@ export default function SalesPage() {
           Wrap
         </button>
 
-        {isAuthenticated && newRow && (
+        {can("Add Sales") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 font-medium">1 unsaved sale</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -2493,7 +2493,7 @@ export default function SalesPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Sales") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>★</td>
               {COLS.map((c, ci) => {
@@ -2566,7 +2566,7 @@ export default function SalesPage() {
               {COLS.map((c, ci) => {
                 const isA = activeCell?.id === sale.id && activeCell.col === ci;
                 const rawVal = cellValue(sale, c.field);
-                const canEdit = isAuthenticated && c.type !== "readonly";
+                const canEdit = can("Edit Sales") && c.type !== "readonly";
                 return (
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${c.type === "readonly" ? "bg-gray-50/40 dark:bg-gray-800/10" : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
@@ -2643,7 +2643,7 @@ export default function SalesPage() {
                     title="Open POS" onClick={() => openDetail(sale.id)}>
                     <Eye size={13} />
                   </button>
-                  {isAuthenticated && (
+                  {can("Delete Sales") && (
                     <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       title="Delete" onClick={() => setDeleteId(sale.id)}>
                       <Trash2 size={13} />
@@ -2688,7 +2688,7 @@ export default function SalesPage() {
           )}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {can("Add Sales") && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => { setNewRow(blankNewRow()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">

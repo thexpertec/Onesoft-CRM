@@ -47,7 +47,7 @@ export default function StaffPage() {
   const [, nav] = useLocation();
   const { staff, addStaff, editStaff, removeStaff } = useStaff();
   const { roles } = useStaffRoles();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const roleNames = useMemo(() => roles.map(r => r.name), [roles]);
@@ -213,7 +213,7 @@ export default function StaffPage() {
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · organised by department & designation</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Staff") && (
           <Button size="sm" onClick={() => nav("/staff/new")} className="gap-1.5">
             <Plus size={14} /> Add Staff
           </Button>
@@ -258,7 +258,7 @@ export default function StaffPage() {
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search name, dept, role…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {isAuthenticated && newRow && (
+        {can("Add Staff") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -272,7 +272,7 @@ export default function StaffPage() {
       <div ref={tableRef}>
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Staff") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: CELL_H }}>★</td>
               {COLS.map((c, ci) => {
@@ -347,7 +347,7 @@ export default function StaffPage() {
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === member.id && activeCell.col === ci;
                   const rawVal = String((member as unknown as Record<string, string>)[c.field] ?? "");
-                  const canEdit = isAuthenticated;
+                  const canEdit = can("Edit Staff");
                   return (
                     <td key={c.field}
                       className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
@@ -391,23 +391,23 @@ export default function StaffPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && (
-                      <>
-                        <button
-                          title={member.loginEnabled ? "Login access enabled — click to edit" : "Set login access"}
-                          onClick={() => openLoginDialog(member)}
-                          className={`p-1 rounded transition-colors ${
-                            member.loginEnabled
-                              ? "text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
-                              : "text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
-                          }`}>
-                          <KeyRound size={13} />
-                        </button>
-                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Remove"
-                          onClick={() => setDeleteId(member.id)}>
-                          <Trash2 size={13} />
-                        </button>
-                      </>
+                    {can("Edit Staff") && (
+                      <button
+                        title={member.loginEnabled ? "Login access enabled — click to edit" : "Set login access"}
+                        onClick={() => openLoginDialog(member)}
+                        className={`p-1 rounded transition-colors ${
+                          member.loginEnabled
+                            ? "text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                            : "text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                        }`}>
+                        <KeyRound size={13} />
+                      </button>
+                    )}
+                    {can("Delete Staff") && (
+                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Remove"
+                        onClick={() => setDeleteId(member.id)}>
+                        <Trash2 size={13} />
+                      </button>
                     )}
                   </div>
                 </td>
@@ -416,7 +416,7 @@ export default function StaffPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && (
+          {can("Add Staff") && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => nav("/staff/new")}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"

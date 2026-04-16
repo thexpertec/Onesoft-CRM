@@ -452,56 +452,57 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // When superadmin is in their own context (no tenant), full access always.
   // When a staff member is logged in, use their HRM role permissions.
 
-  /** Map from moduleId → HRM permission strings required (any one is sufficient). */
+  /** Map from moduleId → HRM permission strings required (any one is sufficient).
+   *  Includes both new 4-level keys and legacy "Manage X" keys for backward compat. */
   const STAFF_MODULE_PERMS: Partial<Record<ModuleId, string[]>> = {
     // CRM
-    crm_leads:           ["View Leads",     "Manage Leads"],
-    crm_customers:       ["View Customers", "Manage Customers"],
-    crm_suppliers:       ["View Suppliers", "Manage Suppliers"],
+    crm_leads:           ["View Leads",     "Add Leads",    "Edit Leads",    "Delete Leads",    "Manage Leads"],
+    crm_customers:       ["View Customers", "Add Customers","Edit Customers","Delete Customers","Manage Customers"],
+    crm_suppliers:       ["View Suppliers", "Add Suppliers","Edit Suppliers","Delete Suppliers","Manage Suppliers"],
     // Products & Inventory
-    products:            ["View Products",  "Manage Products"],
-    categories:          ["View Products",  "Manage Products"],
-    brands:              ["View Products",  "Manage Products"],
+    products:            ["View Products",  "Add Products", "Edit Products", "Delete Products", "Manage Products"],
+    categories:          ["View Categories","Add Categories","Edit Categories","Delete Categories","View Products","Manage Products"],
+    brands:              ["View Brands",    "Add Brands",   "Edit Brands",   "Delete Brands",   "View Products","Manage Products"],
     product_groups:      ["View Products",  "Manage Products"],
-    attributes:          ["View Products",  "Manage Products"],
-    units:               ["View Products",  "Manage Products"],
-    stock:               ["View Products",  "Manage Products"],
-    raw_materials:       ["View Products",  "Manage Products"],
-    purchases:           ["View Purchases", "Manage Purchases"],
+    attributes:          ["View Attributes","Add Attributes","Edit Attributes","Delete Attributes","View Products","Manage Products"],
+    units:               ["View Units",     "Add Units",    "Edit Units",    "Delete Units",    "View Products","Manage Products"],
+    stock:               ["View Stock",     "Edit Stock",   "View Products", "Manage Products"],
+    raw_materials:       ["View Raw Materials","Add Raw Materials","Edit Raw Materials","Delete Raw Materials","View Products","Manage Products"],
+    purchases:           ["View Purchases", "Add Purchases","Edit Purchases","Delete Purchases","Manage Purchases"],
     // Sales
-    sales:               ["View Sales",     "Manage Sales"],
-    invoices:            ["View Sales",     "Manage Sales"],
-    sale_return:         ["View Sales",     "Manage Sales"],
-    calc_invoice:        ["View Sales",     "Manage Sales"],
-    sales_agents:        ["View Sales",     "Manage Sales"],
-    agent_performance:   ["View Sales",     "Manage Sales"],
+    sales:               ["View Sales",     "Add Sales",    "Edit Sales",    "Delete Sales",    "Manage Sales"],
+    invoices:            ["View Invoices",  "Add Invoices", "Edit Invoices", "Delete Invoices", "View Sales","Manage Sales"],
+    sale_return:         ["View Sale Returns","Add Sale Returns","Delete Sale Returns","View Sales","Manage Sales"],
+    calc_invoice:        ["View Invoices",  "Add Invoices", "View Sales",   "Manage Sales"],
+    sales_agents:        ["View Agents",    "Add Agents",   "Edit Agents",   "Delete Agents",   "View Sales","Manage Sales"],
+    agent_performance:   ["View Agents",    "View Sales",   "Manage Sales"],
     areas:               ["View Sales",     "Manage Sales"],
     // HRM
-    hrm_staff:           ["View Staff",     "Manage Staff"],
-    hrm_roles:           ["View Roles",     "Manage Roles"],
-    hrm_org:             ["View Staff",     "Manage Staff"],
+    hrm_staff:           ["View Staff",     "Add Staff",    "Edit Staff",    "Delete Staff",    "Manage Staff"],
+    hrm_roles:           ["View Roles",     "Add Roles",    "Edit Roles",    "Delete Roles",    "Manage Roles"],
+    hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     // Accounting
-    accounting_coa:      ["View Accounts",  "Manage Accounts"],
-    accounting_journal:  ["View Accounts",  "Manage Accounts"],
-    accounting_balance:  ["View Accounts",  "Manage Accounts"],
+    accounting_coa:      ["View Chart of Accounts","Add Chart of Accounts","Edit Chart of Accounts","Delete Chart of Accounts","View Accounts","Manage Accounts"],
+    accounting_journal:  ["View Journal",   "Add Journal",  "Edit Journal",  "Delete Journal",  "View Accounts","Manage Accounts"],
+    accounting_balance:  ["View Fin Reports","View Accounts","Manage Accounts"],
     accounting_ledger:   ["View Accounts",  "Manage Accounts"],
-    accounting_pls:      ["View Accounts",  "Manage Accounts"],
-    accounting_income:   ["View Accounts",  "Manage Accounts"],
+    accounting_pls:      ["View Fin Reports","View Accounts","Manage Accounts"],
+    accounting_income:   ["View Fin Reports","View Accounts","Manage Accounts"],
     accounting_expense:  ["View Accounts",  "Manage Accounts"],
-    accounting_receipts: ["View Accounts",  "Manage Accounts"],
+    accounting_receipts: ["View Receipts",  "Add Receipts", "Edit Receipts", "Delete Receipts", "View Accounts","Manage Accounts"],
     shareholders:        ["View Accounts",  "Manage Accounts"],
     investment_plans:    ["View Accounts",  "Manage Accounts"],
     // Manufacturing
-    manufacturing:       ["View Products",  "Manage Products"],
-    production_guide:    ["View Products",  "Manage Products"],
+    manufacturing:       ["View Manufacturing","Add Manufacturing","Edit Manufacturing","Delete Manufacturing","View Products","Manage Products"],
+    production_guide:    ["View Manufacturing","Add Manufacturing","View Products","Manage Products"],
     // Website
-    website_cms:         ["Manage Settings"],
+    website_cms:         ["Edit Settings",  "Manage Settings"],
     // Repairs
-    repair:              ["View Sales",     "Manage Sales"],
+    repair:              ["View Repairs",   "Add Repairs",  "Edit Repairs",  "Delete Repairs",  "View Sales","Manage Sales"],
     // Other
-    documents:           ["View Documents", "Manage Documents"],
-    media:               ["View Products",  "Manage Products"],
-    settings:            ["Manage Settings"],
+    documents:           ["View Documents", "Add Documents","Edit Documents","Delete Documents","Manage Documents"],
+    media:               ["View Media",     "Add Media",    "Delete Media",  "View Products",   "Manage Products"],
+    settings:            ["View Settings",  "Edit Settings","Manage Settings"],
   };
 
   /** Modules a Sales Agent can access (always, regardless of configured HRM role) */

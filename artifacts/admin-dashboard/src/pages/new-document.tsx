@@ -658,7 +658,7 @@ export default function NewDocument() {
   const { docs, addDoc, editDoc } = useDocs();
   const { leads } = useLeads();
   const { customers } = useCustomers();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -1081,7 +1081,7 @@ export default function NewDocument() {
     navigate("/documents");
   };
 
-  if (!isAuthenticated) {
+  if (!can("Add Documents")) {
     return (
       <div className="max-w-4xl mx-auto py-6 px-2 sm:px-4">
         <div className="flex flex-col items-center justify-center py-24 text-center gap-5">

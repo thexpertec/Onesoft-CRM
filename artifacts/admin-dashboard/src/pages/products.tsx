@@ -181,7 +181,7 @@ function parseCSV(text: string): ImportRow[] {
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
   const { stock, refresh: refreshStock } = useStock();
-  const { isAuthenticated, currentTenantId } = useAuth();
+  const { isAuthenticated, currentTenantId, can } = useAuth();
   const dp = getSettingsDecimalPlaces();
 
   // Build a map: SKU (lowercased) → total qty across all stock entries
@@ -940,7 +940,7 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Products") && (
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={downloadTemplate} className="gap-1.5 h-8 text-[13px]" title="Download CSV template">
               <Download size={13} /> Template
@@ -1305,7 +1305,7 @@ export default function ProductsPage() {
           </button>
 
           {/* Unsaved row indicator */}
-          {isAuthenticated && newRow && (
+          {can("Add Products") && newRow && (
             <div className="flex items-center gap-1.5 ml-auto shrink-0">
               <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
               <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -1317,7 +1317,7 @@ export default function ProductsPage() {
           {selectedIds.size > 0 ? (
             <div className="flex items-center gap-2 ml-auto shrink-0 flex-wrap">
               <span className="text-[12px] font-medium text-foreground">{selectedIds.size} selected</span>
-              {isAuthenticated && (
+              {can("Edit Products") && (
                 <>
                   <div className="relative">
                     <select
@@ -1517,7 +1517,7 @@ export default function ProductsPage() {
         <ExcelGridShell cols={visibleCols} totalMinW={TOTAL_W} tableId="products"
           extraLeadingCol={{
             width: 32,
-            header: isAuthenticated ? (
+            header: can("Edit Products") ? (
               <div className="flex items-center justify-center">
                 <input
                   type="checkbox"
@@ -1534,7 +1534,7 @@ export default function ProductsPage() {
         >
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Products") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-100 dark:border-border w-7" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
@@ -1595,7 +1595,7 @@ export default function ProductsPage() {
             const isDragOver  = dragOverId === prod.id;
             return (
               <tr key={prod.id} data-testid={`row-product-${prod.id}`}
-                draggable={!isFiltered && isAuthenticated && selectedIds.size === 0}
+                draggable={!isFiltered && can("Edit Products") && selectedIds.size === 0}
                 onDragStart={() => handleDragStart(prod.id)}
                 onDragOver={e => handleDragOver(e, prod.id)}
                 onDrop={() => handleDrop(prod.id)}
@@ -1609,8 +1609,8 @@ export default function ProductsPage() {
 
                 {/* Checkbox / drag handle */}
                 <td className="border-r border-gray-100 dark:border-border w-8 text-center select-none" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
-                  onClick={e => { e.stopPropagation(); if (isAuthenticated) toggleSelect(prod.id); }}>
-                  {isAuthenticated ? (
+                  onClick={e => { e.stopPropagation(); if (can("Edit Products")) toggleSelect(prod.id); }}>
+                  {can("Edit Products") ? (
                     <div className="flex items-center justify-center h-full">
                       {selectedIds.has(prod.id) || selectedIds.size > 0 ? (
                         <input
@@ -1676,7 +1676,7 @@ export default function ProductsPage() {
                       <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
                         style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
                         <div className="w-full h-full flex items-center justify-center px-2">
-                          {isAuthenticated ? (
+                          {can("Edit Products") ? (
                             <button
                               onClick={() => editProduct(prod.id, { showOnWeb: !visible })}
                               title={visible ? "Shown on website — click to hide" : "Hidden from website — click to show"}
@@ -1723,16 +1723,16 @@ export default function ProductsPage() {
                   }
 
                   return (
-                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : can("Edit Products") && c.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && c.type !== "readonly" && setActiveCell({ id: prod.id, col: ci })}>
+                      onClick={() => !isA && can("Edit Products") && c.type !== "readonly" && setActiveCell({ id: prod.id, col: ci })}>
                       {isProfitCol ? (
                         <div className={`w-full flex items-center px-3 text-[12px] select-none ${wrapText ? "py-2 break-words" : "h-full truncate"} ${rawVal ? profitColor : "text-muted-foreground/40"}`}>
                           {rawVal || "—"}
                         </div>
                       ) : (
                         <EditableCell
-                          value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                          value={rawVal} col={c} active={isA} canEdit={can("Edit Products")}
                           onActivate={() => setActiveCell({ id: prod.id, col: ci })}
                           onCommit={v => commitCell(prod.id, c.field as EditableField, v)}
                           onCancel={() => setActiveCell(null)}
@@ -1750,7 +1750,7 @@ export default function ProductsPage() {
                     {prod.thumbnail ? (
                       <img src={prod.thumbnail} alt="" title="Has thumbnail"
                         className="w-5 h-5 rounded object-cover border border-zinc-200 dark:border-zinc-600 flex-shrink-0 cursor-pointer hover:opacity-80"
-                        onClick={() => isAuthenticated && setImagesDialogId(prod.id)} />
+                        onClick={() => can("Edit Products") && setImagesDialogId(prod.id)} />
                     ) : (prod.images?.length ?? 0) > 0 ? (
                       <span className="text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 rounded px-1 flex-shrink-0 leading-4">{prod.images!.length}img</span>
                     ) : null}
@@ -1760,13 +1760,13 @@ export default function ProductsPage() {
                         onClick={e => { e.stopPropagation(); setViewProdId(prod.id); }}>
                         <Eye size={13} />
                       </button>
-                      {isAuthenticated && (
+                      {can("Edit Products") && (
                         <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Manage images"
                           onClick={() => setImagesDialogId(prod.id)}>
                           <Camera size={13} />
                         </button>
                       )}
-                      {isAuthenticated && (
+                      {can("Delete Products") && (
                         <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
                           onClick={() => setDeleteId(prod.id)} data-testid={`btn-delete-product-${prod.id}`}>
                           <Trash2 size={13} />
@@ -1780,7 +1780,7 @@ export default function ProductsPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {can("Add Products") && !newRow && (
             <tr><td colSpan={visibleCols.length + 2}>
               <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"

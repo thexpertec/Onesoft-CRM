@@ -185,7 +185,7 @@ export default function InvestmentPlansPage() {
   const { plans, addPlan, editPlan, removePlan } = useInvestmentPlans();
   const { products }    = useProducts();
   const { categories }  = useProductCategories();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const productOptions  = useMemo(() => [...new Set(products.map(p => p.name).filter(Boolean))].sort(), [products]);
@@ -351,7 +351,7 @@ export default function InvestmentPlansPage() {
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
-        {isAuthenticated && (
+        {can("Edit Accounts") && (
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={loadExamples} className="gap-1.5 h-8 text-[13px] border-dashed" data-testid="btn-load-examples">
               {plans.length > 0 ? "Reset Examples" : "Load Examples"}
@@ -387,7 +387,7 @@ export default function InvestmentPlansPage() {
             <X size={12} /> Clear
           </Button>
         )}
-        {isAuthenticated && newRow && (
+        {can("Edit Accounts") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -402,7 +402,7 @@ export default function InvestmentPlansPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
 
           {/* ── New row ──────────────────────────────────────────────────── */}
-          {isAuthenticated && newRow && (() => {
+          {can("Edit Accounts") && newRow && (() => {
             const investOn = newRow.investmentOn || "Product";
             return (
               <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
@@ -522,12 +522,12 @@ export default function InvestmentPlansPage() {
                           ? "bg-gray-50/40 dark:bg-muted/10"
                           : isA
                             ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10"
-                            : isAuthenticated
+                            : can("Edit Accounts")
                               ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20"
                               : ""
                       }`}
                       style={{ height: `${CELL_H}px` }}
-                      onClick={() => !dimmed && !isA && isAuthenticated && setActiveCell({ id: plan.id, col: ci })}>
+                      onClick={() => !dimmed && !isA && can("Edit Accounts") && setActiveCell({ id: plan.id, col: ci })}>
 
                       {/* Dimmed cell */}
                       {dimmed ? (
@@ -561,7 +561,7 @@ export default function InvestmentPlansPage() {
                           options={opts}
                           placeholder={c.label}
                           active={isA}
-                          canEdit={isAuthenticated}
+                          canEdit={can("Edit Accounts")}
                           onActivate={() => setActiveCell({ id: plan.id, col: ci })}
                           onCommit={v => commitCell(plan.id, c.field as EditableField, v)}
                           onCancel={() => setActiveCell(null)}
@@ -571,7 +571,7 @@ export default function InvestmentPlansPage() {
                       /* Default editable / display cell */
                       ) : (
                         <EditableCell
-                          value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                          value={rawVal} col={c} active={isA} canEdit={can("Edit Accounts")}
                           onActivate={() => setActiveCell({ id: plan.id, col: ci })}
                           onCommit={v => commitCell(plan.id, c.field as EditableField, v)}
                           onCancel={() => setActiveCell(null)}
@@ -585,7 +585,7 @@ export default function InvestmentPlansPage() {
 
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px`, width: 56 }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 h-full px-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && (
+                    {can("Delete Accounts") && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
                         onClick={() => setDeleteId(plan.id)} data-testid={`btn-delete-plan-${plan.id}`}>
                         <Trash2 size={13} />

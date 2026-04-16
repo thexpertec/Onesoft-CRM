@@ -35,6 +35,8 @@ type AuthContextType = {
   currentTenantId:   string | null;
   currentTenant:     Tenant | null;
   isSyncing:         boolean;
+  /** Check if the current user has a specific permission (e.g. "Add Leads", "Edit Products"). Superadmin/tenant-admin always return true. */
+  can:               (permission: string) => boolean;
   login:             (username: string, password: string) => Promise<boolean>;
   logout:            () => void;
   refreshCurrentUser: () => void;
@@ -52,6 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   currentTenantId:    null,
   currentTenant:      null,
   isSyncing:          false,
+  can:                () => false,
   login:              async () => false,
   logout:             () => {},
   refreshCurrentUser: () => {},
@@ -110,10 +113,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isSalesAgent) {
       // Sales agents always have a fixed set of permissions
       return new Set<string>([
-        "View Leads", "Manage Leads",
-        "View Customers",
-        "View Sales", "Manage Sales",
         "View Dashboard",
+        "View Leads", "Add Leads", "Edit Leads",
+        "View Customers", "Add Customers", "Edit Customers",
+        "View Sales", "Add Sales",
+        "View Invoices",
       ]);
     }
     if (!isStaff || !currentUser) return new Set<string>();
@@ -126,6 +130,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hrmRole.permissions.split(",").map(p => p.trim()).filter(Boolean)
     );
   })();
+
+  /**
+   * Check if the current user has a specific permission string.
+   * - Superadmin / tenant-admin → always true.
+   * - Staff / sales agent     → checks staffPermissions; also accepts legacy "Manage X" in place of Add/Edit/Delete X.
+   * - Unauthenticated          → false.
+   */
+  const can = (permission: string): boolean => {
+    if (!isAuthenticated) return false;
+    // Superadmin (no tenant context) and tenant admins have full access
+    if (!isStaff && !isSalesAgent) return true;
+    // Exact match
+    if (staffPermissions.has(permission)) return true;
+    // Legacy backward-compat: "Manage X" satisfies Add/Edit/Delete X
+    const writeActions = ["Add ", "Edit ", "Delete "];
+    for (const prefix of writeActions) {
+      if (permission.startsWith(prefix)) {
+        const resource = permission.slice(prefix.length);
+        if (staffPermissions.has(`Manage ${resource}`)) return true;
+      }
+    }
+    return false;
+  };
 
   // ── On app load: if already authenticated, sync from DB ────────────────────
   useEffect(() => {
@@ -269,7 +296,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated, currentUser, isSuperAdmin,
       isStaff, isSalesAgent, currentAgentId, staffPermissions,
       currentTenantId, currentTenant,
-      isSyncing,
+      isSyncing, can,
       login, logout, refreshCurrentUser, switchTenant,
     }}>
       {children}

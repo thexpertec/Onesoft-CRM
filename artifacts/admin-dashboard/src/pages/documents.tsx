@@ -31,7 +31,7 @@ function statusBadgeClass(status: string) {
 
 export default function Documents() {
   const { docs, removeDoc, editDoc } = useDocs();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
@@ -107,7 +107,7 @@ export default function Documents() {
           <h1 className="text-3xl font-bold tracking-tight">Requirement Documents</h1>
           <p className="text-muted-foreground mt-1">Manage client project requirements and scoping.</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Documents") && (
           <Button asChild data-testid="btn-create-doc">
             <Link href="/documents/new">
               <FileText className="mr-2 h-4 w-4" /> New Document
@@ -182,7 +182,7 @@ export default function Documents() {
                   </TableCell>
                   <TableCell>{doc.softwareType}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    {isAuthenticated ? (
+                    {can("Edit Documents") ? (
                       <Select value={doc.status} onValueChange={(val: DocStatus) => {
                         editDoc(doc.id, { status: val });
                         if (selectedDoc?.id === doc.id) setSelectedDoc(prev => prev ? { ...prev, status: val } : prev);
@@ -222,7 +222,7 @@ export default function Documents() {
                           <Share2 className="mr-2 h-4 w-4" />
                           Open Share Link
                         </DropdownMenuItem>
-                        {isAuthenticated && (
+                        {can("Delete Documents") && (
                           <DropdownMenuItem
                             onClick={() => setDocToDelete(doc.id)}
                             className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
@@ -271,7 +271,7 @@ export default function Documents() {
                     <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
                   </Button>
 
-                  {isAuthenticated ? (
+                  {can("Edit Documents") ? (
                     isEditing ? (
                       <>
                         <Button variant="outline" size="sm" onClick={() => { setIsEditing(false); setFormData(selectedDoc); }}>

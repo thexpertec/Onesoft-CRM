@@ -289,7 +289,7 @@ export default function SuppliersPage() {
   const { cities } = useCities();
   const { areas }  = useAreas();
   const { products } = useProducts();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const showProductPicker = useMemo(() => getSettings().supplierProductPicker !== false, []);
@@ -477,7 +477,7 @@ export default function SuppliersPage() {
           <h1 className="text-2xl font-bold tracking-tight">Suppliers</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Suppliers") && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowImport(true)} className="gap-1.5">
               <Upload size={13} /> Import
@@ -575,7 +575,7 @@ export default function SuppliersPage() {
           </svg>
           Wrap
         </button>
-        {isAuthenticated && newRow && (
+        {can("Add Suppliers") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             {showProductPicker && (
@@ -597,7 +597,7 @@ export default function SuppliersPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="suppliers">
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Suppliers") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>★</td>
               {COLS.map((c, ci) => {
@@ -670,9 +670,9 @@ export default function SuppliersPage() {
                   return (
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
                       style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && setActiveCell({ id: supp.id, col: ci })}>
+                      onClick={() => !isA && can("Edit Suppliers") && setActiveCell({ id: supp.id, col: ci })}>
                       <EditableCell
-                        value={rawVal} col={c} active={isA} canEdit={isAuthenticated}
+                        value={rawVal} col={c} active={isA} canEdit={can("Edit Suppliers")}
                         wrapText={wrapText}
                         onActivate={() => setActiveCell({ id: supp.id, col: ci })}
                         onCommit={v => commitCell(supp.id, c.field as EditableField, v)}
@@ -694,7 +694,7 @@ export default function SuppliersPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {can("Add Suppliers") && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => nav("/suppliers/new")}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
@@ -747,7 +747,7 @@ export default function SuppliersPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked Products</p>
-                    {isAuthenticated && (
+                    {can("Edit Suppliers") && (
                       <ProductMultiPicker
                         allProducts={products}
                         selectedIds={viewSupp.productIds ?? []}
@@ -784,7 +784,7 @@ export default function SuppliersPage() {
                 </div>
               )}
 
-              {isAuthenticated && (
+              {can("Delete Suppliers") && (
                 <div className="pt-4 border-t">
                   <Button variant="destructive" className="w-full gap-2" onClick={() => { setDeleteId(viewSupp.id); setViewSupp(null); }}>
                     <Trash2 size={14} /> Delete Supplier

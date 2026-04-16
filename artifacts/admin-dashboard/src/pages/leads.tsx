@@ -795,7 +795,7 @@ export default function Leads() {
   const { leads, addLead, editLead, removeLead } = useLeads();
   const { refresh: refreshCustomers } = useCustomers();
   const { agents: salesAgents } = useSalesAgents();
-  const { isAuthenticated, isSalesAgent, currentUser } = useAuth();
+  const { isAuthenticated, isSalesAgent, currentUser, can } = useAuth();
   const { toast } = useToast();
 
   const convertedLeadIds = useMemo(
@@ -1075,7 +1075,7 @@ export default function Leads() {
               : "Click any cell to edit · Tab to move · Enter to save · Esc to cancel"}
           </p>
         </div>
-        {isAuthenticated && !isSalesAgent && (
+        {can("Add Leads") && !isSalesAgent && (
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={downloadTemplate} title="Download import template CSV">
               <Download size={14} /> Template
@@ -1210,7 +1210,7 @@ export default function Leads() {
             </svg>
             Wrap
           </button>
-          {isAuthenticated && newRow && (
+          {can("Add Leads") && newRow && (
             <div className="flex items-center gap-1.5 ml-auto">
               <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
               <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={cancelNewRow}><X size={12}/> Cancel</Button>
@@ -1257,7 +1257,7 @@ export default function Leads() {
 
           <tbody>
             {/* New row */}
-            {isAuthenticated && newRow && (
+            {can("Add Leads") && newRow && (
               <tr className="bg-amber-50/60 dark:bg-amber-950/20 border-b border-gray-100 dark:border-border">
                 <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold select-none" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>★</td>
                 {COLS.map((c, ci) => {
@@ -1321,7 +1321,7 @@ export default function Leads() {
                 {hasActiveFilters ? (
                   <span>No leads match your filters. <button className="text-primary underline" onClick={clearAllFilters}>Clear filters</button></span>
                 ) : isAuthenticated
-                  ? <span>No leads yet. Click <strong>Add Lead</strong> to start.</span> : "No leads yet."}
+                  ? <span>No leads yet. Click <strong>Add Lead</strong> to start.</span> : "No leads yet." }
               </td></tr>
             ) : filtered.map((lead, rowIdx) => {
               const isRowActive  = activeCell?.id === lead.id;
@@ -1351,9 +1351,9 @@ export default function Leads() {
                     return (
                       <td key={c.field}
                         className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
-                        style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} onClick={() => !isActive && isAuthenticated && activateCell(lead.id, ci)}>
+                        style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} onClick={() => !isActive && can("Edit Leads") && activateCell(lead.id, ci)}>
                         {c.type === "agent-select" ? (
-                          isActive && isAuthenticated ? (
+                          isActive && can("Edit Leads") ? (
                             <select autoFocus value={rawVal}
                               onChange={e=>{ commitCell(lead.id, c.field, e.target.value); setActiveCell(null); }}
                               onKeyDown={e=>{if(e.key==="Escape")setActiveCell(null);if(e.key==="Tab"){e.preventDefault();navigateCell(lead.id,ci,e.shiftKey);}}}
@@ -1373,7 +1373,7 @@ export default function Leads() {
                         ) : (
                           <EditableCell
                             value={rawVal}
-                            col={c} active={isActive} canEdit={isAuthenticated}
+                            col={c} active={isActive} canEdit={can("Edit Leads")}
                             onActivate={()=>activateCell(lead.id,ci)}
                             onCommit={v=>commitCell(lead.id,c.field,v)}
                             onCancel={()=>setActiveCell(null)}
@@ -1402,7 +1402,7 @@ export default function Leads() {
                       <button
                         className={`p-1 rounded transition-colors ${lead.isRelevant===false?"text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40":"text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40"}`}
                         title={lead.isRelevant===false?"Mark Relevant":"Mark Irrelevant"}
-                        onClick={() => isAuthenticated && editLead(lead.id, { isRelevant: !(lead.isRelevant??true) })}>
+                        onClick={() => can("Edit Leads") && editLead(lead.id, { isRelevant: !(lead.isRelevant??true) })}>
                         {lead.isRelevant===false ? <StarOff size={13}/> : <Star size={13}/>}
                       </button>
                       <button
@@ -1411,12 +1411,12 @@ export default function Leads() {
                         onClick={() => { setViewLead(lead); }}>
                         <Bell size={13}/>
                       </button>
-                      {isAuthenticated && lead.status==="Won" && !convertedLeadIds.has(lead.id) && (
+                      {can("Edit Leads") && lead.status==="Won" && !convertedLeadIds.has(lead.id) && (
                         <button className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors" title="Convert to customer" onClick={() => handleConvert(lead)}>
                           <UserCheck size={13}/>
                         </button>
                       )}
-                      {isAuthenticated && (
+                      {can("Delete Leads") && (
                         <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete" onClick={() => setDeleteId(lead.id)}>
                           <Trash2 size={13}/>
                         </button>
@@ -1523,7 +1523,7 @@ export default function Leads() {
             })}
 
             {/* Add row trigger */}
-            {isAuthenticated && !newRow && (
+            {can("Add Leads") && !newRow && (
               <tr>
                 <td colSpan={COLS.length+2}>
                   <button onClick={startNewRow} className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors" data-testid="btn-add-row">
@@ -1549,7 +1549,7 @@ export default function Leads() {
               onSave={handleSaveLead}
               onDelete={id => { setDeleteId(id); }}
               onConvert={handleConvert}
-              canEdit={isAuthenticated}
+              canEdit={can("Edit Leads")}
               isConverted={convertedLeadIds.has(viewLead.id)}
               agents={salesAgents.map(a => ({ id: a.id, name: a.name, agentCode: a.agentCode }))}
             />

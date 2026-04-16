@@ -33,7 +33,7 @@ const BLANK = (): Record<EditableField, string> => ({ name: "", type: "text", va
 
 export default function AttributesPage() {
   const { attributes, addAttribute, editAttribute, removeAttribute } = useAttributes();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const [search,       setSearch]       = useState("");
@@ -116,7 +116,7 @@ export default function AttributesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Product Attributes</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Define properties like Size, Colour, Material — use the <strong>Values</strong> column for comma-separated options (e.g. S, M, L, XL)</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Attributes") && (
           <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" data-testid="btn-add-attribute">
             <Plus size={14} /> Add Attribute
           </Button>
@@ -142,7 +142,7 @@ export default function AttributesPage() {
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search attributes..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {isAuthenticated && newRow && (
+        {can("Add Attributes") && newRow && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
             <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -157,7 +157,7 @@ export default function AttributesPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Attributes") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
               {COLS.map((c, ci) => {
@@ -219,11 +219,11 @@ export default function AttributesPage() {
                     : String((attr as unknown as Record<string, string>)[c.field] ?? "");
                   const canEditCol = c.type !== "readonly";
                   return (
-                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEditCol && isAuthenticated ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEditCol && can("Edit Attributes") ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && canEditCol && setActiveCell({ id: attr.id, col: ci })}>
+                      onClick={() => !isA && can("Edit Attributes") && canEditCol && setActiveCell({ id: attr.id, col: ci })}>
                       <EditableCell
-                        value={rawVal} col={c} active={isA} canEdit={isAuthenticated && canEditCol}
+                        value={rawVal} col={c} active={isA} canEdit={can("Edit Attributes") && canEditCol}
                         onActivate={() => setActiveCell({ id: attr.id, col: ci })}
                         onCommit={v => commitCell(attr.id, c.field as EditableField, v)}
                         onCancel={() => setActiveCell(null)}
@@ -235,7 +235,7 @@ export default function AttributesPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && (
+                    {can("Delete Attributes") && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
                         onClick={() => setDeleteId(attr.id)} data-testid={`btn-delete-attribute-${attr.id}`}>
                         <Trash2 size={13} />
@@ -248,7 +248,7 @@ export default function AttributesPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {can("Add Attributes") && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"

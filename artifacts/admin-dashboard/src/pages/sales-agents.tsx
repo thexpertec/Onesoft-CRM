@@ -64,7 +64,7 @@ export default function SalesAgentsPage() {
   const { agents, addAgent, editAgent, removeAgent } = useSalesAgents();
   const { cities } = useCities();
   const { areas }  = useAreas();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
   const sym = getSettingsCurrencySymbol();
   const dp  = getSettingsDecimalPlaces();
@@ -272,7 +272,7 @@ export default function SalesAgentsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {isAuthenticated && newRow && (
+          {can("Add Agents") && newRow && (
             <>
               <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
               <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}>
@@ -298,7 +298,7 @@ export default function SalesAgentsPage() {
             <FileSpreadsheet size={13} /> Export
           </Button>
 
-          {isAuthenticated && (
+          {can("Add Agents") && (
             <div className="flex items-center gap-1">
               <Button size="sm" className="gap-1.5 text-[12px] bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={() => nav("/sales-agents/new")}>
@@ -314,7 +314,7 @@ export default function SalesAgentsPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="sales-agents">
 
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Agents") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold"
                 style={{ height: `${CELL_H}px` }}>★</td>
@@ -417,14 +417,14 @@ export default function SalesAgentsPage() {
 
                   return (
                     <td key={col.field}
-                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : isAuthenticated && col.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
+                      className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : can("Edit Agents") && col.type !== "readonly" ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
-                      onClick={() => !isA && isAuthenticated && col.type !== "readonly" && setActiveCell({ id: agent.id, col: ci })}>
+                      onClick={() => !isA && can("Edit Agents") && col.type !== "readonly" && setActiveCell({ id: agent.id, col: ci })}>
                       <EditableCell
                         value={raw}
                         col={col}
                         active={isA}
-                        canEdit={isAuthenticated && col.type !== "readonly"}
+                        canEdit={can("Edit Agents") && col.type !== "readonly"}
                         onActivate={() => setActiveCell({ id: agent.id, col: ci })}
                         onCommit={v => commitCell(agent.id, col.field, v)}
                         onCancel={() => setActiveCell(null)}
@@ -445,7 +445,7 @@ export default function SalesAgentsPage() {
                       title="View agent details">
                       <Eye size={13} />
                     </button>
-                    {isAuthenticated && (
+                    {can("Delete Agents") && (
                       <button
                         onClick={() => setDeleteId(agent.id)}
                         className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
@@ -459,7 +459,7 @@ export default function SalesAgentsPage() {
             );
           })}
           {/* + Add row footer */}
-          {isAuthenticated && (
+          {can("Add Agents") && (
             <tr>
               <td colSpan={COLS.length + 2} className="px-4 py-2 border-t border-dashed border-gray-200 dark:border-border">
                 <button
@@ -698,7 +698,7 @@ export default function SalesAgentsPage() {
                 })()}
 
                 {/* Portal Login */}
-                {isAuthenticated && (
+                {can("Edit Agents") && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">

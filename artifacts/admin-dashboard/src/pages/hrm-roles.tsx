@@ -3,24 +3,110 @@ import { useStaffRoles, useStaff } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { StaffRole } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Plus, X, Save, Trash2, Settings2, CheckSquare, Square } from "lucide-react";
+import { KeyRound, Plus, X, Save, Trash2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG, PRESET_COLORS } from "@/components/editable-cell";
 
-// ─── Permissions catalog ──────────────────────────────────────────────────────
-const PERMISSION_GROUPS = [
-  { group: "Dashboard",     perms: ["View Dashboard"] },
-  { group: "CRM",           perms: ["View Leads", "Manage Leads", "View Customers", "Manage Customers", "View Suppliers", "Manage Suppliers"] },
-  { group: "Sales Agent",   perms: ["View My Leads", "Manage My Leads", "View All Leads", "View Sales Reports"] },
-  { group: "Products",      perms: ["View Products", "Manage Products", "View Brands", "Manage Brands", "View Categories", "Manage Categories", "View Attributes", "Manage Attributes"] },
-  { group: "Purchases",     perms: ["View Purchases", "Manage Purchases"] },
-  { group: "Sales",         perms: ["View Sales", "Manage Sales"] },
-  { group: "Documents",     perms: ["View Documents", "Manage Documents"] },
-  { group: "HRM",           perms: ["View Staff", "Manage Staff", "View Roles", "Manage Roles"] },
-  { group: "System",        perms: ["Manage Admin Accounts", "Manage Settings"] },
+// ─── 4-level permissions catalog ─────────────────────────────────────────────
+type PermAction = "view" | "add" | "edit" | "delete";
+type PermModule = { label: string; prefix: string; actions: PermAction[] };
+type PermGroup  = { group: string; modules: PermModule[] };
+
+const PERMISSION_GROUPS: PermGroup[] = [
+  {
+    group: "Dashboard",
+    modules: [
+      { label: "Dashboard",   prefix: "Dashboard",   actions: ["view"] },
+    ],
+  },
+  {
+    group: "CRM",
+    modules: [
+      { label: "Leads",     prefix: "Leads",     actions: ["view","add","edit","delete"] },
+      { label: "Customers", prefix: "Customers", actions: ["view","add","edit","delete"] },
+      { label: "Suppliers", prefix: "Suppliers", actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Sales",
+    modules: [
+      { label: "Sales / POS",   prefix: "Sales",        actions: ["view","add","edit","delete"] },
+      { label: "Invoices",      prefix: "Invoices",     actions: ["view","add","edit","delete"] },
+      { label: "Sale Returns",  prefix: "Sale Returns", actions: ["view","add","delete"] },
+      { label: "Sales Agents",  prefix: "Agents",       actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Purchases",
+    modules: [
+      { label: "Purchases", prefix: "Purchases", actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Products",
+    modules: [
+      { label: "Products",   prefix: "Products",   actions: ["view","add","edit","delete"] },
+      { label: "Brands",     prefix: "Brands",     actions: ["view","add","edit","delete"] },
+      { label: "Categories", prefix: "Categories", actions: ["view","add","edit","delete"] },
+      { label: "Attributes", prefix: "Attributes", actions: ["view","add","edit","delete"] },
+      { label: "Units",      prefix: "Units",      actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Stock & Manufacturing",
+    modules: [
+      { label: "Stock / Inventory", prefix: "Stock",         actions: ["view","edit"] },
+      { label: "Raw Materials",     prefix: "Raw Materials", actions: ["view","add","edit","delete"] },
+      { label: "Manufacturing",     prefix: "Manufacturing", actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Repair",
+    modules: [
+      { label: "Repairs", prefix: "Repairs", actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Accounting",
+    modules: [
+      { label: "Chart of Accounts",      prefix: "Chart of Accounts", actions: ["view","add","edit","delete"] },
+      { label: "Journal Entries",        prefix: "Journal",            actions: ["view","add","edit","delete"] },
+      { label: "Receipts & Payments",    prefix: "Receipts",           actions: ["view","add","edit","delete"] },
+      { label: "Financial Reports",      prefix: "Fin Reports",        actions: ["view"] },
+    ],
+  },
+  {
+    group: "HRM",
+    modules: [
+      { label: "Staff", prefix: "Staff", actions: ["view","add","edit","delete"] },
+      { label: "Roles", prefix: "Roles", actions: ["view","add","edit","delete"] },
+    ],
+  },
+  {
+    group: "Documents & Media",
+    modules: [
+      { label: "Documents",    prefix: "Documents", actions: ["view","add","edit","delete"] },
+      { label: "Media Library",prefix: "Media",     actions: ["view","add","delete"] },
+    ],
+  },
+  {
+    group: "System",
+    modules: [
+      { label: "Settings",        prefix: "Settings",       actions: ["view","edit"] },
+      { label: "Admin Accounts",  prefix: "Admin Accounts", actions: ["view","add","edit","delete"] },
+    ],
+  },
 ];
+
+function permKey(prefix: string, action: PermAction): string {
+  return `${action.charAt(0).toUpperCase()}${action.slice(1)} ${prefix}`;
+}
+
+function allPermsForGroup(group: PermGroup): string[] {
+  return group.modules.flatMap(m => m.actions.map(a => permKey(m.prefix, a)));
+}
 
 type EditableField = "color" | "name" | "description";
 const BLANK = (): Record<EditableField, string> => ({ color: PRESET_COLORS[0].hex, name: "", description: "" });
@@ -34,77 +120,154 @@ const COLS: ColDef[] = [
 ];
 const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
-// ─── Permissions dialog ───────────────────────────────────────────────────────
+// ─── Permissions dialog — 4-level table grid ─────────────────────────────────
+const ACTIONS: PermAction[] = ["view","add","edit","delete"];
+const ACTION_LABELS: Record<PermAction,string> = { view:"View", add:"Add", edit:"Edit", delete:"Delete" };
+const ACTION_COLORS: Record<PermAction,string> = {
+  view:   "text-blue-600 dark:text-blue-400",
+  add:    "text-emerald-600 dark:text-emerald-400",
+  edit:   "text-amber-600 dark:text-amber-400",
+  delete: "text-red-600 dark:text-red-400",
+};
+const ACTION_ACCENT: Record<PermAction,string> = {
+  view:   "accent-blue-600",
+  add:    "accent-emerald-600",
+  edit:   "accent-amber-600",
+  delete: "accent-red-600",
+};
+
 function PermissionsDialog({
   role, onClose, onSave,
 }: { role: StaffRole; onClose: () => void; onSave: (permissions: string) => void }) {
-  const current = useMemo(() => new Set(role.permissions.split(",").map(s => s.trim()).filter(Boolean)), [role.permissions]);
-  const [selected, setSelected] = useState<Set<string>>(new Set(current));
+  const initial = useMemo(
+    () => new Set(role.permissions.split(",").map(s => s.trim()).filter(Boolean)),
+    [role.permissions]
+  );
+  const [selected, setSelected] = useState<Set<string>>(new Set(initial));
 
-  const togglePerm = (p: string) =>
-    setSelected(prev => { const n = new Set(prev); n.has(p) ? n.delete(p) : n.add(p); return n; });
+  const toggle = (key: string) =>
+    setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  const toggleGroup = (perms: string[]) => {
-    const allOn = perms.every(p => selected.has(p));
+  const toggleGroup = (g: PermGroup) => {
+    const all = allPermsForGroup(g);
+    const allOn = all.every(k => selected.has(k));
     setSelected(prev => {
       const n = new Set(prev);
-      allOn ? perms.forEach(p => n.delete(p)) : perms.forEach(p => n.add(p));
+      allOn ? all.forEach(k => n.delete(k)) : all.forEach(k => n.add(k));
       return n;
     });
   };
 
-  const handleSave = () => {
-    onSave([...selected].join(", "));
-    onClose();
+  const toggleCol = (action: PermAction) => {
+    const keys = PERMISSION_GROUPS.flatMap(g =>
+      g.modules.filter(m => m.actions.includes(action)).map(m => permKey(m.prefix, action))
+    );
+    const allOn = keys.every(k => selected.has(k));
+    setSelected(prev => {
+      const n = new Set(prev);
+      allOn ? keys.forEach(k => n.delete(k)) : keys.forEach(k => n.add(k));
+      return n;
+    });
   };
+
+  const handleSave = () => { onSave([...selected].join(", ")); onClose(); };
+
+  const totalPerms = PERMISSION_GROUPS.flatMap(g => allPermsForGroup(g)).length;
 
   return (
     <Dialog open onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-full" style={{ background: role.color }} />
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0">
+        {/* ── Header ── */}
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-[15px]">
+            <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ background: role.color }} />
             Permissions — {role.name || "New Role"}
           </DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-          {PERMISSION_GROUPS.map(({ group, perms }) => {
-            const allOn = perms.every(p => selected.has(p));
-            const someOn = perms.some(p => selected.has(p));
-            return (
-              <div key={group} className="border rounded-lg p-3 bg-gray-50/60 dark:bg-muted/20">
-                <button
-                  className="flex items-center gap-2 w-full mb-2 group"
-                  onClick={() => toggleGroup(perms)}>
-                  {allOn ? (
-                    <CheckSquare size={15} className="text-blue-600 flex-shrink-0" />
-                  ) : someOn ? (
-                    <div className="w-[15px] h-[15px] flex-shrink-0 border-2 border-blue-400 rounded-sm bg-blue-100 dark:bg-blue-900" />
-                  ) : (
-                    <Square size={15} className="text-gray-400 flex-shrink-0" />
-                  )}
-                  <span className="font-semibold text-[12px] text-gray-700 dark:text-gray-200 uppercase tracking-wide">{group}</span>
-                </button>
-                <div className="space-y-1.5 pl-1">
-                  {perms.map(p => (
-                    <label key={p} className="flex items-center gap-2 cursor-pointer text-[12px] group/item">
-                      <input type="checkbox" checked={selected.has(p)} onChange={() => togglePerm(p)}
-                        className="accent-blue-600 w-3.5 h-3.5 rounded" />
-                      <span className={`${selected.has(p) ? "text-gray-800 dark:text-gray-100" : "text-gray-500 dark:text-gray-400"} group-hover/item:text-gray-800 dark:group-hover/item:text-gray-100 transition-colors`}>{p}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+
+        {/* ── Table ── */}
+        <div className="overflow-y-auto flex-1 px-2 py-2">
+          <table className="w-full border-separate border-spacing-0 text-[12.5px]">
+            {/* sticky column headers */}
+            <thead>
+              <tr className="sticky top-0 z-10 bg-white dark:bg-card">
+                <th className="text-left pl-3 py-2 font-semibold text-muted-foreground w-48">Feature</th>
+                {ACTIONS.map(a => (
+                  <th key={a} className="text-center py-2 w-20">
+                    <button
+                      onClick={() => toggleCol(a)}
+                      className={`font-semibold hover:underline ${ACTION_COLORS[a]}`}
+                      title={`Toggle all ${ACTION_LABELS[a]}`}
+                    >
+                      {ACTION_LABELS[a]}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PERMISSION_GROUPS.map(g => {
+                const gPerms = allPermsForGroup(g);
+                const gAllOn = gPerms.every(k => selected.has(k));
+                const gSomeOn = gPerms.some(k => selected.has(k));
+                return [
+                  /* Group header row */
+                  <tr key={`hdr-${g.group}`} className="bg-gray-50 dark:bg-muted/20">
+                    <td colSpan={5} className="pl-3 py-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={gAllOn}
+                          ref={el => { if (el) el.indeterminate = !gAllOn && gSomeOn; }}
+                          onChange={() => toggleGroup(g)}
+                          className="accent-blue-600 w-3.5 h-3.5"
+                        />
+                        <span className="font-semibold text-[11px] uppercase tracking-widest text-gray-600 dark:text-gray-300">
+                          {g.group}
+                        </span>
+                      </label>
+                    </td>
+                  </tr>,
+                  /* Module rows */
+                  ...g.modules.map(m => (
+                    <tr key={`${g.group}-${m.prefix}`} className="hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
+                      <td className="pl-6 pr-2 py-1 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-border/40">{m.label}</td>
+                      {ACTIONS.map(a => {
+                        const has = m.actions.includes(a);
+                        const key = permKey(m.prefix, a);
+                        return (
+                          <td key={a} className="text-center py-1 border-b border-gray-100 dark:border-border/40">
+                            {has ? (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(key)}
+                                onChange={() => toggle(key)}
+                                className={`${ACTION_ACCENT[a]} w-3.5 h-3.5 cursor-pointer`}
+                              />
+                            ) : (
+                              <span className="text-gray-300 dark:text-gray-600 text-[10px]">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )),
+                ];
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="pt-1 text-xs text-muted-foreground">
-          {selected.size} permission{selected.size !== 1 ? "s" : ""} selected
+
+        {/* ── Footer ── */}
+        <div className="px-5 py-3 border-t flex items-center justify-between shrink-0">
+          <span className="text-xs text-muted-foreground">
+            {selected.size} / {totalPerms} permissions selected
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" onClick={handleSave} className="gap-1.5"><Save size={13} /> Save Permissions</Button>
+          </div>
         </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} className="gap-1.5"><Save size={14} /> Save Permissions</Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -114,7 +277,7 @@ function PermissionsDialog({
 export default function HrmRolesPage() {
   const { roles, addRole, editRole, removeRole } = useStaffRoles();
   const { staff } = useStaff();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
@@ -216,7 +379,7 @@ export default function HrmRolesPage() {
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">Define roles and configure which permissions each role carries</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Roles") && (
           <Button size="sm" onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }} className="gap-1.5" disabled={!!newRow}>
             <Plus size={14} /> New Role
           </Button>
@@ -251,7 +414,7 @@ export default function HrmRolesPage() {
       <div ref={tableRef}>
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
           {/* New row */}
-          {isAuthenticated && newRow && (
+          {can("Add Roles") && newRow && (
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: CELL_H }}>★</td>
               {COLS.map((c, ci) => {
@@ -321,14 +484,14 @@ export default function HrmRolesPage() {
                   const editIdx = editableCols.findIndex(x => x.field === c.field);
                   const isA = activeCell?.id === row.id && activeCell.col === editIdx && editIdx !== -1;
                   const rawVal = String((row as unknown as Record<string, string>)[c.field] ?? "");
-                  const canEdit = isAuthenticated && c.type !== "readonly";
+                  const canEdit = can("Edit Roles") && c.type !== "readonly";
 
                   // permissions count cell — clickable to open permissions dialog
                   if (c.field === "_permCount") return (
                     <td key={c.field} className="border-r border-gray-100 dark:border-border p-0" style={{ height: CELL_H }}>
                       <div className="w-full h-full flex items-center px-3 gap-2">
                         <span className="text-[12px] text-gray-600 dark:text-gray-400">{rawVal}</span>
-                        {isAuthenticated && (
+                        {can("Edit Roles") && (
                           <button onClick={() => setPermRoleId(row.id)}
                             className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors opacity-0 group-hover:opacity-100"
                             title="Edit permissions">
@@ -363,17 +526,17 @@ export default function HrmRolesPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isAuthenticated && (
-                      <>
-                        <button className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                          title="Edit permissions" onClick={() => setPermRoleId(row.id)}>
-                          <Settings2 size={13} />
-                        </button>
-                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                          title="Delete role" onClick={() => setDeleteId(row.id)}>
-                          <Trash2 size={13} />
-                        </button>
-                      </>
+                    {can("Edit Roles") && (
+                      <button className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                        title="Edit permissions" onClick={() => setPermRoleId(row.id)}>
+                        <Settings2 size={13} />
+                      </button>
+                    )}
+                    {can("Delete Roles") && (
+                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Delete role" onClick={() => setDeleteId(row.id)}>
+                        <Trash2 size={13} />
+                      </button>
                     )}
                   </div>
                 </td>
@@ -382,7 +545,7 @@ export default function HrmRolesPage() {
           })}
 
           {/* Add row */}
-          {isAuthenticated && !newRow && (
+          {can("Add Roles") && !newRow && (
             <tr><td colSpan={COLS.length + 2}>
               <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">

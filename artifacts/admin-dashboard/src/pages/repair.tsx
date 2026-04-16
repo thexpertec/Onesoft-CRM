@@ -109,7 +109,7 @@ const EMPTY_FORM = {
 
 export default function RepairPage() {
   const { toast } = useToast();
-  const { isAuthenticated, currentTenantId } = useAuth();
+  const { isAuthenticated, currentTenantId, can } = useAuth();
   const [bookings, setBookings]         = useState<RepairBooking[]>([]);
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState<string | null>(null);
@@ -250,7 +250,7 @@ export default function RepairPage() {
           <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 text-xs">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </Button>
-          {isAuthenticated && (
+          {can("Add Repairs") && (
             <Button size="sm" onClick={() => setAddOpen(true)} className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
               <Plus size={13} /> Add Request
             </Button>
@@ -339,7 +339,7 @@ export default function RepairPage() {
                   <th className="px-3 py-3 text-left font-medium"><CalendarDays size={11} className="inline mr-1" />Received</th>
                   <th className="px-3 py-3 text-left font-medium">Stage</th>
                   <th className="px-3 py-3 text-left font-medium"><Flag size={11} className="inline mr-1" />Priority</th>
-                  {isAuthenticated && <th className="px-3 py-3 text-center font-medium w-16">Del</th>}
+                  {can("Delete Repairs") && <th className="px-3 py-3 text-center font-medium w-16">Del</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -382,7 +382,7 @@ export default function RepairPage() {
                         </td>
                         <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(b.createdAt)}</td>
                         <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          {isAuthenticated ? (
+                          {can("Edit Repairs") ? (
                             <select
                               value={b.status}
                               onChange={e => updateField(b.id, "status", e.target.value as BookingStatus)}
@@ -398,7 +398,7 @@ export default function RepairPage() {
                           )}
                         </td>
                         <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          {isAuthenticated ? (
+                          {can("Edit Repairs") ? (
                             <select
                               value={b.priority || "Normal"}
                               onChange={e => updateField(b.id, "priority", e.target.value as Priority)}
@@ -416,7 +416,7 @@ export default function RepairPage() {
                             </span>
                           )}
                         </td>
-                        {isAuthenticated && (
+                        {can("Delete Repairs") && (
                           <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
                             {deleteId === b.id ? (
                               <div className="flex items-center justify-center gap-1">
@@ -440,7 +440,7 @@ export default function RepairPage() {
                       {/* Expanded detail row */}
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
-                          <td colSpan={isAuthenticated ? 10 : 9} className="px-4 py-4">
+                          <td colSpan={can("Delete Repairs") ? 10 : 9} className="px-4 py-4">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
                               {/* Device issue */}
@@ -458,7 +458,7 @@ export default function RepairPage() {
                                 <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                   <FileText size={11} /> Technician Notes
                                 </div>
-                                {isAuthenticated ? (
+                                {can("Edit Repairs") ? (
                                   <textarea
                                     rows={3}
                                     defaultValue={b.notes || ""}
@@ -499,7 +499,7 @@ export default function RepairPage() {
                                   </div>
                                   <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
                                     <span className="text-muted-foreground font-medium">Est. Completion</span>
-                                    {isAuthenticated ? (
+                                    {can("Edit Repairs") ? (
                                       <input
                                         type="date"
                                         defaultValue={b.estimatedDate || ""}

@@ -192,7 +192,7 @@ export default function CustomersPage() {
   const { leads } = useLeads();
   const { cities } = useCities();
   const { areas }  = useAreas();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
   const cityOptions   = useMemo(() => cities.map(c => c.name), [cities]);
@@ -383,7 +383,7 @@ export default function CustomersPage() {
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Tab to move · Enter to save · Esc to cancel</p>
         </div>
-        {isAuthenticated && (
+        {can("Add Customers") && (
           <div className="flex gap-2">
             {eligibleLeads.length > 0 && (
               <Button variant="outline" size="sm" onClick={() => setActiveTab("Convert from Leads")} className="gap-1.5">
@@ -501,7 +501,7 @@ export default function CustomersPage() {
               </svg>
               Wrap
             </button>
-            {isAuthenticated && newRow && (
+            {can("Add Customers") && newRow && (
               <div className="flex items-center gap-1.5 ml-auto">
                 <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
                 <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
@@ -516,7 +516,7 @@ export default function CustomersPage() {
             <ExcelGridShell cols={COLS} totalMinW={TOTAL_W} tableId="customers">
 
               {/* New row */}
-              {isAuthenticated && newRow && (
+              {can("Add Customers") && newRow && (
                 <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
                   <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>★</td>
                   {COLS.map((c, ci) => {
@@ -571,10 +571,10 @@ export default function CustomersPage() {
                       return (
                         <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : "hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
                           style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}
-                          onClick={() => !isA && isAuthenticated && setActiveCell({ id: cust.id, col: ci })}>
+                          onClick={() => !isA && can("Edit Customers") && setActiveCell({ id: cust.id, col: ci })}>
                           <EditableCell
                             value={String((cust as unknown as Record<string, string>)[c.field] ?? "")}
-                            col={c} active={isA} canEdit={isAuthenticated}
+                            col={c} active={isA} canEdit={can("Edit Customers")}
                             wrapText={wrapText}
                             onActivate={() => setActiveCell({ id: cust.id, col: ci })}
                             onCommit={v => commitCell(cust.id, c.field as EditableField, v)}
@@ -596,7 +596,7 @@ export default function CustomersPage() {
               })}
 
               {/* Add row */}
-              {isAuthenticated && !newRow && (
+              {can("Add Customers") && !newRow && (
                 <tr><td colSpan={COLS.length + 2}>
                   <button onClick={() => nav("/customers/new")}
                     className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
@@ -684,7 +684,7 @@ export default function CustomersPage() {
                   <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">{viewCust.notes}</p>
                 </div>
               )}
-              {isAuthenticated && (
+              {can("Delete Customers") && (
                 <div className="pt-4 border-t">
                   <Button variant="destructive" className="w-full gap-2" onClick={() => { setDeleteId(viewCust.id); setViewCust(null); }}>
                     <Trash2 size={14} /> Delete Customer
