@@ -460,6 +460,7 @@ function POSView({
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [scannerOpen,   setScannerOpen]   = useState(false);
   const [filtersOpen,   setFiltersOpen]   = useState(true);
+  const [showTotalsDetail, setShowTotalsDetail] = useState(false);
   const [prodView, setProdView] = useState<"image" | "list">(() => getSettings().posProductView ?? "image");
   const { toast } = useToast();
 
@@ -986,101 +987,112 @@ function POSView({
           {/* ── Totals + Actions ─────────────────────────────────────────────── */}
           <div className="shrink-0 border-t border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             <div className="px-5 pt-3.5 pb-2 space-y-1.5">
-              {/* Subtotal */}
-              <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
-                <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
-                <span className="font-mono font-semibold">{sym}{subTotalAmt.toFixed(dp)}</span>
-              </div>
+              {/* Collapsible detail rows */}
+              {showTotalsDetail && (
+                <>
+                  {/* Subtotal */}
+                  <div className="flex justify-between text-[12px] text-gray-500 dark:text-gray-400">
+                    <span>Subtotal ({localItems.length} item{localItems.length !== 1 ? "s" : ""})</span>
+                    <span className="font-mono font-semibold">{sym}{subTotalAmt.toFixed(dp)}</span>
+                  </div>
 
-              {/* Line discounts */}
-              {totalLineDisc > 0 && (
-                <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
-                  <span>Item Discounts</span>
-                  <span className="font-mono font-semibold">−{sym}{totalLineDisc.toFixed(dp)}</span>
-                </div>
+                  {/* Line discounts */}
+                  {totalLineDisc > 0 && (
+                    <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
+                      <span>Item Discounts</span>
+                      <span className="font-mono font-semibold">−{sym}{totalLineDisc.toFixed(dp)}</span>
+                    </div>
+                  )}
+
+                  {/* Invoice Discount */}
+                  <div className="flex justify-between items-center text-[12px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-500 dark:text-gray-400">Invoice Discount</span>
+                      {isDraft && (
+                        <button
+                          onClick={() => { onMetaChange({ invoiceDiscountType: localMeta.invoiceDiscountType === "amt" ? "pct" : "amt" }); onSaveMeta(); }}
+                          className="text-[10px] font-bold px-1.5 py-0 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors leading-5"
+                        >
+                          {localMeta.invoiceDiscountType === "amt" ? sym : "%"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {invDiscAmt > 0 && <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">−{sym}{invDiscAmt.toFixed(dp)}</span>}
+                      {isDraft ? (
+                        <input
+                          type="number" min="0"
+                          value={localMeta.invoiceDiscount || ""}
+                          onChange={e => onMetaChange({ invoiceDiscount: e.target.value })}
+                          onBlur={onSaveMeta}
+                          placeholder="0"
+                          className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                        />
+                      ) : (
+                        <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">
+                          {localMeta.invoiceDiscountType === "amt" ? `${sym}${parseFloat(localMeta.invoiceDiscount || "0").toFixed(dp)}` : `${parseFloat(localMeta.invoiceDiscount || "0").toFixed(1)}%`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tax */}
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-gray-500 dark:text-gray-400">Tax</span>
+                    <div className="flex items-center gap-1">
+                      {liveTaxAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{liveTaxAmt.toFixed(dp)}</span>}
+                      {isDraft ? (
+                        <>
+                          <input
+                            type="number" min="0" max="100"
+                            value={localMeta.taxRate || ""}
+                            onChange={e => onMetaChange({ taxRate: e.target.value })}
+                            onBlur={onSaveMeta}
+                            placeholder="0"
+                            className="w-12 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                          />
+                          <span className="text-gray-400 text-[11px]">%</span>
+                        </>
+                      ) : (
+                        <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{parseFloat(sale.taxRate || "0").toFixed(1)}%</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Delivery Charges */}
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-gray-500 dark:text-gray-400">Delivery</span>
+                    <div className="flex items-center gap-1">
+                      {deliveryAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{deliveryAmt.toFixed(dp)}</span>}
+                      {isDraft ? (
+                        <>
+                          <span className="text-[11px] text-gray-400">{sym}</span>
+                          <input
+                            type="number" min="0"
+                            value={localMeta.deliveryCharges || ""}
+                            onChange={e => onMetaChange({ deliveryCharges: e.target.value })}
+                            onBlur={onSaveMeta}
+                            placeholder="0"
+                            className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
+                          />
+                        </>
+                      ) : (
+                        <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{sym}{parseFloat(sale.deliveryCharges || "0").toFixed(dp)}</span>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
 
-              {/* Invoice Discount */}
-              <div className="flex justify-between items-center text-[12px]">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gray-500 dark:text-gray-400">Invoice Discount</span>
-                  {isDraft && (
-                    <button
-                      onClick={() => { onMetaChange({ invoiceDiscountType: localMeta.invoiceDiscountType === "amt" ? "pct" : "amt" }); onSaveMeta(); }}
-                      className="text-[10px] font-bold px-1.5 py-0 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors leading-5"
-                    >
-                      {localMeta.invoiceDiscountType === "amt" ? sym : "%"}
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {invDiscAmt > 0 && <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">−{sym}{invDiscAmt.toFixed(dp)}</span>}
-                  {isDraft ? (
-                    <input
-                      type="number" min="0"
-                      value={localMeta.invoiceDiscount || ""}
-                      onChange={e => onMetaChange({ invoiceDiscount: e.target.value })}
-                      onBlur={onSaveMeta}
-                      placeholder="0"
-                      className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
-                    />
-                  ) : (
-                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">
-                      {localMeta.invoiceDiscountType === "amt" ? `${sym}${parseFloat(localMeta.invoiceDiscount || "0").toFixed(dp)}` : `${parseFloat(localMeta.invoiceDiscount || "0").toFixed(1)}%`}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Tax */}
-              <div className="flex justify-between items-center text-[12px]">
-                <span className="text-gray-500 dark:text-gray-400">Tax</span>
-                <div className="flex items-center gap-1">
-                  {liveTaxAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{liveTaxAmt.toFixed(dp)}</span>}
-                  {isDraft ? (
-                    <>
-                      <input
-                        type="number" min="0" max="100"
-                        value={localMeta.taxRate || ""}
-                        onChange={e => onMetaChange({ taxRate: e.target.value })}
-                        onBlur={onSaveMeta}
-                        placeholder="0"
-                        className="w-12 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
-                      />
-                      <span className="text-gray-400 text-[11px]">%</span>
-                    </>
-                  ) : (
-                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{parseFloat(sale.taxRate || "0").toFixed(1)}%</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Delivery Charges */}
-              <div className="flex justify-between items-center text-[12px]">
-                <span className="text-gray-500 dark:text-gray-400">Delivery</span>
-                <div className="flex items-center gap-1">
-                  {deliveryAmt > 0 && <span className="font-mono font-semibold text-gray-600 dark:text-gray-300">+{sym}{deliveryAmt.toFixed(dp)}</span>}
-                  {isDraft ? (
-                    <>
-                      <span className="text-[11px] text-gray-400">{sym}</span>
-                      <input
-                        type="number" min="0"
-                        value={localMeta.deliveryCharges || ""}
-                        onChange={e => onMetaChange({ deliveryCharges: e.target.value })}
-                        onBlur={onSaveMeta}
-                        placeholder="0"
-                        className="w-14 text-right text-[12px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:outline-none focus:border-blue-500 pb-0"
-                      />
-                    </>
-                  ) : (
-                    <span className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 font-mono">{sym}{parseFloat(sale.deliveryCharges || "0").toFixed(dp)}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Grand Total */}
-              <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-zinc-800">
-                <span className="text-[14px] font-bold text-gray-600 dark:text-gray-300">Total to Pay</span>
+              {/* Grand Total — clicking the label toggles the breakdown */}
+              <div className={`flex justify-between items-center ${showTotalsDetail ? "pt-2 border-t border-gray-100 dark:border-zinc-800" : ""}`}>
+                <button
+                  onClick={() => setShowTotalsDetail(v => !v)}
+                  className="flex items-center gap-1 text-[14px] font-bold text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  Total to Pay
+                  <ChevronDown size={13} className={`transition-transform duration-200 ${showTotalsDetail ? "rotate-180" : ""}`} />
+                </button>
                 <span className="text-[26px] font-black font-mono tabular-nums text-blue-600 dark:text-blue-400 leading-none">
                   {sym}{grandTotal.toFixed(dp)}
                 </span>
