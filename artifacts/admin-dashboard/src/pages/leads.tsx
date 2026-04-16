@@ -1,4 +1,4 @@
-import {
+import React, {
   useState, useMemo, useRef, useEffect, useCallback,
 } from "react";
 import { useLeads, useCustomers, useSalesAgents } from "@/hooks/use-data";
@@ -14,8 +14,8 @@ import {
   Eye, Upload, Download, FileSpreadsheet, AlertTriangle,
   CheckCircle2, Info, Phone, Bell, BellOff, Star, StarOff,
   Clock, PhoneCall, PhoneOff, PhoneMissed, MessageSquare,
-  ChevronRight, Pencil, Globe, MapPin, Briefcase, DollarSign,
-  User, Check, UserCircle2, Filter, ChevronDown,
+  ChevronRight, ChevronUp, Pencil, Globe, MapPin, Briefcase, DollarSign,
+  User, Check, UserCircle2, Filter, ChevronDown, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -858,6 +858,7 @@ export default function Leads() {
   const [activeCell, setActiveCell] = useState<{ id: string; col: number } | null>(null);
   const [deleteId,   setDeleteId]   = useState<string | null>(null);
   const [viewLead,   setViewLead]   = useState<Lead | null>(null);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
 
   // Sync viewLead when underlying leads array updates
   useEffect(() => {
@@ -1201,11 +1202,14 @@ export default function Leads() {
                   ? <span>No leads yet. Click <strong>Add Lead</strong> to start.</span> : "No leads yet."}
               </td></tr>
             ) : filtered.map((lead, rowIdx) => {
-              const isRowActive = activeCell?.id === lead.id;
-              const remInfo     = reminderLabel(lead.nextReminder);
+              const isRowActive  = activeCell?.id === lead.id;
+              const remInfo      = reminderLabel(lead.nextReminder);
+              const isExpanded   = expandedLeadId === lead.id;
+              const lastCallLog  = (lead.callLogs || []).slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
               return (
-                <tr key={lead.id} data-testid={`row-lead-${lead.id}`}
-                  className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive?"bg-blue-50/30 dark:bg-blue-950/10":rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10 ${lead.isRelevant===false?"opacity-60":""}`}>
+                <React.Fragment key={lead.id}>
+                <tr data-testid={`row-lead-${lead.id}`}
+                  className={`border-b border-gray-100 dark:border-border transition-colors group ${isExpanded?"border-b-0":""}  ${isRowActive?"bg-blue-50/30 dark:bg-blue-950/10":rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10 ${lead.isRelevant===false?"opacity-60":""}`}>
                   {/* Row number + indicators */}
                   <td className="border-r border-gray-100 dark:border-border text-center select-none font-mono" style={{height:`${CELL_H}px`}}>
                     <div className="flex flex-col items-center justify-center gap-0.5">
@@ -1262,7 +1266,14 @@ export default function Leads() {
                   {/* Actions */}
                   <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{height:`${CELL_H}px`}} onClick={e=>e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="View details" onClick={() => setViewLead(lead)}>
+                      {/* Expand/collapse details */}
+                      <button
+                        className={`p-1 rounded transition-colors ${isExpanded?"text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40":"text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"}`}
+                        title={isExpanded ? "Collapse details" : "Expand details"}
+                        onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}>
+                        <Layers size={13}/>
+                      </button>
+                      <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="Full details sheet" onClick={() => setViewLead(lead)}>
                         <Eye size={13}/>
                       </button>
                       <button
@@ -1290,6 +1301,91 @@ export default function Leads() {
                     </div>
                   </td>
                 </tr>
+
+                {/* ── Collapsed detail row ───────────────────────────────── */}
+                {isExpanded && (
+                  <tr className={`border-b border-gray-200 dark:border-border ${rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"}`}>
+                    <td colSpan={COLS.length + 2} className="px-0 pb-0">
+                      <div className="mx-3 mb-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/10 overflow-hidden">
+                        {/* Detail grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-0 divide-x divide-y divide-indigo-100 dark:divide-indigo-900/40">
+
+                          {/* Company */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <Briefcase size={9}/> Company
+                            </p>
+                            <p className="text-[13px] text-foreground font-medium truncate">{lead.company || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
+                          </div>
+
+                          {/* Industry */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <Globe size={9}/> Industry
+                            </p>
+                            <p className="text-[13px] text-foreground font-medium truncate">{lead.industry || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
+                          </div>
+
+                          {/* Source */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <ChevronRight size={9}/> Source
+                            </p>
+                            <p className="text-[13px] text-foreground font-medium truncate">{lead.source || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
+                          </div>
+
+                          {/* Last Contact */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <Clock size={9}/> Last Contact
+                            </p>
+                            <p className="text-[13px] text-foreground font-medium">
+                              {lastCallLog
+                                ? format(new Date(lastCallLog.date), "dd MMM yyyy, HH:mm")
+                                : <span className="text-muted-foreground/40 italic font-normal">No contact logged</span>}
+                            </p>
+                          </div>
+
+                          {/* Last Response */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <PhoneCall size={9}/> Response
+                            </p>
+                            {lastCallLog ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${OUTCOME_COLOR[lastCallLog.outcome]}`}>
+                                  {lastCallLog.outcome}
+                                </span>
+                                {lastCallLog.notes && <span className="text-[12px] text-muted-foreground truncate">{lastCallLog.notes}</span>}
+                              </div>
+                            ) : (
+                              <p className="text-muted-foreground/40 italic text-[13px]">—</p>
+                            )}
+                          </div>
+
+                          {/* Notes */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <MessageSquare size={9}/> Notes
+                            </p>
+                            <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2">{lead.notes || <span className="text-muted-foreground/40 italic">—</span>}</p>
+                          </div>
+
+                        </div>
+
+                        {/* Collapse button */}
+                        <div className="border-t border-indigo-100 dark:border-indigo-900/40 px-4 py-2 flex items-center justify-end">
+                          <button
+                            onClick={() => setExpandedLeadId(null)}
+                            className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors font-medium">
+                            <ChevronUp size={11}/> Collapse
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
 
