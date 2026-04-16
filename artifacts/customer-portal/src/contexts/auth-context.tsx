@@ -72,7 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession({ tenantId, customer, loginAt: new Date().toISOString() });
       setSettings(s);
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[portal] login error:", err);
       setError("Something went wrong. Please try again.");
       return false;
     } finally {
@@ -128,7 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession({ tenantId, customer, loginAt: new Date().toISOString() });
       setSettings(s);
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[portal] signup error:", err);
       setError("Something went wrong. Please try again.");
       return false;
     } finally {

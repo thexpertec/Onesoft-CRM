@@ -197,7 +197,7 @@ export default function LoginPage() {
 
         {tab === "signup" && (
           <p className="text-center text-[11.5px] text-gray-400 mt-4 px-4">
-            Your email must be registered with the store before you can create an account.
+            Create an account to track your orders and invoices.
           </p>
         )}
       </div>

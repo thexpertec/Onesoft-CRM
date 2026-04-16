@@ -27,8 +27,12 @@ export function getSession(): CustomerSession | null {
 }
 
 export function saveSession(tenantId: string, customer: Customer): void {
-  const session: CustomerSession = { tenantId, customer, loginAt: new Date().toISOString() };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  try {
+    const session: CustomerSession = { tenantId, customer, loginAt: new Date().toISOString() };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // localStorage may be restricted in some browsers/privacy modes; session continues in memory
+  }
 }
 
 export function clearSession(): void {
