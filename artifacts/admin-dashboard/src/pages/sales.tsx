@@ -423,6 +423,7 @@ interface POSViewProps {
   sale: Sale;
   localItems: SaleItem[];
   localMeta: LocalMeta;
+  isFresh: boolean;
   customerComboOpts: ComboOption[];
   productComboOpts: ComboOption[];
   agentOpts: { id: string; code: string; name: string }[];
@@ -442,7 +443,7 @@ interface POSViewProps {
 }
 
 function POSView({
-  sale, localItems, localMeta, customerComboOpts, productComboOpts, agentOpts,
+  sale, localItems, localMeta, isFresh, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
   onSaveItems, onDeleteItem, onAddProduct, priceMode, onPriceModeChange,
   onSetStatus, onComplete, onAddCustomer,
@@ -1617,18 +1618,25 @@ function POSView({
     <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel this sale?</AlertDialogTitle>
+          <AlertDialogTitle>{isFresh ? "Discard this sale?" : "Cancel this sale?"}</AlertDialogTitle>
           <AlertDialogDescription>
-            This sale will be marked as <strong>Cancelled</strong>. You can view it in the sales list but it will no longer be editable from the POS.
+            {isFresh
+              ? "This sale has not been completed. It will be discarded and removed — nothing will be saved to the sales list."
+              : <>This sale will be marked as <strong>Cancelled</strong>. You can view it in the sales list but it will no longer be editable from the POS.</>
+            }
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Go back</AlertDialogCancel>
           <AlertDialogAction
             className="bg-red-600 hover:bg-red-700"
-            onClick={() => { onSetStatus("Cancelled"); setCancelConfirmOpen(false); onClose(); }}
+            onClick={() => {
+              if (!isFresh) onSetStatus("Cancelled");
+              setCancelConfirmOpen(false);
+              onClose();
+            }}
           >
-            Yes, Cancel Sale
+            {isFresh ? "Yes, Discard" : "Yes, Cancel Sale"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1960,6 +1968,10 @@ export default function SalesPage() {
 
   const setStatus = (status: SaleStatus) => {
     if (!detailId || !localMeta) return;
+    // Completing or crediting a fresh sale → it's now saved, clear the fresh flag
+    if (status !== "Cancelled" && detailId === freshSaleIdRef.current) {
+      freshSaleIdRef.current = null;
+    }
     const wasDeducted = detailSale?.stockDeducted ?? false;
     let stockDeducted = wasDeducted;
 
@@ -2004,12 +2016,9 @@ export default function SalesPage() {
   const closePOS = () => {
     const currentId  = detailId;
     const isFresh    = currentId !== null && currentId === freshSaleIdRef.current;
-    const hasItems   = localItemsRef.current.length > 0;
-    const hasCustomer = !!localMetaRef.current?.customer?.trim();
-    const hasNotes    = !!localMetaRef.current?.notes?.trim();
 
-    if (isFresh && !hasItems && !hasCustomer && !hasNotes) {
-      // Brand-new blank sale — delete it so it never appears in the list
+    if (isFresh) {
+      // New sale that was never completed — discard entirely, never appears in the list
       removeSale(currentId!);
     } else {
       saveMeta();
@@ -2083,6 +2092,8 @@ export default function SalesPage() {
 
       toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
 
+      // Sale is now saved — clear the fresh flag so closePOS won't delete it
+      freshSaleIdRef.current = null;
       // Close POS and show the in-page Sale Complete overlay
       closePOS();
       setCompletedSaleForReceipt(completedSale);
@@ -2236,6 +2247,7 @@ export default function SalesPage() {
         sale={detailSale}
         localItems={localItems}
         localMeta={localMeta}
+        isFresh={detailId === freshSaleIdRef.current}
         customerComboOpts={customerComboOpts}
         productComboOpts={productComboOpts}
         agentOpts={agentOpts}
