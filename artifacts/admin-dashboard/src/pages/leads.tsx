@@ -65,13 +65,9 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 // ─── Column definitions ────────────────────────────────────────────────────────
 const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" | "agent-select" }[] = [
   { field: "name",       label: "Name",       minW: 160, type: "text"         },
-  { field: "company",    label: "Company",    minW: 140, type: "text"         },
-  { field: "email",      label: "Email",      minW: 190, type: "email"        },
   { field: "phone",      label: "Phone",      minW: 130, type: "tel"          },
   { field: "industry",   label: "Industry",   minW: 120, type: "text"         },
-  { field: "city",       label: "City",       minW: 110, type: "text"         },
   { field: "status",     label: "Status",     minW: 140, type: "select"       },
-  { field: "source",     label: "Source",     minW: 110, type: "text"         },
   { field: "assignedTo", label: "Assigned To",minW: 140, type: "agent-select" },
 ];
 
@@ -1307,8 +1303,8 @@ export default function Leads() {
                   <tr className={`border-b border-gray-200 dark:border-border ${rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"}`}>
                     <td colSpan={COLS.length + 2} className="px-0 pb-0">
                       <div className="mx-3 mb-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/10 overflow-hidden">
-                        {/* Detail grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-0 divide-x divide-y divide-indigo-100 dark:divide-indigo-900/40">
+                        {/* Detail grid — 4 columns */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-y divide-indigo-100 dark:divide-indigo-900/40">
 
                           {/* Company */}
                           <div className="px-4 py-3">
@@ -1318,12 +1314,22 @@ export default function Leads() {
                             <p className="text-[13px] text-foreground font-medium truncate">{lead.company || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
                           </div>
 
-                          {/* Industry */}
+                          {/* Email */}
                           <div className="px-4 py-3">
                             <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
-                              <Globe size={9}/> Industry
+                              <MessageSquare size={9}/> Email
                             </p>
-                            <p className="text-[13px] text-foreground font-medium truncate">{lead.industry || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
+                            {lead.email
+                              ? <a href={`mailto:${lead.email}`} className="text-[13px] text-primary hover:underline truncate block">{lead.email}</a>
+                              : <p className="text-muted-foreground/40 italic text-[13px] font-normal">—</p>}
+                          </div>
+
+                          {/* City */}
+                          <div className="px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
+                              <MapPin size={9}/> City
+                            </p>
+                            <p className="text-[13px] text-foreground font-medium truncate">{lead.city || <span className="text-muted-foreground/40 italic font-normal">—</span>}</p>
                           </div>
 
                           {/* Source */}
@@ -1352,7 +1358,7 @@ export default function Leads() {
                               <PhoneCall size={9}/> Response
                             </p>
                             {lastCallLog ? (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${OUTCOME_COLOR[lastCallLog.outcome]}`}>
                                   {lastCallLog.outcome}
                                 </span>
@@ -1363,8 +1369,8 @@ export default function Leads() {
                             )}
                           </div>
 
-                          {/* Notes */}
-                          <div className="px-4 py-3">
+                          {/* Notes — spans 2 cols so the row is full */}
+                          <div className="px-4 py-3 md:col-span-2">
                             <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400 dark:text-indigo-500 mb-1 flex items-center gap-1">
                               <MessageSquare size={9}/> Notes
                             </p>
