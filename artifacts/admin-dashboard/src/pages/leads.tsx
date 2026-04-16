@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes" | "assignedTo">;
+type EditableField = keyof Pick<Lead, "name" | "company" | "email" | "phone" | "industry" | "city" | "status" | "source" | "notes" | "assignedTo" | "temperature" | "nextFollowUp">;
 
 const LEAD_STATUSES: LeadStatus[] = ["New", "Contacted", "Meeting Scheduled", "Demo Completed", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"];
 const PIPELINE_STAGES: LeadStatus[] = ["New", "Contacted", "Meeting Scheduled", "Demo Completed", "Qualified", "Proposal Sent", "Negotiation", "Won"];
@@ -63,17 +63,27 @@ const OUTCOME_COLOR: Record<CallOutcome, string> = {
 };
 
 // ─── Column definitions ────────────────────────────────────────────────────────
-const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" | "agent-select" }[] = [
-  { field: "name",       label: "Name",       minW: 160, type: "text"         },
-  { field: "phone",      label: "Phone",      minW: 130, type: "tel"          },
-  { field: "industry",   label: "Industry",   minW: 120, type: "text"         },
-  { field: "status",     label: "Status",     minW: 140, type: "select"       },
-  { field: "assignedTo", label: "Assigned To",minW: 140, type: "agent-select" },
+const TEMP_COLORS: Record<string, string> = {
+  Hot:  "text-red-600 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/40",
+  Warm: "text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40",
+  Cold: "text-blue-600 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40",
+};
+const TEMP_DOT: Record<string, string> = { Hot: "🔴", Warm: "🟡", Cold: "🔵" };
+
+const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" | "agent-select" | "temp-select" | "date" }[] = [
+  { field: "name",        label: "Name",        minW: 160, type: "text"         },
+  { field: "phone",       label: "Phone",       minW: 130, type: "tel"          },
+  { field: "industry",    label: "Industry",    minW: 120, type: "text"         },
+  { field: "temperature", label: "Temp",        minW: 90,  type: "temp-select"  },
+  { field: "nextFollowUp",label: "Follow-up",   minW: 110, type: "date"         },
+  { field: "status",      label: "Status",      minW: 140, type: "select"       },
+  { field: "assignedTo",  label: "Assigned To", minW: 140, type: "agent-select" },
 ];
 
 const BLANK_ROW = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "",
   industry: "", city: "", status: "New", source: "", notes: "", assignedTo: "",
+  temperature: "", nextFollowUp: "",
 });
 
 // ─── CSV ─────────────────────────────────────────────────────────────────────
@@ -121,6 +131,8 @@ const FIELD_ALIASES: Record<EditableField, string[]> = {
   industry:["industry","sector","vertical"],city:["city","location","town"],
   status:["status","lead status","stage"],source:["source","lead source","channel","origin"],
   notes:["notes","note","comments","comment","description"],
+  temperature:["temperature","temp","heat","lead temp","lead temperature"],
+  nextFollowUp:["next follow-up","followup","follow up","next contact","next call"],
 };
 function mapRow(row: ParsedRow): Record<EditableField, string> {
   const result = BLANK_ROW();
@@ -174,14 +186,32 @@ function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCan
         </select>
       </div>
     );
-    return <input ref={inputRef} type={col.type} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={handleKey}
+    if (col.type==="temp-select") return (
+      <div className="relative w-full h-full">
+        <select ref={selectRef} value={draft} onChange={e=>{setDraft(e.target.value); onCommit(e.target.value);}}
+          onBlur={commit} onKeyDown={handleKey}
+          className="absolute inset-0 w-full h-full px-2 text-[13px] font-medium bg-white dark:bg-card border-0 outline-none cursor-pointer">
+          <option value="">— None —</option>
+          {["Hot","Warm","Cold"].map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+    );
+    return <input ref={inputRef} type={col.type === "temp-select" ? "text" : col.type} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={handleKey}
       className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" style={{boxSizing:"border-box"}} />;
   }
   return (
     <div className={`w-full h-full flex items-center px-3 text-[13px] overflow-hidden ${canEdit?"cursor-text":"cursor-default"}`} onClick={canEdit?onActivate:undefined}>
       {col.field==="status"
         ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${STATUS_STYLES[value as LeadStatus]||""}`}>{value}</span>
-        : <span className={`truncate text-gray-700 dark:text-foreground ${!value?"text-gray-300 dark:text-muted-foreground/30":""}`}>{value||(canEdit?"—":"")}</span>
+        : col.field==="temperature" && value
+          ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${TEMP_COLORS[value]||""}`}><span>{TEMP_DOT[value]}</span>{value}</span>
+          : col.field==="nextFollowUp" && value
+            ? (() => {
+                const d = new Date(value);
+                const past = d < new Date() && value !== format(new Date(),"yyyy-MM-dd");
+                return <span className={`text-[12px] font-medium ${past?"text-red-500":"text-foreground"}`}>{format(d,"dd MMM yy")}</span>;
+              })()
+            : <span className={`truncate text-gray-700 dark:text-foreground ${!value?"text-gray-300 dark:text-muted-foreground/30":""}`}>{value||(canEdit?"—":"")}</span>
       }
     </div>
   );
@@ -923,7 +953,10 @@ export default function Leads() {
     }
     addLead({ name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
       industry: newRow.industry, city: newRow.city, status: (newRow.status as LeadStatus)||"New",
-      source: newRow.source, notes: newRow.notes, isRelevant: true, callLogs: [] });
+      source: newRow.source, notes: newRow.notes, isRelevant: true, callLogs: [],
+      ...(newRow.temperature ? { temperature: newRow.temperature as "Hot"|"Warm"|"Cold" } : {}),
+      ...(newRow.nextFollowUp ? { nextFollowUp: newRow.nextFollowUp } : {}),
+    });
     toast({ title: "Lead added", description: `${newRow.name} has been added.` });
     setNewRow(null); setNewRowActive(null);
   };
@@ -1155,6 +1188,13 @@ export default function Leads() {
                           className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none">
                           {LEAD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
                         </select>
+                      ) : isActive && c.type==="temp-select" ? (
+                        <select autoFocus value={newRow[c.field]||""} onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
+                          onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();navigateNewRow(ci,e.shiftKey);}if(e.key==="Enter"){e.preventDefault();navigateNewRow(ci,false);}if(e.key==="Escape")cancelNewRow();}}
+                          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-card border-0 outline-none">
+                          <option value="">— None —</option>
+                          {["Hot","Warm","Cold"].map(s=><option key={s} value={s}>{s}</option>)}
+                        </select>
                       ) : isActive && c.type==="agent-select" ? (
                         <select autoFocus value={newRow[c.field]||""} onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
                           onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();navigateNewRow(ci,e.shiftKey);}if(e.key==="Enter"){e.preventDefault();ci===COLS.length-1?commitNewRow():navigateNewRow(ci,false);}if(e.key==="Escape")cancelNewRow();}}
@@ -1171,9 +1211,13 @@ export default function Leads() {
                         <div className="w-full h-full flex items-center px-3 cursor-text" onClick={() => activateNewRowCell(ci)}>
                           {c.field==="status"
                             ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[newRow.status as LeadStatus]}`}>{newRow.status}</span>
-                            : c.type==="agent-select" && newRow[c.field]
-                              ? <span className="inline-flex items-center gap-1.5 text-[12px]"><UserCircle2 size={11} className="text-primary/60"/>{newRow[c.field]}</span>
-                              : <span className={`truncate ${!newRow[c.field]?"text-gray-300":"text-gray-700 dark:text-foreground"}`}>{newRow[c.field]||c.label}</span>
+                            : c.field==="temperature" && newRow[c.field]
+                              ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${TEMP_COLORS[newRow[c.field]]||""}`}><span>{TEMP_DOT[newRow[c.field]]}</span>{newRow[c.field]}</span>
+                              : c.field==="nextFollowUp" && newRow[c.field]
+                                ? <span className="text-[12px] font-medium text-foreground">{format(new Date(newRow[c.field]),"dd MMM yy")}</span>
+                                : c.type==="agent-select" && newRow[c.field]
+                                  ? <span className="inline-flex items-center gap-1.5 text-[12px]"><UserCircle2 size={11} className="text-primary/60"/>{newRow[c.field]}</span>
+                                  : <span className={`truncate ${!newRow[c.field]?"text-gray-300":"text-gray-700 dark:text-foreground"}`}>{newRow[c.field]||c.label}</span>
                           }
                         </div>
                       )}

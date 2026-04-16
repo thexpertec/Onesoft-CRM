@@ -31,6 +31,8 @@ export type Lead = {
   reminderNote?: string;
   dealValue?: number;
   assignedTo?: string;
+  temperature?: "Hot" | "Warm" | "Cold";
+  nextFollowUp?: string;
   callLogs?: CallLog[];
   createdAt: string;
   updatedAt: string;
