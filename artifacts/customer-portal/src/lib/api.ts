@@ -1,3 +1,5 @@
+import type { PortalAccount } from "./auth";
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function apiRoot(): string {
@@ -15,6 +17,14 @@ async function kvGet<T>(ns: string, key: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+async function kvPut(ns: string, key: string, value: unknown): Promise<void> {
+  await fetch(`${apiRoot()}/kv/${encodeURIComponent(ns)}/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
 }
 
 export type CustomerStatus = "Active" | "Inactive" | "Churned";
@@ -82,21 +92,27 @@ export interface StoreSettings {
 }
 
 export async function fetchCustomers(tenantId: string): Promise<Customer[]> {
-  const ns = `t:${tenantId}`;
-  const data = await kvGet<Customer[]>(ns, "admin-customers");
+  const data = await kvGet<Customer[]>(`t:${tenantId}`, "admin-customers");
   return data ?? [];
 }
 
 export async function fetchSales(tenantId: string): Promise<Sale[]> {
-  const ns = `t:${tenantId}`;
-  const data = await kvGet<Sale[]>(ns, "admin-sales");
+  const data = await kvGet<Sale[]>(`t:${tenantId}`, "admin-sales");
   return data ?? [];
 }
 
 export async function fetchSettings(tenantId: string): Promise<StoreSettings> {
-  const ns = `t:${tenantId}`;
-  const data = await kvGet<StoreSettings>(ns, "admin-settings");
+  const data = await kvGet<StoreSettings>(`t:${tenantId}`, "admin-settings");
   return data ?? {};
+}
+
+export async function fetchPortalAccounts(tenantId: string): Promise<PortalAccount[]> {
+  const data = await kvGet<PortalAccount[]>(`t:${tenantId}`, "portal-accounts");
+  return data ?? [];
+}
+
+export async function savePortalAccounts(tenantId: string, accounts: PortalAccount[]): Promise<void> {
+  await kvPut(`t:${tenantId}`, "portal-accounts", accounts);
 }
 
 export function calcLineTotal(item: SaleItem): number {
@@ -109,14 +125,23 @@ export function calcLineTotal(item: SaleItem): number {
   return Math.max(0, gross - disc * qty);
 }
 
-export function calcSaleTotal(items: SaleItem[], taxRate: string, deliveryCharges?: string, invoiceDiscount?: string, invoiceDiscountType?: string): number {
+export function calcSaleTotal(
+  items: SaleItem[],
+  taxRate: string,
+  deliveryCharges?: string,
+  invoiceDiscount?: string,
+  invoiceDiscountType?: string
+): number {
   const sub = items.reduce((s, i) => s + calcLineTotal(i), 0);
   const tax = parseFloat(taxRate) || 0;
   const delivery = parseFloat(deliveryCharges ?? "0") || 0;
   const invDisc = parseFloat(invoiceDiscount ?? "0") || 0;
   let afterInvDisc = sub;
   if (invDisc > 0) {
-    afterInvDisc = invoiceDiscountType === "pct" ? sub * (1 - invDisc / 100) : Math.max(0, sub - invDisc);
+    afterInvDisc =
+      invoiceDiscountType === "pct"
+        ? sub * (1 - invDisc / 100)
+        : Math.max(0, sub - invDisc);
   }
   return afterInvDisc * (1 + tax / 100) + delivery;
 }

@@ -1,24 +1,34 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { getSession, saveSession, clearSession, type CustomerSession } from "@/lib/auth";
-import { fetchCustomers, fetchSettings, type Customer, type StoreSettings } from "@/lib/api";
-import { normalizeEmail, normalizePhone } from "@/lib/auth";
+import {
+  getSession, saveSession, clearSession,
+  hashPassword, normalizeEmail, getTenantIdFromUrl,
+  type CustomerSession,
+} from "@/lib/auth";
+import {
+  fetchCustomers, fetchSettings, fetchPortalAccounts, savePortalAccounts,
+  type StoreSettings,
+} from "@/lib/api";
 
 interface AuthContextValue {
   session: CustomerSession | null;
   settings: StoreSettings;
+  tenantId: string;
   loading: boolean;
   error: string;
-  login: (tenantId: string, email: string, phone: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<CustomerSession | null>(null);
+  const [session, setSession]   = useState<CustomerSession | null>(null);
   const [settings, setSettings] = useState<StoreSettings>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [tenantId]              = useState<string>(() => getTenantIdFromUrl());
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
   useEffect(() => {
     const s = getSession();
@@ -28,23 +38,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (tenantId: string, email: string, phone: string): Promise<boolean> => {
+  const clearError = useCallback(() => setError(""), []);
+
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    if (!tenantId) { setError("Invalid portal link. Please use the link provided by your store."); return false; }
     setLoading(true);
     setError("");
     try {
-      const customers = await fetchCustomers(tenantId.trim());
-      const match = customers.find(
-        (c: Customer) =>
-          normalizeEmail(c.email) === normalizeEmail(email) &&
-          normalizePhone(c.phone) === normalizePhone(phone)
-      );
-      if (!match) {
-        setError("No account found with those details. Please check your email and phone number.");
+      const [accounts, customers, s] = await Promise.all([
+        fetchPortalAccounts(tenantId),
+        fetchCustomers(tenantId),
+        fetchSettings(tenantId),
+      ]);
+      const key = normalizeEmail(email);
+      const hash = await hashPassword(password);
+      const account = accounts.find(a => normalizeEmail(a.email) === key && a.passwordHash === hash);
+      if (!account) {
+        setError("Incorrect email or password.");
         return false;
       }
-      saveSession(tenantId.trim(), match);
-      setSession({ tenantId: tenantId.trim(), customer: match, loginAt: new Date().toISOString() });
-      const s = await fetchSettings(tenantId.trim());
+      const customer = customers.find(c => c.id === account.customerId);
+      if (!customer) {
+        setError("Account found but customer record is missing. Please contact support.");
+        return false;
+      }
+      saveSession(tenantId, customer);
+      setSession({ tenantId, customer, loginAt: new Date().toISOString() });
       setSettings(s);
       return true;
     } catch {
@@ -53,7 +72,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId]);
+
+  const signup = useCallback(async (email: string, password: string): Promise<boolean> => {
+    if (!tenantId) { setError("Invalid portal link. Please use the link provided by your store."); return false; }
+    setLoading(true);
+    setError("");
+    try {
+      const [customers, accounts, s] = await Promise.all([
+        fetchCustomers(tenantId),
+        fetchPortalAccounts(tenantId),
+        fetchSettings(tenantId),
+      ]);
+      const key = normalizeEmail(email);
+
+      // Must be an existing customer
+      const customer = customers.find(c => normalizeEmail(c.email) === key);
+      if (!customer) {
+        setError("No customer account exists with this email. Please contact your store to get registered first.");
+        return false;
+      }
+
+      // Cannot sign up twice
+      if (accounts.some(a => normalizeEmail(a.email) === key)) {
+        setError("An account with this email already exists. Please sign in instead.");
+        return false;
+      }
+
+      const hash = await hashPassword(password);
+      const newAccount = { email: key, passwordHash: hash, customerId: customer.id, createdAt: new Date().toISOString() };
+      await savePortalAccounts(tenantId, [...accounts, newAccount]);
+
+      saveSession(tenantId, customer);
+      setSession({ tenantId, customer, loginAt: new Date().toISOString() });
+      setSettings(s);
+      return true;
+    } catch {
+      setError("Something went wrong. Please try again.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
 
   const logout = useCallback(() => {
     clearSession();
@@ -62,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, settings, loading, error, login, logout }}>
+    <AuthContext.Provider value={{ session, settings, tenantId, loading, error, login, signup, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );
