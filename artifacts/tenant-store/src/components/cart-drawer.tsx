@@ -1,11 +1,13 @@
-import { X, ShoppingCart, Minus, Plus, Trash2, ArrowRight } from "lucide-react";
+import { X, ShoppingCart, Minus, Plus, Trash2, ArrowRight, User } from "lucide-react";
 import { Link } from "wouter";
 import { useCart } from "@/lib/cart";
+import { useStore } from "@/contexts/store-context";
 import { formatPrice, getDisplayPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export function CartDrawer() {
   const { items, totalItems, totalPrice, removeItem, updateQty, clearCart, isOpen, closeCart } = useCart();
+  const { tenantId } = useStore();
 
   return (
     <>
@@ -151,6 +153,17 @@ export function CartDrawer() {
             >
               Continue Shopping
             </button>
+
+            {/* My Account prompt */}
+            {tenantId && (
+              <a
+                href={`/customer-portal/?t=${encodeURIComponent(tenantId)}`}
+                className="flex items-center justify-center gap-2 w-full py-2 text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border-t border-gray-100 dark:border-slate-800 pt-3 mt-1"
+              >
+                <User size={13} />
+                Sign in to track your orders
+              </a>
+            )}
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Search, Menu, X, Zap } from "lucide-react";
+import { ShoppingCart, Search, Menu, X, Zap, User } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ const ANNOUNCEMENT_BG: Record<string, string> = {
 
 export function Header() {
   const { totalItems, openCart } = useCart();
-  const { storeName, categories, cms } = useStore();
+  const { storeName, categories, cms, tenantId } = useStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -114,12 +114,25 @@ export function Header() {
             </nav>
 
             {/* Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button onClick={() => setSearchOpen(true)}
                 className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
                 aria-label="Search">
                 <Search size={18} />
               </button>
+
+              {/* My Account — desktop */}
+              {tenantId && (
+                <a
+                  href={`/customer-portal/?t=${encodeURIComponent(tenantId)}`}
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                  aria-label="My Account"
+                >
+                  <User size={16} />
+                  <span>My Account</span>
+                </a>
+              )}
+
               <button onClick={openCart}
                 className="relative p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
                 aria-label="Cart">
@@ -147,6 +160,16 @@ export function Header() {
                 {link.label}
               </Link>
             ))}
+            {tenantId && (
+              <a
+                href={`/customer-portal/?t=${encodeURIComponent(tenantId)}`}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setMobileOpen(false)}
+              >
+                <User size={15} />
+                My Account
+              </a>
+            )}
           </div>
         )}
       </header>

@@ -29,7 +29,7 @@ const SOCIAL_LABELS: Record<string, string> = {
 };
 
 export function Footer() {
-  const { storeName, categories, cms } = useStore();
+  const { storeName, categories, cms, tenantId } = useStore();
   const year = new Date().getFullYear();
 
   const { brand, contact, social } = cms;
@@ -102,8 +102,6 @@ export function Footer() {
                 { label: "New Arrivals", href: "/shop?sort=newest" },
                 { label: "Best Sellers", href: "/shop?sort=popular" },
                 { label: "Deals & Offers", href: "/shop?sort=price_asc" },
-                { label: "Track Order",  href: "#" },
-                { label: "Returns",      href: "#" },
               ].map(link => (
                 <li key={link.label}>
                   <Link href={link.href} className="text-sm hover:text-white transition-colors">
@@ -111,6 +109,26 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              {cms.brand && (
+                <>
+                  <li>
+                    <a
+                      href={`/customer-portal/?t=${encodeURIComponent(tenantId ?? "")}`}
+                      className="text-sm hover:text-white transition-colors"
+                    >
+                      My Account
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href={`/customer-portal/?t=${encodeURIComponent(tenantId ?? "")}`}
+                      className="text-sm hover:text-white transition-colors"
+                    >
+                      Sign Up / Sign In
+                    </a>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
