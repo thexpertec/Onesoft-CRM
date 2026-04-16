@@ -63,6 +63,15 @@ export default function OrdersPage() {
             <p className="text-[14px] text-gray-500 font-medium">
               {query ? "No orders match your search." : "No orders yet."}
             </p>
+            {!query && session?.tenantId && (
+              <a
+                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/shop`}
+                className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[13.5px] font-semibold rounded-xl transition-colors"
+              >
+                <ShoppingBag size={15} />
+                Start Shopping
+              </a>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
