@@ -57,11 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError("Incorrect email or password.");
         return false;
       }
-      const customer = customers.find(c => c.id === account.customerId);
-      if (!customer) {
-        setError("Account found but customer record is missing. Please contact support.");
-        return false;
-      }
+      // Use linked customer record if it exists, otherwise build a minimal stub
+      const customer = customers.find(c => c.id === account.customerId) ?? {
+        id: account.customerId,
+        name: account.name || key.split("@")[0],
+        email: account.email,
+        company: "", phone: "", industry: "", city: "", area: undefined,
+        status: "Active" as const, source: "direct", customerType: "Regular Customer",
+        customerSince: account.createdAt.split("T")[0],
+        totalValue: "0", currency: "GBP", notes: "", tags: [],
+        createdAt: account.createdAt, updatedAt: account.createdAt,
+      };
       saveSession(tenantId, customer);
       setSession({ tenantId, customer, loginAt: new Date().toISOString() });
       setSettings(s);
@@ -86,22 +92,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
       const key = normalizeEmail(email);
 
-      // Must be an existing customer
-      const customer = customers.find(c => normalizeEmail(c.email) === key);
-      if (!customer) {
-        setError("No customer account exists with this email. Please contact your store to get registered first.");
-        return false;
-      }
-
       // Cannot sign up twice
       if (accounts.some(a => normalizeEmail(a.email) === key)) {
         setError("An account with this email already exists. Please sign in instead.");
         return false;
       }
 
+      // Link to existing customer record if email matches, otherwise create a self-registered account
+      const existingCustomer = customers.find(c => normalizeEmail(c.email) === key);
+      const customerId = existingCustomer?.id ?? crypto.randomUUID();
+      const displayName = existingCustomer?.name ?? key.split("@")[0];
+
       const hash = await hashPassword(password);
-      const newAccount = { email: key, passwordHash: hash, customerId: customer.id, createdAt: new Date().toISOString() };
+      const newAccount = {
+        email: key,
+        passwordHash: hash,
+        customerId,
+        name: displayName,
+        createdAt: new Date().toISOString(),
+      };
       await savePortalAccounts(tenantId, [...accounts, newAccount]);
+
+      const customer = existingCustomer ?? {
+        id: customerId,
+        name: displayName,
+        email: key,
+        company: "", phone: "", industry: "", city: "", area: undefined,
+        status: "Active" as const, source: "direct", customerType: "Regular Customer",
+        customerSince: new Date().toISOString().split("T")[0],
+        totalValue: "0", currency: "GBP", notes: "", tags: [],
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
 
       saveSession(tenantId, customer);
       setSession({ tenantId, customer, loginAt: new Date().toISOString() });

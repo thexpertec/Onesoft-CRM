@@ -11,7 +11,8 @@ export interface CustomerSession {
 export interface PortalAccount {
   email: string;
   passwordHash: string;
-  customerId: string;
+  customerId: string;  // linked admin customer id, or a generated uuid for self-registered accounts
+  name: string;        // display name (from customer record or derived from email)
   createdAt: string;
 }
 
