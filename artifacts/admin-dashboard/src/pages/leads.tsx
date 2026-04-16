@@ -1,5 +1,5 @@
 import React, {
-  useState, useMemo, useRef, useEffect, useCallback,
+  useState, useMemo, useRef, useEffect, useCallback, useLayoutEffect,
 } from "react";
 import { useLeads, useCustomers, useSalesAgents } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
@@ -159,10 +159,10 @@ function reminderLabel(iso?: string): { label: string; urgent: boolean; color: s
 }
 
 // ─── EditableCell ──────────────────────────────────────────────────────────────
-function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCancel, onTab, onEnter }: {
+function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCancel, onTab, onEnter, wrapText }: {
   value: string; col: (typeof COLS)[number]; active: boolean; canEdit: boolean;
   onActivate: () => void; onCommit: (v: string) => void; onCancel: () => void;
-  onTab: (shift: boolean) => void; onEnter: () => void;
+  onTab: (shift: boolean) => void; onEnter: () => void; wrapText?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
   const inputRef  = useRef<HTMLInputElement>(null);
@@ -199,20 +199,33 @@ function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCan
     return <input ref={inputRef} type={col.type === "temp-select" ? "text" : col.type} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={handleKey}
       className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" style={{boxSizing:"border-box"}} />;
   }
+  const cellBase = `w-full flex items-center px-3 text-[13px] overflow-hidden ${canEdit?"cursor-text":"cursor-default"}`;
+  const wrapBase = `w-full flex items-start px-3 py-2 text-[13px] ${canEdit?"cursor-text":"cursor-default"}`;
+
+  if (col.field==="status") return (
+    <div className={wrapText ? wrapBase : `${cellBase} h-full`} onClick={canEdit?onActivate:undefined}>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${STATUS_STYLES[value as LeadStatus]||""}`}>{value}</span>
+    </div>
+  );
+  if (col.field==="temperature" && value) return (
+    <div className={wrapText ? wrapBase : `${cellBase} h-full`} onClick={canEdit?onActivate:undefined}>
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${TEMP_COLORS[value]||""}`}><span>{TEMP_DOT[value]}</span>{value}</span>
+    </div>
+  );
+  if (col.field==="nextFollowUp" && value) {
+    const d = new Date(value);
+    const past = d < new Date() && value !== format(new Date(),"yyyy-MM-dd");
+    return (
+      <div className={wrapText ? wrapBase : `${cellBase} h-full`} onClick={canEdit?onActivate:undefined}>
+        <span className={`text-[12px] font-medium ${past?"text-red-500":"text-foreground"}`}>{format(d,"dd MMM yy")}</span>
+      </div>
+    );
+  }
   return (
-    <div className={`w-full h-full flex items-center px-3 text-[13px] overflow-hidden ${canEdit?"cursor-text":"cursor-default"}`} onClick={canEdit?onActivate:undefined}>
-      {col.field==="status"
-        ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${STATUS_STYLES[value as LeadStatus]||""}`}>{value}</span>
-        : col.field==="temperature" && value
-          ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${TEMP_COLORS[value]||""}`}><span>{TEMP_DOT[value]}</span>{value}</span>
-          : col.field==="nextFollowUp" && value
-            ? (() => {
-                const d = new Date(value);
-                const past = d < new Date() && value !== format(new Date(),"yyyy-MM-dd");
-                return <span className={`text-[12px] font-medium ${past?"text-red-500":"text-foreground"}`}>{format(d,"dd MMM yy")}</span>;
-              })()
-            : <span className={`truncate text-gray-700 dark:text-foreground ${!value?"text-gray-300 dark:text-muted-foreground/30":""}`}>{value||(canEdit?"—":"")}</span>
-      }
+    <div className={wrapText ? wrapBase : `${cellBase} h-full`} onClick={canEdit?onActivate:undefined}>
+      <span className={`${wrapText?"break-words min-w-0 w-full leading-snug":"truncate"} ${!value?"text-gray-300 dark:text-muted-foreground/30":"text-gray-700 dark:text-foreground"}`}>
+        {value||(canEdit?"—":"")}
+      </span>
     </div>
   );
 }
@@ -1004,6 +1017,49 @@ export default function Leads() {
 
   const CELL_H = 38;
 
+  // ── Wrap text ─────────────────────────────────────────────────────────────
+  const [wrapText, setWrapText] = useState<boolean>(() => {
+    try { return localStorage.getItem("leads-wrap-text") === "true"; } catch { return false; }
+  });
+  const toggleWrap = () => setWrapText(v => {
+    const next = !v;
+    try { localStorage.setItem("leads-wrap-text", String(next)); } catch {}
+    return next;
+  });
+
+  // ── Column widths (resizable) ─────────────────────────────────────────────
+  const COL_WIDTHS_KEY = "onesoft-col-widths:leads";
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    const stored: Record<string, number> = (() => {
+      try { return JSON.parse(localStorage.getItem(COL_WIDTHS_KEY) ?? "{}"); } catch { return {}; }
+    })();
+    const result: Record<string, number> = {};
+    COLS.forEach(c => { result[c.field] = stored[c.field] ?? c.minW; });
+    return result;
+  });
+  const colWidthsRef = useRef(colWidths);
+  useLayoutEffect(() => { colWidthsRef.current = colWidths; }, [colWidths]);
+  const startResize = useCallback((e: React.MouseEvent, field: string) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidthsRef.current[field] ?? 80;
+    const onMove = (ev: MouseEvent) => {
+      const newW = Math.max(50, startW + (ev.clientX - startX));
+      setColWidths(prev => ({ ...prev, [field]: newW }));
+    };
+    const onUp = () => {
+      try { localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidthsRef.current)); } catch {}
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
 
@@ -1136,6 +1192,24 @@ export default function Leads() {
               <X size={11} /> Clear
             </button>
           )}
+          {/* Wrap toggle */}
+          <button
+            onClick={toggleWrap}
+            title={wrapText ? "Disable text wrap" : "Enable text wrap"}
+            className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all shrink-0 ${
+              wrapText
+                ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+                : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+            }`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+              <polyline points="9 15 6 18 9 21"/>
+              <line x1="3" y1="18" x2="6" y2="18"/>
+            </svg>
+            Wrap
+          </button>
           {isAuthenticated && newRow && (
             <div className="flex items-center gap-1.5 ml-auto">
               <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
@@ -1153,18 +1227,26 @@ export default function Leads() {
       {/* ── Excel-like Grid ───────────────────────────────────────────────────── */}
       <div ref={tableRef} className="rounded-xl border border-gray-200 dark:border-border overflow-auto bg-white dark:bg-card shadow-sm"
         style={{ maxHeight: "calc(100vh - 300px)" }}>
-        <table className="border-collapse text-[13px] w-full" style={{ tableLayout:"fixed", minWidth:`${COLS.reduce((a,c)=>a+c.minW,0)+56+100}px` }}>
+        <table className="border-collapse text-[13px] w-full" style={{ tableLayout:"fixed", minWidth:`${COLS.reduce((a,c)=>a+(colWidths[c.field]??c.minW),0)+56+100}px` }}>
           <colgroup>
             <col style={{ width:"56px" }} />
-            {COLS.map(c => <col key={c.field} style={{ width:`${c.minW}px` }} />)}
+            {COLS.map(c => <col key={c.field} style={{ width:`${colWidths[c.field]??c.minW}px` }} />)}
             <col style={{ width:"100px" }} />
           </colgroup>
           <thead className="sticky top-0 z-10">
             <tr>
               <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">#</th>
               {COLS.map(c => (
-                <th key={c.field} className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none">
-                  {c.label}
+                <th key={c.field} className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none relative group">
+                  <span className="pr-2">{c.label}</span>
+                  {/* Resize handle */}
+                  <div
+                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize z-20 flex items-center justify-end"
+                    onMouseDown={e => startResize(e, c.field)}
+                    title="Drag to resize column"
+                  >
+                    <div className="w-[3px] h-4 rounded-full bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </th>
               ))}
               <th className="border-b border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none sticky right-0">
@@ -1177,11 +1259,11 @@ export default function Leads() {
             {/* New row */}
             {isAuthenticated && newRow && (
               <tr className="bg-amber-50/60 dark:bg-amber-950/20 border-b border-gray-100 dark:border-border">
-                <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold select-none" style={{height:`${CELL_H}px`}}>★</td>
+                <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold select-none" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>★</td>
                 {COLS.map((c, ci) => {
                   const isActive = newRowActive === ci;
                   return (
-                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={{height:`${CELL_H}px`}}>
+                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>
                       {isActive && c.type==="select" ? (
                         <select autoFocus value={newRow[c.field]} onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
                           onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();navigateNewRow(ci,e.shiftKey);}if(e.key==="Enter"){e.preventDefault();navigateNewRow(ci,false);}if(e.key==="Escape")cancelNewRow();}}
@@ -1251,7 +1333,7 @@ export default function Leads() {
                 <tr data-testid={`row-lead-${lead.id}`}
                   className={`border-b border-gray-100 dark:border-border transition-colors group ${isExpanded?"border-b-0":""}  ${isRowActive?"bg-blue-50/30 dark:bg-blue-950/10":rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10 ${lead.isRelevant===false?"opacity-60":""}`}>
                   {/* Row number + indicators */}
-                  <td className="border-r border-gray-100 dark:border-border text-center select-none font-mono" style={{height:`${CELL_H}px`}}>
+                  <td className="border-r border-gray-100 dark:border-border text-center select-none font-mono" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>
                     <div className="flex flex-col items-center justify-center gap-0.5">
                       <span className="text-[10px] text-gray-300 dark:text-muted-foreground/50">{rowIdx+1}</span>
                       <div className="flex gap-0.5">
@@ -1269,7 +1351,7 @@ export default function Leads() {
                     return (
                       <td key={c.field}
                         className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
-                        style={{height:`${CELL_H}px`}} onClick={() => !isActive && isAuthenticated && activateCell(lead.id, ci)}>
+                        style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} onClick={() => !isActive && isAuthenticated && activateCell(lead.id, ci)}>
                         {c.type === "agent-select" ? (
                           isActive && isAuthenticated ? (
                             <select autoFocus value={rawVal}
@@ -1281,7 +1363,7 @@ export default function Leads() {
                               {salesAgents.filter(a=>a.status==="Active").map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
                             </select>
                           ) : (
-                            <div className="w-full h-full flex items-center px-3 gap-1.5 cursor-default">
+                            <div className={`w-full flex items-center px-3 gap-1.5 cursor-default ${wrapText?"py-2 min-h-[38px]":"h-full"}`}>
                               {rawVal
                                 ? <><div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold flex-shrink-0">{rawVal.charAt(0).toUpperCase()}</div><span className="truncate text-[12px] text-foreground">{rawVal}</span></>
                                 : <span className="text-[11px] text-muted-foreground/50 italic">—</span>
@@ -1297,6 +1379,7 @@ export default function Leads() {
                             onCancel={()=>setActiveCell(null)}
                             onTab={shift=>navigateCell(lead.id,ci,shift)}
                             onEnter={()=>moveCellDown(lead.id,ci)}
+                            wrapText={wrapText}
                           />
                         )}
                       </td>
@@ -1304,7 +1387,7 @@ export default function Leads() {
                   })}
 
                   {/* Actions */}
-                  <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{height:`${CELL_H}px`}} onClick={e=>e.stopPropagation()}>
+                  <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} onClick={e=>e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       {/* Expand/collapse details */}
                       <button
