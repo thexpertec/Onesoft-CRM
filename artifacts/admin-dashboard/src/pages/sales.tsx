@@ -462,6 +462,8 @@ function POSView({
   const [filtersOpen,   setFiltersOpen]   = useState(false);
   const [showTotalsDetail, setShowTotalsDetail] = useState(false);
   const [prodView, setProdView] = useState<"image" | "list">(() => getSettings().posProductView ?? "image");
+  const [dropdownIdx, setDropdownIdx] = useState(-1);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   // ── Barcode / QR scanner — shared lookup for both camera and keyboard ──────
@@ -519,6 +521,30 @@ function POSView({
   };
 
   const allProducts  = useMemo(() => getProducts().filter(p => p.status !== "Inactive"), []);
+
+  // ── Search dropdown results (all products, unfiltered by category) ──────────
+  const dropdownResults = useMemo(() => {
+    const q = prodSearch.trim().toLowerCase();
+    if (!q) return [];
+    return allProducts.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode ?? "").toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [allProducts, prodSearch]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setDropdownIdx(-1);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const allCats      = useMemo(() => {
     const allCategoryRecords = getProductCategories();
     const parentCats = allCategoryRecords.filter(c => !c.parentId).map(c => c.name);
@@ -1256,17 +1282,39 @@ function POSView({
           <div className="px-4 pt-3 pb-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 space-y-2.5 shrink-0">
             {/* Search + Scan button + collapse toggle */}
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <div className="relative flex-1" ref={searchWrapRef}>
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-10" />
                 <input
                   autoFocus
                   type="text"
                   value={prodSearch}
-                  onChange={e => setProdSearch(e.target.value)}
+                  onChange={e => { setProdSearch(e.target.value); setDropdownIdx(-1); }}
                   onKeyDown={e => {
+                    if (dropdownResults.length > 0) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setDropdownIdx(i => Math.min(i + 1, dropdownResults.length - 1));
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setDropdownIdx(i => Math.max(i - 1, -1));
+                        return;
+                      }
+                      if (e.key === "Enter" && dropdownIdx >= 0) {
+                        e.preventDefault();
+                        onAddProduct(dropdownResults[dropdownIdx]);
+                        setProdSearch("");
+                        setDropdownIdx(-1);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        setProdSearch("");
+                        setDropdownIdx(-1);
+                        return;
+                      }
+                    }
                     if (e.key === "Enter" && prodSearch.trim()) {
-                      // When the USB/Bluetooth scanner types into this box and presses Enter,
-                      // try an exact barcode/SKU lookup before falling back to search results
                       handleScan(prodSearch.trim());
                     }
                   }}
@@ -1275,11 +1323,47 @@ function POSView({
                 />
                 {prodSearch && (
                   <button
-                    onClick={() => setProdSearch("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-zinc-600 hover:bg-gray-400 dark:hover:bg-zinc-500 flex items-center justify-center transition-colors"
+                    onClick={() => { setProdSearch(""); setDropdownIdx(-1); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-zinc-600 hover:bg-gray-400 dark:hover:bg-zinc-500 flex items-center justify-center transition-colors z-10"
                   >
                     <X size={10} className="text-white" />
                   </button>
+                )}
+
+                {/* ── Dropdown results ── */}
+                {dropdownResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden">
+                    {dropdownResults.map((p, i) => {
+                      const stock = stockMap[p.sku] ?? 0;
+                      const stockColor = stock <= 0 ? "text-red-500" : stock <= 5 ? "text-amber-500" : "text-emerald-600";
+                      const isActive = i === dropdownIdx;
+                      return (
+                        <button
+                          key={p.id}
+                          onMouseDown={e => { e.preventDefault(); onAddProduct(p); setProdSearch(""); setDropdownIdx(-1); }}
+                          onMouseEnter={() => setDropdownIdx(i)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${isActive ? "bg-blue-50 dark:bg-blue-950/40" : "hover:bg-gray-50 dark:hover:bg-zinc-800"} ${i > 0 ? "border-t border-gray-100 dark:border-zinc-800" : ""}`}
+                        >
+                          <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 ring-1 ring-gray-100 dark:ring-zinc-700">
+                            <ProductThumbnail product={p} size="sm" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono">{p.sku}</span>
+                              {p.category && (
+                                <span className="text-[10px] px-1.5 py-0 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400">{p.category}</span>
+                              )}
+                              <span className={`text-[10px] font-semibold ${stockColor}`}>Stk: {stock}</span>
+                            </div>
+                          </div>
+                          <div className="text-[13px] font-bold text-blue-600 dark:text-blue-400 font-mono shrink-0">
+                            {sym}{parseFloat(p.price || "0").toFixed(dp)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
               {/* QR / Barcode scan button */}
