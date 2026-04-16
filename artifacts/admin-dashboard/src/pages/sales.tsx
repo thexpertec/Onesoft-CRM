@@ -459,7 +459,7 @@ function POSView({
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [resetConfirmOpen,  setResetConfirmOpen]  = useState(false);
   const [scannerOpen,   setScannerOpen]   = useState(false);
-  const [filtersOpen,   setFiltersOpen]   = useState(true);
+  const [filtersOpen,   setFiltersOpen]   = useState(false);
   const [showTotalsDetail, setShowTotalsDetail] = useState(false);
   const [prodView, setProdView] = useState<"image" | "list">(() => getSettings().posProductView ?? "image");
   const { toast } = useToast();
