@@ -1,0 +1,122 @@
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function apiRoot(): string {
+  const { protocol, host } = window.location;
+  const prefix = BASE.replace(/\/customer-portal.*/, "");
+  return `${protocol}//${host}${prefix}/api`;
+}
+
+async function kvGet<T>(ns: string, key: string): Promise<T | null> {
+  try {
+    const r = await fetch(`${apiRoot()}/kv/${encodeURIComponent(ns)}/${encodeURIComponent(key)}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.value as T;
+  } catch {
+    return null;
+  }
+}
+
+export type CustomerStatus = "Active" | "Inactive" | "Churned";
+
+export interface Customer {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  industry: string;
+  city: string;
+  area?: string;
+  status: CustomerStatus;
+  source: string;
+  customerType?: string;
+  customerSince: string;
+  totalValue: string;
+  currency: string;
+  notes: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaleItem {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  qty: string;
+  price: string;
+  discount: string;
+  discountType: "pct" | "amt";
+  unit: string;
+}
+
+export interface Sale {
+  id: string;
+  saleNumber: string;
+  saleDate: string;
+  customer: string;
+  status: string;
+  paymentMethod: string;
+  notes: string;
+  items: SaleItem[];
+  taxRate: string;
+  amountPaid: string;
+  paidAt: string;
+  deliveryStatus?: string;
+  deliveryCharges?: string;
+  invoiceDiscount?: string;
+  invoiceDiscountType?: "pct" | "amt";
+  orderType?: string;
+  onlineCustomer?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreSettings {
+  storeName?: string;
+  currency?: string;
+  currencySymbol?: string;
+  decimalPlaces?: string;
+}
+
+export async function fetchCustomers(tenantId: string): Promise<Customer[]> {
+  const ns = `t:${tenantId}`;
+  const data = await kvGet<Customer[]>(ns, "admin-customers");
+  return data ?? [];
+}
+
+export async function fetchSales(tenantId: string): Promise<Sale[]> {
+  const ns = `t:${tenantId}`;
+  const data = await kvGet<Sale[]>(ns, "admin-sales");
+  return data ?? [];
+}
+
+export async function fetchSettings(tenantId: string): Promise<StoreSettings> {
+  const ns = `t:${tenantId}`;
+  const data = await kvGet<StoreSettings>(ns, "admin-settings");
+  return data ?? {};
+}
+
+export function calcLineTotal(item: SaleItem): number {
+  const price = parseFloat(item.price) || 0;
+  const qty = parseFloat(item.qty) || 0;
+  const disc = parseFloat(item.discount) || 0;
+  const gross = price * qty;
+  if (disc <= 0) return gross;
+  if (item.discountType === "pct") return gross * (1 - disc / 100);
+  return Math.max(0, gross - disc * qty);
+}
+
+export function calcSaleTotal(items: SaleItem[], taxRate: string, deliveryCharges?: string, invoiceDiscount?: string, invoiceDiscountType?: string): number {
+  const sub = items.reduce((s, i) => s + calcLineTotal(i), 0);
+  const tax = parseFloat(taxRate) || 0;
+  const delivery = parseFloat(deliveryCharges ?? "0") || 0;
+  const invDisc = parseFloat(invoiceDiscount ?? "0") || 0;
+  let afterInvDisc = sub;
+  if (invDisc > 0) {
+    afterInvDisc = invoiceDiscountType === "pct" ? sub * (1 - invDisc / 100) : Math.max(0, sub - invDisc);
+  }
+  return afterInvDisc * (1 + tax / 100) + delivery;
+}
