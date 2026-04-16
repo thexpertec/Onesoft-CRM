@@ -1177,134 +1177,200 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search products, SKU or barcode…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        {/* Camera barcode / QR scan button */}
-        <button
-          onClick={() => setScannerOpen(true)}
-          className="h-8 w-8 rounded-lg flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors shrink-0"
-          title="Scan barcode / QR code to find product (or plug in a USB/Bluetooth scanner and scan directly)"
-        >
-          <ScanLine size={14} />
-        </button>
+      {/* Toolbar — two explicit rows */}
+      <div className="flex flex-col gap-2">
 
-        {/* Columns visibility dropdown */}
-        <div className="relative" ref={colsMenuRef}>
-          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[12px]" onClick={() => setColsMenuOpen(v => !v)}>
-            <Columns3 size={13} />
-            Columns
-            {hiddenCols.size > 0 && (
-              <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{hiddenCols.size}</span>
-            )}
-            <ChevronDown size={11} className={`transition-transform ${colsMenuOpen ? "rotate-180" : ""}`} />
-          </Button>
-          {colsMenuOpen && (
-            <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-lg shadow-lg w-52 py-1 max-h-80 overflow-y-auto">
-              <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 dark:border-border">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Show / Hide Columns</span>
-                {hiddenCols.size > 0 && (
-                  <button onClick={() => { setHiddenCols(new Set()); localStorage.removeItem("products-hidden-cols"); }}
-                    className="text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold">Reset</button>
-                )}
+        {/* ── Row 1: search bar + action controls ─────────────────── */}
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input placeholder="Search products, SKU or barcode…" className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {/* Camera barcode / QR scan button */}
+          <button
+            onClick={() => setScannerOpen(true)}
+            className="h-8 w-8 rounded-lg flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors shrink-0"
+            title="Scan barcode / QR code to find product (or plug in a USB/Bluetooth scanner and scan directly)"
+          >
+            <ScanLine size={14} />
+          </button>
+
+          {/* Columns visibility dropdown */}
+          <div className="relative shrink-0" ref={colsMenuRef}>
+            <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[12px]" onClick={() => setColsMenuOpen(v => !v)}>
+              <Columns3 size={13} />
+              Columns
+              {hiddenCols.size > 0 && (
+                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">{hiddenCols.size}</span>
+              )}
+              <ChevronDown size={11} className={`transition-transform ${colsMenuOpen ? "rotate-180" : ""}`} />
+            </Button>
+            {colsMenuOpen && (
+              <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-lg shadow-lg w-52 py-1 max-h-80 overflow-y-auto">
+                <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 dark:border-border">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Show / Hide Columns</span>
+                  {hiddenCols.size > 0 && (
+                    <button onClick={() => { setHiddenCols(new Set()); localStorage.removeItem("products-hidden-cols"); }}
+                      className="text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold">Reset</button>
+                  )}
+                </div>
+                {COLS.map(c => {
+                  const visible = !hiddenCols.has(c.field);
+                  const locked  = c.field === "name";
+                  return (
+                    <button key={c.field} disabled={locked}
+                      onClick={() => toggleCol(c.field)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] transition-colors
+                        ${locked ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 dark:hover:bg-muted/40 cursor-pointer"}
+                        ${visible ? "text-gray-800 dark:text-foreground" : "text-gray-400 dark:text-muted-foreground"}`}>
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0
+                        ${visible ? "bg-indigo-500 border-indigo-500 text-white" : "border-gray-300 dark:border-border bg-transparent"}`}>
+                        {visible && <CheckCircle2 size={10} className="stroke-[3]" />}
+                      </span>
+                      <span className="truncate">{c.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-              {COLS.map(c => {
-                const visible = !hiddenCols.has(c.field);
-                const locked  = c.field === "name";
-                return (
-                  <button key={c.field} disabled={locked}
-                    onClick={() => toggleCol(c.field)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] transition-colors
-                      ${locked ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 dark:hover:bg-muted/40 cursor-pointer"}
-                      ${visible ? "text-gray-800 dark:text-foreground" : "text-gray-400 dark:text-muted-foreground"}`}>
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0
-                      ${visible ? "bg-indigo-500 border-indigo-500 text-white" : "border-gray-300 dark:border-border bg-transparent"}`}>
-                      {visible && <CheckCircle2 size={10} className="stroke-[3]" />}
-                    </span>
-                    <span className="truncate">{c.label}</span>
-                  </button>
-                );
-              })}
+            )}
+          </div>
+
+          {/* Sort controls */}
+          <div className="flex items-center gap-1 shrink-0">
+            <div className="relative">
+              <select
+                value={sortField}
+                onChange={e => setSortField(e.target.value)}
+                className="h-8 pl-2.5 pr-7 rounded-l-lg border border-r-0 border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
+              >
+                <option value="name">Sort: Name</option>
+                <option value="sku">Sort: SKU</option>
+                <option value="brand">Sort: Brand</option>
+                <option value="category">Sort: Category</option>
+                <option value="price">Sort: Price</option>
+                <option value="costPrice">Sort: Cost</option>
+                <option value="purchasePrice">Sort: Purchase</option>
+                <option value="wholesalePrice">Sort: Wholesale</option>
+                <option value="margin">Sort: Margin %</option>
+                <option value="stock">Sort: Stock</option>
+                <option value="status">Sort: Status</option>
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+            </div>
+            <button
+              onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
+              title={sortDir === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
+              className="h-8 w-8 flex items-center justify-center rounded-r-lg border border-gray-200 dark:border-border bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted/40 transition-colors"
+            >
+              {sortDir === "asc" ? <ArrowUp size={13} className="text-indigo-500" /> : <ArrowDown size={13} className="text-indigo-500" />}
+            </button>
+          </div>
+
+          {/* Advanced filters toggle */}
+          <button
+            onClick={() => setShowAdvFilters(v => !v)}
+            className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all shrink-0 ${
+              showAdvFilters || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
+                ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
+                : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+            }`}
+            title="Toggle advanced filters"
+          >
+            <SlidersHorizontal size={13} />
+            Filters
+            {(filterStockStatus !== "all" || filterMinPrice || filterMaxPrice) && (
+              <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                {[filterStockStatus !== "all", !!filterMinPrice, !!filterMaxPrice].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+
+          {/* Wrap text toggle */}
+          <button
+            onClick={toggleWrap}
+            title={wrapText ? "Disable text wrap" : "Enable text wrap (Excel-style)"}
+            className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all shrink-0 ${
+              wrapText
+                ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
+                : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
+            }`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <path d="M3 12h15a3 3 0 0 1 0 6H3"/>
+              <polyline points="9 15 6 18 9 21"/>
+              <line x1="3" y1="18" x2="6" y2="18"/>
+            </svg>
+            Wrap
+          </button>
+
+          {/* Unsaved row indicator */}
+          {isAuthenticated && newRow && (
+            <div className="flex items-center gap-1.5 ml-auto shrink-0">
+              <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
+              <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
+              <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save Row</Button>
             </div>
           )}
-        </div>
 
-        {/* ── Sort controls ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-1">
-          <div className="relative">
-            <select
-              value={sortField}
-              onChange={e => setSortField(e.target.value)}
-              className="h-8 pl-2.5 pr-7 rounded-l-lg border border-r-0 border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
-            >
-              <option value="name">Sort: Name</option>
-              <option value="sku">Sort: SKU</option>
-              <option value="brand">Sort: Brand</option>
-              <option value="category">Sort: Category</option>
-              <option value="price">Sort: Price</option>
-              <option value="costPrice">Sort: Cost</option>
-              <option value="purchasePrice">Sort: Purchase</option>
-              <option value="wholesalePrice">Sort: Wholesale</option>
-              <option value="margin">Sort: Margin %</option>
-              <option value="stock">Sort: Stock</option>
-              <option value="status">Sort: Status</option>
-            </select>
-            <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-          </div>
-          <button
-            onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
-            title={sortDir === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
-            className="h-8 w-8 flex items-center justify-center rounded-r-lg border border-gray-200 dark:border-border bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-muted/40 transition-colors"
-          >
-            {sortDir === "asc" ? <ArrowUp size={13} className="text-indigo-500" /> : <ArrowDown size={13} className="text-indigo-500" />}
-          </button>
-        </div>
-
-        {/* Advanced filters toggle */}
-        <button
-          onClick={() => setShowAdvFilters(v => !v)}
-          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
-            showAdvFilters || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
-              ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
-              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
-          }`}
-          title="Toggle advanced filters"
-        >
-          <SlidersHorizontal size={13} />
-          Filters
-          {(filterStockStatus !== "all" || filterMinPrice || filterMaxPrice) && (
-            <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-              {[filterStockStatus !== "all", !!filterMinPrice, !!filterMaxPrice].filter(Boolean).length}
-            </span>
+          {/* Bulk action bar / result count */}
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center gap-2 ml-auto shrink-0 flex-wrap">
+              <span className="text-[12px] font-medium text-foreground">{selectedIds.size} selected</span>
+              {isAuthenticated && (
+                <>
+                  <div className="relative">
+                    <select
+                      defaultValue=""
+                      onChange={e => {
+                        const newStatus = e.target.value as Product["status"];
+                        if (!newStatus) return;
+                        selectedIds.forEach(id => editProduct(id, { status: newStatus }));
+                        toast({ title: `Set ${selectedIds.size} products to ${newStatus}` });
+                        clearSelection();
+                        (e.target as HTMLSelectElement).value = "";
+                      }}
+                      className="h-8 pl-2.5 pr-7 rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
+                    >
+                      <option value="">Set Status…</option>
+                      <option value="Active">→ Active</option>
+                      <option value="Inactive">→ Inactive</option>
+                      <option value="Draft">→ Draft</option>
+                    </select>
+                    <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+                  </div>
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => {
+                    const rows = displayRows.filter(p => selectedIds.has(p.id));
+                    downloadExcel("Products", "Selected Products", rows, [
+                      { header: "#",            key: "id", getValue: (r: Product) => rows.indexOf(r) + 1, width: 5 },
+                      { header: "Name",         key: "name",  width: 32 },
+                      { header: "SKU",          key: "sku",   width: 18 },
+                      { header: "Category",     key: "category", width: 20 },
+                      { header: "Brand",        key: "brand", width: 16 },
+                      { header: "Cost",         key: "costPrice", width: 14 },
+                      { header: "Retail Price", key: "price", width: 14 },
+                      { header: "Status",       key: "status", width: 12 },
+                    ]);
+                  }}>
+                    <FileDown size={12} /> Export
+                  </Button>
+                  <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
+                    <Trash2 size={12} /> Delete {selectedIds.size}
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="ghost" className="h-8 text-[12px] text-muted-foreground" onClick={clearSelection}>
+                <X size={12} className="mr-1" /> Clear
+              </Button>
+            </div>
+          ) : (
+            <div className="text-[12px] text-muted-foreground ml-auto shrink-0">{displayRows.length} of {products.length}</div>
           )}
-        </button>
+        </div>{/* end Row 1 */}
 
-        {/* Wrap text toggle */}
-        <button
-          onClick={toggleWrap}
-          title={wrapText ? "Disable text wrap" : "Enable text wrap (Excel-style)"}
-          className={`h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 transition-all ${
-            wrapText
-              ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300"
-              : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300"
-          }`}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <path d="M3 12h15a3 3 0 0 1 0 6H3"/>
-            <polyline points="9 15 6 18 9 21"/>
-            <line x1="3" y1="18" x2="6" y2="18"/>
-          </svg>
-          Wrap
-        </button>
-
-        {/* ── Dropdown Filters ──────────────────────────────────────── */}
+        {/* ── Row 2: dropdown filters ───────────────────────────────── */}
         {(allCategories.length > 0 || allBrands.length > 0 || allConditions.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Category */}
             {allCategories.length > 0 && (
               <div className="relative">
                 <select
@@ -1321,8 +1387,6 @@ export default function ProductsPage() {
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
               </div>
             )}
-
-            {/* Subcategory — only show when options exist */}
             {allSubcategories.length > 0 && (
               <div className="relative">
                 <select
@@ -1339,8 +1403,6 @@ export default function ProductsPage() {
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
               </div>
             )}
-
-            {/* Brand */}
             {allBrands.length > 0 && (
               <div className="relative">
                 <select
@@ -1357,8 +1419,6 @@ export default function ProductsPage() {
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
               </div>
             )}
-
-            {/* Condition */}
             {allConditions.length > 0 && (
               <div className="relative">
                 <select
@@ -1375,8 +1435,6 @@ export default function ProductsPage() {
                 <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
               </div>
             )}
-
-            {/* Clear all dropdown filters */}
             {(filterCategory || filterSubcategory || filterBrand || filterCondition) && (
               <button
                 onClick={() => { setFilterCategory(""); setFilterSubcategory(""); setFilterBrand(""); setFilterCondition(""); }}
@@ -1388,67 +1446,7 @@ export default function ProductsPage() {
           </div>
         )}
 
-        {isAuthenticated && newRow && (
-          <div className="flex items-center gap-1.5 ml-auto">
-            <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
-            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setNewRow(null); setNewRowActive(null); }}><X size={12} /> Cancel</Button>
-            <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save Row</Button>
-          </div>
-        )}
-        {/* Bulk action bar */}
-        {selectedIds.size > 0 ? (
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
-            <span className="text-[12px] font-medium text-foreground">{selectedIds.size} selected</span>
-            {isAuthenticated && (
-              <>
-                <div className="relative">
-                  <select
-                    defaultValue=""
-                    onChange={e => {
-                      const newStatus = e.target.value as Product["status"];
-                      if (!newStatus) return;
-                      selectedIds.forEach(id => editProduct(id, { status: newStatus }));
-                      toast({ title: `Set ${selectedIds.size} products to ${newStatus}` });
-                      clearSelection();
-                      (e.target as HTMLSelectElement).value = "";
-                    }}
-                    className="h-8 pl-2.5 pr-7 rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card text-[12px] font-medium appearance-none cursor-pointer outline-none text-foreground hover:border-gray-300"
-                  >
-                    <option value="">Set Status…</option>
-                    <option value="Active">→ Active</option>
-                    <option value="Inactive">→ Inactive</option>
-                    <option value="Draft">→ Draft</option>
-                  </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-                </div>
-                <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => {
-                  const rows = displayRows.filter(p => selectedIds.has(p.id));
-                  downloadExcel("Products", "Selected Products", rows, [
-                    { header: "#",            key: "id", getValue: (r: Product) => rows.indexOf(r) + 1, width: 5 },
-                    { header: "Name",         key: "name",  width: 32 },
-                    { header: "SKU",          key: "sku",   width: 18 },
-                    { header: "Category",     key: "category", width: 20 },
-                    { header: "Brand",        key: "brand", width: 16 },
-                    { header: "Cost",         key: "costPrice", width: 14 },
-                    { header: "Retail Price", key: "price", width: 14 },
-                    { header: "Status",       key: "status", width: 12 },
-                  ]);
-                }}>
-                  <FileDown size={12} /> Export
-                </Button>
-                <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 size={12} /> Delete {selectedIds.size}
-                </Button>
-              </>
-            )}
-            <Button size="sm" variant="ghost" className="h-8 text-[12px] text-muted-foreground" onClick={clearSelection}>
-              <X size={12} className="mr-1" /> Clear
-            </Button>
-          </div>
-        ) : (
-          <div className="text-[12px] text-muted-foreground self-center ml-auto">{displayRows.length} of {products.length}</div>
-        )}
-      </div>
+      </div>{/* end toolbar */}
 
       {/* ── Advanced filter panel ─────────────────────────────────────────────── */}
       {showAdvFilters && (
