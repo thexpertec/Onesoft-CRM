@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import {
   ShoppingBag, ChevronRight, ChevronLeft, CheckCircle2,
   Truck, Banknote, CreditCard, MapPin, User, Mail,
-  Phone, Building2, Loader2, Shield, Lock,
+  Phone, Building2, Loader2, Shield, Lock, UserCheck,
 } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
@@ -104,6 +104,26 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all";
 
+/* ─── Portal session reader ───────────────────────────────────────────── */
+interface PortalCustomer {
+  id: string; name: string; email: string; phone?: string; city?: string;
+}
+interface PortalSession {
+  tenantId: string;
+  customer: PortalCustomer;
+}
+interface PortalProfile {
+  phone?: string; address?: string; city?: string; state?: string; postalCode?: string;
+}
+
+function readPortalSession(): PortalSession | null {
+  try {
+    const raw = localStorage.getItem("cp_session");
+    if (!raw) return null;
+    return JSON.parse(raw) as PortalSession;
+  } catch { return null; }
+}
+
 /* ─── Main Component ─────────────────────────────────────────────────── */
 export function CheckoutPage() {
   const { items, totalPrice, totalItems, clearCart } = useCart();
@@ -116,6 +136,43 @@ export function CheckoutPage() {
   const [payment,  setPayment]  = useState<PaymentMethod>("cod");
   const [placing,  setPlacing]  = useState(false);
   const [orderId,  setOrderId]  = useState<string>("");
+  const [portalSession, setPortalSession] = useState<PortalSession | null>(null);
+
+  /* ── Auto-prefill from portal session ─────────────────────────────── */
+  useEffect(() => {
+    const s = readPortalSession();
+    if (!s || (tenantId && s.tenantId !== tenantId)) return;
+    setPortalSession(s);
+    const c = s.customer;
+    const parts = (c.name || "").trim().split(" ");
+    const firstName = parts[0] ?? "";
+    const lastName  = parts.slice(1).join(" ");
+    setForm(f => ({
+      ...f,
+      firstName,
+      lastName,
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      city:  c.city  ?? "",
+    }));
+    // Also fetch portal profile for saved address
+    const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/tenant-store.*/, "")}/api`;
+    const ns = encodeURIComponent(`t:${s.tenantId}`);
+    fetch(`${base}/kv/${ns}/portal-profile-${c.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { value: PortalProfile } | null) => {
+        if (!d?.value) return;
+        const p = d.value;
+        setForm(f => ({
+          ...f,
+          phone:    p.phone    || f.phone,
+          address1: p.address  || f.address1,
+          city:     p.city     || f.city,
+          postcode: p.postalCode || f.postcode,
+        }));
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [tenantId]);
 
   /* Redirect to shop if cart is empty */
   if (items.length === 0 && step !== "confirm") {
@@ -234,9 +291,45 @@ export function CheckoutPage() {
 
   /* ── Step: Info ─────────────────────────────────────────────────────── */
   function InfoStep() {
+    const isLoggedIn = !!portalSession;
     return (
       <div className="space-y-6">
-        {/* Contact */}
+        {/* Contact — summary card when logged in, full form otherwise */}
+        {isLoggedIn ? (
+          <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl border border-blue-100 dark:border-blue-900 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <UserCheck size={16} className="text-blue-500" /> Signed in as {portalSession.customer.name}
+              </h3>
+              <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2.5 py-1 rounded-full">
+                Club Card Member
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-300">
+                <Mail size={13} className="text-blue-400 shrink-0" />
+                <span className="truncate">{form.email}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-300">
+                <Phone size={13} className="text-blue-400 shrink-0" />
+                {form.phone ? (
+                  <span>{form.phone}</span>
+                ) : (
+                  <Field label="">
+                    <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)}
+                      placeholder="+44 7700 000000" className={cn(inputCls, "py-1.5 text-xs", errors.phone && "border-red-400")} />
+                    {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                  </Field>
+                )}
+              </div>
+            </div>
+            {!form.phone && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-1.5">
+                <Phone size={11} /> Please add a phone number to continue.
+              </p>
+            )}
+          </div>
+        ) : (
         <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-700 p-6">
           <h3 className="font-semibold text-slate-900 dark:text-white mb-5 flex items-center gap-2">
             <User size={16} className="text-blue-500" /> Contact Details
@@ -277,6 +370,7 @@ export function CheckoutPage() {
             </Field>
           </div>
         </div>
+        )}
 
         {/* Shipping address */}
         <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-700 p-6">
