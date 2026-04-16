@@ -595,18 +595,18 @@ function POSView({
   }, [allProducts, catFilter, prodSearch, prodSort, saleSummary, stockMap]);
 
   // ── Invoice totals (full breakdown) ─────────────────────────────────────────
-  const subTotalAmt   = subTotal(localItems);
-  const lineDiscAmt   = discountTotal(localItems);
-  const afterLineDisc = subTotalAmt - lineDiscAmt;
-  const invDiscVal    = parseFloat(localMeta.invoiceDiscount || "0") || 0;
-  const invDiscAmt    = localMeta.invoiceDiscountType === "amt"
+  const subTotalAmt    = subTotal(localItems);
+  const totalLineDisc  = discountTotal(localItems);
+  const afterLineDisc  = subTotalAmt - totalLineDisc;
+  const invDiscVal     = parseFloat(localMeta.invoiceDiscount || "0") || 0;
+  const invDiscAmt     = localMeta.invoiceDiscountType === "amt"
     ? Math.min(invDiscVal, afterLineDisc) : afterLineDisc * invDiscVal / 100;
-  const afterInvDisc  = Math.max(0, afterLineDisc - invDiscAmt);
-  const liveTaxPct    = parseFloat(localMeta.taxRate || "0") || 0;
-  const liveTaxAmt    = afterInvDisc * liveTaxPct / 100;
-  const deliveryAmt   = parseFloat(localMeta.deliveryCharges || "0") || 0;
-  const grandTotal    = afterInvDisc + liveTaxAmt + deliveryAmt;
-  const discountAmt   = lineDiscAmt;   // kept for in-line badge display
+  const afterInvDisc   = Math.max(0, afterLineDisc - invDiscAmt);
+  const liveTaxPct     = parseFloat(localMeta.taxRate || "0") || 0;
+  const liveTaxAmt     = afterInvDisc * liveTaxPct / 100;
+  const deliveryAmt    = parseFloat(localMeta.deliveryCharges || "0") || 0;
+  const grandTotal     = afterInvDisc + liveTaxAmt + deliveryAmt;
+  const discountAmt    = totalLineDisc;  // kept for in-line badge display
   const isDraft       = sale.status === "Draft";
   const isCompleted   = sale.status === "Completed";
   const isOnCredit    = sale.status === "On Credit";
@@ -992,10 +992,10 @@ function POSView({
               </div>
 
               {/* Line discounts */}
-              {lineDiscAmt > 0 && (
+              {totalLineDisc > 0 && (
                 <div className="flex justify-between text-[12px] text-emerald-600 dark:text-emerald-400">
                   <span>Item Discounts</span>
-                  <span className="font-mono font-semibold">−{sym}{lineDiscAmt.toFixed(dp)}</span>
+                  <span className="font-mono font-semibold">−{sym}{totalLineDisc.toFixed(dp)}</span>
                 </div>
               )}
 
