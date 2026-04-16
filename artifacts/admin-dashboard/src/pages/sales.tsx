@@ -866,8 +866,7 @@ function POSView({
                           {(() => {
                             if (!item.sku) return null;
                             const rawStock = stockMap[item.sku];
-                            const avail = rawStock !== undefined ? rawStock : null;
-                            if (avail === null) return null;
+                            const avail = rawStock !== undefined ? rawStock : 0;
                             const isNeg  = avail < 0;
                             const isZero = avail === 0;
                             const isLow  = avail > 0 && avail <= 5;
