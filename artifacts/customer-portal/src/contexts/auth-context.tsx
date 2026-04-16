@@ -19,6 +19,7 @@ interface AuthContextValue {
   signup: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -138,6 +139,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [tenantId]);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
+    if (!tenantId || !session) return { ok: false, error: "Not logged in." };
+    try {
+      const accounts = await fetchPortalAccounts(tenantId);
+      const email = normalizeEmail(session.customer.email);
+      const currentHash = await hashPassword(currentPassword);
+      const idx = accounts.findIndex(a => normalizeEmail(a.email) === email && a.passwordHash === currentHash);
+      if (idx === -1) return { ok: false, error: "Current password is incorrect." };
+      const newHash = await hashPassword(newPassword);
+      const updated = accounts.map((a, i) => i === idx ? { ...a, passwordHash: newHash } : a);
+      await savePortalAccounts(tenantId, updated);
+      return { ok: true };
+    } catch (err) {
+      console.error("[portal] changePassword error:", err);
+      return { ok: false, error: "Something went wrong. Please try again." };
+    }
+  }, [tenantId, session]);
+
   const logout = useCallback(() => {
     clearSession();
     setSession(null);
@@ -145,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, settings, tenantId, loading, error, login, signup, logout, clearError }}>
+    <AuthContext.Provider value={{ session, settings, tenantId, loading, error, login, signup, logout, clearError, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

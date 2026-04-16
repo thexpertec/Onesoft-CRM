@@ -115,6 +115,23 @@ export async function savePortalAccounts(tenantId: string, accounts: PortalAccou
   await kvPut(`t:${tenantId}`, "portal-accounts", accounts);
 }
 
+export interface PortalProfile {
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+}
+
+export async function fetchPortalProfile(tenantId: string, customerId: string): Promise<PortalProfile> {
+  const data = await kvGet<PortalProfile>(`t:${tenantId}`, `portal-profile-${customerId}`);
+  return data ?? {};
+}
+
+export async function savePortalProfile(tenantId: string, customerId: string, profile: PortalProfile): Promise<void> {
+  await kvPut(`t:${tenantId}`, `portal-profile-${customerId}`, profile);
+}
+
 export function calcLineTotal(item: SaleItem): number {
   const price = parseFloat(item.price) || 0;
   const qty = parseFloat(item.qty) || 0;
