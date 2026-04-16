@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth";
 import {
   fetchCustomers, fetchSettings, fetchPortalAccounts, savePortalAccounts,
+  fetchClubcard, saveClubcard,
   type StoreSettings,
 } from "@/lib/api";
 
@@ -114,6 +115,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       await savePortalAccounts(tenantId, [...accounts, newAccount]);
+
+      // Award 100 welcome coins
+      const existingCard = await fetchClubcard(tenantId, customerId);
+      await saveClubcard(tenantId, customerId, {
+        coins: (existingCard.coins || 0) + 100,
+        transactions: [
+          ...existingCard.transactions,
+          {
+            id: crypto.randomUUID(),
+            type: "credit" as const,
+            coins: 100,
+            description: "Welcome bonus — Club Card sign-up",
+            date: new Date().toISOString(),
+          },
+        ],
+      });
 
       const customer = existingCustomer ?? {
         id: customerId,

@@ -8,6 +8,7 @@ import DashboardPage from "@/pages/dashboard";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
 import ProfilePage from "@/pages/profile";
+import ClubCardPage from "@/pages/clubcard";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ function ProtectedRouter() {
       <Route path="/orders"     component={OrdersPage} />
       <Route path="/orders/:id" component={OrderDetailPage} />
       <Route path="/profile"    component={ProfilePage} />
+      <Route path="/clubcard"   component={ClubCardPage} />
       <Route component={NotFound} />
     </Switch>
   );

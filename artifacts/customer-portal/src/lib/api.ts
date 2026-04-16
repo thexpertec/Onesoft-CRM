@@ -115,6 +115,28 @@ export async function savePortalAccounts(tenantId: string, accounts: PortalAccou
   await kvPut(`t:${tenantId}`, "portal-accounts", accounts);
 }
 
+export interface ClubCardTransaction {
+  id: string;
+  type: "credit" | "debit";
+  coins: number;
+  description: string;
+  date: string;
+}
+
+export interface ClubCard {
+  coins: number;
+  transactions: ClubCardTransaction[];
+}
+
+export async function fetchClubcard(tenantId: string, customerId: string): Promise<ClubCard> {
+  const data = await kvGet<ClubCard>(`t:${tenantId}`, `clubcard-${customerId}`);
+  return data ?? { coins: 0, transactions: [] };
+}
+
+export async function saveClubcard(tenantId: string, customerId: string, card: ClubCard): Promise<void> {
+  await kvPut(`t:${tenantId}`, `clubcard-${customerId}`, card);
+}
+
 export interface PortalProfile {
   phone?: string;
   address?: string;

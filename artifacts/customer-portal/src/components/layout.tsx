@@ -1,13 +1,14 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X } from "lucide-react";
+import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X, Coins } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Orders",    href: "/orders", icon: ShoppingBag },
-  { label: "Profile",   href: "/profile", icon: User },
+  { label: "Dashboard", href: "/",         icon: LayoutDashboard },
+  { label: "Orders",    href: "/orders",   icon: ShoppingBag },
+  { label: "Club Card", href: "/clubcard", icon: Coins },
+  { label: "Profile",   href: "/profile",  icon: User },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
