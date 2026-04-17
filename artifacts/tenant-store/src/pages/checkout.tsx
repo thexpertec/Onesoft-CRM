@@ -292,8 +292,38 @@ export function CheckoutPage() {
   /* ── Step: Info ─────────────────────────────────────────────────────── */
   function InfoStep() {
     const isLoggedIn = !!portalSession;
+    const signInUrl  = tenantId
+      ? `/customer-portal/?t=${encodeURIComponent(tenantId)}`
+      : "/customer-portal/";
     return (
       <div className="space-y-6">
+
+        {/* ── Sign-in banner (guests only) ─────────────────────────────── */}
+        {!isLoggedIn && (
+          <div className="rounded-2xl border border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
+                <User size={16} className="text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Already have an account?
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Sign in to auto-fill your details and unlock Clubcard prices.
+                </p>
+              </div>
+            </div>
+            <a
+              href={signInUrl}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-200 dark:shadow-blue-900"
+            >
+              <UserCheck size={14} />
+              Sign In
+            </a>
+          </div>
+        )}
+
         {/* Contact — summary card when logged in, full form otherwise */}
         {isLoggedIn ? (
           <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl border border-blue-100 dark:border-blue-900 p-5">
