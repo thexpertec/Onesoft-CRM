@@ -1277,10 +1277,11 @@ export function InvoiceFormPage() {
   const isNewRoute = !invoiceId || invoiceId === "new";
   const invoice = isNewRoute ? null : invoices.find(i => i.id === invoiceId) ?? null;
 
-  // Read ?type=purchase from URL for new invoices
+  // Determine type: prefer stored invoice type, fall back to URL param, then "sale"
   const searchParams = new URLSearchParams(search);
   const defaultType: "sale" | "purchase" =
-    searchParams.get("type") === "purchase" ? "purchase" : "sale";
+    (invoice?.invoiceType as "sale" | "purchase" | undefined) ??
+    (searchParams.get("type") === "purchase" ? "purchase" : "sale");
 
   const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
     if (id) {
@@ -1433,10 +1434,12 @@ export function InvoiceFormPage() {
     navigate("/invoices");
   }, [invoices, removeInvoice, toast, navigate]);
 
+  const backUrl = defaultType === "purchase" ? "/invoices?type=purchase" : "/invoices";
+
   return (
     <InvoicePanel
       invoice={invoice}
-      onClose={() => navigate("/invoices")}
+      onClose={() => navigate(backUrl)}
       onSave={handleSave}
       onDelete={handleDelete}
       onStatusChange={handleStatusChange}
@@ -1693,7 +1696,7 @@ export default function InvoicesPage() {
               return (
                 <div
                   key={inv.id}
-                  onClick={() => navigate(`/invoices/${inv.id}`)}
+                  onClick={() => navigate(`/invoices/${inv.id}${inv.invoiceType === "purchase" ? "?type=purchase" : ""}`)}
                   className={`grid grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto] gap-0 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
                 >
                   {/* Invoice # */}
