@@ -138,26 +138,43 @@ export function CheckoutPage() {
   const [orderId,  setOrderId]  = useState<string>("");
   const [portalSession, setPortalSession] = useState<PortalSession | null>(null);
 
-  /* ── Auto-prefill from portal session ─────────────────────────────── */
+  /* ── Reactive session sync (storage + focus events catch sign-in on any tab) */
   useEffect(() => {
-    const s = readPortalSession();
-    if (!s || (tenantId && s.tenantId !== tenantId)) return;
-    setPortalSession(s);
-    const c = s.customer;
-    const parts = (c.name || "").trim().split(" ");
+    function syncSession() {
+      const s = readPortalSession();
+      if (!s || (tenantId && s.tenantId !== tenantId)) {
+        setPortalSession(null);
+        return;
+      }
+      setPortalSession(s);
+    }
+    syncSession();                                   // read immediately on mount
+    window.addEventListener("storage", syncSession); // sign-in from another tab
+    window.addEventListener("focus",   syncSession); // return to this tab after sign-in
+    return () => {
+      window.removeEventListener("storage", syncSession);
+      window.removeEventListener("focus",   syncSession);
+    };
+  }, [tenantId]);
+
+  /* ── Auto-prefill form when session first becomes available ──────────── */
+  useEffect(() => {
+    if (!portalSession) return;
+    const c = portalSession.customer;
+    const parts    = (c.name || "").trim().split(" ");
     const firstName = parts[0] ?? "";
     const lastName  = parts.slice(1).join(" ");
     setForm(f => ({
       ...f,
-      firstName,
-      lastName,
-      email: c.email ?? "",
-      phone: c.phone ?? "",
-      city:  c.city  ?? "",
+      firstName: firstName || f.firstName,
+      lastName:  lastName  || f.lastName,
+      email:     c.email   || f.email,
+      phone:     c.phone   || f.phone,
+      city:      c.city    || f.city,
     }));
-    // Also fetch portal profile for saved address
+    // Also fetch saved address from portal profile
     const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/tenant-store.*/, "")}/api`;
-    const ns = encodeURIComponent(`t:${s.tenantId}`);
+    const ns   = encodeURIComponent(`t:${portalSession.tenantId}`);
     fetch(`${base}/kv/${ns}/portal-profile-${c.id}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { value: PortalProfile } | null) => {
@@ -165,14 +182,14 @@ export function CheckoutPage() {
         const p = d.value;
         setForm(f => ({
           ...f,
-          phone:    p.phone    || f.phone,
-          address1: p.address  || f.address1,
-          city:     p.city     || f.city,
+          phone:    p.phone      || f.phone,
+          address1: p.address    || f.address1,
+          city:     p.city       || f.city,
           postcode: p.postalCode || f.postcode,
         }));
       })
       .catch(() => { /* non-fatal */ });
-  }, [tenantId]);
+  }, [portalSession]);
 
   /* Redirect to shop if cart is empty */
   if (items.length === 0 && step !== "confirm") {
