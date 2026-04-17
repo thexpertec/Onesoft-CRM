@@ -1,29 +1,44 @@
 import { useState, useEffect } from "react";
 
-const SESSION_KEY = "cp_session";
+export const SESSION_KEY = "cp_session";
 
-interface CustomerSession {
+export interface SessionCustomer {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  city?: string;
+}
+
+export interface StoredSession {
   tenantId: string;
-  customer: { id: string; name: string; email: string };
+  customer: SessionCustomer;
   loginAt: string;
 }
 
-function readSession(): CustomerSession | null {
+function readSession(): StoredSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as CustomerSession) : null;
+    return raw ? (JSON.parse(raw) as StoredSession) : null;
   } catch {
     return null;
   }
 }
 
+/** Call this to sign out from anywhere in the tenant store */
+export function signOutPortal() {
+  localStorage.removeItem(SESSION_KEY);
+  // Fire a synthetic storage event so all components on this tab update immediately
+  window.dispatchEvent(new StorageEvent("storage", { key: SESSION_KEY, newValue: null }));
+}
+
 export function useCustomerSession() {
-  const [session, setSession] = useState<CustomerSession | null>(readSession);
+  const [session, setSession] = useState<StoredSession | null>(readSession);
 
   useEffect(() => {
     function sync() { setSession(readSession()); }
-    window.addEventListener("storage", sync);
-    window.addEventListener("focus", sync);
+    window.addEventListener("storage", sync); // another tab changed the session
+    window.addEventListener("focus", sync);   // user returned to this tab
     return () => {
       window.removeEventListener("storage", sync);
       window.removeEventListener("focus", sync);

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
+import { useCustomerSession } from "@/hooks/use-customer-session";
 import { cn, formatPrice, getDisplayPrice } from "@/lib/utils";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
@@ -104,30 +105,17 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all";
 
-/* ─── Portal session reader ───────────────────────────────────────────── */
-interface PortalCustomer {
-  id: string; name: string; email: string; phone?: string; city?: string;
-}
-interface PortalSession {
-  tenantId: string;
-  customer: PortalCustomer;
-}
 interface PortalProfile {
   phone?: string; address?: string; city?: string; state?: string; postalCode?: string;
-}
-
-function readPortalSession(): PortalSession | null {
-  try {
-    const raw = localStorage.getItem("cp_session");
-    if (!raw) return null;
-    return JSON.parse(raw) as PortalSession;
-  } catch { return null; }
 }
 
 /* ─── Main Component ─────────────────────────────────────────────────── */
 export function CheckoutPage() {
   const { items, totalPrice, totalItems, clearCart } = useCart();
   const { tenantId } = useStore();
+
+  /* Session comes from the shared hook — no custom reader, no tenantId mismatch risk */
+  const { session: portalSession } = useCustomerSession();
 
   const [step,    setStep]    = useState<Step>("info");
   const [form,    setForm]    = useState<CustomerForm>(BLANK);
@@ -136,32 +124,12 @@ export function CheckoutPage() {
   const [payment,  setPayment]  = useState<PaymentMethod>("cod");
   const [placing,  setPlacing]  = useState(false);
   const [orderId,  setOrderId]  = useState<string>("");
-  const [portalSession, setPortalSession] = useState<PortalSession | null>(null);
 
-  /* ── Reactive session sync (storage + focus events catch sign-in on any tab) */
-  useEffect(() => {
-    function syncSession() {
-      const s = readPortalSession();
-      if (!s || (tenantId && s.tenantId !== tenantId)) {
-        setPortalSession(null);
-        return;
-      }
-      setPortalSession(s);
-    }
-    syncSession();                                   // read immediately on mount
-    window.addEventListener("storage", syncSession); // sign-in from another tab
-    window.addEventListener("focus",   syncSession); // return to this tab after sign-in
-    return () => {
-      window.removeEventListener("storage", syncSession);
-      window.removeEventListener("focus",   syncSession);
-    };
-  }, [tenantId]);
-
-  /* ── Auto-prefill form when session first becomes available ──────────── */
+  /* ── Auto-prefill form whenever session is detected / changes ──────── */
   useEffect(() => {
     if (!portalSession) return;
     const c = portalSession.customer;
-    const parts    = (c.name || "").trim().split(" ");
+    const parts     = (c.name || "").trim().split(" ");
     const firstName = parts[0] ?? "";
     const lastName  = parts.slice(1).join(" ");
     setForm(f => ({
@@ -172,9 +140,9 @@ export function CheckoutPage() {
       phone:     c.phone   || f.phone,
       city:      c.city    || f.city,
     }));
-    // Also fetch saved address from portal profile
+    // Also pull saved address from portal profile store
     const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/tenant-store.*/, "")}/api`;
-    const ns   = encodeURIComponent(`t:${portalSession.tenantId}`);
+    const ns   = encodeURIComponent(`t:${portalSession.tenantId || tenantId || ""}`);
     fetch(`${base}/kv/${ns}/portal-profile-${c.id}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { value: PortalProfile } | null) => {
@@ -189,7 +157,8 @@ export function CheckoutPage() {
         }));
       })
       .catch(() => { /* non-fatal */ });
-  }, [portalSession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portalSession?.customer?.id]);
 
   /* Redirect to shop if cart is empty */
   if (items.length === 0 && step !== "confirm") {

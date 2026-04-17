@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { ShoppingCart, Search, Menu, X, Zap, User, LogIn, LogOut, ChevronDown } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { useCustomerSession } from "@/hooks/use-customer-session";
+import { useCustomerSession, signOutPortal } from "@/hooks/use-customer-session";
 import { cn } from "@/lib/utils";
 
 const ANNOUNCEMENT_BG: Record<string, string> = {
@@ -63,8 +63,7 @@ export function Header() {
   }
 
   function signOut() {
-    localStorage.removeItem("cp_session");
-    window.dispatchEvent(new StorageEvent("storage", { key: "cp_session" }));
+    signOutPortal();
     setAccountOpen(false);
   }
 
