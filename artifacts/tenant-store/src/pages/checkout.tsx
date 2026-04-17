@@ -295,28 +295,59 @@ export function CheckoutPage() {
     const signInUrl  = tenantId
       ? `/customer-portal/?t=${encodeURIComponent(tenantId)}`
       : "/customer-portal/";
+
+    /* Calculate total potential Clubcard saving across all cart items */
+    const clubcardSaving = items.reduce((sum, { product, quantity }) => {
+      const display = parseFloat(getDisplayPrice(product));
+      const club    = parseFloat(product.clubcardPrice ?? "");
+      if (!isNaN(club) && club > 0 && club < display) {
+        return sum + (display - club) * quantity;
+      }
+      return sum;
+    }, 0);
+
+    const bannerSubtitle = clubcardSaving > 0
+      ? `Sign in and save ${formatPrice(clubcardSaving)} on this order with your Clubcard.`
+      : "Sign in to auto-fill your details and unlock Clubcard prices.";
+
     return (
       <div className="space-y-6">
 
         {/* ── Sign-in banner (guests only) ─────────────────────────────── */}
         {!isLoggedIn && (
-          <div className="rounded-2xl border border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between ${
+            clubcardSaving > 0
+              ? "border-green-200 dark:border-green-800 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40"
+              : "border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40"
+          }`}>
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
-                <User size={16} className="text-blue-600 dark:text-blue-400" />
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                clubcardSaving > 0
+                  ? "bg-green-100 dark:bg-green-900"
+                  : "bg-blue-100 dark:bg-blue-900"
+              }`}>
+                <User size={16} className={clubcardSaving > 0 ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400"} />
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
                   Already have an account?
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Sign in to auto-fill your details and unlock Clubcard prices.
+                <p className={`text-xs mt-0.5 ${
+                  clubcardSaving > 0
+                    ? "text-green-700 dark:text-green-400 font-medium"
+                    : "text-slate-500 dark:text-slate-400"
+                }`}>
+                  {bannerSubtitle}
                 </p>
               </div>
             </div>
             <a
               href={signInUrl}
-              className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-200 dark:shadow-blue-900"
+              className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-sm ${
+                clubcardSaving > 0
+                  ? "bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-green-900"
+                  : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-blue-900"
+              }`}
             >
               <UserCheck size={14} />
               Sign In
