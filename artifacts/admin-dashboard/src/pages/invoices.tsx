@@ -866,13 +866,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <div className="grid grid-cols-2 gap-2">
                     {/* Receive to Stock — purchase invoices only (not on new forms) */}
                     {invoiceType === "purchase" && !isNew && s !== "Cancelled" && (() => {
-                      const alreadyReceived = !!invoice!.stockReceived;
+                      // Treat stockReceived OR stockDeducted as "already received" so marking
+                      // Paid (which sets stockDeducted) prevents a double-receipt via this button.
+                      const alreadyReceived = !!(invoice!.stockReceived || invoice!.stockDeducted);
                       return (
                         <button
                           onClick={() => {
                             if (alreadyReceived) return;
                             receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
-                            updateInvoice(invoice!.id, { stockReceived: true });
+                            editInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
                             toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
                           }}
                           disabled={alreadyReceived}
@@ -1309,6 +1311,7 @@ export function InvoiceFormPage() {
     if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         receiveStockForPurchase(inv.items, inv.invoiceNumber);
+        updates.stockReceived = true;   // keep in sync so the button shows ✓
       } else {
         deductStockForSale(inv.items, inv.invoiceNumber);
       }
@@ -1317,6 +1320,7 @@ export function InvoiceFormPage() {
     if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         reverseStockForPurchase(inv.items, inv.invoiceNumber);
+        updates.stockReceived = false;  // reset so button is usable again if re-activated
       } else {
         restoreStockForSale(inv.items, inv.invoiceNumber);
       }
@@ -1372,6 +1376,7 @@ export function InvoiceFormPage() {
     if (!inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         receiveStockForPurchase(inv.items, inv.invoiceNumber);
+        updates.stockReceived = true;   // keep in sync with the "Receive to Stock" button
       } else {
         deductStockForSale(inv.items, inv.invoiceNumber);
       }
