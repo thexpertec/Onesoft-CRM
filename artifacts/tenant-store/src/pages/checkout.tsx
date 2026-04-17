@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { useCustomerSession } from "@/hooks/use-customer-session";
+import { SESSION_KEY, type StoredSession } from "@/hooks/use-customer-session";
 import { cn, formatPrice, getDisplayPrice } from "@/lib/utils";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
@@ -114,8 +114,29 @@ export function CheckoutPage() {
   const { items, totalPrice, totalItems, clearCart } = useCart();
   const { tenantId } = useStore();
 
-  /* Session comes from the shared hook — no custom reader, no tenantId mismatch risk */
-  const { session: portalSession } = useCustomerSession();
+  /* ── Session state — managed locally so inline sign-in can update it immediately ── */
+  const [portalSession, setPortalSession] = useState<StoredSession | null>(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      return raw ? (JSON.parse(raw) as StoredSession) : null;
+    } catch { return null; }
+  });
+
+  /* Sync when user returns to tab or signs in from another tab */
+  useEffect(() => {
+    function syncFromStorage() {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        setPortalSession(raw ? (JSON.parse(raw) as StoredSession) : null);
+      } catch { setPortalSession(null); }
+    }
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener("focus", syncFromStorage);
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener("focus", syncFromStorage);
+    };
+  }, []);
 
   const [step,    setStep]    = useState<Step>("info");
   const [form,    setForm]    = useState<CustomerForm>(BLANK);
@@ -161,10 +182,9 @@ export function CheckoutPage() {
         email: account.email,
         phone: "", city: "",
       };
-      const sessionData = { tenantId, customer, loginAt: new Date().toISOString() };
-      localStorage.setItem("cp_session", JSON.stringify(sessionData));
-      // Notify useCustomerSession hook on this tab immediately
-      window.dispatchEvent(new StorageEvent("storage", { key: "cp_session", newValue: JSON.stringify(sessionData) }));
+      const sessionData: StoredSession = { tenantId, customer, loginAt: new Date().toISOString() };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+      setPortalSession(sessionData);   // update state directly — no StorageEvent needed
       setShowInlineLogin(false);
       setLoginEmail("");
       setLoginPassword("");

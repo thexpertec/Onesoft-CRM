@@ -139,7 +139,14 @@ export function generateCardId(): string {
 
 export async function fetchClubcard(tenantId: string, customerId: string): Promise<ClubCard> {
   const data = await kvGet<ClubCard>(`t:${tenantId}`, `clubcard-${customerId}`);
-  return data ?? { cardId: generateCardId(), coins: 0, transactions: [] };
+  if (!data || Array.isArray(data) || typeof data !== "object") {
+    return { cardId: generateCardId(), coins: 0, transactions: [] };
+  }
+  return {
+    cardId: data.cardId || generateCardId(),
+    coins: typeof data.coins === "number" ? data.coins : 0,
+    transactions: Array.isArray(data.transactions) ? data.transactions : [],
+  };
 }
 
 export async function saveClubcard(tenantId: string, customerId: string, card: ClubCard): Promise<void> {

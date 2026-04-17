@@ -12,7 +12,7 @@ router.get("/:namespace/:key", async (req, res) => {
       [namespace, key]
     );
     if (rows.length === 0) {
-      return res.json({ value: [] });
+      return res.json({ value: null });
     }
     return res.json({ value: (rows[0] as { value: unknown }).value });
   } catch (err) {
