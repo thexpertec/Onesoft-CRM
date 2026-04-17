@@ -2118,6 +2118,86 @@ export const getEntityLedger       = (entityId: string) => getStockLedger().filt
 export const clearEntityLedger     = (entityId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.entityId !== entityId));
 export const deleteStockLedgerEntry = (entryId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.id !== entryId));
 
+/**
+ * Remove duplicate purchase-receipt ledger entries that share the same
+ * (entityId, reference) pair — keeping only the chronologically first one.
+ * After pruning, rebuilds qtyBefore/qtyAfter for affected entities and
+ * corrects the actual stock-item quantity to match the deduplicated ledger.
+ */
+export function deduplicatePurchaseReceipts(): { removedEntries: number; fixedItems: number } {
+  const allEntries = getStockLedger();
+
+  // Chronological sort (date primary, createdAt secondary)
+  const sorted = [...allEntries].sort((a, b) =>
+    a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+  );
+
+  const seenPurchaseKeys = new Set<string>();
+  const keptIds           = new Set<string>();
+  const affectedEntityIds = new Set<string>();
+
+  for (const entry of sorted) {
+    if (entry.txType === "purchase-receipt") {
+      const key = `${entry.entityId}::${entry.reference}`;
+      if (seenPurchaseKeys.has(key)) {
+        affectedEntityIds.add(entry.entityId);
+        continue; // skip duplicate
+      }
+      seenPurchaseKeys.add(key);
+    }
+    keptIds.add(entry.id);
+  }
+
+  const removedCount = allEntries.length - keptIds.size;
+  if (removedCount === 0) return { removedEntries: 0, fixedItems: 0 };
+
+  // Filter to kept entries then rebuild balances for affected entities
+  const kept = allEntries.filter(e => keptIds.has(e.id));
+
+  const rebuiltMap = new Map<string, StockLedgerEntry[]>();
+
+  for (const entityId of affectedEntityIds) {
+    const entityEntries = kept
+      .filter(e => e.entityId === entityId)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+
+    // Use the first entry's qtyBefore as the true opening seed
+    let running = entityEntries.length > 0 ? entityEntries[0].qtyBefore : 0;
+    const rebuilt = entityEntries.map(e => {
+      const before = running;
+      const after  = running + e.qtyChange;
+      running = after;
+      return { ...e, qtyBefore: before, qtyAfter: after };
+    });
+    rebuiltMap.set(entityId, rebuilt);
+  }
+
+  const finalEntries: StockLedgerEntry[] = [
+    ...kept.filter(e => !affectedEntityIds.has(e.entityId)),
+    ...[...rebuiltMap.values()].flat(),
+  ];
+
+  setStored(LEDGER_KEY, finalEntries);
+
+  // Correct actual stock quantities to match the deduplicated ledger
+  const stocks = getStock();
+  let fixedItems = 0;
+
+  for (const entityId of affectedEntityIds) {
+    const idx = stocks.findIndex(s => s.id === entityId);
+    if (idx < 0) continue;
+    const entityEntries = (rebuiltMap.get(entityId) ?? [])
+      .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+    const correctQty = entityEntries.length > 0 ? entityEntries[entityEntries.length - 1].qtyAfter : 0;
+    stocks[idx] = { ...stocks[idx], quantity: String(correctQty), updatedAt: new Date().toISOString() };
+    fixedItems++;
+  }
+
+  setStored(STOCK_KEY, stocks);
+
+  return { removedEntries: removedCount, fixedItems };
+}
+
 function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
   if (entries.length === 0) return;
   const now = new Date().toISOString();

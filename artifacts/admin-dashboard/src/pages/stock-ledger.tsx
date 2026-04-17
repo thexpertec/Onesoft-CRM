@@ -4,12 +4,12 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getStock, getStockLedger, deleteStockLedgerEntry, getSettings,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
-  reconcileStockItem, reconcileAllStock,
+  reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
   TrendingUp, TrendingDown, Package, BarChart3,
-  Filter, X, Trash2, AlertTriangle, ChevronDown, Wrench, CheckCircle2,
+  Filter, X, Trash2, AlertTriangle, ChevronDown, Wrench, CheckCircle2, Eraser,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -308,6 +308,19 @@ export default function StockLedgerPage() {
     }
   }, [toast]);
 
+  const handleDeduplicatePurchases = useCallback(() => {
+    const { removedEntries, fixedItems } = deduplicatePurchaseReceipts();
+    setRevision(r => r + 1);
+    if (removedEntries > 0) {
+      toast({
+        title: `Removed ${removedEntries} duplicate entr${removedEntries !== 1 ? "ies" : "y"}`,
+        description: `Stock quantities corrected for ${fixedItems} product${fixedItems !== 1 ? "s" : ""}.`,
+      });
+    } else {
+      toast({ title: "No duplicates found", description: "All purchase receipt entries are already unique." });
+    }
+  }, [toast]);
+
   const productOpts = useMemo(() =>
     stocks.filter(s =>
       !search ||
@@ -375,6 +388,14 @@ export default function StockLedgerPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleDeduplicatePurchases}
+            title="Remove duplicate purchase receipt entries caused by clicking 'Receive to Stock' multiple times on the same invoice, and correct stock quantities"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+          >
+            <Eraser size={12}/> Remove Duplicates
+          </button>
+
           <button
             onClick={handleReconcileAll}
             title="Scan all stock items and create correction ledger entries where the ledger balance doesn't match actual quantity"
