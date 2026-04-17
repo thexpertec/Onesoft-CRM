@@ -885,7 +885,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           // Optimistically disable button before any re-render
                           setStockJustReceived(true);
                           receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
-                          editInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
+                          updateInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
                           toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
                         }}
                         disabled={stockJustReceived}
