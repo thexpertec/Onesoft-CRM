@@ -133,14 +133,19 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 
   // ── Seller compact footer lines ──────────────────────────────────────────────
   const footerInfoParts: string[] = [];
-  if (settings.addressHull)         footerInfoParts.push(esc(settings.addressHull));
-  if (settings.addressIslamabad)    footerInfoParts.push(esc(settings.addressIslamabad));
-  if (settings.phoneHull)           footerInfoParts.push(`Tel: ${esc(settings.phoneHull)}`);
-  if (settings.emailHull)           footerInfoParts.push(esc(settings.emailHull));
-  if (settings.website)             footerInfoParts.push(esc(settings.website));
-  if (settings.vatNumber)           footerInfoParts.push(`VAT No: ${esc(settings.vatNumber)}`);
-  if (settings.companyRegistration) footerInfoParts.push(`Reg: ${esc(settings.companyRegistration)}`);
-  const footerLegal = settings.invoiceFooter;
+  const showContact = settings.printFooterShowContact !== false; // default true
+  if (showContact) {
+    if (settings.addressHull)         footerInfoParts.push(esc(settings.addressHull));
+    if (settings.addressIslamabad)    footerInfoParts.push(esc(settings.addressIslamabad));
+    if (settings.phoneHull)           footerInfoParts.push(`Tel: ${esc(settings.phoneHull)}`);
+    if (settings.emailHull)           footerInfoParts.push(esc(settings.emailHull));
+    if (settings.website)             footerInfoParts.push(esc(settings.website));
+    if (settings.vatNumber)           footerInfoParts.push(`VAT No: ${esc(settings.vatNumber)}`);
+    if (settings.companyRegistration) footerInfoParts.push(`Reg: ${esc(settings.companyRegistration)}`);
+  }
+  const footerLegal    = settings.invoiceFooter;
+  const footerLegalNote = settings.printFooterLegalNote
+    ?? "This is a computer-generated document. No handwritten signature is required.";
 
   // ── Item rows ───────────────────────────────────────────────────────────────
   const itemRows = inv.items.map((item, i) => {
@@ -421,6 +426,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
     <div>
       ${logoHtml}
       ${settings.companyTagline ? `<div class="company-tagline">${esc(settings.companyTagline)}</div>` : ""}
+      ${settings.printHeaderNote ? `<div style="font-size:7.5pt;color:#cbd5e1;margin-top:4pt;font-style:italic;">${nl2br(settings.printHeaderNote)}</div>` : ""}
     </div>
   </div>
   <div class="inv-header-right">
@@ -586,7 +592,7 @@ ${docsToRender.length > 0 ? `
   </div>
   ${footerInfoParts.length > 0 ? `<div class="inv-footer-line">${footerInfoParts.join(" &nbsp;·&nbsp; ")}</div>` : ""}
   ${footerLegal ? `<div class="inv-footer-line">${nl2br(footerLegal)}</div>` : ""}
-  <div class="inv-footer-legal">This is a computer-generated document. No handwritten signature is required.</div>
+  ${footerLegalNote ? `<div class="inv-footer-legal">${nl2br(footerLegalNote)}</div>` : ""}
 </div>
 
 </div><!-- /page -->

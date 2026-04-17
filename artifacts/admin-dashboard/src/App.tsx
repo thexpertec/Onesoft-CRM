@@ -40,6 +40,7 @@ import ShareholdersPage from "@/pages/shareholders";
 import InvestmentPlansPage from "@/pages/investment-plans";
 import MediaLibraryPage from "@/pages/media";
 import SettingsPage from "@/pages/settings";
+import PrintTemplatesPage from "@/pages/print-templates";
 import TenantsPage from "@/pages/tenants";
 import ModuleGroupsPage from "@/pages/module-groups";
 import ChartOfAccountsPage from "@/pages/chart-of-accounts";
@@ -171,6 +172,7 @@ function Router() {
               <Route path="/website-cms" component={WebsiteCmsPage} />
               <Route path="/repair" component={RepairPage} />
               <Route path="/settings" component={SettingsPage} />
+              <Route path="/print-templates" component={PrintTemplatesPage} />
               <Route component={NotFound} />
             </Switch>
             </PageErrorBoundary>

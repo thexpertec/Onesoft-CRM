@@ -3058,6 +3058,10 @@ export type AppSettings = {
   fontButton?:     number;   // button text font size (default 13)
   fontTag?:        number;   // badge/tag/pill font size (default 11)
   fontFilter?:     number;   // filter bar / toolbar text font size (default 12)
+  // ── Print template ──
+  printHeaderNote?:          string;   // extra text/note shown in the invoice header band
+  printFooterLegalNote?:     string;   // small legal note at the bottom of the footer
+  printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -3110,6 +3114,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontButton:           13,
   fontTag:              11,
   fontFilter:           12,
+  printHeaderNote:          "",
+  printFooterLegalNote:     "This is a computer-generated document. No handwritten signature is required.",
+  printFooterShowContact:   true,
 };
 
 export function getSettings(): AppSettings {
