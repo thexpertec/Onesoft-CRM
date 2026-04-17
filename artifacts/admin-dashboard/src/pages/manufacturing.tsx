@@ -102,24 +102,44 @@ function printMfgOrder(order: ManufacturingOrder, rms: RawMaterial[], sym: strin
     `<div class="tr indent"><span>${c.description}</span><span class="ta violet">${f(parseFloat(c.amount || "0"))}</span></div>`
   ).join("");
 
-  const tOutRight = [
-    mainOut && mainQty > 0 ? `<p class="t-sub orange">Main Product</p>
-      <div class="tr indent"><span>${mainOut.productName || "Main"} × ${mainQty}</span><span class="ta orange">${f(mainCost)}</span></div>
-      <div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit</div>` : "",
-    byProds.filter(bp => bp.productName?.trim()).length > 0 ? `<p class="t-sub" style="margin-top:7pt;">By-products</p>` + byProds.filter(bp => bp.productName?.trim()).map(bp => {
-      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
-      const mc   = parseFloat(bp.manualCost || "0");
-      const q    = parseFloat(bp.qty) || 0;
-      const alloc = hasM ? mc * q : 0;
-      return `<div class="tr indent"><span>${bp.productName} × ${bp.qty}</span>
-        <span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>
-        <div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">
-          ${hasM ? `${sym}${mc.toFixed(3)}/unit · FIXED` : "Cost absorbed by main product"}</div>`;
-    }).join("") : "",
-  ].join("");
+  // Build tOutRight as plain string (no nested template literals)
+  let tOutRight = "";
+  if (mainOut && mainQty > 0) {
+    tOutRight += '<p class="t-sub orange">Main Product</p>';
+    tOutRight += `<div class="tr indent"><span>${mainOut.productName || "Main"} \u00d7 ${mainQty}</span><span class="ta orange">${f(mainCost)}</span></div>`;
+    tOutRight += `<div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit</div>`;
+  }
+  byProds.filter(bp => bp.productName?.trim()).forEach((bp, i) => {
+    if (i === 0) tOutRight += '<p class="t-sub" style="margin-top:7pt;">By-products</p>';
+    const hasM  = bp.manualCost !== undefined && bp.manualCost !== "";
+    const mc    = parseFloat(bp.manualCost || "0");
+    const q     = parseFloat(bp.qty) || 0;
+    const alloc = hasM ? mc * q : 0;
+    tOutRight += `<div class="tr indent"><span>${bp.productName} \u00d7 ${bp.qty}</span><span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>`;
+    tOutRight += `<div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">${hasM ? (sym + mc.toFixed(3) + "/unit \u00b7 FIXED") : "Cost absorbed by main product"}</div>`;
+  });
 
+  // Pre-build reconciliation production-cost block
+  let reconProdBlock = "";
+  if ((order.productionCosts || []).filter(c => c.description?.trim()).length > 0) {
+    reconProdBlock = '<p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>';
+    reconProdBlock += tCostLeft;
+    reconProdBlock += `<div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>`;
+  }
+
+  // Pre-build optional sections
   const hasWaste = order.wasteQty && order.wasteQty !== "0" && order.wasteQty !== "";
   const sectionN = (n: number) => hasWaste ? n : n - (n > 4 ? 1 : 0);
+  let wasteSection = "";
+  if (hasWaste) {
+    wasteSection = '<div class="sec"><div class="sh a">5 \u00b7 Waste / Loss Recorded</div>';
+    wasteSection += '<div style="border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;padding:7pt 9pt;background:#fffbeb;">';
+    wasteSection += `<strong>${order.wasteQty} ${order.wasteUnit || ""}</strong>`;
+    if (order.wasteNotes) wasteSection += `<br><span style="color:#64748b;font-size:8.5pt;">${order.wasteNotes}</span>`;
+    wasteSection += '</div></div>';
+  }
+  const batchNotesContent = order.notes || '<em style="color:#9ca3af;">No notes recorded.</em>';
+  const batchNotesSection = `<div class="sec"><div class="sh sl">${sectionN(6)} \u00b7 Batch Notes</div><div class="nb">${batchNotesContent}</div></div>`;
 
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
 <title>Manufacturing Order — ${order.orderNumber}</title>
@@ -254,40 +274,24 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
       <p class="t-sub" style="color:#059669;">Raw Materials</p>
       ${tInLeft}
       <div class="tr sub"><span style="color:#059669;">RM Subtotal</span><span class="ta green">${f(rmCost)}</span></div>
-      ${(order.productionCosts || []).filter(c => c.description?.trim()).length > 0 ? `
-      <p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>
-      ${tCostLeft}
-      <div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>
-      ` : ""}
+      ${reconProdBlock}
       <div class="tr tot"><span>Total In</span><span class="ta orange">${f(total)}</span></div>
     </div>
     <div class="tc">
-      <div class="tch">Costs Out — Credits</div>
+      <div class="tch">Costs Out &#x2014; Credits</div>
       ${tOutRight}
       <div class="tr tot"><span>Total Out</span><span class="ta orange">${f(total)}</span></div>
     </div>
   </div>
   <div class="bal ok">
-    <span>✓ Fully Reconciled — Cost In = Cost Out</span>
+    <span>&#x2713; Fully Reconciled &#x2014; Cost In = Cost Out</span>
     <span>Variance: ${sym}0.00</span>
   </div>
 </div>
 
-${hasWaste ? `
-<!-- 5. WASTE / LOSS -->
-<div class="sec">
-  <div class="sh a">5 · Waste / Loss Recorded</div>
-  <div style="border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;padding:7pt 9pt;background:#fffbeb;">
-    <strong>${order.wasteQty} ${order.wasteUnit || ""}</strong>
-    ${order.wasteNotes ? `<br><span style="color:#64748b;font-size:8.5pt;">${order.wasteNotes}</span>` : ""}
-  </div>
-</div>` : ""}
+${wasteSection}
 
-<!-- BATCH NOTES -->
-<div class="sec">
-  <div class="sh sl">${hasWaste ? 6 : 5} · Batch Notes</div>
-  <div class="nb">${order.notes || `<em style="color:#9ca3af;">No notes recorded.</em>`}</div>
-</div>
+${batchNotesSection}
 
 <!-- SIGNATURES -->
 <div class="sigs">
@@ -389,21 +393,65 @@ function printRecipe(recipe: MfgRecipe, rms: RawMaterial[], sym: string, decPlac
     `<div class="tr indent"><span>${c.description}</span><span class="ta violet">${f(parseFloat(c.amount || "0"))}</span></div>`
   ).join("");
 
-  const tOutRight = [
-    mainOut && mainQty > 0 ? `<p class="t-sub orange">Main Product</p>
-      <div class="tr indent"><span>${mainOut.productName || "Main"} × ${mainQty}</span><span class="ta orange">${total > 0 ? f(mainCost) : "—"}</span></div>
-      ${total > 0 ? `<div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit (base)</div>` : ""}` : "",
-    byProds.filter(bp => bp.productName?.trim()).length > 0 ? `<p class="t-sub" style="margin-top:7pt;">By-products</p>` + byProds.filter(bp => bp.productName?.trim()).map(bp => {
-      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
-      const mc   = parseFloat(bp.manualCost || "0");
-      const q    = parseFloat(bp.qty) || 0;
+  // Build tOutRight without nested template literals
+  let tOutRight = "";
+  if (mainOut && mainQty > 0) {
+    tOutRight += '<p class="t-sub orange">Main Product</p>';
+    tOutRight += `<div class="tr indent"><span>${mainOut.productName || "Main"} \u00d7 ${mainQty}</span><span class="ta orange">${total > 0 ? f(mainCost) : "\u2014"}</span></div>`;
+    if (total > 0) {
+      tOutRight += `<div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit (base)</div>`;
+    }
+  }
+  const visibleBPs = byProds.filter(bp => bp.productName?.trim());
+  if (visibleBPs.length > 0) {
+    tOutRight += '<p class="t-sub" style="margin-top:7pt;">By-products</p>';
+    visibleBPs.forEach(bp => {
+      const hasM  = bp.manualCost !== undefined && bp.manualCost !== "";
+      const mc    = parseFloat(bp.manualCost || "0");
+      const q     = parseFloat(bp.qty) || 0;
       const alloc = hasM ? mc * q : 0;
-      return `<div class="tr indent"><span>${bp.productName} × ${bp.qty}</span>
-        <span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>
-        <div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">
-          ${hasM ? `${sym}${mc.toFixed(3)}/unit · FIXED` : "Cost absorbed by main product"}</div>`;
-    }).join("") : "",
-  ].join("");
+      tOutRight += `<div class="tr indent"><span>${bp.productName} \u00d7 ${bp.qty}</span><span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>`;
+      tOutRight += `<div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">${hasM ? (sym + mc.toFixed(3) + "/unit \u00b7 FIXED") : "Cost absorbed by main product"}</div>`;
+    });
+  }
+
+  // Pre-build reconciliation section to avoid nested template literals
+  let reconSection = "";
+  if (total > 0) {
+    let prodCostBlock = "";
+    if ((recipe.productionCosts || []).filter(c => c.description?.trim()).length > 0) {
+      prodCostBlock = '<p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>';
+      prodCostBlock += tCostLeft;
+      prodCostBlock += `<div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>`;
+    }
+    const tInFallback = tInLeft || '<div class="tr indent"><span style="color:#9ca3af;font-style:italic;">None</span></div>';
+    reconSection = [
+      '<div class="sec">',
+      '  <div class="sh e">4 \u00b7 Base Cost Reconciliation \u2014 Manufacturing Account</div>',
+      '  <div class="tac">',
+      '    <div class="tc">',
+      '      <div class="tch">Costs In \u2014 Debits</div>',
+      '      <p class="t-sub" style="color:#059669;">Raw Materials</p>',
+      '      ' + tInFallback,
+      `      <div class="tr sub"><span style="color:#059669;">RM Subtotal</span><span class="ta green">${f(rmCost)}</span></div>`,
+      '      ' + prodCostBlock,
+      `      <div class="tr tot"><span>Total In</span><span class="ta orange">${f(total)}</span></div>`,
+      '    </div>',
+      '    <div class="tc">',
+      '      <div class="tch">Costs Out \u2014 Credits</div>',
+      '      ' + tOutRight,
+      `      <div class="tr tot"><span>Total Out</span><span class="ta orange">${f(total)}</span></div>`,
+      '    </div>',
+      '  </div>',
+      `  <div class="bal ok"><span>\u2713 Fully Reconciled \u2014 Cost In = Cost Out (base quantities)</span><span>Variance: ${sym}0.00</span></div>`,
+      '</div>',
+    ].join("\n");
+  }
+
+  // Pre-build notes section
+  const notesSectionNum = total > 0 ? 5 : 4;
+  const notesContent    = recipe.notes || '<em style="color:#9ca3af;">No notes recorded.</em>';
+  const notesSection    = `<div class="sec"><div class="sh sl">${notesSectionNum} \u00b7 Recipe Notes</div><div class="nb">${notesContent}</div></div>`;
 
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
 <title>Recipe — ${recipe.name}</title>
@@ -527,39 +575,9 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
   </table></div>
 </div>
 
-<!-- 4. COST RECONCILIATION -->
-${total > 0 ? `<div class="sec">
-  <div class="sh e">4 · Base Cost Reconciliation — Manufacturing Account</div>
-  <div class="tac">
-    <div class="tc">
-      <div class="tch">Costs In — Debits</div>
-      <p class="t-sub" style="color:#059669;">Raw Materials</p>
-      ${tInLeft || `<div class="tr indent"><span style="color:#9ca3af;font-style:italic;">None</span></div>`}
-      <div class="tr sub"><span style="color:#059669;">RM Subtotal</span><span class="ta green">${f(rmCost)}</span></div>
-      ${(recipe.productionCosts || []).filter(c => c.description?.trim()).length > 0 ? `
-      <p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>
-      ${tCostLeft}
-      <div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>
-      ` : ""}
-      <div class="tr tot"><span>Total In</span><span class="ta orange">${f(total)}</span></div>
-    </div>
-    <div class="tc">
-      <div class="tch">Costs Out — Credits</div>
-      ${tOutRight}
-      <div class="tr tot"><span>Total Out</span><span class="ta orange">${f(total)}</span></div>
-    </div>
-  </div>
-  <div class="bal ok">
-    <span>✓ Fully Reconciled — Cost In = Cost Out (base quantities)</span>
-    <span>Variance: ${sym}0.00</span>
-  </div>
-</div>` : ""}
+${reconSection}
 
-<!-- RECIPE NOTES -->
-<div class="sec">
-  <div class="sh sl">${total > 0 ? 5 : 4} · Recipe Notes</div>
-  <div class="nb">${recipe.notes || `<em style="color:#9ca3af;">No notes recorded.</em>`}</div>
-</div>
+${notesSection}
 
 <!-- SIGNATURES -->
 <div class="sigs">
