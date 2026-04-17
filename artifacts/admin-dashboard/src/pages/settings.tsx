@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import {
   Building2, DollarSign, ShoppingBag, Database, Scale, BookOpen,
   Save, Upload, Download, Trash2, RefreshCw,
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
-  PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer,
+  PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer, Pencil, ExternalLink,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import {
 } from "@/lib/quick-actions";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
-type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface" | "print";
+type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface" | "print" | "invoice_labels";
 
 const FORM_MODE_OPTS: { value: "dialog" | "sheet"; label: string; icon: React.ElementType }[] = [
   { value: "dialog", label: "Form",       icon: Maximize2  },
@@ -49,8 +50,9 @@ const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[
   { id: "pos",        label: "POS & Sales",        icon: ShoppingBag,    desc: "Receipt, payment & tax defaults"      },
   { id: "accounting", label: "Accounting Links",   icon: BookOpen,       desc: "Map COA accounts to POS & Invoices"   },
   { id: "interface",  label: "Interface",          icon: LayoutTemplate, desc: "Sidebar shortcuts & quick actions"    },
-  { id: "print",      label: "Print Templates",    icon: FileText,       desc: "Header & footer for printed docs"     },
-  { id: "legal",      label: "Legal Documents",    icon: Scale,          desc: "Terms, conditions & privacy policy"   },
+  { id: "print",          label: "Print Templates",    icon: FileText, desc: "Header & footer for printed docs"     },
+  { id: "invoice_labels", label: "Invoice Labels",     icon: Pencil,   desc: "Customise text labels on invoices"    },
+  { id: "legal",          label: "Legal Documents",    icon: Scale,    desc: "Terms, conditions & privacy policy"   },
   { id: "data",       label: "Data Management",    icon: Database,       desc: "Backup, import & reset"               },
 ];
 
@@ -576,6 +578,7 @@ export default function SettingsPage() {
   const { isSuperAdmin, currentTenant } = useAuth();
   const { toast } = useToast();
   const { accounts } = useAccounts();
+  const [, navigate] = useLocation();
 
   // Ledger accounts only (for accounting mappings)
   const ledgerAccounts = accounts.filter(a => a.accountType === "Ledger" && a.isActive !== false);
@@ -688,7 +691,7 @@ export default function SettingsPage() {
           </div>
           <Button
             onClick={handleSave}
-            disabled={!dirty || saving || tab === "data"}
+            disabled={!dirty || saving || tab === "data" || tab === "invoice_labels"}
             className={`gap-2 h-9 px-4 text-[13px] ${tab === "legal" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
           >
             {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
@@ -1714,6 +1717,33 @@ export default function SettingsPage() {
                       <p className="text-[10px] text-muted-foreground">This footer appears on every page of the printed document.</p>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══ Invoice Labels ═══════════════════════════════════════════════ */}
+            {tab === "invoice_labels" && (
+              <div className="space-y-8">
+                <SectionHeader
+                  title="Invoice Labels"
+                  desc="Customise the text labels that appear on printed sale and purchase invoices — column headers, totals, section titles, and more."
+                />
+                <div className="flex flex-col items-center justify-center gap-6 py-12 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900/40">
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center">
+                      <Pencil size={26} className="text-blue-500 dark:text-blue-400" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Visual Label Editor</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs">
+                      Click any label on the live invoice preview to rename it. Changes apply to all printed invoices instantly.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate("/invoice-template")}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm"
+                  >
+                    <ExternalLink size={15} /> Open Invoice Label Editor
+                  </button>
                 </div>
               </div>
             )}
