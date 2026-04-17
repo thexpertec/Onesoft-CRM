@@ -65,9 +65,9 @@ function calcProdCost(costs: ProductionCost[]): number {
 
 // ── Recipe base (for auto-scaling) ────────────────────────────────────────────
 type RecipeBase = {
-  recipeName:     string;
-  inputs:         { id: string; qty: number }[];  // base qty per input row
-  totalOutputQty: number;                          // base total output qty
+  recipeName:    string;
+  inputs:        { id: string; qty: number }[];  // base qty per input row
+  mainOutputQty: number;                          // base qty of main product
 };
 
 // ── Form state type ───────────────────────────────────────────────────────────
@@ -75,13 +75,14 @@ type NewOrderForm = {
   orderDate:       string;
   status:          string;
   inputs:          MfgInput[];
-  outputs:         MfgOutput[];
+  mainOutput:      MfgOutput;        // primary / main product (exactly one)
+  byProducts:      MfgOutput[];      // optional secondary / co-products
   productionCosts: ProductionCost[];
   wasteQty:        string;
   wasteUnit:       string;
   wasteNotes:      string;
   notes:           string;
-  recipeBase:      RecipeBase | null;   // set when a recipe is loaded
+  recipeBase:      RecipeBase | null;
 };
 
 function defaultForm(): NewOrderForm {
@@ -89,7 +90,8 @@ function defaultForm(): NewOrderForm {
     orderDate:       format(new Date(), "yyyy-MM-dd"),
     status:          "Draft",
     inputs:          [blankInput()],
-    outputs:         [blankOutput()],
+    mainOutput:      blankOutput(),
+    byProducts:      [],
     productionCosts: [],
     wasteQty:        "",
     wasteUnit:       "",
@@ -138,26 +140,29 @@ export default function ManufacturingPage() {
       recipeBase: "qtyUsed" in p ? null : f.recipeBase,
     }));
 
-  // outputs — if recipe is loaded, auto-scale all inputs proportionally
-  const addOutput    = () => setF({ outputs: [...form.outputs, blankOutput()] });
-  const removeOutput = (id: string) => setF({ outputs: form.outputs.filter(o => o.id !== id) });
-  const updOutput = (id: string, p: Partial<MfgOutput>) =>
+  // main output — changing qty auto-scales all inputs when recipe is loaded
+  const updMainOutput = (p: Partial<MfgOutput>) =>
     setForm(f => {
-      const newOutputs = f.outputs.map(o => o.id === id ? { ...o, ...p } : o);
-      // Auto-scale inputs when a recipe is loaded and qty changes
+      const newMain = { ...f.mainOutput, ...p };
       let newInputs = f.inputs;
-      if (f.recipeBase && f.recipeBase.totalOutputQty > 0 && "qty" in p) {
-        const newTotal = newOutputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
-        if (newTotal > 0) {
-          const ratio = newTotal / f.recipeBase.totalOutputQty;
+      if (f.recipeBase && f.recipeBase.mainOutputQty > 0 && "qty" in p) {
+        const newQty = parseFloat(newMain.qty) || 0;
+        if (newQty > 0) {
+          const ratio = newQty / f.recipeBase.mainOutputQty;
           newInputs = f.inputs.map(inp => {
             const base = f.recipeBase!.inputs.find(b => b.id === inp.id);
             return base ? { ...inp, qtyUsed: scaleQty(base.qty, ratio) } : inp;
           });
         }
       }
-      return { ...f, outputs: newOutputs, inputs: newInputs };
+      return { ...f, mainOutput: newMain, inputs: newInputs };
     });
+
+  // by-products
+  const addByProduct    = () => setF({ byProducts: [...form.byProducts, blankOutput()] });
+  const removeByProduct = (id: string) => setF({ byProducts: form.byProducts.filter(o => o.id !== id) });
+  const updByProduct    = (id: string, p: Partial<MfgOutput>) =>
+    setF({ byProducts: form.byProducts.map(o => o.id === id ? { ...o, ...p } : o) });
 
   // production costs
   const addCost    = () => setF({ productionCosts: [...form.productionCosts, blankCost()] });
@@ -169,19 +174,21 @@ export default function ManufacturingPage() {
   const rmCost      = useMemo(() => calcRMCost(form.inputs, rms), [form.inputs, rms]);
   const prodCost    = useMemo(() => calcProdCost(form.productionCosts), [form.productionCosts]);
   const totalCost   = rmCost + prodCost;
-  const totalOutQty = form.outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+  const mainQty     = parseFloat(form.mainOutput.qty) || 0;
+  const byQty       = form.byProducts.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+  const totalOutQty = mainQty + byQty;
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
-    const validOutputs = form.outputs.filter(o => o.productName.trim() && (parseFloat(o.qty) || 0) > 0);
-    if (validOutputs.length === 0) {
-      toast({ title: "Add at least one output product with a quantity", variant: "destructive" }); return;
+    if (!form.mainOutput.productName.trim() || mainQty <= 0) {
+      toast({ title: "Select a main product and enter a quantity", variant: "destructive" }); return;
     }
+    const validByProducts = form.byProducts.filter(o => o.productName.trim() && (parseFloat(o.qty) || 0) > 0);
     add({
       orderDate:       form.orderDate,
       status:          form.status as ManufacturingOrder["status"],
       inputs:          form.inputs.filter(i => i.rmName.trim()),
-      outputs:         validOutputs,
+      outputs:         [form.mainOutput, ...validByProducts],
       productionCosts: form.productionCosts.filter(c => c.description.trim()),
       wasteQty:        form.wasteQty,
       wasteUnit:       form.wasteUnit,
@@ -191,7 +198,7 @@ export default function ManufacturingPage() {
     toast({ title: "Manufacturing order created" });
     setNewOpen(false);
     setForm(defaultForm());
-  }, [form, add, toast]);
+  }, [form, mainQty, add, toast]);
 
   // ── Recipe states ─────────────────────────────────────────────────────────
   const [recipesOpen,    setRecipesOpen]    = useState(false);
@@ -380,20 +387,23 @@ export default function ManufacturingPage() {
                       <Button size="sm" variant="outline" className="w-full h-8 text-[12px] gap-1.5 mt-1"
                         onClick={() => {
                           const newInputs = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
-                          const baseOutQty = r.outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+                          const [firstOut, ...restOuts] = r.outputs;
+                          const mainOut = firstOut ? { ...firstOut, id: crypto.randomUUID() } : blankOutput();
+                          const baseMainQty = parseFloat(mainOut.qty) || 0;
                           setF({
                             inputs:          newInputs,
-                            outputs:         r.outputs.map(o => ({ ...o, id: crypto.randomUUID() })),
+                            mainOutput:      mainOut,
+                            byProducts:      restOuts.map(o => ({ ...o, id: crypto.randomUUID() })),
                             productionCosts: r.productionCosts.map(c => ({ ...c, id: crypto.randomUUID() })),
                             notes:           r.notes,
                             recipeBase: {
-                              recipeName:     r.name,
-                              inputs:         newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
-                              totalOutputQty: baseOutQty,
+                              recipeName:    r.name,
+                              inputs:        newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
+                              mainOutputQty: baseMainQty,
                             },
                           });
                           setNewOpen(true);
-                          toast({ title: `Recipe "${r.name}" loaded — adjust output qty to auto-scale materials` });
+                          toast({ title: `Recipe "${r.name}" loaded — adjust main product qty to auto-scale materials` });
                         }}>
                         <BookOpen size={12} /> Use Recipe
                       </Button>
@@ -449,20 +459,23 @@ export default function ManufacturingPage() {
                         {recipes.map((r, i) => (
                           <button key={r.id} onMouseDown={() => {
                             const newInputs = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
-                            const baseOutQty = r.outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+                            const [firstOut, ...restOuts] = r.outputs;
+                            const mainOut = firstOut ? { ...firstOut, id: crypto.randomUUID() } : blankOutput();
+                            const baseMainQty = parseFloat(mainOut.qty) || 0;
                             setF({
                               inputs:          newInputs,
-                              outputs:         r.outputs.map(x => ({ ...x, id: crypto.randomUUID() })),
+                              mainOutput:      mainOut,
+                              byProducts:      restOuts.map(x => ({ ...x, id: crypto.randomUUID() })),
                               productionCosts: r.productionCosts.map(x => ({ ...x, id: crypto.randomUUID() })),
                               notes:           r.notes,
                               recipeBase: {
-                                recipeName:     r.name,
-                                inputs:         newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
-                                totalOutputQty: baseOutQty,
+                                recipeName:    r.name,
+                                inputs:        newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
+                                mainOutputQty: baseMainQty,
                               },
                             });
                             setLoadDropOpen(false);
-                            toast({ title: `Recipe "${r.name}" loaded — adjust output qty to auto-scale materials` });
+                            toast({ title: `Recipe "${r.name}" loaded — adjust main product qty to auto-scale materials` });
                           }}
                           className={`w-full text-left px-4 py-2.5 text-[13px] hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors ${i > 0 ? "border-t border-gray-100 dark:border-zinc-800" : ""}`}>
                             <div className="font-semibold text-gray-800 dark:text-gray-100">{r.name}</div>
@@ -641,99 +654,171 @@ export default function ManufacturingPage() {
                       <Package size={16} className="text-orange-600" />
                       <h2 className="text-[15px] font-bold">Output Products</h2>
                     </div>
-                    <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Products produced from this batch</p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">One main product + optional by-products</p>
                   </div>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addOutput}>
-                    <Plus size={13} /> Add Row
-                  </Button>
                 </div>
 
-                {/* Outputs table */}
+                {/* ── Main Product ── */}
+                <div className="border-2 border-orange-200 dark:border-orange-800 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 dark:bg-orange-950/30 border-b border-orange-200 dark:border-orange-800">
+                    <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400">Main Product</span>
+                    {form.recipeBase && (
+                      <span className="ml-auto text-[10px] text-violet-500 italic">← change qty to auto-scale materials</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[1fr_110px_90px_100px] gap-0 divide-x divide-border">
+                    {/* Product selector */}
+                    <div className="px-3 py-2">
+                      {products.length > 0 ? (
+                        <Select value={form.mainOutput.productId || ""} onValueChange={v => {
+                          const p = products.find(x => x.id === v);
+                          if (p) updMainOutput({ productId: p.id, productName: p.name, unit: p.unit });
+                          else   updMainOutput({ productId: v });
+                        }}>
+                          <SelectTrigger className="h-10 text-[13px] border-0 shadow-none focus:ring-0 px-0"><SelectValue placeholder="Select main product…" /></SelectTrigger>
+                          <SelectContent>
+                            {products.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                <span className="font-medium">{p.name}</span>
+                                <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input value={form.mainOutput.productName} onChange={e => updMainOutput({ productName: e.target.value })}
+                          placeholder="Product name" className="h-10 text-[13px]" />
+                      )}
+                    </div>
+                    {/* Qty */}
+                    <div className="px-2 py-2">
+                      <div className="flex flex-col gap-0.5">
+                        <Input type="number" min="0" value={form.mainOutput.qty}
+                          onChange={e => updMainOutput({ qty: e.target.value })}
+                          placeholder="0" className="h-10 text-[13px]" />
+                        {form.recipeBase && form.recipeBase.mainOutputQty > 0 && mainQty > 0 && mainQty !== form.recipeBase.mainOutputQty && (
+                          <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 text-center">
+                            ×{(mainQty / form.recipeBase.mainOutputQty).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Unit */}
+                    <div className="px-2 py-2">
+                      <Input value={form.mainOutput.unit} onChange={e => updMainOutput({ unit: e.target.value })}
+                        placeholder="pcs" className="h-10 text-[13px]" />
+                    </div>
+                    {/* Cost/unit */}
+                    <div className="px-3 py-2 flex items-center justify-end">
+                      <span className="text-[13px] font-semibold text-orange-700 dark:text-orange-400 whitespace-nowrap">
+                        {mainQty > 0 && totalCost > 0
+                          ? `${sym}${(totalCost * (mainQty / (totalOutQty || 1)) / mainQty).toFixed(3)}`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[1fr_110px_90px_100px] divide-x divide-border border-t border-orange-200 dark:border-orange-800 bg-orange-50/40 dark:bg-orange-950/10">
+                    <div className="px-4 py-1.5 text-[11px] text-orange-600 dark:text-orange-400 font-semibold">Product</div>
+                    <div className="px-3 py-1.5 text-[11px] text-orange-600 dark:text-orange-400 font-semibold">Qty</div>
+                    <div className="px-3 py-1.5 text-[11px] text-orange-600 dark:text-orange-400 font-semibold">Unit</div>
+                    <div className="px-3 py-1.5 text-[11px] text-right text-orange-600 dark:text-orange-400 font-semibold">Cost/Unit</div>
+                  </div>
+                </div>
+
+                {/* ── By-products ── */}
                 <div className="border rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-orange-50 dark:bg-orange-950/20">
-                        <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b">Product</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:110}}>Qty</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:90}}>Unit</th>
-                        <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-400 border-b" style={{width:105}}>Cost/Unit</th>
-                        <th className="border-b" style={{width:36}} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {form.outputs.map((out, idx) => {
-                        const outQty   = parseFloat(out.qty) || 0;
-                        const share    = totalOutQty > 0 ? outQty / totalOutQty : 0;
-                        const outCost  = totalCost * share;
-                        const unitCost = outQty > 0 ? outCost / outQty : 0;
-                        const ratio    = form.recipeBase && form.recipeBase.totalOutputQty > 0
-                          ? totalOutQty / form.recipeBase.totalOutputQty : null;
-                        return (
-                          <tr key={out.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                            <td className="px-3 py-2">
-                              {products.length > 0 ? (
-                                <Select value={out.productId || ""} onValueChange={v => {
-                                  const p = products.find(x => x.id === v);
-                                  if (p) updOutput(out.id, { productId: p.id, productName: p.name, unit: p.unit });
-                                  else   updOutput(out.id, { productId: v });
-                                }}>
-                                  <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select product…" /></SelectTrigger>
-                                  <SelectContent>
-                                    {products.map(p => (
-                                      <SelectItem key={p.id} value={p.id}>
-                                        <span className="font-medium">{p.name}</span>
-                                        <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <Input value={out.productName} onChange={e => updOutput(out.id, { productName: e.target.value })}
-                                  placeholder="Product name" className="h-10 text-[13px]" />
-                              )}
-                            </td>
-                            <td className="px-2 py-2">
-                              <div className="flex flex-col gap-0.5">
-                                <Input type="number" min="0" value={out.qty}
-                                  onChange={e => updOutput(out.id, { qty: e.target.value })}
-                                  placeholder="0" className="h-10 text-[13px]" />
-                                {ratio !== null && ratio !== 1 && (
-                                  <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 text-center">
-                                    ×{ratio.toFixed(2)}
-                                  </span>
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                        By-products / Co-products
+                      </span>
+                      {form.byProducts.length > 0 && (
+                        <span className="text-[10px] bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full font-semibold">
+                          {form.byProducts.length}
+                        </span>
+                      )}
+                    </div>
+                    <Button size="sm" variant="ghost" className="gap-1 text-[12px] h-7 px-2 text-muted-foreground" onClick={addByProduct}>
+                      <Plus size={12} /> Add By-product
+                    </Button>
+                  </div>
+
+                  {form.byProducts.length === 0 ? (
+                    <div className="px-4 py-4 text-center text-[12px] text-muted-foreground italic">
+                      No by-products — click "Add By-product" to record secondary outputs (scrap, offcuts, co-products…)
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted/20 border-b">
+                          <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Product</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground" style={{width:100}}>Qty</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground" style={{width:85}}>Unit</th>
+                          <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground" style={{width:100}}>Cost/Unit</th>
+                          <th style={{width:34}} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {form.byProducts.map((bp, idx) => {
+                          const bpQty    = parseFloat(bp.qty) || 0;
+                          const share    = totalOutQty > 0 ? bpQty / totalOutQty : 0;
+                          const unitCost = bpQty > 0 ? (totalCost * share) / bpQty : 0;
+                          return (
+                            <tr key={bp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/10" : ""}`}>
+                              <td className="px-3 py-1.5">
+                                {products.length > 0 ? (
+                                  <Select value={bp.productId || ""} onValueChange={v => {
+                                    const p = products.find(x => x.id === v);
+                                    if (p) updByProduct(bp.id, { productId: p.id, productName: p.name, unit: p.unit });
+                                    else   updByProduct(bp.id, { productId: v });
+                                  }}>
+                                    <SelectTrigger className="h-9 text-[12px]"><SelectValue placeholder="Select product…" /></SelectTrigger>
+                                    <SelectContent>
+                                      {products.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                          <span className="font-medium">{p.name}</span>
+                                          <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input value={bp.productName} onChange={e => updByProduct(bp.id, { productName: e.target.value })}
+                                    placeholder="Product name" className="h-9 text-[12px]" />
                                 )}
-                              </div>
-                            </td>
-                            <td className="px-2 py-2">
-                              <Input value={out.unit} onChange={e => updOutput(out.id, { unit: e.target.value })}
-                                placeholder="pcs, kg…" className="h-10 text-[13px]" />
-                            </td>
-                            <td className="px-3 py-2 text-right text-[13px] font-semibold text-orange-700 dark:text-orange-400 whitespace-nowrap">
-                              {unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}
-                            </td>
-                            <td className="px-1 py-2 text-center">
-                              {form.outputs.length > 1 && (
-                                <button onClick={() => removeOutput(out.id)} className="text-red-400 hover:text-red-600 p-1">
-                                  <XCircle size={15} />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <Input type="number" min="0" value={bp.qty}
+                                  onChange={e => updByProduct(bp.id, { qty: e.target.value })}
+                                  placeholder="0" className="h-9 text-[12px]" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <Input value={bp.unit} onChange={e => updByProduct(bp.id, { unit: e.target.value })}
+                                  placeholder="pcs" className="h-9 text-[12px]" />
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                                {unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}
+                              </td>
+                              <td className="px-1 py-1.5 text-center">
+                                <button onClick={() => removeByProduct(bp.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <XCircle size={14} />
                                 </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-orange-50/60 dark:bg-orange-950/10 border-t-2">
-                        <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
-                          {form.outputs.filter(o => o.productName).length} product(s)
-                        </td>
-                        <td className="px-3 py-2.5 text-[13px] font-bold text-orange-700 dark:text-orange-400">
-                          {totalOutQty > 0 ? totalOutQty : "—"}
-                        </td>
-                        <td colSpan={3} />
-                      </tr>
-                    </tfoot>
-                  </table>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/20 border-t">
+                          <td className="px-4 py-2 text-[11px] text-muted-foreground">{form.byProducts.length} by-product(s)</td>
+                          <td className="px-3 py-2 text-[12px] font-bold text-muted-foreground">{byQty > 0 ? byQty : "—"}</td>
+                          <td colSpan={3} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
                 </div>
 
                 {/* Production Costs */}
@@ -1126,7 +1211,10 @@ export default function ManufacturingPage() {
                   addRecipe({
                     name: recipeName.trim(),
                     inputs: form.inputs.filter(i => i.rmName.trim()),
-                    outputs: form.outputs.filter(o => o.productName.trim()),
+                    outputs: [
+                      form.mainOutput,
+                      ...form.byProducts.filter(o => o.productName.trim()),
+                    ],
                     productionCosts: form.productionCosts.filter(c => c.description.trim()),
                     notes: form.notes,
                   });
@@ -1146,7 +1234,10 @@ export default function ManufacturingPage() {
                 addRecipe({
                   name: recipeName.trim(),
                   inputs: form.inputs.filter(i => i.rmName.trim()),
-                  outputs: form.outputs.filter(o => o.productName.trim()),
+                  outputs: [
+                    form.mainOutput,
+                    ...form.byProducts.filter(o => o.productName.trim()),
+                  ],
                   productionCosts: form.productionCosts.filter(c => c.description.trim()),
                   notes: form.notes,
                 });
