@@ -141,6 +141,17 @@ function printMfgOrder(order: ManufacturingOrder, rms: RawMaterial[], sym: strin
   const batchNotesContent = order.notes || '<em style="color:#9ca3af;">No notes recorded.</em>';
   const batchNotesSection = `<div class="sec"><div class="sh sl">${sectionN(6)} \u00b7 Batch Notes</div><div class="nb">${batchNotesContent}</div></div>`;
 
+  // Pre-build Section 2 Production Costs HTML (avoids nested template in html)
+  let prodCosts2Html = "";
+  if ((order.productionCosts || []).filter(c => c.description?.trim()).length === 0) {
+    prodCosts2Html = '<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs recorded.</div>';
+  } else {
+    prodCosts2Html = '<table><thead><tr><th></th><th>Description</th><th class="r">Amount</th></tr></thead>';
+    prodCosts2Html += `<tbody>${costRows}</tbody>`;
+    prodCosts2Html += `<tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>`;
+    prodCosts2Html += '</table>';
+  }
+
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
 <title>Manufacturing Order — ${order.orderNumber}</title>
 <style>
@@ -246,13 +257,7 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
 <!-- 2. PRODUCTION COSTS -->
 <div class="sec">
   <div class="sh v">2 · Production Costs</div>
-  <div class="tw">${(order.productionCosts || []).filter(c => c.description?.trim()).length === 0
-    ? `<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs recorded.</div>`
-    : `<table><thead><tr><th></th><th>Description</th><th class="r">Amount</th></tr></thead>
-       <tbody>${costRows}</tbody>
-       <tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>
-       </table>`}
-  </div>
+  <div class="tw">${prodCosts2Html}</div>
 </div>
 
 <!-- 3. OUTPUT PRODUCTS -->
@@ -415,6 +420,23 @@ function printRecipe(recipe: MfgRecipe, rms: RawMaterial[], sym: string, decPlac
     });
   }
 
+  // Pre-build all conditional section HTML (avoids nested templates in html)
+  const rmRowsFinal   = rmRows  || '<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No raw materials defined.</td></tr>';
+  const outRowsFinal  = outRows || '<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No output products defined.</td></tr>';
+  const outQtyDisplay = totalOutQty > 0 ? totalOutQty + " units" : "\u2014";
+  const rmCostDisplay = total > 0 ? f(rmCost) : "\u2014";
+  const totalDisplay  = total > 0 ? f(total)  : "\u2014";
+
+  let recipeProdCosts2Html = "";
+  if ((recipe.productionCosts || []).filter(c => c.description?.trim()).length === 0) {
+    recipeProdCosts2Html = '<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs defined.</div>';
+  } else {
+    recipeProdCosts2Html = '<table><thead><tr><th></th><th>Description</th><th class="r">Base Amount</th></tr></thead>';
+    recipeProdCosts2Html += `<tbody>${costRows}</tbody>`;
+    recipeProdCosts2Html += `<tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>`;
+    recipeProdCosts2Html += '</table>';
+  }
+
   // Pre-build reconciliation section to avoid nested template literals
   let reconSection = "";
   if (total > 0) {
@@ -540,7 +562,7 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
   <div class="pill rm"><div class="pl">Base RM Cost</div><div class="pv">${total > 0 ? f(rmCost) : "—"}</div></div>
   <div class="pill pc"><div class="pl">Base Prod. Costs</div><div class="pv">${prodCost > 0 ? f(prodCost) : "—"}</div></div>
   <div class="pill tc"><div class="pl">Base Batch Cost</div><div class="pv">${total > 0 ? f(total) : "—"}</div></div>
-  <div class="pill"><div class="pl">Base Output Qty</div><div class="pv">${totalOutQty > 0 ? `${totalOutQty} units` : "—"}</div></div>
+  <div class="pill"><div class="pl">Base Output Qty</div><div class="pv">${outQtyDisplay}</div></div>
 </div>
 
 <!-- 1. RAW MATERIALS / INGREDIENTS -->
@@ -548,21 +570,15 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
   <div class="sh g">1 · Raw Materials / Ingredients</div>
   <div class="tw"><table>
     <thead><tr><th></th><th>Material / Ingredient</th><th class="r">Base Qty</th><th>Unit</th><th class="r">Current Rate</th><th class="r">Est. Cost</th></tr></thead>
-    <tbody>${rmRows || `<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No raw materials defined.</td></tr>`}</tbody>
-    <tfoot><tr><td colspan="5" class="r" style="font-size:7pt;color:#64748b;">Total Estimated RM Cost</td><td class="r green" style="font-size:10pt;">${total > 0 ? f(rmCost) : "—"}</td></tr></tfoot>
+    <tbody>${rmRowsFinal}</tbody>
+    <tfoot><tr><td colspan="5" class="r" style="font-size:7pt;color:#64748b;">Total Estimated RM Cost</td><td class="r green" style="font-size:10pt;">${rmCostDisplay}</td></tr></tfoot>
   </table></div>
 </div>
 
 <!-- 2. PRODUCTION COSTS -->
 <div class="sec">
   <div class="sh v">2 · Production Costs</div>
-  <div class="tw">${(recipe.productionCosts || []).filter(c => c.description?.trim()).length === 0
-    ? `<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs defined.</div>`
-    : `<table><thead><tr><th></th><th>Description</th><th class="r">Base Amount</th></tr></thead>
-       <tbody>${costRows}</tbody>
-       <tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>
-       </table>`}
-  </div>
+  <div class="tw">${recipeProdCosts2Html}</div>
 </div>
 
 <!-- 3. OUTPUT PRODUCTS -->
@@ -570,8 +586,8 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
   <div class="sh o">3 · Output Products</div>
   <div class="tw"><table>
     <thead><tr><th>Product</th><th>Type</th><th class="r">Base Qty</th><th>Unit</th><th class="r">Est. Allocated Cost</th><th class="r">Est. Cost / Unit</th></tr></thead>
-    <tbody>${outRows || `<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No output products defined.</td></tr>`}</tbody>
-    <tfoot><tr><td colspan="4" class="r" style="font-size:7pt;color:#64748b;">Total Est. Allocated</td><td class="r orange" style="font-size:10pt;">${total > 0 ? f(total) : "—"}</td><td></td></tr></tfoot>
+    <tbody>${outRowsFinal}</tbody>
+    <tfoot><tr><td colspan="4" class="r" style="font-size:7pt;color:#64748b;">Total Est. Allocated</td><td class="r orange" style="font-size:10pt;">${totalDisplay}</td><td></td></tr></tfoot>
   </table></div>
 </div>
 
