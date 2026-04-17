@@ -17,7 +17,7 @@ import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, Search, X, Trash2, Printer, Send,
-  CheckCircle, AlertTriangle, Ban, RotateCcw,
+  CheckCircle, RotateCcw,
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
   DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
@@ -449,7 +449,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const [items, setItems]       = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
   const [deleteOpen, setDeleteOpen]         = useState(false);
-  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
   const [collectPayOpen, setCollectPayOpen] = useState(false);
@@ -880,6 +879,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
               {/* ── Status Actions Card ────────────────────────────────────── */}
               {!isNew && (
+                (invoiceType === "purchase" && s !== "Cancelled") ||
+                (s === "Draft" && invoiceType !== "purchase") ||
+                s === "Paid" || s === "Partial"
+              ) && (
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -913,28 +916,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         <Send size={12}/> Send
                       </button>
                     )}
-                    {(s === "Sent" || s === "Draft" || s === "Overdue" || s === "Partial") && (
-                      <button onClick={() => onStatusChange(inv!.id, "Paid", payInput)}
-                        className="h-9 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                        <CheckCircle size={12}/> Mark Paid
-                      </button>
-                    )}
-                    {(s === "Sent" || s === "Draft") && (
-                      <button onClick={() => onStatusChange(inv!.id, "Overdue")}
-                        className="h-9 rounded-lg border border-red-200 dark:border-red-800 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                        <AlertTriangle size={12}/> Mark Overdue
-                      </button>
-                    )}
                     {(s === "Paid" || s === "Partial") && (
                       <button onClick={() => setRevertConfirmOpen(true)}
-                        className="h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
+                        className="col-span-2 h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
                         <RotateCcw size={12}/> Revert to Draft
-                      </button>
-                    )}
-                    {s !== "Cancelled" && (
-                      <button onClick={() => setCancelConfirmOpen(true)}
-                        className="h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
-                        <Ban size={12}/> Cancel
                       </button>
                     )}
                   </div>
@@ -1250,21 +1235,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this invoice?</AlertDialogTitle>
-            <AlertDialogDescription>Invoice "{invoice?.invoiceNumber}" will be marked as Cancelled.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700"
-              onClick={() => { if (invoice) onStatusChange(invoice.id, "Cancelled"); setCancelConfirmOpen(false); }}>
-              Cancel Invoice
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog open={revertConfirmOpen} onOpenChange={setRevertConfirmOpen}>
         <AlertDialogContent>
