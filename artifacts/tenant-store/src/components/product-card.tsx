@@ -61,6 +61,18 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const hasImage = Boolean(product.thumbnail);
   const cartDisabled = isOutOfStock && !cms.shop.allowBackorder;
 
+  // Pre-compute price variants for use throughout the card
+  const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
+    ? product.websitePrice
+    : product.price;
+  const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
+    ? product.websitePriceWas
+    : null;
+  const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
+    ? product.clubcardPrice
+    : null;
+  const clubSaving = clubPrice ? parseFloat(displayPrice) - parseFloat(clubPrice) : 0;
+
   async function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -191,44 +203,26 @@ export function ProductCard({ product, className }: ProductCardProps) {
         {/* Price + Cart */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            {(() => {
-              const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
-                ? product.websitePrice
-                : product.price;
-              const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
-                ? product.websitePriceWas
-                : null;
-              const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
-                ? product.clubcardPrice
-                : null;
-              const saving = clubPrice
-                ? parseFloat(displayPrice) - parseFloat(clubPrice)
-                : 0;
-              return (
-                <>
-                  <div className={cn(
-                    "text-base font-extrabold tabular-nums",
-                    clubPrice ? "text-slate-400 dark:text-slate-500 line-through text-sm" : "text-slate-900 dark:text-white"
-                  )}>
-                    {formatPrice(displayPrice)}
-                  </div>
-                  {wasPrice && !clubPrice && (
-                    <div className="text-xs text-slate-400 line-through">{formatPrice(wasPrice)}</div>
-                  )}
-                  {clubPrice && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <CreditCard size={10} className="text-blue-600 shrink-0" />
-                      <span className="text-[13px] font-extrabold text-blue-600 tabular-nums">{formatPrice(clubPrice)}</span>
-                      {saving > 0 && (
-                        <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 ml-0.5">
-                          Save {formatPrice(saving.toFixed(2))}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+            <div className={cn(
+              "text-base font-extrabold tabular-nums",
+              clubPrice ? "text-slate-400 dark:text-slate-500 line-through text-sm" : "text-slate-900 dark:text-white"
+            )}>
+              {formatPrice(displayPrice)}
+            </div>
+            {wasPrice && !clubPrice && (
+              <div className="text-xs text-slate-400 line-through">{formatPrice(wasPrice)}</div>
+            )}
+            {clubPrice && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <CreditCard size={10} className="text-blue-600 shrink-0" />
+                <span className="text-[13px] font-extrabold text-blue-600 tabular-nums">{formatPrice(clubPrice)}</span>
+                {clubSaving > 0 && (
+                  <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 ml-0.5">
+                    Save {formatPrice(clubSaving.toFixed(2))}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <button
@@ -248,6 +242,18 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </button>
         </div>
       </div>
+
+      {/* Full-width Clubcard button — only when clubcard price is set */}
+      {clubPrice && (
+        <Link href={`/product/${product.id}`} className="block">
+          <div className="mx-3 mb-3 flex items-center justify-center gap-2 rounded-lg border border-red-400 dark:border-red-500 px-3 py-2 text-[11.5px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer">
+            <CreditCard size={12} className="shrink-0" />
+            <span className="truncate">
+              Order with your ClubCard and Save {clubSaving > 0 ? formatPrice(clubSaving.toFixed(2)) : ""}
+            </span>
+          </div>
+        </Link>
+      )}
 
       {/* Bottom accent bar — uses the category colour */}
       {!hasImage && (
