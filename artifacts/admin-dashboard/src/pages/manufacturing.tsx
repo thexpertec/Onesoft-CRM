@@ -171,12 +171,22 @@ export default function ManufacturingPage() {
     setF({ productionCosts: form.productionCosts.map(c => c.id === id ? { ...c, ...p } : c) });
 
   // ── Cost summary (live) ───────────────────────────────────────────────────
-  const rmCost      = useMemo(() => calcRMCost(form.inputs, rms), [form.inputs, rms]);
-  const prodCost    = useMemo(() => calcProdCost(form.productionCosts), [form.productionCosts]);
-  const totalCost   = rmCost + prodCost;
-  const mainQty     = parseFloat(form.mainOutput.qty) || 0;
-  const byQty       = form.byProducts.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+  const rmCost    = useMemo(() => calcRMCost(form.inputs, rms), [form.inputs, rms]);
+  const prodCost  = useMemo(() => calcProdCost(form.productionCosts), [form.productionCosts]);
+  const totalCost = rmCost + prodCost;
+  const mainQty   = parseFloat(form.mainOutput.qty) || 0;
+  const byQty     = form.byProducts.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
   const totalOutQty = mainQty + byQty;
+
+  // By-products with a manual cost/unit carve out their share from the total;
+  // the remainder is allocated entirely to the main product.
+  const byProductsFixedCost = form.byProducts.reduce((s, bp) => {
+    const mc = parseFloat(bp.manualCost || "");
+    const q  = parseFloat(bp.qty) || 0;
+    return isNaN(mc) ? s : s + mc * q;
+  }, 0);
+  const mainProductCost    = totalCost - byProductsFixedCost;
+  const mainCostPerUnit    = mainQty > 0 ? mainProductCost / mainQty : 0;
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
@@ -709,13 +719,18 @@ export default function ManufacturingPage() {
                       <Input value={form.mainOutput.unit} onChange={e => updMainOutput({ unit: e.target.value })}
                         placeholder="pcs" className="h-10 text-[13px]" />
                     </div>
-                    {/* Cost/unit */}
-                    <div className="px-3 py-2 flex items-center justify-end">
-                      <span className="text-[13px] font-semibold text-orange-700 dark:text-orange-400 whitespace-nowrap">
-                        {mainQty > 0 && totalCost > 0
-                          ? `${sym}${(totalCost * (mainQty / (totalOutQty || 1)) / mainQty).toFixed(3)}`
+                    {/* Cost/unit — uses remaining cost after by-product manual costs are carved out */}
+                    <div className="px-3 py-2 flex flex-col items-end justify-center gap-0.5">
+                      <span className="text-[13px] font-bold text-orange-700 dark:text-orange-400 whitespace-nowrap">
+                        {mainQty > 0 && mainProductCost > 0
+                          ? `${sym}${mainCostPerUnit.toFixed(3)}`
                           : "—"}
                       </span>
+                      {byProductsFixedCost > 0 && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          −{sym}{byProductsFixedCost.toFixed(dp)} saved
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-[1fr_110px_90px_100px] divide-x divide-border border-t border-orange-200 dark:border-orange-800 bg-orange-50/40 dark:bg-orange-950/10">
@@ -762,9 +777,7 @@ export default function ManufacturingPage() {
                       </thead>
                       <tbody>
                         {form.byProducts.map((bp, idx) => {
-                          const bpQty    = parseFloat(bp.qty) || 0;
-                          const share    = totalOutQty > 0 ? bpQty / totalOutQty : 0;
-                          const unitCost = bpQty > 0 ? (totalCost * share) / bpQty : 0;
+                          const hasManual = bp.manualCost !== undefined && bp.manualCost !== "";
                           return (
                             <tr key={bp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/10" : ""}`}>
                               <td className="px-3 py-1.5">
@@ -798,8 +811,34 @@ export default function ManufacturingPage() {
                                 <Input value={bp.unit} onChange={e => updByProduct(bp.id, { unit: e.target.value })}
                                   placeholder="pcs" className="h-9 text-[12px]" />
                               </td>
-                              <td className="px-3 py-1.5 text-right text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
-                                {unitCost > 0 ? `${sym}${unitCost.toFixed(3)}` : "—"}
+                              {/* Editable Cost/Unit — fills in a fixed value that is carved out of total cost */}
+                              <td className="px-2 py-1.5">
+                                <div className="flex flex-col gap-0.5">
+                                  <div className={`relative flex items-center rounded border text-[12px] h-9 ${hasManual ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20" : "border-input bg-background"}`}>
+                                    <span className="pl-2 text-muted-foreground select-none">{sym}</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={bp.manualCost ?? ""}
+                                      onChange={e => updByProduct(bp.id, { manualCost: e.target.value === "" ? undefined : e.target.value })}
+                                      placeholder="auto"
+                                      className="flex-1 bg-transparent outline-none px-1 py-1 text-[12px] w-0 min-w-0 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                    {hasManual && (
+                                      <button
+                                        title="Clear — revert to auto"
+                                        onClick={() => updByProduct(bp.id, { manualCost: undefined })}
+                                        className="pr-1.5 text-emerald-600 hover:text-red-500 transition-colors"
+                                      >
+                                        <XCircle size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+                                  {hasManual && (
+                                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold text-center">FIXED · carves out of total</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-1 py-1.5 text-center">
                                 <button onClick={() => removeByProduct(bp.id)} className="text-red-400 hover:text-red-600 p-1">

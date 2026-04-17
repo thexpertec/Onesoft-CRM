@@ -2628,6 +2628,7 @@ export type MfgOutput = {
   productName: string;
   qty:         string;
   unit:        string;
+  manualCost?: string;  // by-product: manually entered cost/unit (overrides proportional share)
 };
 
 export type ProductionCost = {
