@@ -42,7 +42,8 @@ const STATUS_STYLE: Record<InvoiceStatus, { bg: string; dot: string; label: stri
 const today = () => new Date().toISOString().slice(0, 10);
 const in30  = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); };
 
-const SALE_ORDER_STATUSES = ["Pending", "Processing", "Dispatched", "Delivered", "Completed", "On Hold", "Cancelled"] as const;
+const SALE_ORDER_STATUSES     = ["Pending", "Processing", "Dispatched", "Delivered", "Completed", "On Hold", "Cancelled"] as const;
+const PURCHASE_ORDER_STATUSES = ["Pending", "Ordered", "Received", "Partially Received", "Overdue", "Paid", "Cancelled"] as const;
 
 const lineTotal = (item: SaleItem) => {
   const q = parseFloat(item.qty) || 0;
@@ -295,8 +296,9 @@ interface CollectPaymentModalProps {
   invoiceNumber: string;
   outstanding: number;
   onConfirm: (record: PaymentRecord) => void;
+  isPurchase?: boolean;
 }
-function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm }: CollectPaymentModalProps) {
+function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm, isPurchase }: CollectPaymentModalProps) {
   const sym = getSettingsCurrencySymbol();
   const [amount, setAmount]   = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
   const [method, setMethod]   = useState<SalePayment>("Bank Transfer");
@@ -333,7 +335,9 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
               <DollarSign size={15} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Collect Payment</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                {isPurchase ? "Pay Supplier" : "Collect Payment"}
+              </p>
               <p className="text-[11px] text-gray-500 dark:text-gray-400">{invoiceNumber}</p>
             </div>
           </div>
@@ -683,13 +687,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </div>
                   </div>
 
-                  {/* Sale Status */}
+                  {/* Sale / Purchase Status */}
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Sale Status</label>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                      {invoiceType === "purchase" ? "Purchase Status" : "Sale Status"}
+                    </label>
                     <select value={form.saleStatus ?? ""} onChange={e => setF("saleStatus", e.target.value)}
                       className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
                       <option value="">— Select status —</option>
-                      {SALE_ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}
+                      {(invoiceType === "purchase" ? PURCHASE_ORDER_STATUSES : SALE_ORDER_STATUSES).map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
 
@@ -809,7 +815,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         <p className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{total.toFixed(dp)}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-center">
-                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">Collected</p>
+                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">
+                          {invoiceType === "purchase" ? "Paid to Supplier" : "Collected"}
+                        </p>
                         <p className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">{sym}{paid.toFixed(dp)}</p>
                       </div>
                       <div className={`p-3 rounded-xl text-center ${balance > 0.005 ? "bg-red-50 dark:bg-red-950/20" : "bg-emerald-50 dark:bg-emerald-950/20"}`}>
@@ -842,7 +850,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-2">No payments recorded yet.</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-2">
+                        {invoiceType === "purchase" ? "No payments made yet." : "No payments recorded yet."}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -853,7 +863,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {s === "Draft" && (
+                    {s === "Draft" && invoiceType !== "purchase" && (
                       <button onClick={() => onStatusChange(inv!.id, "Sent")}
                         className="h-9 rounded-lg border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors">
                         <Send size={12}/> Send
@@ -1138,13 +1148,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             </button>
           )}
 
-          {/* Collect Payment — existing, not fully paid/cancelled */}
+          {/* Collect / Pay — existing, not fully paid/cancelled */}
           {!isNew && s !== "Paid" && s !== "Cancelled" && (
             <button
               onClick={() => setCollectPayOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
             >
-              <DollarSign size={14}/> Collect Payment
+              <DollarSign size={14}/> {invoiceType === "purchase" ? "Pay Supplier" : "Collect Payment"}
             </button>
           )}
 
@@ -1169,6 +1179,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           onClose={() => setCollectPayOpen(false)}
           invoiceNumber={invoice.invoiceNumber}
           outstanding={balance}
+          isPurchase={invoiceType === "purchase"}
           onConfirm={(record) => {
             const newHistory = [...savedHistory, record];
             const newPaid = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
