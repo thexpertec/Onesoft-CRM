@@ -660,7 +660,7 @@ export default function SettingsPage() {
         let count = 0;
         ALL_STORE_KEYS.forEach(k => {
           if (k in data) {
-            localStorage.setItem(k, JSON.stringify(data[k]));
+            try { localStorage.setItem(k, JSON.stringify(data[k])); } catch { /* quota — server import still succeeded */ }
             count++;
           }
         });

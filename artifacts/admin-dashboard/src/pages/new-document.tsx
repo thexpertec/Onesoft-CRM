@@ -808,7 +808,7 @@ export default function NewDocument() {
 
   const persist = (key: string, data: object) => {
     const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data }));
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data })); } catch { /* quota */ }
   };
 
   const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1");  markClean("s1"); };
@@ -821,7 +821,7 @@ export default function NewDocument() {
     const currentCustom: CustomSection[] = existing.sCustom?.sections ?? [];
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } }));
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } })); } catch { /* quota */ }
     markSaved(`sc_${id}`); markClean(`sc_${id}`);
   };
   const saveCustomSection2 = (id: string) => {
@@ -831,7 +831,7 @@ export default function NewDocument() {
     const currentCustom: CustomSection[] = existing.sCustom2?.sections ?? [];
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } }));
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } })); } catch { /* quota */ }
     markSaved(`sc2_${id}`); markClean(`sc2_${id}`);
   };
   const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible }); markSaved("s5"); markClean("s5"); };

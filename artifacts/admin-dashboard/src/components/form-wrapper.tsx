@@ -84,7 +84,7 @@ export function useFormMode(storageKey = "os-form-mode"): ["dialog" | "sheet", (
   const toggle = () => {
     const next = mode === "dialog" ? "sheet" : "dialog";
     setMode(next);
-    localStorage.setItem(storageKey, next);
+    try { localStorage.setItem(storageKey, next); } catch { /* quota */ }
   };
   return [mode, toggle];
 }

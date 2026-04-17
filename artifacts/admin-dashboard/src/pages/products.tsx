@@ -275,7 +275,7 @@ export default function ProductsPage() {
     setHiddenCols(prev => {
       const next = new Set(prev);
       if (next.has(field)) next.delete(field); else next.add(field);
-      localStorage.setItem("products-hidden-cols", JSON.stringify([...next]));
+      try { localStorage.setItem("products-hidden-cols", JSON.stringify([...next])); } catch { /* quota — in-memory state still correct */ }
       return next;
     });
   };

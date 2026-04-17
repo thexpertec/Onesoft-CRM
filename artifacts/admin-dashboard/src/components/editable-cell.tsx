@@ -281,7 +281,7 @@ export function ExcelGridShell({
     };
 
     const onUp = () => {
-      if (storageKey) localStorage.setItem(storageKey, JSON.stringify(widthsRef.current));
+      if (storageKey) try { localStorage.setItem(storageKey, JSON.stringify(widthsRef.current)); } catch { /* quota */ }
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";

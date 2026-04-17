@@ -372,7 +372,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleActivityOpen = (open: boolean) => {
     setActivityOpen(open);
     if (open) {
-      localStorage.setItem(LAST_SEEN_KEY, String(Date.now()));
+      try { localStorage.setItem(LAST_SEEN_KEY, String(Date.now())); } catch { /* quota */ }
       setUnreadCount(0);
     }
   };

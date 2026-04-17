@@ -166,11 +166,28 @@ function _lsGet(storageKey: string): string | null {
   try { return localStorage.getItem(storageKey); } catch { return null; }
 }
 
-/** Write to in-memory cache + best-effort localStorage (quota errors are swallowed). */
+/** Write to in-memory cache + best-effort localStorage (auto-evicts on quota). */
 function _lsSet(storageKey: string, data: unknown): void {
   const json = JSON.stringify(data);
   _memRaw.set(storageKey, json);
-  try { localStorage.setItem(storageKey, json); } catch { /* quota full — server has the authoritative copy */ }
+  try {
+    localStorage.setItem(storageKey, json);
+  } catch {
+    // Quota exceeded — try to free space by removing the largest non-essential keys
+    try {
+      const keySizes: [string, number][] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k !== storageKey) keySizes.push([k, (localStorage.getItem(k) ?? "").length]);
+      }
+      keySizes.sort((a, b) => b[1] - a[1]);
+      // Evict up to 3 largest items (they are re-fetchable from server on next load)
+      for (let i = 0; i < Math.min(3, keySizes.length); i++) {
+        localStorage.removeItem(keySizes[i][0]);
+      }
+      localStorage.setItem(storageKey, json);
+    } catch { /* still full — server has the authoritative copy */ }
+  }
 }
 
 /** Remove from in-memory cache + best-effort localStorage. */

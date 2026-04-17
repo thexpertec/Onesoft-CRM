@@ -51,7 +51,7 @@ export function ThemeProvider({
   const value = {
     theme,
     setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
+      try { localStorage.setItem(storageKey, theme); } catch { /* quota */ }
       setTheme(theme)
     },
   }
