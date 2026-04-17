@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getStock, getStockLedger, deleteStockLedgerEntry, getSettings,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
-  reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts,
+  reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts, deduplicateSaleEntries,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
@@ -321,11 +321,24 @@ export default function StockLedgerPage() {
     setRevision(r => r + 1);
     if (removedEntries > 0) {
       toast({
-        title: `Removed ${removedEntries} duplicate entr${removedEntries !== 1 ? "ies" : "y"}`,
+        title: `Removed ${removedEntries} duplicate purchase entr${removedEntries !== 1 ? "ies" : "y"}`,
         description: `Stock quantities corrected for ${fixedItems} product${fixedItems !== 1 ? "s" : ""}.`,
       });
     } else {
-      toast({ title: "No duplicates found", description: "All purchase receipt entries are already unique." });
+      toast({ title: "No purchase duplicates found", description: "All purchase receipt entries are already unique." });
+    }
+  }, [toast]);
+
+  const handleDeduplicateSales = useCallback(() => {
+    const { removedEntries, fixedItems } = deduplicateSaleEntries();
+    setRevision(r => r + 1);
+    if (removedEntries > 0) {
+      toast({
+        title: `Removed ${removedEntries} duplicate sale entr${removedEntries !== 1 ? "ies" : "y"}`,
+        description: `Stock quantities corrected for ${fixedItems} product${fixedItems !== 1 ? "s" : ""}.`,
+      });
+    } else {
+      toast({ title: "No sale duplicates found", description: "All sale entries are already unique." });
     }
   }, [toast]);
 
@@ -397,11 +410,19 @@ export default function StockLedgerPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={handleDeduplicateSales}
+            title="Remove duplicate sale entries where the same invoice number deducted stock more than once, and correct stock quantities"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 dark:border-orange-800 text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
+          >
+            <Eraser size={12}/> Remove Sale Dups
+          </button>
+
+          <button
             onClick={handleDeduplicatePurchases}
             title="Remove duplicate purchase receipt entries caused by clicking 'Receive to Stock' multiple times on the same invoice, and correct stock quantities"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
           >
-            <Eraser size={12}/> Remove Duplicates
+            <Eraser size={12}/> Remove Purchase Dups
           </button>
 
           <button
