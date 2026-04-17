@@ -34,6 +34,25 @@ import {
   City, Area,
 } from "@/lib/store";
 
+/**
+ * Subscribes a callback to both "storage" (cross-tab writes via setStored)
+ * and "onesoft:data-synced" (fired at the end of syncAllFromServer) so hooks
+ * always refresh after the async server sync completes on page load.
+ */
+function useStoreEffect(cb: () => void) {
+  useEffect(() => {
+    cb();
+    window.addEventListener("storage", cb);
+    window.addEventListener("onesoft:data-synced", cb);
+    return () => {
+      window.removeEventListener("storage", cb);
+      window.removeEventListener("onesoft:data-synced", cb);
+    };
+  // cb is a stable useCallback(fn,[]) reference — deps intentionally empty.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
 export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
 
@@ -41,11 +60,7 @@ export function useLeads() {
     setLeads(getLeads());
   }, []);
 
-  useEffect(() => {
-    fetchLeads();
-    window.addEventListener("storage", fetchLeads);
-    return () => window.removeEventListener("storage", fetchLeads);
-  }, [fetchLeads]);
+  useStoreEffect(fetchLeads);
 
   const addLead = (lead: Parameters<typeof createLead>[0]) => {
     const newLead = createLead(lead);
@@ -74,11 +89,7 @@ export function useDocs() {
     setDocs(getDocs());
   }, []);
 
-  useEffect(() => {
-    fetchDocs();
-    window.addEventListener("storage", fetchDocs);
-    return () => window.removeEventListener("storage", fetchDocs);
-  }, [fetchDocs]);
+  useStoreEffect(fetchDocs);
 
   const addDoc = (doc: Parameters<typeof createDoc>[0]) => {
     const newDoc = createDoc(doc);
@@ -107,11 +118,7 @@ export function useCustomers() {
     setCustomers(getCustomers());
   }, []);
 
-  useEffect(() => {
-    fetchCustomers();
-    window.addEventListener("storage", fetchCustomers);
-    return () => window.removeEventListener("storage", fetchCustomers);
-  }, [fetchCustomers]);
+  useStoreEffect(fetchCustomers);
 
   const addCustomer = (data: Parameters<typeof createCustomer>[0]) => {
     const c = createCustomer(data);
@@ -140,11 +147,7 @@ export function useProductCategories() {
     setCategories(getProductCategories());
   }, []);
 
-  useEffect(() => {
-    fetchCategories();
-    window.addEventListener("storage", fetchCategories);
-    return () => window.removeEventListener("storage", fetchCategories);
-  }, [fetchCategories]);
+  useStoreEffect(fetchCategories);
 
   const addCategory = (data: Parameters<typeof createProductCategory>[0]) => {
     const c = createProductCategory(data);
@@ -171,15 +174,7 @@ export function useProducts() {
 
   const fetchProducts = useCallback(() => { setProducts(getProducts()); }, []);
 
-  useEffect(() => {
-    fetchProducts();
-    window.addEventListener("storage", fetchProducts);
-    window.addEventListener("onesoft:data-synced", fetchProducts);
-    return () => {
-      window.removeEventListener("storage", fetchProducts);
-      window.removeEventListener("onesoft:data-synced", fetchProducts);
-    };
-  }, [fetchProducts]);
+  useStoreEffect(fetchProducts);
 
   const addProduct    = (data: Parameters<typeof createProduct>[0]) => { const p = createProduct(data); fetchProducts(); return p; };
   const editProduct   = (id: string, updates: Parameters<typeof updateProduct>[1]) => { const p = updateProduct(id, updates); fetchProducts(); return p; };
@@ -194,11 +189,7 @@ export function useBrands() {
 
   const fetchBrands = useCallback(() => { setBrands(getBrands()); }, []);
 
-  useEffect(() => {
-    fetchBrands();
-    window.addEventListener("storage", fetchBrands);
-    return () => window.removeEventListener("storage", fetchBrands);
-  }, [fetchBrands]);
+  useStoreEffect(fetchBrands);
 
   const addBrand = (data: Parameters<typeof createBrand>[0]) => { const b = createBrand(data); fetchBrands(); return b; };
   const editBrand = (id: string, updates: Parameters<typeof updateBrand>[1]) => { const b = updateBrand(id, updates); fetchBrands(); return b; };
@@ -212,11 +203,7 @@ export function useAttributes() {
 
   const fetchAttributes = useCallback(() => { setAttributes(getAttributes()); }, []);
 
-  useEffect(() => {
-    fetchAttributes();
-    window.addEventListener("storage", fetchAttributes);
-    return () => window.removeEventListener("storage", fetchAttributes);
-  }, [fetchAttributes]);
+  useStoreEffect(fetchAttributes);
 
   const addAttribute = (data: Parameters<typeof createAttribute>[0]) => { const a = createAttribute(data); fetchAttributes(); return a; };
   const editAttribute = (id: string, updates: Parameters<typeof updateAttribute>[1]) => { const a = updateAttribute(id, updates); fetchAttributes(); return a; };
@@ -230,11 +217,7 @@ export function useUnits() {
 
   const fetchUnits = useCallback(() => { setUnits(getUnits()); }, []);
 
-  useEffect(() => {
-    fetchUnits();
-    window.addEventListener("storage", fetchUnits);
-    return () => window.removeEventListener("storage", fetchUnits);
-  }, [fetchUnits]);
+  useStoreEffect(fetchUnits);
 
   const addUnit = (data: Parameters<typeof createUnit>[0]) => { const u = createUnit(data); fetchUnits(); return u; };
   const editUnit = (id: string, updates: Parameters<typeof updateUnit>[1]) => { const u = updateUnit(id, updates); fetchUnits(); return u; };
@@ -250,11 +233,7 @@ export function useSuppliers() {
     setSuppliers(getSuppliers());
   }, []);
 
-  useEffect(() => {
-    fetchSuppliers();
-    window.addEventListener("storage", fetchSuppliers);
-    return () => window.removeEventListener("storage", fetchSuppliers);
-  }, [fetchSuppliers]);
+  useStoreEffect(fetchSuppliers);
 
   const addSupplier = (data: Parameters<typeof createSupplier>[0]) => {
     const s = createSupplier(data);
@@ -283,11 +262,7 @@ export function usePurchaseOrders() {
     setPurchaseOrders(getPurchaseOrders());
   }, []);
 
-  useEffect(() => {
-    fetchOrders();
-    window.addEventListener("storage", fetchOrders);
-    return () => window.removeEventListener("storage", fetchOrders);
-  }, [fetchOrders]);
+  useStoreEffect(fetchOrders);
 
   const addPurchaseOrder = (data: Parameters<typeof createPurchaseOrder>[0]) => {
     const po = createPurchaseOrder(data);
@@ -312,7 +287,7 @@ export function usePurchaseOrders() {
 export function useInvoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const fetch = useCallback(() => setInvoices(getInvoices()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addInvoice    = (d: Parameters<typeof createInvoice>[0])                 => { const inv = createInvoice(d);    fetch(); return inv; };
   const editInvoice   = (id: string, u: Parameters<typeof updateInvoice>[1])     => { const inv = updateInvoice(id, u); fetch(); return inv; };
   const removeInvoice = (id: string)                                              => { deleteInvoice(id);               fetch(); };
@@ -322,7 +297,7 @@ export function useInvoices() {
 export function useSales() {
   const [sales, setSales] = useState<Sale[]>([]);
   const fetch = useCallback(() => setSales(getSales()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addSale    = (d: Parameters<typeof createSale>[0])               => { const s = createSale(d);    fetch(); return s; };
   const editSale   = (id: string, u: Parameters<typeof updateSale>[1])   => { const s = updateSale(id, u); fetch(); return s; };
   const removeSale = (id: string)                                         => { deleteSale(id);              fetch(); };
@@ -332,15 +307,7 @@ export function useSales() {
 export function useStock() {
   const [stock, setStock] = useState<StockItem[]>([]);
   const fetch = useCallback(() => setStock(getStock()), []);
-  useEffect(() => {
-    fetch();
-    window.addEventListener("storage", fetch);
-    window.addEventListener("onesoft:data-synced", fetch);
-    return () => {
-      window.removeEventListener("storage", fetch);
-      window.removeEventListener("onesoft:data-synced", fetch);
-    };
-  }, [fetch]);
+  useStoreEffect(fetch);
   const addItem    = (d: Parameters<typeof createStockItem>[0])                   => { const s = createStockItem(d);    fetch(); return s; };
   const editItem   = (id: string, u: Parameters<typeof updateStockItem>[1])       => { const s = updateStockItem(id, u); fetch(); return s; };
   const removeItem = (id: string)                                                  => { deleteStockItem(id);              fetch(); };
@@ -350,7 +317,7 @@ export function useStock() {
 export function useAccounts() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const fetch = useCallback(() => setAccounts(getAccounts()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addAccount    = (d: Parameters<typeof createAccount>[0])               => { const a = createAccount(d);    fetch(); return a; };
   const editAccount   = (id: string, u: Parameters<typeof updateAccount>[1])   => { const a = updateAccount(id, u); fetch(); return a; };
   const removeAccount = (id: string)                                            => { deleteAccount(id);              fetch(); };
@@ -360,7 +327,7 @@ export function useAccounts() {
 export function useStaff() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const fetch = useCallback(() => setStaff(getStaff()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addStaff    = (d: Parameters<typeof createStaff>[0])                 => { const s = createStaff(d);    fetch(); return s; };
   const editStaff   = (id: string, u: Parameters<typeof updateStaff>[1])     => { const s = updateStaff(id, u); fetch(); return s; };
   const removeStaff = (id: string)                                            => { deleteStaff(id);              fetch(); };
@@ -370,7 +337,7 @@ export function useStaff() {
 export function useStaffRoles() {
   const [roles, setRoles] = useState<StaffRole[]>([]);
   const fetch = useCallback(() => setRoles(getStaffRoles()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addRole    = (d: Parameters<typeof createStaffRole>[0])                   => { const r = createStaffRole(d);    fetch(); return r; };
   const editRole   = (id: string, u: Parameters<typeof updateStaffRole>[1])       => { const r = updateStaffRole(id, u); fetch(); return r; };
   const removeRole = (id: string)                                                  => { deleteStaffRole(id);              fetch(); };
@@ -380,7 +347,7 @@ export function useStaffRoles() {
 export function useDepartments() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const fetch = useCallback(() => setDepartments(getDepartments()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addDepartment    = (d: Parameters<typeof createDepartment>[0])                  => { const r = createDepartment(d);    fetch(); return r; };
   const editDepartment   = (id: string, u: Parameters<typeof updateDepartment>[1])      => { const r = updateDepartment(id, u); fetch(); return r; };
   const removeDepartment = (id: string)                                                  => { deleteDepartment(id);              fetch(); };
@@ -390,7 +357,7 @@ export function useDepartments() {
 export function useDesignations() {
   const [designations, setDesignations] = useState<Designation[]>([]);
   const fetch = useCallback(() => setDesignations(getDesignations()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addDesignation    = (d: Parameters<typeof createDesignation>[0])                => { const r = createDesignation(d);    fetch(); return r; };
   const editDesignation   = (id: string, u: Parameters<typeof updateDesignation>[1])    => { const r = updateDesignation(id, u); fetch(); return r; };
   const removeDesignation = (id: string)                                                 => { deleteDesignation(id);              fetch(); };
@@ -400,7 +367,7 @@ export function useDesignations() {
 export function useShareholders() {
   const [shareholders, setShareholders] = useState<Shareholder[]>([]);
   const fetch = useCallback(() => setShareholders(getShareholders()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addShareholder    = (d: Parameters<typeof createShareholder>[0])                => { const s = createShareholder(d);    fetch(); return s; };
   const editShareholder   = (id: string, u: Parameters<typeof updateShareholder>[1])    => { const s = updateShareholder(id, u); fetch(); return s; };
   const removeShareholder = (id: string)                                                 => { deleteShareholder(id);              fetch(); };
@@ -410,7 +377,7 @@ export function useShareholders() {
 export function useInvestmentPlans() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const fetch = useCallback(() => setPlans(getInvestmentPlans()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addPlan    = (d: Parameters<typeof createInvestmentPlan>[0])                => { const p = createInvestmentPlan(d);    fetch(); return p; };
   const editPlan   = (id: string, u: Parameters<typeof updateInvestmentPlan>[1])    => { const p = updateInvestmentPlan(id, u); fetch(); return p; };
   const removePlan = (id: string)                                                    => { deleteInvestmentPlan(id);              fetch(); };
@@ -420,7 +387,7 @@ export function useInvestmentPlans() {
 export function useJournalEntries() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const fetch = useCallback(() => setEntries(getJournalEntries()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addEntry    = (d: Parameters<typeof createJournalEntry>[0])                => { const e = createJournalEntry(d);    fetch(); return e; };
   const editEntry   = (id: string, u: Parameters<typeof updateJournalEntry>[1])    => { const e = updateJournalEntry(id, u); fetch(); return e; };
   const removeEntry = (id: string)                                                  => { deleteJournalEntry(id);              fetch(); };
@@ -430,7 +397,7 @@ export function useJournalEntries() {
 export function useProductGroups() {
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const fetch = useCallback(() => setGroups(getProductGroups()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addGroup    = (d: Parameters<typeof createProductGroup>[0])                => { const g = createProductGroup(d);    fetch(); return g; };
   const editGroup   = (id: string, u: Parameters<typeof updateProductGroup>[1])    => { const g = updateProductGroup(id, u); fetch(); return g; };
   const removeGroup = (id: string)                                                  => { deleteProductGroup(id);              fetch(); };
@@ -440,7 +407,7 @@ export function useProductGroups() {
 export function useSalesAgents() {
   const [agents, setAgents] = useState<SalesAgent[]>([]);
   const fetch = useCallback(() => setAgents(getSalesAgents()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const addAgent    = (d: Parameters<typeof createSalesAgent>[0])               => { const a = createSalesAgent(d);    fetch(); return a; };
   const editAgent   = (id: string, u: Parameters<typeof updateSalesAgent>[1])   => { const a = updateSalesAgent(id, u); fetch(); return a; };
   const removeAgent = (id: string)                                               => { deleteSalesAgent(id);              fetch(); };
@@ -450,7 +417,7 @@ export function useSalesAgents() {
 export function useRawMaterials() {
   const [rms, setRms] = useState<RawMaterial[]>([]);
   const fetch = useCallback(() => setRms(getRawMaterials()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add    = (d: Parameters<typeof createRawMaterial>[0])             => { const r = createRawMaterial(d);    fetch(); return r; };
   const edit   = (id: string, u: Parameters<typeof updateRawMaterial>[1]) => { const r = updateRawMaterial(id, u); fetch(); return r; };
   const remove = (id: string)                                              => { deleteRawMaterial(id);              fetch(); };
@@ -460,7 +427,7 @@ export function useRawMaterials() {
 export function useManufacturingOrders() {
   const [orders, setOrders] = useState<ManufacturingOrder[]>([]);
   const fetch = useCallback(() => setOrders(getManufacturingOrders()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add     = (d: Parameters<typeof createManufacturingOrder>[0])             => { const o = createManufacturingOrder(d);    fetch(); return o; };
   const edit    = (id: string, u: Parameters<typeof updateManufacturingOrder>[1]) => { const o = updateManufacturingOrder(id, u); fetch(); return o; };
   const remove  = (id: string)                                                     => { deleteManufacturingOrder(id);              fetch(); };
@@ -471,7 +438,7 @@ export function useManufacturingOrders() {
 export function useRecipes() {
   const [recipes, setRecipes] = useState<MfgRecipe[]>([]);
   const fetch = useCallback(() => setRecipes(getRecipes()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add    = (d: Parameters<typeof createRecipe>[0]) => { const r = createRecipe(d); fetch(); return r; };
   const remove = (id: string)                            => { deleteRecipe(id);           fetch(); };
   return { recipes, add, remove, refresh: fetch };
@@ -480,7 +447,7 @@ export function useRecipes() {
 export function useRPVouchers() {
   const [vouchers, setVouchers] = useState<RPVoucher[]>([]);
   const fetch = useCallback(() => setVouchers(getRPVouchers()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add    = (d: Parameters<typeof createRPVoucher>[0])              => { const v = createRPVoucher(d);    fetch(); return v; };
   const edit   = (id: string, u: Parameters<typeof updateRPVoucher>[1]) => { const v = updateRPVoucher(id, u); fetch(); return v; };
   const remove = (id: string)                                             => { deleteRPVoucher(id);              fetch(); };
@@ -491,7 +458,7 @@ export function useRPVouchers() {
 export function useCities() {
   const [cities, setCities] = useState<City[]>([]);
   const fetch = useCallback(() => setCities(getCities()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add    = (d: Parameters<typeof createCity>[0])              => { const c = createCity(d);    fetch(); return c; };
   const edit   = (id: string, u: Parameters<typeof updateCity>[1]) => { const c = updateCity(id, u); fetch(); return c; };
   const remove = (id: string)                                        => { deleteCity(id);              fetch(); };
@@ -501,7 +468,7 @@ export function useCities() {
 export function useAreas() {
   const [areas, setAreas] = useState<Area[]>([]);
   const fetch = useCallback(() => setAreas(getAreas()), []);
-  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  useStoreEffect(fetch);
   const add    = (d: Parameters<typeof createArea>[0])              => { const a = createArea(d);    fetch(); return a; };
   const edit   = (id: string, u: Parameters<typeof updateArea>[1]) => { const a = updateArea(id, u); fetch(); return a; };
   const remove = (id: string)                                        => { deleteArea(id);              fetch(); };
