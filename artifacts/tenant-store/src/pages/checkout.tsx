@@ -292,9 +292,12 @@ export function CheckoutPage() {
   /* ── Step: Info ─────────────────────────────────────────────────────── */
   function InfoStep() {
     const isLoggedIn = !!portalSession;
-    const signInUrl  = tenantId
-      ? `/customer-portal/?t=${encodeURIComponent(tenantId)}`
-      : "/customer-portal/";
+    const returnTo   = encodeURIComponent(window.location.pathname + window.location.search);
+    const portalBase = tenantId
+      ? `/customer-portal/?t=${encodeURIComponent(tenantId)}&returnTo=${returnTo}`
+      : `/customer-portal/?returnTo=${returnTo}`;
+    const signInUrl  = `${portalBase}&tab=signin`;
+    const signUpUrl  = `${portalBase}&tab=signup`;
 
     /* Calculate total potential Clubcard saving across all cart items */
     const clubcardSaving = items.reduce((sum, { product, quantity }) => {
@@ -341,17 +344,25 @@ export function CheckoutPage() {
                 </p>
               </div>
             </div>
-            <a
-              href={signInUrl}
-              className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-sm ${
-                clubcardSaving > 0
-                  ? "bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-green-900"
-                  : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-blue-900"
-              }`}
-            >
-              <UserCheck size={14} />
-              Sign In
-            </a>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={signUpUrl}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700"
+              >
+                Sign Up
+              </a>
+              <a
+                href={signInUrl}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-sm ${
+                  clubcardSaving > 0
+                    ? "bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-green-900"
+                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-blue-900"
+                }`}
+              >
+                <UserCheck size={14} />
+                Sign In
+              </a>
+            </div>
           </div>
         )}
 

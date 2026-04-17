@@ -5,10 +5,19 @@ import { useAuth } from "@/contexts/auth-context";
 
 type Tab = "signin" | "signup";
 
+function getUrlParam(key: string): string | null {
+  return new URLSearchParams(window.location.search).get(key);
+}
+
 export default function LoginPage() {
   const { login, signup, loading, error, clearError, session, tenantId, settings } = useAuth();
   const [, navigate] = useLocation();
-  const [tab, setTab]               = useState<Tab>("signin");
+
+  /* Read returnTo + default tab from URL (set by tenant-store checkout) */
+  const returnTo   = getUrlParam("returnTo");
+  const defaultTab = getUrlParam("tab") === "signup" ? "signup" : "signin";
+
+  const [tab, setTab]               = useState<Tab>(defaultTab);
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
   const [confirm, setConfirm]       = useState("");
@@ -16,7 +25,14 @@ export default function LoginPage() {
   const [showConf, setShowConf]     = useState(false);
   const [localErr, setLocalErr]     = useState("");
 
-  useEffect(() => { if (session) navigate("/"); }, [session, navigate]);
+  useEffect(() => {
+    if (!session) return;
+    if (returnTo) {
+      window.location.href = returnTo;   // redirect back to checkout (or wherever)
+    } else {
+      navigate("/");
+    }
+  }, [session, navigate, returnTo]);
 
   function switchTab(t: Tab) {
     setTab(t);
@@ -94,8 +110,8 @@ export default function LoginPage() {
           <div className="p-7">
             <p className="text-[13px] text-gray-500 mb-5">
               {tab === "signin"
-                ? "Welcome back. Sign in to view your orders."
-                : "Create your account to access your orders and invoices."}
+                ? (returnTo ? "Welcome back. Sign in to complete your order." : "Welcome back. Sign in to view your orders.")
+                : (returnTo ? "Create an account and complete your order." : "Create your account to access your orders and invoices.")}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
