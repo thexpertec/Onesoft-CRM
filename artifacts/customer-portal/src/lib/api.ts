@@ -124,13 +124,22 @@ export interface ClubCardTransaction {
 }
 
 export interface ClubCard {
+  cardId?: string;
   coins: number;
   transactions: ClubCardTransaction[];
 }
 
+/** Generate a unique Clubcard ID: CC + 4 uppercase chars + 4 digits. e.g. CCAB3D-7821 */
+export function generateCardId(): string {
+  const alpha = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const part1 = Array.from({ length: 4 }, () => alpha[Math.floor(Math.random() * alpha.length)]).join("");
+  const part2 = String(Math.floor(Math.random() * 9000) + 1000);
+  return `CC${part1}-${part2}`;
+}
+
 export async function fetchClubcard(tenantId: string, customerId: string): Promise<ClubCard> {
   const data = await kvGet<ClubCard>(`t:${tenantId}`, `clubcard-${customerId}`);
-  return data ?? { coins: 0, transactions: [] };
+  return data ?? { cardId: generateCardId(), coins: 0, transactions: [] };
 }
 
 export async function saveClubcard(tenantId: string, customerId: string, card: ClubCard): Promise<void> {
