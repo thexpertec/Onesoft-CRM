@@ -76,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err) {
       console.error("[portal] login error:", err);
-      setError("Something went wrong. Please try again.");
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Sign in failed: ${msg}`);
       return false;
     } finally {
       setLoading(false);
@@ -151,7 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err) {
       console.error("[portal] signup error:", err);
-      setError("Something went wrong. Please try again.");
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Sign up failed: ${msg}`);
       return false;
     } finally {
       setLoading(false);

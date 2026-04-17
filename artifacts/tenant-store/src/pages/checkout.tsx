@@ -153,46 +153,97 @@ export function CheckoutPage() {
   const [loginLoading,    setLoginLoading]    = useState(false);
   const [loginError,      setLoginError]      = useState("");
 
-  /* ── Inline sign-in handler (calls same API the portal uses) ─────────── */
+  /* ── SHA-256 helper — works in all secure contexts (HTTPS + localhost) ── */
+  async function sha256hex(text: string): Promise<string> {
+    const encoded = new TextEncoder().encode(text);
+    const buf = await window.crypto.subtle.digest("SHA-256", encoded);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /* ── Build the API base URL regardless of which path the app is served at */
+  function getApiBase(): string {
+    const { origin } = window.location;
+    // Strip anything from /tenant-store onwards so we always reach the root /api
+    const base = import.meta.env.BASE_URL ?? "/tenant-store/";
+    const prefix = base.replace(/\/tenant-store.*/, "");   // "" in most deployments
+    return `${origin}${prefix}/api`;
+  }
+
+  /* ── Inline sign-in handler ──────────────────────────────────────────── */
   async function handleInlineSignIn(e: React.FormEvent) {
     e.preventDefault();
-    if (!tenantId) return;
+    if (!tenantId) { setLoginError("Store not identified. Please refresh the page."); return; }
     setLoginLoading(true);
     setLoginError("");
+
+    const apiBase = getApiBase();
+    const ns = encodeURIComponent(`t:${tenantId}`);
+    const email = loginEmail.trim().toLowerCase();
+
+    // Step 1 — fetch portal accounts
+    let accounts: Array<{ email: string; passwordHash: string; customerId: string; name: string; createdAt: string }> = [];
     try {
-      const apiBase = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/tenant-store.*/, "")}/api`;
-      const ns = encodeURIComponent(`t:${tenantId}`);
-      const [accsRes, custsRes] = await Promise.all([
-        fetch(`${apiBase}/kv/${ns}/portal-accounts`).then(r => r.ok ? r.json() : { value: [] }),
-        fetch(`${apiBase}/kv/${ns}/admin-customers`).then(r => r.ok ? r.json() : { value: [] }),
-      ]);
-      const accounts: Array<{ email: string; passwordHash: string; customerId: string; name: string; createdAt: string }> =
-        accsRes?.value ?? [];
-      const customers: Array<{ id: string; name: string; email: string; phone?: string; city?: string }> =
-        custsRes?.value ?? [];
-      const email = loginEmail.trim().toLowerCase();
-      const encoded = new TextEncoder().encode(loginPassword);
-      const buffer = await crypto.subtle.digest("SHA-256", encoded);
-      const hash = Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
-      const account = accounts.find(a => a.email.trim().toLowerCase() === email && a.passwordHash === hash);
-      if (!account) { setLoginError("Incorrect email or password."); return; }
-      const customer = customers.find(c => c.id === account.customerId) ?? {
-        id: account.customerId,
-        name: account.name || email.split("@")[0],
-        email: account.email,
-        phone: "", city: "",
-      };
-      const sessionData: StoredSession = { tenantId, customer, loginAt: new Date().toISOString() };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-      setPortalSession(sessionData);   // update state directly — no StorageEvent needed
-      setShowInlineLogin(false);
-      setLoginEmail("");
-      setLoginPassword("");
+      const r = await fetch(`${apiBase}/kv/${ns}/portal-accounts`);
+      if (r.ok) {
+        const json = await r.json();
+        if (Array.isArray(json?.value)) accounts = json.value;
+      } else {
+        setLoginError("Could not reach the server. Please try again.");
+        setLoginLoading(false);
+        return;
+      }
     } catch {
-      setLoginError("Something went wrong. Please try again.");
-    } finally {
+      setLoginError("Network error. Please check your connection and try again.");
       setLoginLoading(false);
+      return;
     }
+
+    // Step 2 — hash password
+    let hash = "";
+    try {
+      hash = await sha256hex(loginPassword);
+    } catch {
+      setLoginError("Your browser does not support secure login. Please use an up-to-date browser.");
+      setLoginLoading(false);
+      return;
+    }
+
+    // Step 3 — find matching account
+    const account = accounts.find(
+      a => a.email.trim().toLowerCase() === email && a.passwordHash === hash
+    );
+    if (!account) {
+      setLoginError("Incorrect email or password.");
+      setLoginLoading(false);
+      return;
+    }
+
+    // Step 4 — fetch customers (non-fatal)
+    let customers: Array<{ id: string; name: string; email: string; phone?: string; city?: string }> = [];
+    try {
+      const r = await fetch(`${apiBase}/kv/${ns}/admin-customers`);
+      if (r.ok) {
+        const json = await r.json();
+        if (Array.isArray(json?.value)) customers = json.value;
+      }
+    } catch { /* proceed with stub */ }
+
+    // Step 5 — build session and store
+    const customer = customers.find(c => c.id === account.customerId) ?? {
+      id: account.customerId,
+      name: account.name || email.split("@")[0],
+      email: account.email,
+      phone: "", city: "",
+    };
+    const sessionData: StoredSession = { tenantId, customer, loginAt: new Date().toISOString() };
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+    } catch { /* storage restricted — session stays in memory only */ }
+    setPortalSession(sessionData);
+    setShowInlineLogin(false);
+    setLoginEmail("");
+    setLoginPassword("");
+    setLoginLoading(false);
   }
 
   /* ── Auto-prefill form whenever session is detected / changes ──────── */

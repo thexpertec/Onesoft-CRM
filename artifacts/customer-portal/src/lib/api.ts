@@ -20,11 +20,12 @@ async function kvGet<T>(ns: string, key: string): Promise<T | null> {
 }
 
 async function kvPut(ns: string, key: string, value: unknown): Promise<void> {
-  await fetch(`${apiRoot()}/kv/${encodeURIComponent(ns)}/${encodeURIComponent(key)}`, {
+  const r = await fetch(`${apiRoot()}/kv/${encodeURIComponent(ns)}/${encodeURIComponent(key)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value }),
   });
+  if (!r.ok) throw new Error(`Save failed (HTTP ${r.status})`);
 }
 
 export type CustomerStatus = "Active" | "Inactive" | "Churned";
