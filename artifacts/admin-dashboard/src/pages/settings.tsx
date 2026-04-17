@@ -5,7 +5,7 @@ import {
   Globe, Mail, Phone, MapPin, Image as ImageIcon,
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
-  PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw,
+  PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ import {
 } from "@/lib/quick-actions";
 
 // ─── Tab ids ──────────────────────────────────────────────────────────────────
-type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface";
+type TabId = "company" | "financial" | "pos" | "accounting" | "legal" | "data" | "interface" | "print";
 
 const FORM_MODE_OPTS: { value: "dialog" | "sheet"; label: string; icon: React.ElementType }[] = [
   { value: "dialog", label: "Form",       icon: Maximize2  },
@@ -49,6 +49,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[
   { id: "pos",        label: "POS & Sales",        icon: ShoppingBag,    desc: "Receipt, payment & tax defaults"      },
   { id: "accounting", label: "Accounting Links",   icon: BookOpen,       desc: "Map COA accounts to POS & Invoices"   },
   { id: "interface",  label: "Interface",          icon: LayoutTemplate, desc: "Sidebar shortcuts & quick actions"    },
+  { id: "print",      label: "Print Templates",    icon: FileText,       desc: "Header & footer for printed docs"     },
   { id: "legal",      label: "Legal Documents",    icon: Scale,          desc: "Terms, conditions & privacy policy"   },
   { id: "data",       label: "Data Management",    icon: Database,       desc: "Backup, import & reset"               },
 ];
@@ -506,6 +507,67 @@ function LegalTab({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// ─── Print template preview helpers ──────────────────────────────────────────
+const _esc  = (s: string) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const _nl2br = (s: string) => _esc(s).replace(/\n/g,"<br/>");
+
+function buildPrintHeaderHtml(s: AppSettings, note: string): string {
+  const logo = s.logoBase64
+    ? `<img src="${s.logoBase64}" alt="Logo" style="max-height:44px;max-width:140px;object-fit:contain;filter:brightness(0) invert(1);">`
+    : `<span style="font-size:18pt;font-weight:800;color:#fff;letter-spacing:-0.5px;line-height:1;">${_esc(s.companyName||"Company Name")}</span>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;padding:12px;}
+    .hdr{background:linear-gradient(135deg,#0f2447 0%,#1a3a6b 100%);color:#e2e8f0;padding:14pt 20pt;display:flex;justify-content:space-between;align-items:center;border-radius:6px;}
+    .tag{font-size:8pt;color:#94a3b8;margin-top:3pt;}
+    .note{font-size:7.5pt;color:#cbd5e1;margin-top:4pt;font-style:italic;}
+    .ttl{font-size:18pt;font-weight:700;color:#fff;letter-spacing:1pt;text-align:right;}
+    .num{font-size:9pt;color:#93c5fd;margin-top:4pt;text-align:right;}
+  </style></head><body>
+  <div class="hdr">
+    <div>${logo}${s.companyTagline?`<div class="tag">${_esc(s.companyTagline)}</div>`:""}${note?`<div class="note">${_nl2br(note)}</div>`:""}</div>
+    <div><div class="ttl">INVOICE</div><div class="num">INV-0001</div></div>
+  </div></body></html>`;
+}
+
+function buildPrintFooterHtml(s: AppSettings, showContact: boolean, customText: string, legalNote: string): string {
+  const parts: string[] = [];
+  if (showContact) {
+    if (s.addressHull)         parts.push(_esc(s.addressHull));
+    if (s.addressIslamabad)    parts.push(_esc(s.addressIslamabad));
+    if (s.phoneHull)           parts.push(`Tel: ${_esc(s.phoneHull)}`);
+    if (s.emailHull)           parts.push(_esc(s.emailHull));
+    if (s.website)             parts.push(_esc(s.website));
+    if (s.vatNumber)           parts.push(`VAT No: ${_esc(s.vatNumber)}`);
+    if (s.companyRegistration) parts.push(`Reg: ${_esc(s.companyRegistration)}`);
+  }
+  const noData = showContact && parts.length === 0;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;padding:12px;}
+    .ftr{background:#0f2447;color:#94a3b8;padding:10pt 20pt;font-size:7.5pt;line-height:1.7;text-align:center;border-radius:6px;}
+    .fn{font-size:9.5pt;font-weight:700;color:#e2e8f0;margin-bottom:3pt;}
+    .fl{color:#64748b;margin-bottom:1.5pt;}
+    .fg{font-size:7pt;color:#334155;margin-top:6pt;padding-top:5pt;border-top:1px solid #1e3a5f;}
+    .mt{color:#334155;font-style:italic;font-size:7pt;}
+  </style></head><body>
+  <div class="ftr">
+    <div class="fn">${_esc(s.companyName||"Company")}${s.companyTagline?` — ${_esc(s.companyTagline)}`:""}</div>
+    ${parts.length>0?`<div class="fl">${parts.join(" &nbsp;·&nbsp; ")}</div>`:noData?`<div class="mt">(Add address/phone/email in Company Profile)</div>`:""}
+    ${customText?`<div class="fl">${_nl2br(customText)}</div>`:""}
+    ${legalNote?`<div class="fg">${_nl2br(legalNote)}</div>`:""}
+  </div></body></html>`;
+}
+
+function PrintPreviewFrame({ html, height = 120 }: { html: string; height?: number }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => { if (ref.current) ref.current.srcdoc = html; }, [html]);
+  return (
+    <iframe ref={ref} title="preview" scrolling="no" sandbox="allow-same-origin"
+      style={{ width:"100%", height, border:"none", borderRadius:6, display:"block" }} />
   );
 }
 
@@ -1481,6 +1543,178 @@ export default function SettingsPage() {
                     toast({ title: "Right sidebar saved", description: "Changes will apply immediately on next page load." });
                   }}
                 />
+              </div>
+            )}
+
+            {/* ══ Print Templates ══════════════════════════════════════════════ */}
+            {tab === "print" && (
+              <div className="space-y-8">
+                <SectionHeader
+                  title="Print Templates"
+                  desc="Customise the header and footer that appear on all printed documents — invoices, purchase orders, and more. Live preview updates as you type."
+                />
+
+                {/* ── Info notice ── */}
+                <div className="flex items-start gap-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 px-4 py-3 text-[12px] text-blue-700 dark:text-blue-300">
+                  <Info size={13} className="mt-0.5 shrink-0" />
+                  <span>
+                    Company name, logo, tagline and contact details come from the{" "}
+                    <button onClick={() => setTab("company")} className="font-semibold underline underline-offset-2 hover:text-blue-900">
+                      Company Profile
+                    </button>{" "}tab. Edit them there to update what appears here.
+                  </span>
+                </div>
+
+                {/* ── Header Template ── */}
+                <div className="rounded-xl border border-gray-200 dark:border-border overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 bg-gray-50 dark:bg-muted/20 border-b border-gray-100 dark:border-border">
+                    <Printer size={15} className="text-primary" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">Header Template</p>
+                      <p className="text-[11px] text-muted-foreground">Top banner of every printed document — logo, company name, document title</p>
+                    </div>
+                    <span className="ml-auto text-[10px] font-medium bg-gray-200 dark:bg-muted text-gray-600 dark:text-gray-400 rounded px-1.5 py-0.5">Top of page</span>
+                  </div>
+                  <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left: form */}
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">From Company Profile</p>
+                        <div className="space-y-1.5">
+                          {[
+                            ["Logo / Name", form.logoBase64 ? "Logo uploaded ✓" : form.companyName],
+                            ["Tagline",     form.companyTagline],
+                          ].map(([lbl, val]) => (
+                            <div key={lbl as string} className="flex items-center gap-2 py-1 px-3 rounded-md bg-gray-50 dark:bg-muted/30 border border-dashed border-gray-200 dark:border-border">
+                              <span className="text-[11px] text-muted-foreground min-w-[70px]">{lbl}</span>
+                              <span className="text-[12px] font-medium text-gray-700 dark:text-gray-200 flex-1 truncate">
+                                {val || <em className="text-muted-foreground">—</em>}
+                              </span>
+                            </div>
+                          ))}
+                          <button onClick={() => setTab("company")} className="flex items-center gap-1 text-[11px] text-primary hover:underline mt-1">
+                            <Link2 size={11} /> Edit in Company Profile <ChevronRight size={11} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="border-t border-gray-100 dark:border-border pt-4">
+                        <Field
+                          label="Header Note (optional)"
+                          hint="Small italic text shown below the company name/tagline. Use for a slogan, branch name, or extra info."
+                        >
+                          <Textarea
+                            value={form.printHeaderNote ?? ""}
+                            onChange={e => set("printHeaderNote", e.target.value)}
+                            placeholder="e.g. Authorised dealer · Registered in England & Wales"
+                            rows={2}
+                            className="text-[13px] resize-none"
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                    {/* Right: preview */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                        <Eye size={11} /> Live Preview
+                      </p>
+                      <div className="rounded-lg border border-gray-200 dark:border-border overflow-hidden bg-gray-100 dark:bg-muted/20 p-2">
+                        <PrintPreviewFrame html={buildPrintHeaderHtml(form, form.printHeaderNote ?? "")} height={108} />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Right side shows document title/number — filled automatically per document.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Footer Template ── */}
+                <div className="rounded-xl border border-gray-200 dark:border-border overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 bg-gray-50 dark:bg-muted/20 border-b border-gray-100 dark:border-border">
+                    <Printer size={15} className="text-primary" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground">Footer Template</p>
+                      <p className="text-[11px] text-muted-foreground">Bottom band — company contact strip, custom message, and legal note</p>
+                    </div>
+                    <span className="ml-auto text-[10px] font-medium bg-gray-200 dark:bg-muted text-gray-600 dark:text-gray-400 rounded px-1.5 py-0.5">Bottom of page</span>
+                  </div>
+                  <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left: form */}
+                    <div className="space-y-4">
+                      {/* Contact toggle */}
+                      <div className="flex items-start gap-3 rounded-lg border border-gray-100 dark:border-border bg-gray-50 dark:bg-muted/20 px-4 py-3">
+                        <Switch
+                          checked={form.printFooterShowContact !== false}
+                          onCheckedChange={v => set("printFooterShowContact", v)}
+                          id="pf-contact"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Label htmlFor="pf-contact" className="text-[13px] font-medium cursor-pointer">Show company contact info</Label>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Displays addresses, phone, email, website, VAT number &amp; company registration in the footer.
+                          </p>
+                          {form.printFooterShowContact !== false && (
+                            <div className="mt-2 space-y-0.5">
+                              {[
+                                ["Address (Hull)",      form.addressHull],
+                                ["Address (Islamabad)", form.addressIslamabad],
+                                ["Phone",              form.phoneHull],
+                                ["Email",              form.emailHull],
+                                ["Website",            form.website],
+                                ["VAT No",             form.vatNumber],
+                                ["Company Reg",        form.companyRegistration],
+                              ].filter(([, v]) => v).map(([l, v]) => (
+                                <div key={l as string} className="flex gap-2 text-[11px]">
+                                  <span className="text-muted-foreground min-w-[90px]">{l}:</span>
+                                  <span className="text-gray-700 dark:text-gray-300 truncate">{v}</span>
+                                </div>
+                              ))}
+                              {!form.addressHull && !form.phoneHull && !form.emailHull && (
+                                <p className="text-[11px] text-amber-600 dark:text-amber-400 italic">No contact details yet — add them in Company Profile.</p>
+                              )}
+                              <button onClick={() => setTab("company")} className="flex items-center gap-1 text-[11px] text-primary hover:underline mt-1">
+                                <Link2 size={11} /> Edit in Company Profile <ChevronRight size={11} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Field label="Custom Footer Text" hint="e.g. payment terms, thank-you message, or promotional note — shown below contact info.">
+                        <Textarea
+                          value={form.invoiceFooter ?? ""}
+                          onChange={e => set("invoiceFooter", e.target.value)}
+                          placeholder="e.g. Thank you for your business! Payment due within 30 days."
+                          rows={2}
+                          className="text-[13px] resize-none"
+                        />
+                      </Field>
+                      <Field label="Legal Note" hint="Fine-print shown at the very bottom of the footer. Clear this field to hide it.">
+                        <Textarea
+                          value={form.printFooterLegalNote ?? "This is a computer-generated document. No handwritten signature is required."}
+                          onChange={e => set("printFooterLegalNote", e.target.value)}
+                          placeholder="e.g. This is a computer-generated document…"
+                          rows={2}
+                          className="text-[13px] resize-none"
+                        />
+                      </Field>
+                    </div>
+                    {/* Right: preview */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                        <Eye size={11} /> Live Preview
+                      </p>
+                      <div className="rounded-lg border border-gray-200 dark:border-border overflow-hidden bg-gray-100 dark:bg-muted/20 p-2">
+                        <PrintPreviewFrame
+                          html={buildPrintFooterHtml(
+                            form,
+                            form.printFooterShowContact !== false,
+                            form.invoiceFooter ?? "",
+                            form.printFooterLegalNote ?? "This is a computer-generated document. No handwritten signature is required.",
+                          )}
+                          height={140}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">This footer appears on every page of the printed document.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
