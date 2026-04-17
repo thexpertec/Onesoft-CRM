@@ -472,7 +472,10 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
     </div>
   </div>
   <div class="inv-header-right">
-    <div class="inv-title">${esc(inv.invoiceTitle || L.invoiceTitle || "Invoice")}</div>
+    <div class="inv-title">${isSale
+      ? sl("invoiceTitle",         L.invoiceTitle         || inv.invoiceTitle || "Invoice")
+      : sl("purchaseInvoiceTitle", L.purchaseInvoiceTitle || inv.invoiceTitle || "Purchase Invoice")
+    }</div>
     <div class="inv-number">${esc(inv.invoiceNumber)}</div>
   </div>
 </div>
