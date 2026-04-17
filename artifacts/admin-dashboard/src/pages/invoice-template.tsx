@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Save, RotateCcw, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +15,7 @@ function EditLabel({
   value: string;
   onChange: (k: keyof InvoiceLabels, v: string) => void;
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const lastValue = useRef(value);
