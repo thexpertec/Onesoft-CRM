@@ -2,14 +2,14 @@ import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getStock, getStockLedger, deleteStockLedgerEntry, getSettings,
+  getStock, getStockLedger, getSettings,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
   reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts, deduplicateSaleEntries,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
   TrendingUp, TrendingDown, Package, BarChart3,
-  Filter, X, Trash2, AlertTriangle, ChevronDown, Wrench, CheckCircle2, Eraser,
+  Filter, X, AlertTriangle, ChevronDown, Wrench, CheckCircle2, Eraser,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -281,19 +281,11 @@ export default function StockLedgerPage() {
   const [fromDate,  setFromDate]  = useState(monthStart());
   const [toDate,    setToDate]    = useState(today());
   const [txFilter,  setTxFilter]  = useState<"__all__" | LedgerTxType>("__all__");
-  const [deleteId,  setDeleteId]  = useState<string | null>(null);
   const [revision,  setRevision]  = useState(0);
 
   const stocks  = useMemo(() => getStock(),       [revision]); // eslint-disable-line
   const ledger  = useMemo(() => getStockLedger(), [revision]); // eslint-disable-line
   const settings = useMemo(() => getSettings(),   []);
-
-  const handleDelete = useCallback(() => {
-    if (!deleteId) return;
-    deleteStockLedgerEntry(deleteId);
-    setDeleteId(null);
-    setRevision(r => r + 1);
-  }, [deleteId]);
 
   const handleReconcileOne = useCallback(() => {
     if (!productId || productId === "__all__") return;
@@ -726,7 +718,6 @@ export default function StockLedgerPage() {
                         <th className="text-right px-4 py-3 text-rose-400">Qty Out</th>
                         <th className="text-right px-4 py-3">Balance</th>
                         <th className="text-left px-4 py-3">Notes</th>
-                        <th className="w-9 px-2 py-3"/>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
@@ -742,7 +733,7 @@ export default function StockLedgerPage() {
                           {openingQty.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
                           {unit && <span className="text-xs font-normal text-gray-400 ml-1">{unit}</span>}
                         </td>
-                        <td colSpan={2}/>
+                        <td/>
                       </tr>
 
                       {filteredWithBalance.map((row, idx) => (
@@ -797,15 +788,6 @@ export default function StockLedgerPage() {
                           <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 max-w-[160px] truncate">
                             {row.notes || <span className="text-gray-200 dark:text-zinc-800">—</span>}
                           </td>
-                          <td className="px-2 py-2.5">
-                            <button
-                              onClick={() => setDeleteId(row.id)}
-                              title="Delete entry"
-                              className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
-                            >
-                              <Trash2 size={12}/>
-                            </button>
-                          </td>
                         </tr>
                       ))}
 
@@ -826,7 +808,7 @@ export default function StockLedgerPage() {
                             {unit && <span className="text-xs font-normal text-gray-400 ml-1">{unit}</span>}
                           </span>
                         </td>
-                        <td colSpan={2}/>
+                        <td/>
                       </tr>
                     </tbody>
                   </table>
@@ -837,38 +819,6 @@ export default function StockLedgerPage() {
         </main>
       </div>
 
-      {/* ── Delete Confirmation Modal ── */}
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-zinc-700 p-6 max-w-sm w-full mx-4">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center shrink-0">
-                <Trash2 size={18} className="text-red-500"/>
-              </div>
-              <div>
-                <p className="font-bold text-gray-900 dark:text-zinc-100">Delete ledger entry?</p>
-                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                  This will permanently remove this transaction from the stock ledger. The running balances will recalculate automatically.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2.5 justify-end">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-sm"
-              >
-                Delete Entry
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
