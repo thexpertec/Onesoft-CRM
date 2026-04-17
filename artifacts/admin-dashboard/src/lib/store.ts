@@ -2602,6 +2602,32 @@ const nextInvoiceNumber = (type: "sale" | "purchase" = "sale"): string => {
 
 export const getInvoices = (): Invoice[] => getStored<Invoice>(INVOICES_KEY);
 
+/**
+ * Returns the total outstanding receivable balance for a customer
+ * across all their sale invoices EXCLUDING the given invoice id.
+ * Used to compute "Previous Balance" on invoice prints.
+ */
+export function getCustomerPreviousBalance(customerName: string, excludeInvoiceId: string): number {
+  if (!customerName) return 0;
+  let balance = 0;
+  for (const inv of getInvoices()) {
+    if (inv.customer !== customerName) continue;
+    if (inv.id === excludeInvoiceId) continue;
+    if (inv.invoiceType === "purchase") continue;
+    if (inv.status === "Cancelled") continue;
+    const sub   = inv.items.reduce((s, i) => s + (parseFloat(i.qty)||0) * (parseFloat(i.unitPrice)||0), 0);
+    const disc  = inv.items.reduce((s, i) => s + (parseFloat(i.qty)||0) * (parseFloat(i.unitPrice)||0) * ((parseFloat(i.discount)||0)/100), 0);
+    const after = sub - disc;
+    const tax   = after * (parseFloat(inv.taxRate)||0) / 100;
+    const ship  = parseFloat(inv.shippingFee) || 0;
+    const hand  = parseFloat(inv.handlingFee) || 0;
+    const total = after + tax + ship + hand;
+    const paid  = parseFloat(inv.amountPaid) || 0;
+    balance += Math.max(0, total - paid);
+  }
+  return balance;
+}
+
 export const createInvoice = (data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">): Invoice => {
   const inv: Invoice = {
     ...data,

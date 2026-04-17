@@ -3,7 +3,7 @@
  * Layout: compact header → Bill To only → items → totals →
  *         payment history → bank details table → terms → footer
  */
-import { Invoice, AppSettings } from "./store";
+import { Invoice, AppSettings, getCustomerPreviousBalance } from "./store";
 
 const esc = (s: string) =>
   String(s ?? "")
@@ -106,6 +106,11 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   const paid        = parseFloat(inv.amountPaid) || 0;
   const balance     = Math.max(0, total - paid);
   const histTotal   = (inv.paymentHistory ?? []).reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
+
+  // ── Previous / New balance (sale invoices only) ──────────────────────────
+  const isSale      = !inv.invoiceType || inv.invoiceType === "sale";
+  const prevBalance = isSale ? getCustomerPreviousBalance(inv.customer, inv.id) : 0;
+  const newBalance  = prevBalance + total;
 
   // ── Status colours ──────────────────────────────────────────────────────────
   const statusColors: Record<string, string> = {
@@ -379,6 +384,10 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .totals-total-label { font-size: 9pt; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
   .totals-total-amount { font-size: 14pt; font-weight: 900; color: #fff; }
   .totals-balance { background: linear-gradient(135deg,#fef3c7,#fde68a); border: 1.5px solid #fbbf24; color: #78350f; padding: 7pt 12pt; border-radius: 5pt; margin-top: 5pt; display: flex; justify-content: space-between; align-items: center; font-size: 10pt; font-weight: 800; }
+  .totals-prev-bal { display: flex; justify-content: space-between; align-items: center; padding: 5pt 12pt; font-size: 9pt; color: #475569; border-bottom: 1px solid #e2e8f0; margin-top: 4pt; }
+  .totals-new-bal  { background: #1e293b; color: #fff; padding: 8pt 12pt; border-radius: 5pt; margin-top: 4pt; display: flex; justify-content: space-between; align-items: center; border-top: 3px double #94a3b8; }
+  .totals-new-bal-label { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; }
+  .totals-new-bal-amount { font-size: 13pt; font-weight: 900; color: #fff; }
   .fully-paid { background: #f0fdf4; border: 1.5px solid #86efac; color: #166534; padding: 7pt 12pt; border-radius: 5pt; margin-top: 5pt; text-align: center; font-size: 9pt; font-weight: 800; }
 
   /* ── PAYMENT HISTORY TABLE ─────────────────────────────────────────────── */
@@ -532,6 +541,15 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       </div>` : ""}
       ${paid >= total && total > 0 ? `
       <div class="fully-paid">✓ &nbsp; Fully Paid${inv.paidAt ? " — " + fmtDate(inv.paidAt) : ""}</div>` : ""}
+      ${isSale ? `
+      <div class="totals-prev-bal">
+        <span>Previous Balance</span>
+        <span>${fmt(prevBalance)}</span>
+      </div>
+      <div class="totals-new-bal">
+        <span class="totals-new-bal-label">New Balance</span>
+        <span class="totals-new-bal-amount">${fmt(newBalance)}</span>
+      </div>` : ""}
     </div>
   </div>
 </div>
