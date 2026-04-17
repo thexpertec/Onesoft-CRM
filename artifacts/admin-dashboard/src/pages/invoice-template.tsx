@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getSettings, saveSettings,
   InvoiceLabels, DEFAULT_INVOICE_LABELS, getInvoiceLabels,
-  AppSettings, LabelStyle, getInvoiceLabelStyles,
+  DEFAULT_PURCHASE_INVOICE_LABELS, getPurchaseInvoiceLabels,
+  AppSettings, LabelStyle, getInvoiceLabelStyles, getPurchaseInvoiceLabelStyles,
 } from "@/lib/store";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -342,50 +343,71 @@ export default function InvoiceTemplatePage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const [labels,      setLabels]      = useState<InvoiceLabels>(() => getInvoiceLabels());
-  const [labelStyles, setLabelStyles] = useState<LabelStyles>(() => getInvoiceLabelStyles());
-  const [dirty,       setDirty]       = useState(false);
-  const [company]                     = useState<AppSettings>(() => getSettings());
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [invoiceType, setInvoiceType] = useState<"sale" | "purchase">("sale");
+  const [saleLabels,    setSaleLabels]    = useState<InvoiceLabels>(() => getInvoiceLabels());
+  const [saleStyles,    setSaleStyles]    = useState<LabelStyles>(() => getInvoiceLabelStyles());
+  const [purLabels,     setPurLabels]     = useState<InvoiceLabels>(() => getPurchaseInvoiceLabels());
+  const [purStyles,     setPurStyles]     = useState<LabelStyles>(() => getPurchaseInvoiceLabelStyles());
+  const [dirty,         setDirty]         = useState(false);
+  const [company]                         = useState<AppSettings>(() => getSettings());
+  const [selectedKey,   setSelectedKey]   = useState<string | null>(null);
+  const [invoiceType,   setInvoiceType]   = useState<"sale" | "purchase">("sale");
+
+  const isSaleTab = invoiceType === "sale";
+  const labels     = isSaleTab ? saleLabels : purLabels;
+  const labelStyles = isSaleTab ? saleStyles : purStyles;
+  const setLabels   = isSaleTab ? setSaleLabels : setPurLabels;
+  const setStyles   = isSaleTab ? setSaleStyles : setPurStyles;
 
   const markDirty = () => setDirty(true);
 
   const update = useCallback((key: keyof InvoiceLabels, value: string) => {
     setLabels(prev => prev[key] === value ? prev : { ...prev, [key]: value });
     markDirty();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSaleTab]);
 
   const updateStyle = useCallback((key: string, prop: keyof LabelStyle, val: LabelStyle[keyof LabelStyle] | undefined) => {
-    setLabelStyles(prev => {
+    setStyles(prev => {
       const cur = prev[key] ?? {};
       const next = { ...cur, [prop]: val };
-      // Clean up undefined/none values
       if (val === undefined || val === "none") delete (next as Record<string, unknown>)[prop];
       return { ...prev, [key]: next };
     });
     markDirty();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSaleTab]);
 
   const clearStyle = useCallback((key: string) => {
-    setLabelStyles(prev => {
+    setStyles(prev => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
     markDirty();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSaleTab]);
 
   const handleSave = () => {
     const settings = getSettings();
-    saveSettings({ ...settings, invoiceLabels: labels, invoiceLabelStyles: labelStyles });
+    saveSettings({
+      ...settings,
+      invoiceLabels:             saleLabels,
+      invoiceLabelStyles:        saleStyles,
+      purchaseInvoiceLabels:     purLabels,
+      purchaseInvoiceLabelStyles: purStyles,
+    });
     setDirty(false);
     toast({ title: "Template saved", description: "Labels and styles updated on all invoices." });
   };
 
   const handleReset = () => {
-    setLabels({ ...DEFAULT_INVOICE_LABELS });
-    setLabelStyles({});
+    if (isSaleTab) {
+      setSaleLabels({ ...DEFAULT_INVOICE_LABELS });
+      setSaleStyles({});
+    } else {
+      setPurLabels({ ...DEFAULT_PURCHASE_INVOICE_LABELS });
+      setPurStyles({});
+    }
     setDirty(true);
     toast({ title: "Reset to defaults", description: "Click Save to apply." });
   };
@@ -395,7 +417,7 @@ export default function InvoiceTemplatePage() {
   // Sample data
   const sym = company.defaultCurrency === "GBP" ? "£" : "PKR ";
 
-  // Helper: renders an EditLabel in the preview
+  // Helper: renders an EditLabel in the preview using the active label set
   const lbl = (key: keyof InvoiceLabels) => (
     <EditLabel
       labelKey={key}

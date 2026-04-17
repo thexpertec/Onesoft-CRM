@@ -3284,8 +3284,10 @@ export type AppSettings = {
   printFooterLegalNote?:     string;   // small legal note at the bottom of the footer
   printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
   // ── Invoice label customisation ──
-  invoiceLabels?:            Partial<InvoiceLabels>;
-  invoiceLabelStyles?:       Record<string, LabelStyle>;
+  invoiceLabels?:             Partial<InvoiceLabels>;
+  invoiceLabelStyles?:        Record<string, LabelStyle>;
+  purchaseInvoiceLabels?:     Partial<InvoiceLabels>;
+  purchaseInvoiceLabelStyles?: Record<string, LabelStyle>;
 };
 
 export interface LabelStyle {
@@ -3378,6 +3380,23 @@ export function getInvoiceLabels(): InvoiceLabels {
 
 export function getInvoiceLabelStyles(): Record<string, LabelStyle> {
   return getSettings().invoiceLabelStyles ?? {};
+}
+
+export const DEFAULT_PURCHASE_INVOICE_LABELS: InvoiceLabels = {
+  ...DEFAULT_INVOICE_LABELS,
+  invoiceTitle:         "PURCHASE ORDER",
+  purchaseInvoiceTitle: "PURCHASE ORDER",
+  billTo:               "Supplier",
+  footerNote:           "Thank you for your order.",
+};
+
+export function getPurchaseInvoiceLabels(): InvoiceLabels {
+  const saved = getSettings().purchaseInvoiceLabels ?? {};
+  return { ...DEFAULT_PURCHASE_INVOICE_LABELS, ...saved };
+}
+
+export function getPurchaseInvoiceLabelStyles(): Record<string, LabelStyle> {
+  return getSettings().purchaseInvoiceLabelStyles ?? {};
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

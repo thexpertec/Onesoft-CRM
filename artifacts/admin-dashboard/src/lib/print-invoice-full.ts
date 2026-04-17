@@ -3,7 +3,11 @@
  * Layout: compact header → Bill To only → items → totals →
  *         payment history → bank details table → terms → footer
  */
-import { Invoice, AppSettings, getCustomerPreviousBalance, getInvoiceLabels, getInvoiceLabelStyles, LabelStyle } from "./store";
+import {
+  Invoice, AppSettings, getCustomerPreviousBalance, LabelStyle,
+  getInvoiceLabels, getInvoiceLabelStyles,
+  getPurchaseInvoiceLabels, getPurchaseInvoiceLabelStyles,
+} from "./store";
 
 // Convert a LabelStyle to an inline CSS string for use in HTML attributes
 function toInlineCSS(s?: LabelStyle): string {
@@ -119,9 +123,12 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   const balance     = Math.max(0, total - paid);
   const histTotal   = (inv.paymentHistory ?? []).reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
 
-  // ── Invoice labels (user-customisable) ──────────────────────────────────
-  const L  = getInvoiceLabels();
-  const LS = getInvoiceLabelStyles();
+  // ── Invoice type ─────────────────────────────────────────────────────────
+  const isSale = !inv.invoiceType || inv.invoiceType === "sale";
+
+  // ── Invoice labels (user-customisable, separate sets per type) ───────────
+  const L  = isSale ? getInvoiceLabels()         : getPurchaseInvoiceLabels();
+  const LS = isSale ? getInvoiceLabelStyles()     : getPurchaseInvoiceLabelStyles();
   // Helper: wrap label text with inline style if custom style exists
   const sl = (key: string, text: string, extra?: string): string => {
     const css = toInlineCSS(LS[key]);
@@ -130,7 +137,6 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   };
 
   // ── Previous / New balance (sale invoices only) ──────────────────────────
-  const isSale      = !inv.invoiceType || inv.invoiceType === "sale";
   const prevBalance = isSale ? getCustomerPreviousBalance(inv.customer, inv.id) : 0;
   const newBalance  = prevBalance + total;
 
@@ -472,10 +478,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
     </div>
   </div>
   <div class="inv-header-right">
-    <div class="inv-title">${isSale
-      ? sl("invoiceTitle",         L.invoiceTitle         || inv.invoiceTitle || "Invoice")
-      : sl("purchaseInvoiceTitle", L.purchaseInvoiceTitle || inv.invoiceTitle || "Purchase Invoice")
-    }</div>
+    <div class="inv-title">${sl("invoiceTitle", L.invoiceTitle || inv.invoiceTitle || "Invoice")}</div>
     <div class="inv-number">${esc(inv.invoiceNumber)}</div>
   </div>
 </div>
