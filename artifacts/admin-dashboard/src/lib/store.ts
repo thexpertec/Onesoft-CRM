@@ -2546,8 +2546,10 @@ export type Invoice = {
   customer:          string;
   customerId:        string;
   buyerAddress:      string;
+  buyerTown:         string;
   buyerPhone:        string;
   buyerEmail:        string;
+  salesOfficer:      string;
   // Status & payment
   status:            InvoiceStatus;
   saleStatus?:       string;        // fulfilment status: Pending, Processing, Dispatched, etc.

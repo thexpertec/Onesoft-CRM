@@ -81,8 +81,10 @@ const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | 
     customer:       "",
     customerId:     "",
     buyerAddress:   "",
+    buyerTown:      "",
     buyerPhone:     "",
     buyerEmail:     "",
+    salesOfficer:   "",
     status:         "Draft",
     paymentMethod:  "Bank Transfer",
     paymentTerms:   "",
@@ -523,9 +525,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       ...f,
       customer:    name,
       customerId:  c ? c.id.slice(-8).toUpperCase() : f.customerId,
-      buyerPhone:  c?.phone  || f.buyerPhone,
-      buyerEmail:  c?.email  || f.buyerEmail,
-      buyerAddress: c ? [c.company, c.city].filter(Boolean).join(", ") : f.buyerAddress,
+      buyerPhone:   c?.phone  || f.buyerPhone,
+      buyerEmail:   c?.email  || f.buyerEmail,
+      buyerAddress: c?.address || f.buyerAddress,
+      buyerTown:    c?.city   || f.buyerTown,
     }));
   }, [customers]);
 
@@ -748,9 +751,21 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Billing Address</label>
-                        <textarea rows={2} value={form.buyerAddress} onChange={e => setF("buyerAddress", e.target.value)} placeholder="Address…"
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Complete Address</label>
+                        <textarea rows={2} value={form.buyerAddress} onChange={e => setF("buyerAddress", e.target.value)} placeholder="Street address…"
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"/>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Town</label>
+                          <input value={form.buyerTown} onChange={e => setF("buyerTown", e.target.value)} placeholder="Town / City"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Sales Officer</label>
+                          <input value={form.salesOfficer} onChange={e => setF("salesOfficer", e.target.value)} placeholder="Officer name"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
                       </div>
 
                       {/* Sales Agent */}
