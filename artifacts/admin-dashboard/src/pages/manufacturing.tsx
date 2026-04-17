@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   Factory, Eye, Trash2, Plus, CheckCircle2, XCircle, FlaskConical,
   Package, DollarSign, AlertTriangle, ChevronRight, BookOpen, BookMarked,
-  ChevronDown, ChevronUp, Scale, CheckCircle, AlertCircle, ArrowRight,
+  ChevronDown, ChevronUp, Scale, CheckCircle, AlertCircle, ArrowRight, Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +19,298 @@ import { useManufacturingOrders, useRawMaterials, useRecipes } from "@/hooks/use
 import { useAuth } from "@/contexts/auth-context";
 import {
   getProducts, MFG_STATUSES, MfgInput, MfgOutput, ProductionCost, ManufacturingOrder,
+  RawMaterial, getSettings,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { ExcelGridShell, ColDef, CELL_H } from "@/components/editable-cell";
 
 const dp = getSettingsDecimalPlaces();
+
+// ── Print / PDF generator ─────────────────────────────────────────────────────
+function printMfgOrder(order: ManufacturingOrder, rms: RawMaterial[], sym: string, decPlaces: number) {
+  const s = getSettings();
+  const rmCost   = order.inputs.reduce((sum, inp) => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    return sum + (parseFloat(rm?.costPerUnit || "0") * (parseFloat(inp.qtyUsed) || 0));
+  }, 0);
+  const prodCost = (order.productionCosts || []).reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+  const total    = rmCost + prodCost;
+  const outputs  = order.outputs || [];
+  const [mainOut, ...byProds] = outputs;
+  const mainQty  = parseFloat(mainOut?.qty || "0") || 0;
+  const bpFixed  = byProds.reduce((sum, bp) => {
+    const mc = parseFloat(bp.manualCost || ""); const q = parseFloat(bp.qty) || 0;
+    return isNaN(mc) ? sum : sum + mc * q;
+  }, 0);
+  const mainCost    = total - bpFixed;
+  const mainPerUnit = mainQty > 0 ? mainCost / mainQty : 0;
+  const totalOutQty = outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+  const f = (v: number) => `${sym}${v.toFixed(decPlaces)}`;
+  let orderDateFmt = order.orderDate;
+  try { orderDateFmt = format(new Date(order.orderDate), "d MMMM yyyy"); } catch { /* */ }
+  const now = new Date();
+  const printDate = format(now, "d MMMM yyyy");
+  const printTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const statusClass = order.status === "Completed" ? "completed" : order.status === "In Progress" ? "in-progress" : "draft";
+
+  const rmRows = order.inputs.filter(i => i.rmName?.trim()).map((inp, i) => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    const rate = parseFloat(rm?.costPerUnit || "0");
+    const lc   = rate * (parseFloat(inp.qtyUsed) || 0);
+    return `<tr class="${i % 2 ? "alt" : ""}">
+      <td class="num">${i + 1}</td><td class="bold">${inp.rmName}</td>
+      <td class="r bold green">${inp.qtyUsed}</td><td class="muted">${inp.unit || "—"}</td>
+      <td class="r muted">${rate > 0 ? f(rate) : "—"}</td>
+      <td class="r bold">${lc > 0 ? f(lc) : "—"}</td></tr>`;
+  }).join("");
+
+  const costRows = (order.productionCosts || []).filter(c => c.description?.trim()).map((c, i) =>
+    `<tr class="${i % 2 ? "alt" : ""}">
+      <td class="num">${i + 1}</td><td>${c.description}</td>
+      <td class="r bold violet">${f(parseFloat(c.amount || "0"))}</td></tr>`
+  ).join("");
+
+  const outRows = [
+    mainOut ? `<tr>
+      <td class="bold">${mainOut.productName || "Main Product"}</td>
+      <td><span class="tag main">MAIN</span></td>
+      <td class="r bold orange">${mainOut.qty}</td><td class="muted">${mainOut.unit || "—"}</td>
+      <td class="r bold orange">${f(mainCost)}</td>
+      <td class="r bold orange">${sym}${mainPerUnit.toFixed(3)}</td></tr>` : "",
+    ...byProds.map((bp, i) => {
+      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
+      const mc   = parseFloat(bp.manualCost || "0");
+      const q    = parseFloat(bp.qty) || 0;
+      const alloc = hasM ? mc * q : 0;
+      return `<tr class="${i % 2 ? "alt" : ""}">
+        <td>${bp.productName || "By-product"}</td>
+        <td><span class="tag ${hasM ? "fixed" : "absorbed"}">${hasM ? "FIXED" : "ABSORBED"}</span></td>
+        <td class="r bold muted">${bp.qty}</td><td class="muted">${bp.unit || "—"}</td>
+        <td class="r">${hasM ? f(alloc) : `<em class="muted">absorbed</em>`}</td>
+        <td class="r">${hasM ? `${sym}${mc.toFixed(3)}` : "—"}</td></tr>`;
+    }),
+  ].join("");
+
+  const tInLeft = order.inputs.filter(i => i.rmName?.trim()).map(inp => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    const lc = (parseFloat(rm?.costPerUnit || "0")) * (parseFloat(inp.qtyUsed) || 0);
+    return `<div class="tr indent"><span>${inp.rmName}</span><span class="ta green">${f(lc)}</span></div>`;
+  }).join("");
+
+  const tCostLeft = (order.productionCosts || []).filter(c => c.description?.trim()).map(c =>
+    `<div class="tr indent"><span>${c.description}</span><span class="ta violet">${f(parseFloat(c.amount || "0"))}</span></div>`
+  ).join("");
+
+  const tOutRight = [
+    mainOut && mainQty > 0 ? `<p class="t-sub orange">Main Product</p>
+      <div class="tr indent"><span>${mainOut.productName || "Main"} × ${mainQty}</span><span class="ta orange">${f(mainCost)}</span></div>
+      <div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit</div>` : "",
+    byProds.filter(bp => bp.productName?.trim()).length > 0 ? `<p class="t-sub" style="margin-top:7pt;">By-products</p>` + byProds.filter(bp => bp.productName?.trim()).map(bp => {
+      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
+      const mc   = parseFloat(bp.manualCost || "0");
+      const q    = parseFloat(bp.qty) || 0;
+      const alloc = hasM ? mc * q : 0;
+      return `<div class="tr indent"><span>${bp.productName} × ${bp.qty}</span>
+        <span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>
+        <div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">
+          ${hasM ? `${sym}${mc.toFixed(3)}/unit · FIXED` : "Cost absorbed by main product"}</div>`;
+    }).join("") : "",
+  ].join("");
+
+  const hasWaste = order.wasteQty && order.wasteQty !== "0" && order.wasteQty !== "";
+  const sectionN = (n: number) => hasWaste ? n : n - (n > 4 ? 1 : 0);
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
+<title>Manufacturing Order — ${order.orderNumber}</title>
+<style>
+@page{size:A4;margin:16mm 15mm 18mm 15mm}
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:9.5pt;color:#111;background:#fff;margin:0}
+/* ── Header ── */
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2pt solid #ea580c;margin-bottom:12pt}
+.co h1{margin:0 0 2pt;font-size:15pt;font-weight:700;color:#ea580c}
+.co .tl{font-size:7.5pt;color:#777;margin:0 0 3pt}
+.co .addr{font-size:7.5pt;color:#555;line-height:1.5}
+.di{text-align:right}
+.di .dt{font-size:12pt;font-weight:700;color:#111;margin-bottom:3pt}
+.di .on{font-size:10pt;font-weight:700;color:#ea580c}
+.di .dm{font-size:7.5pt;color:#666;line-height:1.6}
+.badge{display:inline-block;padding:1.5pt 6pt;border-radius:99pt;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.4pt}
+.draft{background:#f1f5f9;color:#475569}
+.in-progress{background:#fffbeb;color:#b45309;border:1pt solid #fcd34d}
+.completed{background:#f0fdf4;color:#166534;border:1pt solid #86efac}
+/* ── Pill strip ── */
+.pills{display:flex;gap:7pt;margin-bottom:12pt}
+.pill{flex:1;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:5pt;padding:5pt 9pt}
+.pill .pl{font-size:6.5pt;text-transform:uppercase;letter-spacing:.6pt;color:#94a3b8;font-weight:700;margin-bottom:1pt}
+.pill .pv{font-size:11pt;font-weight:700;color:#111}
+.pill.rm .pv{color:#059669}.pill.pc .pv{color:#7c3aed}.pill.tc .pv{color:#ea580c}
+/* ── Section ── */
+.sec{margin-bottom:13pt;page-break-inside:avoid}
+.sh{font-size:8.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.6pt;color:#fff;padding:4.5pt 9pt;border-radius:4pt 4pt 0 0}
+.sh.g{background:#059669}.sh.v{background:#7c3aed}.sh.o{background:#ea580c}
+.sh.sl{background:#475569}.sh.e{background:#10b981}.sh.a{background:#b45309}
+/* ── Tables ── */
+.tw{border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:8.5pt}
+th{background:#f8fafc;padding:4.5pt 7pt;text-align:left;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.4pt;color:#64748b;border-bottom:1pt solid #e2e8f0}
+th.r{text-align:right}
+td{padding:4.5pt 7pt;border-bottom:.5pt solid #f1f5f9;vertical-align:top}
+td.r{text-align:right}td.bold{font-weight:700}td.num{color:#9ca3af;width:18pt}
+td.muted{color:#64748b}td.green{color:#059669}td.violet{color:#7c3aed}td.orange{color:#ea580c}
+tr.alt{background:#f9fafb}tr:last-child td{border-bottom:none}
+tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
+.tag{display:inline-block;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3pt;padding:1pt 4.5pt;border-radius:3pt}
+.tag.main{background:#fff7ed;color:#c2410c}.tag.fixed{background:#d1fae5;color:#065f46}.tag.absorbed{background:#f1f5f9;color:#64748b}
+/* ── T-account ── */
+.tac{display:flex;border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;overflow:hidden}
+.tc{flex:1;padding:7pt 9pt}.tc:first-child{border-right:1pt solid #e2e8f0}
+.tch{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.6pt;color:#94a3b8;margin-bottom:5pt;padding-bottom:3pt;border-bottom:1pt solid #e2e8f0}
+.t-sub{font-size:7.5pt;font-weight:700;color:#555;margin:5pt 0 2pt}
+.t-sub.orange{color:#ea580c}
+.tr{display:flex;justify-content:space-between;font-size:8.5pt;margin-bottom:2.5pt}
+.tr.indent{padding-left:9pt;color:#555}
+.tr.sub{border-top:.5pt solid #e2e8f0;padding-top:2.5pt;font-weight:700;margin-top:1pt}
+.tr.tot{background:#f1f5f9;border-radius:3pt;padding:3.5pt 6pt;font-weight:700;margin-top:5pt;font-size:9.5pt}
+.ta{font-variant-numeric:tabular-nums;white-space:nowrap}.ta.green{color:#059669}.ta.violet{color:#7c3aed}.ta.orange{color:#ea580c}
+.bal{display:flex;justify-content:space-between;align-items:center;padding:5pt 9pt;font-size:8.5pt;font-weight:700}
+.bal.ok{background:#f0fdf4;color:#166534;border-top:1pt solid #bbf7d0}
+/* ── Notes / sig ── */
+.nb{border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;padding:7pt 9pt;font-size:8.5pt;color:#444;line-height:1.6;background:#fafafa;min-height:22pt}
+.sigs{display:flex;gap:10pt;margin-top:18pt}
+.sig{flex:1;padding-top:20pt;border-top:1pt solid #333;text-align:center}
+.sig .sl{font-size:7.5pt;color:#555}
+.sig .sn{font-size:7pt;color:#999;margin-top:1pt}
+.ft{margin-top:12pt;padding-top:5pt;border-top:.5pt solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#9ca3af}
+@media print{html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="co">
+    ${s.logoBase64 ? `<img src="${s.logoBase64}" alt="logo" style="height:32pt;margin-bottom:3pt;display:block;"/>` : ""}
+    <h1>${s.companyName || "Onesoft"}</h1>
+    ${s.companyTagline ? `<p class="tl">${s.companyTagline}</p>` : ""}
+    <div class="addr">${s.addressHull ? s.addressHull.replace(/\n/g," · ") : ""}${s.phoneHull ? ` · Tel: ${s.phoneHull}` : ""}${s.emailHull ? `<br>${s.emailHull}` : ""}${s.vatNumber ? ` · VAT: ${s.vatNumber}` : ""}${s.companyRegistration ? ` · Reg: ${s.companyRegistration}` : ""}</div>
+  </div>
+  <div class="di">
+    <div class="dt">Manufacturing Production Order</div>
+    <div class="on">${order.orderNumber}</div>
+    <div class="dm">
+      Date: <strong>${orderDateFmt}</strong><br>
+      Status: <span class="badge ${statusClass}">${order.status}</span><br>
+      <span style="color:#bbb;">Printed: ${printDate} at ${printTime}</span>
+    </div>
+  </div>
+</div>
+
+<!-- COST SUMMARY PILLS -->
+<div class="pills">
+  <div class="pill rm"><div class="pl">Raw Material Cost</div><div class="pv">${f(rmCost)}</div></div>
+  <div class="pill pc"><div class="pl">Production Costs</div><div class="pv">${f(prodCost)}</div></div>
+  <div class="pill tc"><div class="pl">Total Batch Cost</div><div class="pv">${f(total)}</div></div>
+  <div class="pill"><div class="pl">Total Output Qty</div><div class="pv">${totalOutQty} units</div></div>
+</div>
+
+<!-- 1. RAW MATERIALS -->
+<div class="sec">
+  <div class="sh g">1 · Raw Materials Consumed</div>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>Material / Ingredient</th><th class="r">Qty Used</th><th>Unit</th><th class="r">Rate</th><th class="r">Line Cost</th></tr></thead>
+    <tbody>${rmRows}</tbody>
+    <tfoot><tr><td colspan="5" class="r" style="font-size:7pt;color:#64748b;">Total Raw Material Cost</td><td class="r green" style="font-size:10pt;">${f(rmCost)}</td></tr></tfoot>
+  </table></div>
+</div>
+
+<!-- 2. PRODUCTION COSTS -->
+<div class="sec">
+  <div class="sh v">2 · Production Costs</div>
+  <div class="tw">${(order.productionCosts || []).filter(c => c.description?.trim()).length === 0
+    ? `<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs recorded.</div>`
+    : `<table><thead><tr><th></th><th>Description</th><th class="r">Amount</th></tr></thead>
+       <tbody>${costRows}</tbody>
+       <tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>
+       </table>`}
+  </div>
+</div>
+
+<!-- 3. OUTPUT PRODUCTS -->
+<div class="sec">
+  <div class="sh o">3 · Output Products</div>
+  <div class="tw"><table>
+    <thead><tr><th>Product</th><th>Type</th><th class="r">Qty</th><th>Unit</th><th class="r">Allocated Cost</th><th class="r">Cost / Unit</th></tr></thead>
+    <tbody>${outRows}</tbody>
+    <tfoot><tr><td colspan="4" class="r" style="font-size:7pt;color:#64748b;">Total Allocated</td><td class="r orange" style="font-size:10pt;">${f(total)}</td><td></td></tr></tfoot>
+  </table></div>
+</div>
+
+<!-- 4. COST RECONCILIATION -->
+<div class="sec">
+  <div class="sh e">4 · Cost Reconciliation — Manufacturing Account</div>
+  <div class="tac">
+    <div class="tc">
+      <div class="tch">Costs In — Debits</div>
+      <p class="t-sub" style="color:#059669;">Raw Materials</p>
+      ${tInLeft}
+      <div class="tr sub"><span style="color:#059669;">RM Subtotal</span><span class="ta green">${f(rmCost)}</span></div>
+      ${(order.productionCosts || []).filter(c => c.description?.trim()).length > 0 ? `
+      <p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>
+      ${tCostLeft}
+      <div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>
+      ` : ""}
+      <div class="tr tot"><span>Total In</span><span class="ta orange">${f(total)}</span></div>
+    </div>
+    <div class="tc">
+      <div class="tch">Costs Out — Credits</div>
+      ${tOutRight}
+      <div class="tr tot"><span>Total Out</span><span class="ta orange">${f(total)}</span></div>
+    </div>
+  </div>
+  <div class="bal ok">
+    <span>✓ Fully Reconciled — Cost In = Cost Out</span>
+    <span>Variance: ${sym}0.00</span>
+  </div>
+</div>
+
+${hasWaste ? `
+<!-- 5. WASTE / LOSS -->
+<div class="sec">
+  <div class="sh a">5 · Waste / Loss Recorded</div>
+  <div style="border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;padding:7pt 9pt;background:#fffbeb;">
+    <strong>${order.wasteQty} ${order.wasteUnit || ""}</strong>
+    ${order.wasteNotes ? `<br><span style="color:#64748b;font-size:8.5pt;">${order.wasteNotes}</span>` : ""}
+  </div>
+</div>` : ""}
+
+<!-- BATCH NOTES -->
+<div class="sec">
+  <div class="sh sl">${hasWaste ? 6 : 5} · Batch Notes</div>
+  <div class="nb">${order.notes || `<em style="color:#9ca3af;">No notes recorded.</em>`}</div>
+</div>
+
+<!-- SIGNATURES -->
+<div class="sigs">
+  <div class="sig"><div class="sl">Prepared By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Checked By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Approved By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Date</div><div class="sn">&nbsp;</div></div>
+</div>
+
+<!-- FOOTER -->
+<div class="ft">
+  <span>${s.companyName || "Onesoft"}${s.addressHull ? " · " + s.addressHull.split("\n")[0] : ""}${s.vatNumber ? " · VAT: " + s.vatNumber : ""}</span>
+  <span>${order.orderNumber} · Page 1</span>
+</div>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=900,height=750");
+  if (!win) { alert("Please allow pop-ups to print manufacturing orders."); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 500);
+}
 
 // ── Grid columns ──────────────────────────────────────────────────────────────
 const COLS: ColDef[] = [
@@ -1214,6 +1500,14 @@ export default function ManufacturingPage() {
                           <div className="text-[13px] font-bold">{sym}{p.val.toFixed(dp)}</div>
                         </div>
                       ))}
+                      {/* Print / PDF button — always visible */}
+                      <Button
+                        variant="outline"
+                        className="bg-white/15 hover:bg-white/25 text-white border-white/30 font-semibold gap-1.5 h-10 px-4 text-[13px] shadow"
+                        onClick={() => printMfgOrder(viewOrder, rms, sym, dp)}
+                      >
+                        <Printer size={15} /> Print / PDF
+                      </Button>
                       {canEdit && (viewOrder.status === "Draft" || viewOrder.status === "In Progress") && (
                         <Button className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold gap-1.5 h-10 px-4 text-[13px] shadow-lg"
                           onClick={() => handleComplete(viewOrder.id)}>
