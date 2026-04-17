@@ -63,6 +63,13 @@ function calcProdCost(costs: ProductionCost[]): number {
   return costs.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
 }
 
+// ── Recipe base (for auto-scaling) ────────────────────────────────────────────
+type RecipeBase = {
+  recipeName:     string;
+  inputs:         { id: string; qty: number }[];  // base qty per input row
+  totalOutputQty: number;                          // base total output qty
+};
+
 // ── Form state type ───────────────────────────────────────────────────────────
 type NewOrderForm = {
   orderDate:       string;
@@ -74,6 +81,7 @@ type NewOrderForm = {
   wasteUnit:       string;
   wasteNotes:      string;
   notes:           string;
+  recipeBase:      RecipeBase | null;   // set when a recipe is loaded
 };
 
 function defaultForm(): NewOrderForm {
@@ -87,7 +95,16 @@ function defaultForm(): NewOrderForm {
     wasteUnit:       "",
     wasteNotes:      "",
     notes:           "",
+    recipeBase:      null,
   };
+}
+
+// ── Scale a numeric qty string to N decimal places, strip trailing zeros ──────
+function scaleQty(baseQty: number, ratio: number): string {
+  const v = baseQty * ratio;
+  if (v === 0) return "0";
+  const s = v.toFixed(6).replace(/\.?0+$/, "");
+  return s;
 }
 
 // ── Detail tabs ───────────────────────────────────────────────────────────────
@@ -110,17 +127,37 @@ export default function ManufacturingPage() {
 
   const setF = (patch: Partial<NewOrderForm>) => setForm(f => ({ ...f, ...patch }));
 
-  // inputs
+  // inputs — manually editing qty clears recipeBase (disables auto-scaling)
   const addInput    = () => setF({ inputs: [...form.inputs, blankInput()] });
   const removeInput = (id: string) => setF({ inputs: form.inputs.filter(i => i.id !== id) });
   const updInput    = (id: string, p: Partial<MfgInput>) =>
-    setF({ inputs: form.inputs.map(i => i.id === id ? { ...i, ...p } : i) });
+    setForm(f => ({
+      ...f,
+      inputs: f.inputs.map(i => i.id === id ? { ...i, ...p } : i),
+      // user overriding a qty manually disables auto-scaling for that field
+      recipeBase: "qtyUsed" in p ? null : f.recipeBase,
+    }));
 
-  // outputs
+  // outputs — if recipe is loaded, auto-scale all inputs proportionally
   const addOutput    = () => setF({ outputs: [...form.outputs, blankOutput()] });
   const removeOutput = (id: string) => setF({ outputs: form.outputs.filter(o => o.id !== id) });
-  const updOutput    = (id: string, p: Partial<MfgOutput>) =>
-    setF({ outputs: form.outputs.map(o => o.id === id ? { ...o, ...p } : o) });
+  const updOutput = (id: string, p: Partial<MfgOutput>) =>
+    setForm(f => {
+      const newOutputs = f.outputs.map(o => o.id === id ? { ...o, ...p } : o);
+      // Auto-scale inputs when a recipe is loaded and qty changes
+      let newInputs = f.inputs;
+      if (f.recipeBase && f.recipeBase.totalOutputQty > 0 && "qty" in p) {
+        const newTotal = newOutputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+        if (newTotal > 0) {
+          const ratio = newTotal / f.recipeBase.totalOutputQty;
+          newInputs = f.inputs.map(inp => {
+            const base = f.recipeBase!.inputs.find(b => b.id === inp.id);
+            return base ? { ...inp, qtyUsed: scaleQty(base.qty, ratio) } : inp;
+          });
+        }
+      }
+      return { ...f, outputs: newOutputs, inputs: newInputs };
+    });
 
   // production costs
   const addCost    = () => setF({ productionCosts: [...form.productionCosts, blankCost()] });
@@ -342,14 +379,21 @@ export default function ManufacturingPage() {
                     {canEdit && (
                       <Button size="sm" variant="outline" className="w-full h-8 text-[12px] gap-1.5 mt-1"
                         onClick={() => {
+                          const newInputs = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
+                          const baseOutQty = r.outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
                           setF({
-                            inputs:          r.inputs.map(i => ({ ...i, id: crypto.randomUUID() })),
+                            inputs:          newInputs,
                             outputs:         r.outputs.map(o => ({ ...o, id: crypto.randomUUID() })),
                             productionCosts: r.productionCosts.map(c => ({ ...c, id: crypto.randomUUID() })),
                             notes:           r.notes,
+                            recipeBase: {
+                              recipeName:     r.name,
+                              inputs:         newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
+                              totalOutputQty: baseOutQty,
+                            },
                           });
                           setNewOpen(true);
-                          toast({ title: `Recipe "${r.name}" loaded` });
+                          toast({ title: `Recipe "${r.name}" loaded — adjust output qty to auto-scale materials` });
                         }}>
                         <BookOpen size={12} /> Use Recipe
                       </Button>
@@ -404,14 +448,21 @@ export default function ManufacturingPage() {
                       <div className="absolute right-0 top-full mt-1.5 z-50 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl min-w-[220px] overflow-hidden">
                         {recipes.map((r, i) => (
                           <button key={r.id} onMouseDown={() => {
+                            const newInputs = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
+                            const baseOutQty = r.outputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
                             setF({
-                              inputs:          r.inputs.map(x => ({ ...x, id: crypto.randomUUID() })),
+                              inputs:          newInputs,
                               outputs:         r.outputs.map(x => ({ ...x, id: crypto.randomUUID() })),
                               productionCosts: r.productionCosts.map(x => ({ ...x, id: crypto.randomUUID() })),
                               notes:           r.notes,
+                              recipeBase: {
+                                recipeName:     r.name,
+                                inputs:         newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
+                                totalOutputQty: baseOutQty,
+                              },
                             });
                             setLoadDropOpen(false);
-                            toast({ title: `Recipe "${r.name}" loaded` });
+                            toast({ title: `Recipe "${r.name}" loaded — adjust output qty to auto-scale materials` });
                           }}
                           className={`w-full text-left px-4 py-2.5 text-[13px] hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors ${i > 0 ? "border-t border-gray-100 dark:border-zinc-800" : ""}`}>
                             <div className="font-semibold text-gray-800 dark:text-gray-100">{r.name}</div>
@@ -459,6 +510,23 @@ export default function ManufacturingPage() {
                     <Plus size={13} /> Add Row
                   </Button>
                 </div>
+
+                {/* Auto-scaling indicator */}
+                {form.recipeBase && (
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800">
+                    <div className="flex items-center gap-2 text-[12px] text-violet-700 dark:text-violet-300">
+                      <BookMarked size={13} />
+                      <span className="font-semibold">Auto-scaling active</span>
+                      <span className="text-violet-500 dark:text-violet-400">· recipe: <em>{form.recipeBase.recipeName}</em> (base: {form.recipeBase.totalOutputQty} units)</span>
+                    </div>
+                    <button
+                      onClick={() => setF({ recipeBase: null })}
+                      className="text-[11px] text-violet-500 hover:text-violet-700 underline shrink-0"
+                    >
+                      Disable
+                    </button>
+                  </div>
+                )}
 
                 {/* Inputs table */}
                 <div className="border rounded-xl overflow-hidden">
@@ -598,6 +666,8 @@ export default function ManufacturingPage() {
                         const share    = totalOutQty > 0 ? outQty / totalOutQty : 0;
                         const outCost  = totalCost * share;
                         const unitCost = outQty > 0 ? outCost / outQty : 0;
+                        const ratio    = form.recipeBase && form.recipeBase.totalOutputQty > 0
+                          ? totalOutQty / form.recipeBase.totalOutputQty : null;
                         return (
                           <tr key={out.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
                             <td className="px-3 py-2">
@@ -623,9 +693,16 @@ export default function ManufacturingPage() {
                               )}
                             </td>
                             <td className="px-2 py-2">
-                              <Input type="number" min="0" value={out.qty}
-                                onChange={e => updOutput(out.id, { qty: e.target.value })}
-                                placeholder="0" className="h-10 text-[13px]" />
+                              <div className="flex flex-col gap-0.5">
+                                <Input type="number" min="0" value={out.qty}
+                                  onChange={e => updOutput(out.id, { qty: e.target.value })}
+                                  placeholder="0" className="h-10 text-[13px]" />
+                                {ratio !== null && ratio !== 1 && (
+                                  <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 text-center">
+                                    ×{ratio.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-2 py-2">
                               <Input value={out.unit} onChange={e => updOutput(out.id, { unit: e.target.value })}
