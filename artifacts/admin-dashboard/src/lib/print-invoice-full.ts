@@ -256,9 +256,20 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <meta charset="utf-8"/>
 <title>${esc(inv.invoiceTitle || "Invoice")} ${esc(inv.invoiceNumber)}</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after {
+    box-sizing: border-box; margin: 0; padding: 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
   @page { size: A4 portrait; margin: 0; }
-  @media print { html, body { width: 210mm; } }
+  @media print {
+    html, body { width: 210mm; }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+  }
 
   body {
     font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
