@@ -173,13 +173,12 @@ const CRM_COLUMNS: MegaColumn[] = [
     color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/40",
     desc: "Cities & area master data",
     links: [
-      { label: "Cities & Areas",  href: "/areas", icon: MapPin     },
-      { label: "Sales Agents",    href: "/sales-agents", icon: Users2 },
+      { label: "Cities & Areas", href: "/areas", icon: MapPin },
     ],
   },
 ];
 
-// ─── Sales mega-menu columns ──────────────────────────────────────────────────
+// ─── Trading mega-menu columns ────────────────────────────────────────────────
 const SALES_COLUMNS: MegaColumn[] = [
   {
     label: "Point of Sale", href: "/sales", icon: Receipt,
@@ -202,12 +201,11 @@ const SALES_COLUMNS: MegaColumn[] = [
     ],
   },
   {
-    label: "Sales Team", href: "/sales-agents", icon: Users2,
-    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
-    desc: "Agents & commissions",
+    label: "Sale Returns", href: "/sale-return", icon: Undo2,
+    color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/40",
+    desc: "Refunds & credit notes",
     links: [
-      { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
-      { label: "Agent Performance", href: "/agent-performance", icon: BarChart3,  desc: "Revenue, targets & commission" },
+      { label: "Sale Returns", href: "/sale-return", icon: Undo2, desc: "Refunds & credit notes" },
     ],
   },
 ];
@@ -279,12 +277,12 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
 ];
 
 // ─── Nav items (professional sequence) ───────────────────────────────────────
-// Order: Dashboard → CRM → Sales → Products → Manufacturing → Accounts → Documents → Investments → Settings
+// Order: Dashboard → CRM → Trading → Products → Manufacturing → Accounts → Documents → Investments → Settings
 // HRM is appended dynamically based on permissions
 const OTHER_NAV: NavItem[] = [
   { key: "dashboard", href: "/", label: "Dashboard", icon: LayoutDashboard, items: null },
   { key: "crm",       label: "CRM",       icon: Users,    isMega: true },
-  { key: "sales",     label: "Sales",     icon: Receipt,  isMega: true },
+  { key: "sales",     label: "Trading",   icon: Receipt,  isMega: true },
   { key: "products",  label: "Products",  icon: Package,  isMega: true },
   {
     key: "manufacturing", label: "Manufacturing", icon: Factory,
@@ -326,8 +324,8 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES           = ["/leads", "/customers", "/suppliers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
-const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sales-agents", "/sale-return", "/agent-performance"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users"];
+const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-return"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
@@ -580,9 +578,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const hrmItems: SubItem[] = [
-    ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff",                    href: "/staff",    icon: Users2,    desc: "Employees by dept & designation"   }] : []),
-    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                    href: "/roles",    icon: KeyRound,  desc: "Permission roles"                   }] : []),
-    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations",     href: "/hrm-org",  icon: Building2, desc: "Departments, designations & JDs"    }] : []),
+    ...(isModuleAllowed("hrm_staff") ? [{ label: "Staff",                href: "/staff",             icon: Users2,    desc: "Employees by dept & designation"   }] : []),
+    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                href: "/roles",             icon: KeyRound,  desc: "Permission roles"                   }] : []),
+    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org",           icon: Building2, desc: "Departments, designations & JDs"    }] : []),
+    { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
+    { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
     ...(!isStaff && isSuperAdmin && !currentTenantId ? [
       { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System users"          },
       { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
@@ -640,8 +640,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
     sales: {
       columns: SALES_COLUMNS,
-      footerText: "Manage sales, invoices and purchase orders",
-      footerHref: "/sales", footerLabel: "View all sales",
+      footerText: "Manage sales, purchases and invoicing",
+      footerHref: "/sales", footerLabel: "View all trading",
     },
     products: {
       columns: PRODUCTS_COLUMNS,
@@ -1062,9 +1062,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {allowedCrmColumns.map(col => <NavLink key={col.href} href={col.href} icon={col.icon} label={col.label} />)}
                 </>}
 
-                {/* Sales */}
+                {/* Trading */}
                 {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
-                  <SectionLabel label="Sales" />
+                  <SectionLabel label="Trading" />
                   {isModuleAllowed("sales") && <>
                     <NavLink href="/sales"       icon={Receipt} label="All Sales" />
                     <NavLink href="/sales/new"   icon={Plus}    label="New Sale" />
@@ -1073,8 +1073,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/invoices"               icon={FileText}     label="Sales Invoices" />
                   <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
                   <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
-                  <NavLink href="/sales-agents"           icon={Users2}       label="Sales Agents" />
-                  <NavLink href="/agent-performance"      icon={BarChart3}    label="Agent Performance" />
                 </>}
 
                 {/* Products */}
