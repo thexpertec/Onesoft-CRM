@@ -502,12 +502,12 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       </div>` : ""}
       ${shipping > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">Shipping${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
+        <span class="totals-label">Delivery${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
         <span class="totals-value">${fmt(shipping)}</span>
       </div>` : ""}
       ${handling > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">Handling</span>
+        <span class="totals-label">Other Charges</span>
         <span class="totals-value">${fmt(handling)}</span>
       </div>` : ""}
       <div class="totals-total">

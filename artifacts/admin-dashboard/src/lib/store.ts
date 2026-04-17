@@ -2358,6 +2358,7 @@ export type Invoice = {
   buyerEmail:        string;
   // Status & payment
   status:            InvoiceStatus;
+  saleStatus?:       string;        // fulfilment status: Pending, Processing, Dispatched, etc.
   paymentMethod:     SalePayment;
   paymentTerms:      string;    // e.g. "Net 30", "Due on receipt"
   bankDetails:       string;    // bank account details for payment

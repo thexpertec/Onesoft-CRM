@@ -42,22 +42,31 @@ const STATUS_STYLE: Record<InvoiceStatus, { bg: string; dot: string; label: stri
 const today = () => new Date().toISOString().slice(0, 10);
 const in30  = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); };
 
+const SALE_ORDER_STATUSES = ["Pending", "Processing", "Dispatched", "Delivered", "Completed", "On Hold", "Cancelled"] as const;
+
 const lineTotal = (item: SaleItem) => {
   const q = parseFloat(item.qty) || 0;
   const p = parseFloat(item.unitPrice) || 0;
   const d = parseFloat(item.discount) || 0;
+  if (item.discountType === "amt") return Math.max(0, q * p - d * q);
   return q * p * (1 - d / 100);
 };
 
 const itemsSubtotal = (items: SaleItem[]) =>
   items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
 const itemsDiscount = (items: SaleItem[]) =>
-  items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0) * ((parseFloat(i.discount) || 0) / 100), 0);
+  items.reduce((s, i) => {
+    const q = parseFloat(i.qty) || 0;
+    const p = parseFloat(i.unitPrice) || 0;
+    const d = parseFloat(i.discount) || 0;
+    if (i.discountType === "amt") return s + Math.min(d * q, q * p);
+    return s + q * p * (d / 100);
+  }, 0);
 
 const blankItem = (): SaleItem => ({
   id: crypto.randomUUID(),
   productName: "", sku: "", qty: "1", unit: "",
-  unitPrice: "", discount: "0", notes: "",
+  unitPrice: "", discount: "0", discountType: "pct", notes: "",
   itemStatus: "Delivered",
 });
 
@@ -85,6 +94,7 @@ const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | 
     shippingFee:    "",
     handlingFee:    "",
     shippingMethod: "",
+    saleStatus:     "",
     notes:          "",
     agreement:      "",
     invoiceFooter:  "",
@@ -673,6 +683,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </div>
                   </div>
 
+                  {/* Sale Status */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Sale Status</label>
+                    <select value={form.saleStatus ?? ""} onChange={e => setF("saleStatus", e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
+                      <option value="">— Select status —</option>
+                      {SALE_ORDER_STATUSES.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+
                   {/* More Details accordion */}
                   <button
                     onClick={() => setMoreOpen(o => !o)}
@@ -733,15 +753,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         );
                       })()}
 
-                      {/* Shipping + Handling */}
+                      {/* Delivery + Other Charges */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Shipping Fee</label>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Delivery Charges</label>
                           <input type="number" min="0" step="0.01" value={form.shippingFee} onChange={e => setF("shippingFee", e.target.value)} placeholder="0.00"
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Handling Fee</label>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Other Charges</label>
                           <input type="number" min="0" step="0.01" value={form.handlingFee} onChange={e => setF("handlingFee", e.target.value)} placeholder="0.00"
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
@@ -920,8 +940,23 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Disc %</label>
-                          <input type="number" min="0" max="100" value={item.discount} onChange={e => updateItem(item.id, "discount", e.target.value)}
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Discount</label>
+                            <button
+                              type="button"
+                              onClick={() => updateItem(item.id, "discountType", item.discountType === "amt" ? "pct" : "amt")}
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-600 text-gray-500 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                              {item.discountType === "amt" ? sym : "%"}
+                            </button>
+                          </div>
+                          <input
+                            type="number" min="0"
+                            {...(item.discountType !== "amt" ? { max: "100" } : {})}
+                            step="0.01"
+                            value={item.discount}
+                            onChange={e => updateItem(item.id, "discount", e.target.value)}
+                            placeholder={item.discountType === "amt" ? "0.00" : "0"}
                             className="w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
                       </div>
@@ -963,13 +998,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   )}
                   {shipping > 0 && (
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                      <span>Shipping{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
+                      <span>Delivery{form.shippingMethod ? ` (${form.shippingMethod})` : ""}</span>
                       <span className="font-mono">{sym}{shipping.toFixed(dp)}</span>
                     </div>
                   )}
                   {handling > 0 && (
                     <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                      <span>Handling</span><span className="font-mono">{sym}{handling.toFixed(dp)}</span>
+                      <span>Other Charges</span><span className="font-mono">{sym}{handling.toFixed(dp)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-base font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
