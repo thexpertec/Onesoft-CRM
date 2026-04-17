@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { format } from "date-fns";
 import {
   Factory, Eye, Trash2, Plus, CheckCircle2, XCircle, FlaskConical,
-  Package, DollarSign, AlertTriangle, ChevronRight,
+  Package, DollarSign, AlertTriangle, ChevronRight, BookOpen, BookMarked,
+  ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useManufacturingOrders, useRawMaterials } from "@/hooks/use-data";
+import { useManufacturingOrders, useRawMaterials, useRecipes } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
   getProducts, MFG_STATUSES, MfgInput, MfgOutput, ProductionCost, ManufacturingOrder,
@@ -95,6 +96,7 @@ type Tab = "inputs" | "outputs" | "costs" | "waste";
 export default function ManufacturingPage() {
   const { orders, add, remove, complete }     = useManufacturingOrders();
   const { rms }                               = useRawMaterials();
+  const { recipes, add: addRecipe, remove: removeRecipe } = useRecipes();
   const { isStaff, staffPermissions }         = useAuth();
   const { toast }                             = useToast();
   const sym                                   = getSettingsCurrencySymbol();
@@ -153,6 +155,14 @@ export default function ManufacturingPage() {
     setNewOpen(false);
     setForm(defaultForm());
   }, [form, add, toast]);
+
+  // ── Recipe states ─────────────────────────────────────────────────────────
+  const [recipesOpen,    setRecipesOpen]    = useState(false);
+  const [saveRecipeOpen, setSaveRecipeOpen] = useState(false);
+  const [recipeName,     setRecipeName]     = useState("");
+  const [loadDropOpen,   setLoadDropOpen]   = useState(false);
+  const [deleteRecipeId, setDeleteRecipeId] = useState<string | null>(null);
+  const loadDropRef = useRef<HTMLDivElement>(null);
 
   // ── Detail sheet ──────────────────────────────────────────────────────────
   const [viewId,   setViewId]   = useState<string | null>(null);
@@ -274,6 +284,84 @@ export default function ManufacturingPage() {
         )}
       </ExcelGridShell>
 
+      {/* ════ Recipes Panel ═════════════════════════════════════════════════════ */}
+      <div className="border rounded-xl overflow-hidden">
+        <button
+          onClick={() => setRecipesOpen(o => !o)}
+          className="w-full flex items-center justify-between px-5 py-3.5 bg-violet-50 dark:bg-violet-950/20 hover:bg-violet-100 dark:hover:bg-violet-950/30 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <BookMarked size={16} className="text-violet-600" />
+            <span className="text-[14px] font-bold text-violet-700 dark:text-violet-300">
+              Production Recipes
+            </span>
+            <span className="text-[11px] bg-violet-200 dark:bg-violet-800 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded-full font-semibold">
+              {recipes.length}
+            </span>
+          </div>
+          {recipesOpen ? <ChevronUp size={16} className="text-violet-500" /> : <ChevronDown size={16} className="text-violet-500" />}
+        </button>
+
+        {recipesOpen && (
+          <div className="p-4">
+            {recipes.length === 0 ? (
+              <div className="text-center py-8 text-[13px] text-muted-foreground italic">
+                No recipes saved yet. Create a manufacturing order and click "Save as Recipe" to save a template.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {recipes.map(r => (
+                  <div key={r.id} className="border rounded-xl p-4 space-y-2.5 bg-white dark:bg-zinc-900 hover:shadow-sm transition-shadow">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+                          <BookMarked size={14} className="text-violet-600" />
+                        </div>
+                        <span className="text-[13px] font-bold leading-tight">{r.name}</span>
+                      </div>
+                      {canEdit && (
+                        <button onClick={() => setDeleteRecipeId(r.id)} className="text-red-400 hover:text-red-600 p-0.5 shrink-0">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <span className="text-[11px] bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+                        {r.inputs.length} input{r.inputs.length !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[11px] bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 px-2 py-0.5 rounded-full">
+                        {r.outputs.length} output{r.outputs.length !== 1 ? "s" : ""}
+                      </span>
+                      {r.productionCosts.length > 0 && (
+                        <span className="text-[11px] bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400 px-2 py-0.5 rounded-full">
+                          {r.productionCosts.length} cost{r.productionCosts.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    {r.notes && <p className="text-[11px] text-muted-foreground truncate">{r.notes}</p>}
+                    {canEdit && (
+                      <Button size="sm" variant="outline" className="w-full h-8 text-[12px] gap-1.5 mt-1"
+                        onClick={() => {
+                          setF({
+                            inputs:          r.inputs.map(i => ({ ...i, id: crypto.randomUUID() })),
+                            outputs:         r.outputs.map(o => ({ ...o, id: crypto.randomUUID() })),
+                            productionCosts: r.productionCosts.map(c => ({ ...c, id: crypto.randomUUID() })),
+                            notes:           r.notes,
+                          });
+                          setNewOpen(true);
+                          toast({ title: `Recipe "${r.name}" loaded` });
+                        }}>
+                        <BookOpen size={12} /> Use Recipe
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ════ New Order Bottom Sheet ════════════════════════════════════════════ */}
       <Sheet open={newOpen} onOpenChange={o => { if (!o) setNewOpen(false); }}>
         <SheetContent side="bottom" className="h-[94vh] rounded-t-2xl p-0 flex flex-col overflow-hidden">
@@ -303,8 +391,47 @@ export default function ManufacturingPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* ── Load Recipe dropdown ── */}
+                {recipes.length > 0 && (
+                  <div className="relative" ref={loadDropRef}>
+                    <Button variant="outline" size="sm"
+                      className="bg-white/20 border-white/30 text-white hover:bg-white/30 gap-1.5"
+                      onClick={() => setLoadDropOpen(o => !o)}>
+                      <BookOpen size={13} /> Load Recipe <ChevronDown size={11} />
+                    </Button>
+                    {loadDropOpen && (
+                      <div className="absolute right-0 top-full mt-1.5 z-50 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl min-w-[220px] overflow-hidden">
+                        {recipes.map((r, i) => (
+                          <button key={r.id} onMouseDown={() => {
+                            setF({
+                              inputs:          r.inputs.map(x => ({ ...x, id: crypto.randomUUID() })),
+                              outputs:         r.outputs.map(x => ({ ...x, id: crypto.randomUUID() })),
+                              productionCosts: r.productionCosts.map(x => ({ ...x, id: crypto.randomUUID() })),
+                              notes:           r.notes,
+                            });
+                            setLoadDropOpen(false);
+                            toast({ title: `Recipe "${r.name}" loaded` });
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-[13px] hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors ${i > 0 ? "border-t border-gray-100 dark:border-zinc-800" : ""}`}>
+                            <div className="font-semibold text-gray-800 dark:text-gray-100">{r.name}</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              {r.inputs.length} input{r.inputs.length !== 1 ? "s" : ""} · {r.outputs.length} output{r.outputs.length !== 1 ? "s" : ""}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <Button variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30"
                   onClick={() => setNewOpen(false)}>Cancel</Button>
+                <Button size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30 gap-1.5"
+                  variant="outline"
+                  onClick={() => { setRecipeName(""); setSaveRecipeOpen(true); }}>
+                  <BookMarked size={13} /> Save as Recipe
+                </Button>
                 <Button size="sm" className="bg-white text-orange-600 hover:bg-white/90 font-bold" onClick={handleSave}>
                   Create Order
                 </Button>
@@ -897,6 +1024,88 @@ export default function ManufacturingPage() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {/* ════ Save as Recipe dialog ══════════════════════════════════════════════ */}
+      <AlertDialog open={saveRecipeOpen} onOpenChange={o => { if (!o) setSaveRecipeOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <BookMarked size={16} className="text-violet-600" /> Save as Recipe
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Give this combination of inputs, outputs, and costs a name so you can reuse it as a template for future orders.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-0 py-2">
+            <Label className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5 block">Recipe Name</Label>
+            <Input
+              autoFocus
+              value={recipeName}
+              onChange={e => setRecipeName(e.target.value)}
+              placeholder="e.g. Standard Batch, Product A Formula…"
+              className="text-[13px]"
+              onKeyDown={e => {
+                if (e.key === "Enter" && recipeName.trim()) {
+                  addRecipe({
+                    name: recipeName.trim(),
+                    inputs: form.inputs.filter(i => i.rmName.trim()),
+                    outputs: form.outputs.filter(o => o.productName.trim()),
+                    productionCosts: form.productionCosts.filter(c => c.description.trim()),
+                    notes: form.notes,
+                  });
+                  toast({ title: `Recipe "${recipeName.trim()}" saved` });
+                  setSaveRecipeOpen(false);
+                }
+              }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              disabled={!recipeName.trim()}
+              onClick={() => {
+                if (!recipeName.trim()) return;
+                addRecipe({
+                  name: recipeName.trim(),
+                  inputs: form.inputs.filter(i => i.rmName.trim()),
+                  outputs: form.outputs.filter(o => o.productName.trim()),
+                  productionCosts: form.productionCosts.filter(c => c.description.trim()),
+                  notes: form.notes,
+                });
+                toast({ title: `Recipe "${recipeName.trim()}" saved` });
+                setSaveRecipeOpen(false);
+              }}>
+              Save Recipe
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ════ Delete Recipe confirm ══════════════════════════════════════════════ */}
+      <AlertDialog open={!!deleteRecipeId} onOpenChange={o => { if (!o) setDeleteRecipeId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Recipe?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This recipe template will be permanently deleted. Existing manufacturing orders are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-500 hover:bg-red-600 text-white"
+              onClick={() => {
+                if (deleteRecipeId) {
+                  removeRecipe(deleteRecipeId);
+                  setDeleteRecipeId(null);
+                  toast({ title: "Recipe deleted" });
+                }
+              }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>

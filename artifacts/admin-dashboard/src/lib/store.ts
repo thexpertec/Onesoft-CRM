@@ -2770,6 +2770,31 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   return orders[i];
 };
 
+// ─── Manufacturing Recipes ────────────────────────────────────────────────────
+const MFG_RECIPE_KEY = "admin-manufacturing-recipes";
+
+export type MfgRecipe = {
+  id:              string;
+  name:            string;
+  inputs:          MfgInput[];
+  outputs:         MfgOutput[];
+  productionCosts: ProductionCost[];
+  notes:           string;
+  createdAt:       string;
+};
+
+export const getRecipes = (): MfgRecipe[] => getStored<MfgRecipe>(MFG_RECIPE_KEY);
+
+export const createRecipe = (data: Omit<MfgRecipe, "id" | "createdAt">): MfgRecipe => {
+  const recipe: MfgRecipe = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  setStored(MFG_RECIPE_KEY, [...getRecipes(), recipe]);
+  return recipe;
+};
+
+export const deleteRecipe = (id: string): void => {
+  setStored(MFG_RECIPE_KEY, getRecipes().filter(r => r.id !== id));
+};
+
 // ─── HRM — Staff ─────────────────────────────────────────────────────────────
 export type StaffStatus = "Active" | "On Leave" | "Terminated";
 

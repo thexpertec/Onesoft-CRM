@@ -26,10 +26,11 @@ import {
   getSalesAgents, createSalesAgent, updateSalesAgent, deleteSalesAgent,
   getRawMaterials, createRawMaterial, updateRawMaterial, deleteRawMaterial,
   getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
+  getRecipes, createRecipe, deleteRecipe,
   getRPVouchers, createRPVoucher, updateRPVoucher, deleteRPVoucher, postRPVoucherJE,
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, Department, Designation, StockItem, Sale, Invoice, Account,
-  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgOutput, ProductionCost, RPVoucher,
+  JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgRecipe, MfgOutput, ProductionCost, RPVoucher,
   City, Area,
 } from "@/lib/store";
 
@@ -465,6 +466,15 @@ export function useManufacturingOrders() {
   const remove  = (id: string)                                                     => { deleteManufacturingOrder(id);              fetch(); };
   const complete = (id: string)                                                    => { const o = completeManufacturingOrder(id);  fetch(); return o; };
   return { orders, add, edit, remove, complete, refresh: fetch };
+}
+
+export function useRecipes() {
+  const [recipes, setRecipes] = useState<MfgRecipe[]>([]);
+  const fetch = useCallback(() => setRecipes(getRecipes()), []);
+  useEffect(() => { fetch(); window.addEventListener("storage", fetch); return () => window.removeEventListener("storage", fetch); }, [fetch]);
+  const add    = (d: Parameters<typeof createRecipe>[0]) => { const r = createRecipe(d); fetch(); return r; };
+  const remove = (id: string)                            => { deleteRecipe(id);           fetch(); };
+  return { recipes, add, remove, refresh: fetch };
 }
 
 export function useRPVouchers() {
