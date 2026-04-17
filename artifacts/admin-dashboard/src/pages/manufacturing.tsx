@@ -627,30 +627,74 @@ export default function ManufacturingPage() {
                   </table>
                 </div>
 
-                {/* Waste / Loss */}
-                <div className="border rounded-xl p-4 space-y-3 bg-amber-50/50 dark:bg-amber-950/10">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle size={15} className="text-amber-600" />
-                    <span className="text-[13px] font-bold text-amber-700 dark:text-amber-400">Waste / Loss</span>
-                    <span className="text-[12px] text-muted-foreground">(optional)</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
+                {/* Production Costs */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
                     <div>
-                      <Label className={lbl}>Waste Qty</Label>
-                      <Input type="number" min="0" value={form.wasteQty}
-                        onChange={e => setF({ wasteQty: e.target.value })} placeholder="0" className="h-10 text-[13px]" />
+                      <div className="flex items-center gap-2">
+                        <DollarSign size={16} className="text-violet-600" />
+                        <h2 className="text-[15px] font-bold">Production Costs</h2>
+                      </div>
+                      <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Labour, utilities, machine hire…</p>
                     </div>
-                    <div>
-                      <Label className={lbl}>Unit</Label>
-                      <Input value={form.wasteUnit}
-                        onChange={e => setF({ wasteUnit: e.target.value })} placeholder="kg, L, pcs…" className="h-10 text-[13px]" />
+                    <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addCost}>
+                      <Plus size={13} /> Add
+                    </Button>
+                  </div>
+
+                  {form.productionCosts.length === 0 ? (
+                    <div className="border-2 border-dashed rounded-xl p-5 text-center text-[13px] text-muted-foreground">
+                      No additional costs yet — click "Add" to record labour, electricity, packaging, etc.
                     </div>
-                  </div>
-                  <div>
-                    <Label className={lbl}>Waste Notes</Label>
-                    <Input value={form.wasteNotes} onChange={e => setF({ wasteNotes: e.target.value })}
-                      placeholder="Trimming, spoilage, evaporation…" className="h-10 text-[13px]" />
-                  </div>
+                  ) : (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-violet-50 dark:bg-violet-950/20">
+                            <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b">Description</th>
+                            <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b" style={{width:140}}>Amount</th>
+                            <th className="border-b" style={{width:36}} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.productionCosts.map((c, idx) => (
+                            <tr key={c.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
+                              <td className="px-3 py-2">
+                                <Input value={c.description} onChange={e => updCost(c.id, { description: e.target.value })}
+                                  placeholder="e.g. Labour, Electricity, Packaging…" className="h-10 text-[13px]" />
+                              </td>
+                              <td className="px-2 py-2">
+                                <Input type="number" min="0" value={c.amount}
+                                  onChange={e => updCost(c.id, { amount: e.target.value })}
+                                  placeholder="0.00" className="h-10 text-[13px] text-right" />
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <button onClick={() => removeCost(c.id)} className="text-red-400 hover:text-red-600 p-1">
+                                  <XCircle size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2">
+                            <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-semibold">Subtotal</td>
+                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-violet-700 dark:text-violet-400">
+                              {sym}{prodCost.toFixed(dp)}
+                            </td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Batch Notes */}
+                <div>
+                  <Label className={lbl}>Batch Notes (optional)</Label>
+                  <Textarea value={form.notes} onChange={e => setF({ notes: e.target.value })}
+                    rows={3} placeholder="Batch reference, special instructions, QC notes…" className="text-[13px] resize-none" />
                 </div>
               </div>
 
@@ -860,109 +904,60 @@ export default function ManufacturingPage() {
                   )}
                 </div>
 
-                {/* Production Costs */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <DollarSign size={16} className="text-violet-600" />
-                        <h2 className="text-[15px] font-bold">Production Costs</h2>
-                      </div>
-                      <p className="text-[12px] text-muted-foreground mt-0.5 ml-6">Labour, utilities, machine hire…</p>
-                    </div>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-[13px] h-9 px-4" onClick={addCost}>
-                      <Plus size={13} /> Add
-                    </Button>
-                  </div>
-
-                  {form.productionCosts.length === 0 ? (
-                    <div className="border-2 border-dashed rounded-xl p-5 text-center text-[13px] text-muted-foreground">
-                      No additional costs yet — click "Add" to record labour, electricity, packaging, etc.
-                    </div>
-                  ) : (
-                    <div className="border rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-violet-50 dark:bg-violet-950/20">
-                            <th className="px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b">Description</th>
-                            <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 border-b" style={{width:140}}>Amount</th>
-                            <th className="border-b" style={{width:36}} />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {form.productionCosts.map((c, idx) => (
-                            <tr key={c.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
-                              <td className="px-3 py-2">
-                                <Input value={c.description} onChange={e => updCost(c.id, { description: e.target.value })}
-                                  placeholder="e.g. Labour, Electricity, Packaging…" className="h-10 text-[13px]" />
-                              </td>
-                              <td className="px-2 py-2">
-                                <Input type="number" min="0" value={c.amount}
-                                  onChange={e => updCost(c.id, { amount: e.target.value })}
-                                  placeholder="0.00" className="h-10 text-[13px] text-right" />
-                              </td>
-                              <td className="px-1 py-2 text-center">
-                                <button onClick={() => removeCost(c.id)} className="text-red-400 hover:text-red-600 p-1">
-                                  <XCircle size={15} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-violet-50/60 dark:bg-violet-950/10 border-t-2">
-                            <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-semibold">Subtotal</td>
-                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-violet-700 dark:text-violet-400">
-                              {sym}{prodCost.toFixed(dp)}
-                            </td>
-                            <td />
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Batch Notes */}
-                <div>
-                  <Label className={lbl}>Batch Notes (optional)</Label>
-                  <Textarea value={form.notes} onChange={e => setF({ notes: e.target.value })}
-                    rows={2} placeholder="Batch reference, special instructions, QC notes…" className="text-[13px] resize-none" />
-                </div>
-
                 {/* Cost Summary Card */}
                 <div className="rounded-xl border-2 border-orange-200 dark:border-orange-800 overflow-hidden">
                   <div className="px-5 py-3" style={{ background: "linear-gradient(135deg,#ea580c18,#f59e0b18)" }}>
                     <h3 className="text-[13px] font-bold text-orange-700 dark:text-orange-400">Cost Summary</h3>
                   </div>
                   <div className="p-5 space-y-3">
+                    {/* Cost sources */}
                     {[
                       { label: "Raw Material Cost", value: rmCost,   color: "text-emerald-700 dark:text-emerald-400" },
                       { label: "Production Costs",  value: prodCost, color: "text-violet-700 dark:text-violet-400"  },
                     ].map(r => (
-                      <div key={r.label} className="flex justify-between items-center text-[14px]">
+                      <div key={r.label} className="flex justify-between items-center text-[13px]">
                         <span className="text-muted-foreground">{r.label}</span>
                         <span className={`font-semibold ${r.color}`}>{sym}{r.value.toFixed(dp)}</span>
                       </div>
                     ))}
                     <div className="border-t pt-3 flex justify-between items-center">
-                      <span className="text-[15px] font-bold">Total Cost</span>
-                      <span className="text-[18px] font-bold text-orange-600">{sym}{totalCost.toFixed(dp)}</span>
+                      <span className="text-[14px] font-bold">Total Batch Cost</span>
+                      <span className="text-[17px] font-bold text-orange-600">{sym}{totalCost.toFixed(dp)}</span>
                     </div>
-                    {totalOutQty > 0 && totalCost > 0 && (
-                      <div className="flex justify-between items-center text-[13px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-4 py-2.5">
-                        <span className="text-muted-foreground">Avg. Cost / Unit</span>
-                        <span className="font-bold text-orange-600">{sym}{(totalCost / totalOutQty).toFixed(3)}</span>
-                      </div>
-                    )}
-                    {(parseFloat(form.wasteQty) || 0) > 0 && (
-                      <div className="flex justify-between items-center text-[13px] bg-amber-50 dark:bg-amber-950/20 rounded-lg px-4 py-2.5">
-                        <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-                          <AlertTriangle size={13} /> Waste recorded
-                        </span>
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">
-                          {form.wasteQty} {form.wasteUnit}
-                        </span>
+
+                    {/* Allocation breakdown */}
+                    {totalCost > 0 && (mainQty > 0 || form.byProducts.length > 0) && (
+                      <div className="space-y-2 pt-1">
+                        {/* Main product allocation */}
+                        {mainQty > 0 && (
+                          <div className="flex justify-between items-center text-[12px] bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2">
+                            <span className="text-orange-700 dark:text-orange-400 font-semibold truncate max-w-[55%]">
+                              {form.mainOutput.productName || "Main Product"}
+                              <span className="ml-1 font-normal text-muted-foreground">({mainQty} {form.mainOutput.unit || "units"})</span>
+                            </span>
+                            <div className="text-right">
+                              <div className="font-bold text-orange-600">{sym}{mainProductCost.toFixed(dp)}</div>
+                              {mainQty > 0 && <div className="text-[10px] text-orange-500">{sym}{mainCostPerUnit.toFixed(3)}/unit</div>}
+                            </div>
+                          </div>
+                        )}
+                        {/* By-product fixed costs */}
+                        {form.byProducts.filter(bp => bp.manualCost && bp.manualCost !== "").map(bp => {
+                          const mc = parseFloat(bp.manualCost || "0");
+                          const q  = parseFloat(bp.qty) || 0;
+                          return (
+                            <div key={bp.id} className="flex justify-between items-center text-[12px] bg-muted/20 rounded-lg px-3 py-2">
+                              <span className="text-muted-foreground font-medium truncate max-w-[55%]">
+                                {bp.productName || "By-product"}
+                                <span className="ml-1 text-[10px] text-emerald-600 font-semibold">FIXED</span>
+                              </span>
+                              <div className="text-right">
+                                <div className="font-semibold text-foreground">{sym}{(mc * q).toFixed(dp)}</div>
+                                <div className="text-[10px] text-muted-foreground">{sym}{mc.toFixed(3)}/unit</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
