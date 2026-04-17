@@ -19,7 +19,7 @@ import { useManufacturingOrders, useRawMaterials, useRecipes } from "@/hooks/use
 import { useAuth } from "@/contexts/auth-context";
 import {
   getProducts, MFG_STATUSES, MfgInput, MfgOutput, ProductionCost, ManufacturingOrder,
-  RawMaterial, getSettings,
+  RawMaterial, getSettings, MfgRecipe,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
@@ -306,6 +306,278 @@ ${hasWaste ? `
 
   const win = window.open("", "_blank", "width=900,height=750");
   if (!win) { alert("Please allow pop-ups to print manufacturing orders."); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 500);
+}
+
+// ── Recipe Print / PDF generator ─────────────────────────────────────────────
+function printRecipe(recipe: MfgRecipe, rms: RawMaterial[], sym: string, decPlaces: number) {
+  const s = getSettings();
+  const outputs   = recipe.outputs || [];
+  const [mainOut, ...byProds] = outputs;
+  const f = (v: number) => `${sym}${v.toFixed(decPlaces)}`;
+
+  // Compute base costs from RM rates × qty
+  const rmCost   = recipe.inputs.reduce((sum, inp) => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    return sum + (parseFloat(rm?.costPerUnit || "0") * (parseFloat(inp.qtyUsed) || 0));
+  }, 0);
+  const prodCost = (recipe.productionCosts || []).reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+  const total    = rmCost + prodCost;
+  const mainQty  = parseFloat(mainOut?.qty || "0") || 0;
+  const bpFixed  = byProds.reduce((sum, bp) => {
+    const mc = parseFloat(bp.manualCost || ""); const q = parseFloat(bp.qty) || 0;
+    return isNaN(mc) ? sum : sum + mc * q;
+  }, 0);
+  const mainCost    = total - bpFixed;
+  const mainPerUnit = mainQty > 0 ? mainCost / mainQty : 0;
+  const totalOutQty = outputs.reduce((t, o) => t + (parseFloat(o.qty) || 0), 0);
+
+  let createdFmt = recipe.createdAt;
+  try { createdFmt = format(new Date(recipe.createdAt), "d MMMM yyyy"); } catch { /* */ }
+  const now = new Date();
+  const printDate = format(now, "d MMMM yyyy");
+  const printTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  const rmRows = recipe.inputs.filter(i => i.rmName?.trim()).map((inp, i) => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    const rate = parseFloat(rm?.costPerUnit || "0");
+    const lc   = rate * (parseFloat(inp.qtyUsed) || 0);
+    return `<tr class="${i % 2 ? "alt" : ""}">
+      <td class="num">${i + 1}</td><td class="bold">${inp.rmName}</td>
+      <td class="r bold green">${inp.qtyUsed}</td><td class="muted">${inp.unit || "—"}</td>
+      <td class="r muted">${rate > 0 ? f(rate) : "—"}</td>
+      <td class="r bold">${lc > 0 ? f(lc) : "—"}</td></tr>`;
+  }).join("");
+
+  const costRows = (recipe.productionCosts || []).filter(c => c.description?.trim()).map((c, i) =>
+    `<tr class="${i % 2 ? "alt" : ""}">
+      <td class="num">${i + 1}</td><td>${c.description}</td>
+      <td class="r bold violet">${f(parseFloat(c.amount || "0"))}</td></tr>`
+  ).join("");
+
+  const outRows = [
+    mainOut ? `<tr>
+      <td class="bold">${mainOut.productName || "Main Product"}</td>
+      <td><span class="tag main">MAIN</span></td>
+      <td class="r bold orange">${mainOut.qty}</td><td class="muted">${mainOut.unit || "—"}</td>
+      <td class="r bold orange">${total > 0 ? f(mainCost) : "—"}</td>
+      <td class="r bold orange">${total > 0 && mainPerUnit > 0 ? `${sym}${mainPerUnit.toFixed(3)}` : "—"}</td></tr>` : "",
+    ...byProds.map((bp, i) => {
+      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
+      const mc   = parseFloat(bp.manualCost || "0");
+      const q    = parseFloat(bp.qty) || 0;
+      const alloc = hasM ? mc * q : 0;
+      return `<tr class="${i % 2 ? "alt" : ""}">
+        <td>${bp.productName || "By-product"}</td>
+        <td><span class="tag ${hasM ? "fixed" : "absorbed"}">${hasM ? "FIXED" : "ABSORBED"}</span></td>
+        <td class="r bold muted">${bp.qty}</td><td class="muted">${bp.unit || "—"}</td>
+        <td class="r">${hasM ? f(alloc) : `<em class="muted">absorbed by main</em>`}</td>
+        <td class="r">${hasM ? `${sym}${mc.toFixed(3)}` : "—"}</td></tr>`;
+    }),
+  ].join("");
+
+  const tInLeft = recipe.inputs.filter(i => i.rmName?.trim()).map(inp => {
+    const rm = rms.find(r => r.id === inp.rmId);
+    const lc = (parseFloat(rm?.costPerUnit || "0")) * (parseFloat(inp.qtyUsed) || 0);
+    return `<div class="tr indent"><span>${inp.rmName}</span><span class="ta green">${f(lc)}</span></div>`;
+  }).join("");
+
+  const tCostLeft = (recipe.productionCosts || []).filter(c => c.description?.trim()).map(c =>
+    `<div class="tr indent"><span>${c.description}</span><span class="ta violet">${f(parseFloat(c.amount || "0"))}</span></div>`
+  ).join("");
+
+  const tOutRight = [
+    mainOut && mainQty > 0 ? `<p class="t-sub orange">Main Product</p>
+      <div class="tr indent"><span>${mainOut.productName || "Main"} × ${mainQty}</span><span class="ta orange">${total > 0 ? f(mainCost) : "—"}</span></div>
+      ${total > 0 ? `<div style="font-size:7.5pt;color:#ea580c;padding-left:10pt;margin-bottom:3pt;">${sym}${mainPerUnit.toFixed(3)}/unit (base)</div>` : ""}` : "",
+    byProds.filter(bp => bp.productName?.trim()).length > 0 ? `<p class="t-sub" style="margin-top:7pt;">By-products</p>` + byProds.filter(bp => bp.productName?.trim()).map(bp => {
+      const hasM = bp.manualCost !== undefined && bp.manualCost !== "";
+      const mc   = parseFloat(bp.manualCost || "0");
+      const q    = parseFloat(bp.qty) || 0;
+      const alloc = hasM ? mc * q : 0;
+      return `<div class="tr indent"><span>${bp.productName} × ${bp.qty}</span>
+        <span class="ta" style="color:${hasM ? "#374151" : "#9ca3af"};">${hasM ? f(alloc) : "absorbed"}</span></div>
+        <div style="font-size:7.5pt;color:${hasM ? "#10b981" : "#9ca3af"};padding-left:10pt;margin-bottom:3pt;font-style:${hasM ? "normal" : "italic"};">
+          ${hasM ? `${sym}${mc.toFixed(3)}/unit · FIXED` : "Cost absorbed by main product"}</div>`;
+    }).join("") : "",
+  ].join("");
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
+<title>Recipe — ${recipe.name}</title>
+<style>
+@page{size:A4;margin:16mm 15mm 18mm 15mm}
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:9.5pt;color:#111;background:#fff;margin:0}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2pt solid #7c3aed;margin-bottom:12pt}
+.co h1{margin:0 0 2pt;font-size:15pt;font-weight:700;color:#7c3aed}
+.co .tl{font-size:7.5pt;color:#777;margin:0 0 3pt}
+.co .addr{font-size:7.5pt;color:#555;line-height:1.5}
+.di{text-align:right}
+.di .dt{font-size:12pt;font-weight:700;color:#111;margin-bottom:3pt}
+.di .rn{font-size:11pt;font-weight:700;color:#7c3aed}
+.di .dm{font-size:7.5pt;color:#666;line-height:1.6}
+.rbadge{display:inline-block;padding:1.5pt 7pt;border-radius:99pt;font-size:7.5pt;font-weight:700;background:#f3f0ff;color:#6d28d9;border:1pt solid #c4b5fd;letter-spacing:.3pt}
+.pills{display:flex;gap:7pt;margin-bottom:12pt}
+.pill{flex:1;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:5pt;padding:5pt 9pt}
+.pill .pl{font-size:6.5pt;text-transform:uppercase;letter-spacing:.6pt;color:#94a3b8;font-weight:700;margin-bottom:1pt}
+.pill .pv{font-size:11pt;font-weight:700;color:#111}
+.pill.rm .pv{color:#059669}.pill.pc .pv{color:#7c3aed}.pill.tc .pv{color:#ea580c}
+/* notice banner */
+.notice{background:#f5f3ff;border:1pt solid #c4b5fd;border-radius:5pt;padding:6pt 10pt;margin-bottom:12pt;font-size:8pt;color:#5b21b6;display:flex;align-items:center;gap:6pt}
+.sec{margin-bottom:13pt;page-break-inside:avoid}
+.sh{font-size:8.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.6pt;color:#fff;padding:4.5pt 9pt;border-radius:4pt 4pt 0 0}
+.sh.g{background:#059669}.sh.v{background:#7c3aed}.sh.o{background:#ea580c}
+.sh.sl{background:#475569}.sh.e{background:#10b981}
+.tw{border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:8.5pt}
+th{background:#f8fafc;padding:4.5pt 7pt;text-align:left;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.4pt;color:#64748b;border-bottom:1pt solid #e2e8f0}
+th.r{text-align:right}
+td{padding:4.5pt 7pt;border-bottom:.5pt solid #f1f5f9;vertical-align:top}
+td.r{text-align:right}td.bold{font-weight:700}td.num{color:#9ca3af;width:18pt}
+td.muted{color:#64748b}td.green{color:#059669}td.violet{color:#7c3aed}td.orange{color:#ea580c}
+tr.alt{background:#f9fafb}tr:last-child td{border-bottom:none}
+tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
+.tag{display:inline-block;font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.3pt;padding:1pt 4.5pt;border-radius:3pt}
+.tag.main{background:#fff7ed;color:#c2410c}.tag.fixed{background:#d1fae5;color:#065f46}.tag.absorbed{background:#f1f5f9;color:#64748b}
+.tac{display:flex;border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;overflow:hidden}
+.tc{flex:1;padding:7pt 9pt}.tc:first-child{border-right:1pt solid #e2e8f0}
+.tch{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.6pt;color:#94a3b8;margin-bottom:5pt;padding-bottom:3pt;border-bottom:1pt solid #e2e8f0}
+.t-sub{font-size:7.5pt;font-weight:700;color:#555;margin:5pt 0 2pt}
+.t-sub.orange{color:#ea580c}
+.tr{display:flex;justify-content:space-between;font-size:8.5pt;margin-bottom:2.5pt}
+.tr.indent{padding-left:9pt;color:#555}
+.tr.sub{border-top:.5pt solid #e2e8f0;padding-top:2.5pt;font-weight:700;margin-top:1pt}
+.tr.tot{background:#f1f5f9;border-radius:3pt;padding:3.5pt 6pt;font-weight:700;margin-top:5pt;font-size:9.5pt}
+.ta{font-variant-numeric:tabular-nums;white-space:nowrap}.ta.green{color:#059669}.ta.violet{color:#7c3aed}.ta.orange{color:#ea580c}
+.bal{display:flex;justify-content:space-between;align-items:center;padding:5pt 9pt;font-size:8.5pt;font-weight:700}
+.bal.ok{background:#f0fdf4;color:#166534;border-top:1pt solid #bbf7d0}
+.nb{border:1pt solid #e2e8f0;border-radius:0 0 5pt 5pt;padding:7pt 9pt;font-size:8.5pt;color:#444;line-height:1.6;background:#fafafa;min-height:22pt}
+.sigs{display:flex;gap:10pt;margin-top:18pt}
+.sig{flex:1;padding-top:20pt;border-top:1pt solid #333;text-align:center}
+.sig .sl{font-size:7.5pt;color:#555}
+.sig .sn{font-size:7pt;color:#999;margin-top:1pt}
+.ft{margin-top:12pt;padding-top:5pt;border-top:.5pt solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#9ca3af}
+@media print{html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="co">
+    ${s.logoBase64 ? `<img src="${s.logoBase64}" alt="logo" style="height:32pt;margin-bottom:3pt;display:block;"/>` : ""}
+    <h1>${s.companyName || "Onesoft"}</h1>
+    ${s.companyTagline ? `<p class="tl">${s.companyTagline}</p>` : ""}
+    <div class="addr">${s.addressHull ? s.addressHull.replace(/\n/g," · ") : ""}${s.phoneHull ? ` · Tel: ${s.phoneHull}` : ""}${s.emailHull ? `<br>${s.emailHull}` : ""}${s.vatNumber ? ` · VAT: ${s.vatNumber}` : ""}${s.companyRegistration ? ` · Reg: ${s.companyRegistration}` : ""}</div>
+  </div>
+  <div class="di">
+    <div class="dt">Manufacturing Recipe</div>
+    <div class="rn">${recipe.name}</div>
+    <div class="dm">
+      <span class="rbadge">RECIPE TEMPLATE</span><br>
+      Created: <strong>${createdFmt}</strong><br>
+      <span style="color:#bbb;">Printed: ${printDate} at ${printTime}</span>
+    </div>
+  </div>
+</div>
+
+<!-- NOTICE BANNER -->
+<div class="notice">
+  ★ This is a <strong>recipe template</strong>. Costs shown are estimates based on current raw material rates and base quantities. Actual batch costs will vary with production scale.
+</div>
+
+<!-- COST SUMMARY PILLS -->
+<div class="pills">
+  <div class="pill rm"><div class="pl">Base RM Cost</div><div class="pv">${total > 0 ? f(rmCost) : "—"}</div></div>
+  <div class="pill pc"><div class="pl">Base Prod. Costs</div><div class="pv">${prodCost > 0 ? f(prodCost) : "—"}</div></div>
+  <div class="pill tc"><div class="pl">Base Batch Cost</div><div class="pv">${total > 0 ? f(total) : "—"}</div></div>
+  <div class="pill"><div class="pl">Base Output Qty</div><div class="pv">${totalOutQty > 0 ? `${totalOutQty} units` : "—"}</div></div>
+</div>
+
+<!-- 1. RAW MATERIALS / INGREDIENTS -->
+<div class="sec">
+  <div class="sh g">1 · Raw Materials / Ingredients</div>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>Material / Ingredient</th><th class="r">Base Qty</th><th>Unit</th><th class="r">Current Rate</th><th class="r">Est. Cost</th></tr></thead>
+    <tbody>${rmRows || `<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No raw materials defined.</td></tr>`}</tbody>
+    <tfoot><tr><td colspan="5" class="r" style="font-size:7pt;color:#64748b;">Total Estimated RM Cost</td><td class="r green" style="font-size:10pt;">${total > 0 ? f(rmCost) : "—"}</td></tr></tfoot>
+  </table></div>
+</div>
+
+<!-- 2. PRODUCTION COSTS -->
+<div class="sec">
+  <div class="sh v">2 · Production Costs</div>
+  <div class="tw">${(recipe.productionCosts || []).filter(c => c.description?.trim()).length === 0
+    ? `<div style="padding:9pt;color:#9ca3af;font-style:italic;">No additional production costs defined.</div>`
+    : `<table><thead><tr><th></th><th>Description</th><th class="r">Base Amount</th></tr></thead>
+       <tbody>${costRows}</tbody>
+       <tfoot><tr><td colspan="2" class="r" style="font-size:7pt;color:#64748b;">Subtotal</td><td class="r violet" style="font-size:10pt;">${f(prodCost)}</td></tr></tfoot>
+       </table>`}
+  </div>
+</div>
+
+<!-- 3. OUTPUT PRODUCTS -->
+<div class="sec">
+  <div class="sh o">3 · Output Products</div>
+  <div class="tw"><table>
+    <thead><tr><th>Product</th><th>Type</th><th class="r">Base Qty</th><th>Unit</th><th class="r">Est. Allocated Cost</th><th class="r">Est. Cost / Unit</th></tr></thead>
+    <tbody>${outRows || `<tr><td colspan="6" style="padding:9pt;color:#9ca3af;font-style:italic;">No output products defined.</td></tr>`}</tbody>
+    <tfoot><tr><td colspan="4" class="r" style="font-size:7pt;color:#64748b;">Total Est. Allocated</td><td class="r orange" style="font-size:10pt;">${total > 0 ? f(total) : "—"}</td><td></td></tr></tfoot>
+  </table></div>
+</div>
+
+<!-- 4. COST RECONCILIATION -->
+${total > 0 ? `<div class="sec">
+  <div class="sh e">4 · Base Cost Reconciliation — Manufacturing Account</div>
+  <div class="tac">
+    <div class="tc">
+      <div class="tch">Costs In — Debits</div>
+      <p class="t-sub" style="color:#059669;">Raw Materials</p>
+      ${tInLeft || `<div class="tr indent"><span style="color:#9ca3af;font-style:italic;">None</span></div>`}
+      <div class="tr sub"><span style="color:#059669;">RM Subtotal</span><span class="ta green">${f(rmCost)}</span></div>
+      ${(recipe.productionCosts || []).filter(c => c.description?.trim()).length > 0 ? `
+      <p class="t-sub" style="color:#7c3aed;margin-top:8pt;">Production Costs</p>
+      ${tCostLeft}
+      <div class="tr sub"><span style="color:#7c3aed;">Prod. Subtotal</span><span class="ta violet">${f(prodCost)}</span></div>
+      ` : ""}
+      <div class="tr tot"><span>Total In</span><span class="ta orange">${f(total)}</span></div>
+    </div>
+    <div class="tc">
+      <div class="tch">Costs Out — Credits</div>
+      ${tOutRight}
+      <div class="tr tot"><span>Total Out</span><span class="ta orange">${f(total)}</span></div>
+    </div>
+  </div>
+  <div class="bal ok">
+    <span>✓ Fully Reconciled — Cost In = Cost Out (base quantities)</span>
+    <span>Variance: ${sym}0.00</span>
+  </div>
+</div>` : ""}
+
+<!-- RECIPE NOTES -->
+<div class="sec">
+  <div class="sh sl">${total > 0 ? 5 : 4} · Recipe Notes</div>
+  <div class="nb">${recipe.notes || `<em style="color:#9ca3af;">No notes recorded.</em>`}</div>
+</div>
+
+<!-- SIGNATURES -->
+<div class="sigs">
+  <div class="sig"><div class="sl">Reviewed By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Checked By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Approved By</div><div class="sn">Name &amp; Signature</div></div>
+  <div class="sig"><div class="sl">Date</div><div class="sn">&nbsp;</div></div>
+</div>
+
+<!-- FOOTER -->
+<div class="ft">
+  <span>${s.companyName || "Onesoft"}${s.addressHull ? " · " + s.addressHull.split("\n")[0] : ""}${s.vatNumber ? " · VAT: " + s.vatNumber : ""}</span>
+  <span>Recipe Template · ${recipe.name} · Page 1</span>
+</div>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=900,height=750");
+  if (!win) { alert("Please allow pop-ups to print recipes."); return; }
   win.document.write(html);
   win.document.close();
   win.focus();
@@ -713,35 +985,43 @@ export default function ManufacturingPage() {
                       )}
                     </div>
                     {r.notes && <p className="text-[11px] text-muted-foreground truncate">{r.notes}</p>}
-                    {canEdit && (
-                      <Button size="sm" variant="outline" className="w-full h-8 text-[12px] gap-1.5 mt-1"
-                        onClick={() => {
-                          const newInputs   = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
-                          const [firstOut, ...restOuts] = r.outputs;
-                          const mainOut     = firstOut ? { ...firstOut, id: crypto.randomUUID() } : blankOutput();
-                          const baseMainQty = parseFloat(mainOut.qty) || 0;
-                          const newBPs      = restOuts.map(o => ({ ...o, id: crypto.randomUUID() }));
-                          const newCosts    = r.productionCosts.map(c => ({ ...c, id: crypto.randomUUID() }));
-                          setF({
-                            inputs:          newInputs,
-                            mainOutput:      mainOut,
-                            byProducts:      newBPs,
-                            productionCosts: newCosts,
-                            notes:           r.notes,
-                            recipeBase: {
-                              recipeName:      r.name,
-                              mainOutputQty:   baseMainQty,
-                              inputs:          newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
-                              byProducts:      newBPs.map((bp, idx)  => ({ id: bp.id,  qty: parseFloat(restOuts[idx]?.qty || "0") || 0 })),
-                              productionCosts: newCosts.map((c, idx)  => ({ id: c.id,   amount: parseFloat(r.productionCosts[idx]?.amount || "0") || 0 })),
-                            },
-                          });
-                          setNewOpen(true);
-                          toast({ title: `Recipe "${r.name}" loaded — change main product qty to auto-scale everything` });
-                        }}>
-                        <BookOpen size={12} /> Use Recipe
+                    <div className="flex gap-1.5 mt-1">
+                      {/* Print recipe — always visible */}
+                      <Button size="sm" variant="outline"
+                        className="flex-1 h-8 text-[12px] gap-1 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-400 dark:hover:bg-violet-950/30"
+                        onClick={() => printRecipe(r, rms, sym, dp)}>
+                        <Printer size={12} /> Print
                       </Button>
-                    )}
+                      {canEdit && (
+                        <Button size="sm" variant="outline" className="flex-1 h-8 text-[12px] gap-1"
+                          onClick={() => {
+                            const newInputs   = r.inputs.map(x => ({ ...x, id: crypto.randomUUID() }));
+                            const [firstOut, ...restOuts] = r.outputs;
+                            const mainOut     = firstOut ? { ...firstOut, id: crypto.randomUUID() } : blankOutput();
+                            const baseMainQty = parseFloat(mainOut.qty) || 0;
+                            const newBPs      = restOuts.map(o => ({ ...o, id: crypto.randomUUID() }));
+                            const newCosts    = r.productionCosts.map(c => ({ ...c, id: crypto.randomUUID() }));
+                            setF({
+                              inputs:          newInputs,
+                              mainOutput:      mainOut,
+                              byProducts:      newBPs,
+                              productionCosts: newCosts,
+                              notes:           r.notes,
+                              recipeBase: {
+                                recipeName:      r.name,
+                                mainOutputQty:   baseMainQty,
+                                inputs:          newInputs.map((inp, idx) => ({ id: inp.id, qty: parseFloat(r.inputs[idx]?.qtyUsed || "0") || 0 })),
+                                byProducts:      newBPs.map((bp, idx)  => ({ id: bp.id,  qty: parseFloat(restOuts[idx]?.qty || "0") || 0 })),
+                                productionCosts: newCosts.map((c, idx)  => ({ id: c.id,   amount: parseFloat(r.productionCosts[idx]?.amount || "0") || 0 })),
+                              },
+                            });
+                            setNewOpen(true);
+                            toast({ title: `Recipe "${r.name}" loaded — change main product qty to auto-scale everything` });
+                          }}>
+                          <BookOpen size={12} /> Use Recipe
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
