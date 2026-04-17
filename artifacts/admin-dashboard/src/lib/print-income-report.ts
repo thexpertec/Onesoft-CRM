@@ -89,12 +89,10 @@ export function printIncomeReport(params: PrintIncomeParams): void {
   const isFiltered = !!srcFilterName || !!searchQuery;
   const transLabel = isFiltered ? "Filtered Transactions" : "All Transactions";
 
-  // ── Logo or company initials ────────────────────────────────────────────────
-  const logoHtml = settings.logoBase64
-    ? `<img src="${esc(settings.logoBase64)}" alt="logo" style="height:48px;width:auto;object-fit:contain;" />`
-    : `<div style="width:48px;height:48px;border-radius:10px;background:#10b981;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;">
-        ${esc((settings.companyName || "O").charAt(0).toUpperCase())}
-       </div>`;
+  // ── Location line ───────────────────────────────────────────────────────────
+  const addrParts  = [settings.addressHull, settings.addressIslamabad].filter(Boolean).join(" & ");
+  const phoneParts = [settings.phoneHull,   settings.phoneIslamabad  ].filter(Boolean).join(" / ");
+  const locationLine = [addrParts, phoneParts].filter(Boolean).join(" | ");
 
   // ── Source breakdown rows ───────────────────────────────────────────────────
   const sourceRows = sources.map(src => {
@@ -198,16 +196,14 @@ export function printIncomeReport(params: PrintIncomeParams): void {
   /* ── Company header ── */
   .header {
     display: flex; align-items: flex-start; justify-content: space-between;
-    padding-bottom: 14px; border-bottom: 2.5px solid #10b981; margin-bottom: 20px;
-    gap: 16px;
+    padding-bottom: 12px; border-bottom: 2.5px solid #059669; margin-bottom: 20px;
   }
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .company-name { font-size: 20px; font-weight: 800; color: #10b981; line-height: 1.1; }
-  .company-sub  { font-size: 11px; color: #6b7280; margin-top: 2px; }
-  .header-right { text-align: right; }
-  .report-title { font-size: 16px; font-weight: 700; color: #111827; line-height: 1.2; }
-  .report-period { font-size: 11px; color: #6b7280; margin-top: 3px; }
-  .print-meta   { font-size: 10px; color: #9ca3af; margin-top: 6px; }
+  .company { font-size: 18px; font-weight: 800; color: #059669; letter-spacing: -0.5px; }
+  .company-sub  { font-size: 10px; color: #6b7280; margin-top: 2px; }
+  .doc-title { text-align: right; }
+  .doc-title h1 { font-size: 15px; font-weight: 700; color: #111; }
+  .doc-title .period { font-size: 10px; color: #6b7280; margin-top: 4px; }
+  .doc-title .printed { font-size: 9px; color: #9ca3af; margin-top: 2px; }
 
   /* ── KPI grid ── */
   .kpi-grid {
@@ -316,25 +312,14 @@ export function printIncomeReport(params: PrintIncomeParams): void {
 
   <!-- ── Company Header ──────────────────────────────────────── -->
   <div class="header">
-    <div class="header-left">
-      ${logoHtml}
-      <div>
-        <div class="company-name">${esc(settings.companyName || "Onesoft")}</div>
-        ${settings.addressHull
-          ? `<div class="company-sub">${esc(settings.addressHull)}</div>`
-          : ""}
-        ${settings.website
-          ? `<div class="company-sub">${esc(settings.website)}</div>`
-          : ""}
-        ${settings.vatNumber
-          ? `<div class="company-sub">VAT: ${esc(settings.vatNumber)}</div>`
-          : ""}
-      </div>
+    <div>
+      <div class="company">${esc(settings.companyName || "Onesoft")}</div>
+      <div class="company-sub">${esc(locationLine)}</div>
     </div>
-    <div class="header-right">
-      <div class="report-title">📈 Income / Revenue Report</div>
-      <div class="report-period">Period: ${esc(fmtDate(from))} — ${esc(fmtDate(to))}</div>
-      <div class="print-meta">Printed: ${esc(now)}</div>
+    <div class="doc-title">
+      <h1>Income / Revenue Report</h1>
+      <div class="period">Period: ${esc(fmtDate(from))} — ${esc(fmtDate(to))}</div>
+      <div class="printed">Printed: ${esc(now)}</div>
     </div>
   </div>
 

@@ -53,6 +53,9 @@ function printMfgOrder(order: ManufacturingOrder, rms: RawMaterial[], sym: strin
   const printDate = format(now, "d MMMM yyyy");
   const printTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const statusClass = order.status === "Completed" ? "completed" : order.status === "In Progress" ? "in-progress" : "draft";
+  const mfgAddrParts = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+  const mfgPhoneParts = [s.phoneHull, s.phoneIslamabad].filter(Boolean).join(" / ");
+  const mfgLocationLine = [mfgAddrParts, mfgPhoneParts].filter(Boolean).join(" | ");
 
   const rmRows = order.inputs.filter(i => i.rmName?.trim()).map((inp, i) => {
     const rm = rms.find(r => r.id === inp.rmId);
@@ -159,10 +162,9 @@ function printMfgOrder(order: ManufacturingOrder, rms: RawMaterial[], sym: strin
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;font-size:9.5pt;color:#111;background:#fff;margin:0}
 /* ── Header ── */
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2pt solid #ea580c;margin-bottom:12pt}
-.co h1{margin:0 0 2pt;font-size:15pt;font-weight:700;color:#ea580c}
-.co .tl{font-size:7.5pt;color:#777;margin:0 0 3pt}
-.co .addr{font-size:7.5pt;color:#555;line-height:1.5}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2.5pt solid #059669;margin-bottom:12pt}
+.co-name{font-size:15pt;font-weight:800;color:#059669;letter-spacing:-0.3pt}
+.co-sub{font-size:7.5pt;color:#6b7280;margin-top:2pt}
 .di{text-align:right}
 .di .dt{font-size:12pt;font-weight:700;color:#111;margin-bottom:3pt}
 .di .on{font-size:10pt;font-weight:700;color:#ea580c}
@@ -219,19 +221,16 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
 
 <!-- HEADER -->
 <div class="hdr">
-  <div class="co">
-    ${s.logoBase64 ? `<img src="${s.logoBase64}" alt="logo" style="height:32pt;margin-bottom:3pt;display:block;"/>` : ""}
-    <h1>${s.companyName || "Onesoft"}</h1>
-    ${s.companyTagline ? `<p class="tl">${s.companyTagline}</p>` : ""}
-    <div class="addr">${s.addressHull ? s.addressHull.replace(/\n/g," · ") : ""}${s.phoneHull ? ` · Tel: ${s.phoneHull}` : ""}${s.emailHull ? `<br>${s.emailHull}` : ""}${s.vatNumber ? ` · VAT: ${s.vatNumber}` : ""}${s.companyRegistration ? ` · Reg: ${s.companyRegistration}` : ""}</div>
+  <div>
+    <div class="co-name">${s.companyName || "Onesoft"}</div>
+    <div class="co-sub">${mfgLocationLine}</div>
   </div>
   <div class="di">
     <div class="dt">Manufacturing Production Order</div>
-    <div class="on">${order.orderNumber}</div>
     <div class="dm">
-      Date: <strong>${orderDateFmt}</strong><br>
+      Order: <strong>${order.orderNumber}</strong> &nbsp;·&nbsp; Date: <strong>${orderDateFmt}</strong><br>
       Status: <span class="badge ${statusClass}">${order.status}</span><br>
-      <span style="color:#bbb;">Printed: ${printDate} at ${printTime}</span>
+      <span style="color:#9ca3af;">Printed: ${printDate}, ${printTime}</span>
     </div>
   </div>
 </div>
@@ -349,6 +348,9 @@ function printRecipe(recipe: MfgRecipe, rms: RawMaterial[], sym: string, decPlac
   const now = new Date();
   const printDate = format(now, "d MMMM yyyy");
   const printTime = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const recipeAddrParts = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+  const recipePhoneParts = [s.phoneHull, s.phoneIslamabad].filter(Boolean).join(" / ");
+  const recipeLocationLine = [recipeAddrParts, recipePhoneParts].filter(Boolean).join(" | ");
 
   const rmRows = recipe.inputs.filter(i => i.rmName?.trim()).map((inp, i) => {
     const rm = rms.find(r => r.id === inp.rmId);
@@ -481,10 +483,9 @@ function printRecipe(recipe: MfgRecipe, rms: RawMaterial[], sym: string, decPlac
 @page{size:A4;margin:16mm 15mm 18mm 15mm}
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;font-size:9.5pt;color:#111;background:#fff;margin:0}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2pt solid #7c3aed;margin-bottom:12pt}
-.co h1{margin:0 0 2pt;font-size:15pt;font-weight:700;color:#7c3aed}
-.co .tl{font-size:7.5pt;color:#777;margin:0 0 3pt}
-.co .addr{font-size:7.5pt;color:#555;line-height:1.5}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:9pt;border-bottom:2.5pt solid #059669;margin-bottom:12pt}
+.co-name{font-size:15pt;font-weight:800;color:#059669;letter-spacing:-0.3pt}
+.co-sub{font-size:7.5pt;color:#6b7280;margin-top:2pt}
 .di{text-align:right}
 .di .dt{font-size:12pt;font-weight:700;color:#111;margin-bottom:3pt}
 .di .rn{font-size:11pt;font-weight:700;color:#7c3aed}
@@ -535,19 +536,16 @@ tfoot td{background:#f8fafc;font-weight:700;border-top:1.5pt solid #e2e8f0}
 
 <!-- HEADER -->
 <div class="hdr">
-  <div class="co">
-    ${s.logoBase64 ? `<img src="${s.logoBase64}" alt="logo" style="height:32pt;margin-bottom:3pt;display:block;"/>` : ""}
-    <h1>${s.companyName || "Onesoft"}</h1>
-    ${s.companyTagline ? `<p class="tl">${s.companyTagline}</p>` : ""}
-    <div class="addr">${s.addressHull ? s.addressHull.replace(/\n/g," · ") : ""}${s.phoneHull ? ` · Tel: ${s.phoneHull}` : ""}${s.emailHull ? `<br>${s.emailHull}` : ""}${s.vatNumber ? ` · VAT: ${s.vatNumber}` : ""}${s.companyRegistration ? ` · Reg: ${s.companyRegistration}` : ""}</div>
+  <div>
+    <div class="co-name">${s.companyName || "Onesoft"}</div>
+    <div class="co-sub">${recipeLocationLine}</div>
   </div>
   <div class="di">
     <div class="dt">Manufacturing Recipe</div>
-    <div class="rn">${recipe.name}</div>
     <div class="dm">
-      <span class="rbadge">RECIPE TEMPLATE</span><br>
+      Recipe: <strong>${recipe.name}</strong><br>
       Created: <strong>${createdFmt}</strong><br>
-      <span style="color:#bbb;">Printed: ${printDate} at ${printTime}</span>
+      <span style="color:#9ca3af;">Printed: ${printDate}, ${printTime}</span>
     </div>
   </div>
 </div>

@@ -318,9 +318,9 @@ export default function LedgerReportPage() {
       </tr>`;
 
     // Company info parts
-    const addresses = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
-    const phones    = [s.phoneHull, s.phoneIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
-    const emails    = [s.emailHull, s.emailIslamabad].filter(Boolean).join(" &nbsp;|&nbsp; ");
+    const addrParts  = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+    const phoneParts = [s.phoneHull,   s.phoneIslamabad  ].filter(Boolean).join(" / ");
+    const locationLine = [addrParts, phoneParts].filter(Boolean).join(" | ");
 
     // Summary cards (after table)
     const obAbs = Math.abs(debitNormal ? openingBalance : -openingBalance);
@@ -362,21 +362,13 @@ export default function LedgerReportPage() {
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; }
 
     /* ── Company Header ── */
-    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 3px solid #1e3a8a; margin-bottom: 14px; }
-    .header-left { display: flex; align-items: center; gap: 12px; }
-    .logo { width: 52px; height: 52px; object-fit: contain; border-radius: 6px; }
-    .logo-placeholder { width: 52px; height: 52px; background: #1e3a8a; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
-    .logo-initials { color: white; font-size: 18px; font-weight: 900; }
-    .co-name { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.3px; line-height: 1.1; }
-    .co-tag  { font-size: 10px; color: #6b7280; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 10px; color: #6b7280; line-height: 1.8; }
-    .header-right strong { color: #374151; }
-
-    /* ── Report Title Band ── */
-    .title-band { background: #f0f4ff; border-left: 4px solid #1e3a8a; padding: 10px 14px; border-radius: 0 6px 6px 0; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .report-title { font-size: 18px; font-weight: 800; color: #1e3a8a; }
-    .report-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
-    .generated { font-size: 9px; color: #9ca3af; text-align: right; }
+    .header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 12px; border-bottom: 2.5px solid #059669; margin-bottom: 14px; }
+    .company { font-size: 18px; font-weight: 800; color: #059669; letter-spacing: -0.5px; }
+    .company-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { font-size: 15px; font-weight: 700; color: #111; }
+    .doc-title .period { font-size: 10px; color: #6b7280; margin-top: 4px; }
+    .doc-title .printed { font-size: 9px; color: #9ca3af; margin-top: 2px; }
 
     /* ── Account & Period Info ── */
     .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
@@ -446,34 +438,17 @@ export default function LedgerReportPage() {
 
   <div style="padding: 16px 18px;">
 
-    <!-- Company Header -->
+    <!-- Header -->
     <div class="header">
-      <div class="header-left">
-        ${s.logoBase64
-          ? `<img class="logo" src="${s.logoBase64}" alt="Logo" />`
-          : `<div class="logo-placeholder"><div class="logo-initials">${(s.companyName || "O").charAt(0)}</div></div>`}
-        <div>
-          <div class="co-name">${s.companyName || "Onesoft"}</div>
-          <div class="co-tag">${s.companyTagline || ""}</div>
-        </div>
-      </div>
-      <div class="header-right">
-        ${addresses ? `<div>${addresses}</div>` : ""}
-        ${phones    ? `<div><strong>Tel:</strong> ${phones}</div>` : ""}
-        ${emails    ? `<div><strong>Email:</strong> ${emails}</div>` : ""}
-        ${s.website ? `<div><strong>Web:</strong> ${s.website}</div>` : ""}
-        ${s.vatNumber ? `<div><strong>VAT No:</strong> ${s.vatNumber}</div>` : ""}
-        ${s.companyRegistration ? `<div><strong>Reg No:</strong> ${s.companyRegistration}</div>` : ""}
-      </div>
-    </div>
-
-    <!-- Report Title -->
-    <div class="title-band">
       <div>
-        <div class="report-title">Ledger Report</div>
-        <div class="report-sub">Account Statement with Running Balance</div>
+        <div class="company">${s.companyName || "Onesoft"}</div>
+        <div class="company-sub">${locationLine}</div>
       </div>
-      <div class="generated">Generated: ${generatedAt}</div>
+      <div class="doc-title">
+        <h1>Ledger Report</h1>
+        <div class="period">Period: ${from} — ${to}</div>
+        <div class="printed">Printed: ${generatedAt}</div>
+      </div>
     </div>
 
     <!-- Account & Period Info -->

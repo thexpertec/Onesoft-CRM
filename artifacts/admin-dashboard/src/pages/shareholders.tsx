@@ -141,6 +141,11 @@ const BLANK_PLAN = (): PlanForm => ({
 
 // ─── Print / PDF helper ───────────────────────────────────────────────────────
 function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[], currSym: string = "£"): string {
+  const s            = getSettings();
+  const addrParts    = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+  const phoneParts   = [s.phoneHull,   s.phoneIslamabad  ].filter(Boolean).join(" / ");
+  const locationLine = [addrParts, phoneParts].filter(Boolean).join(" | ");
+  const printedAt    = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const fmt = (n: string | undefined) => n ? Number(n).toLocaleString() : "—";
   const fmtP = (n: string | undefined) => n ? `${currSym}${Number(n).toLocaleString()}` : "—";
   const date = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
@@ -227,10 +232,13 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; color: #111; background: #fff; padding: 32px 40px; max-width: 800px; margin: 0 auto; }
 
     /* Header */
-    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; }
-    .brand { font-size: 20px; font-weight: 700; color: #10b981; letter-spacing: -0.5px; }
-    .brand-sub { font-size: 11px; color: #6b7280; margin-top: 2px; }
-    .doc-meta { text-align: right; font-size: 11px; color: #6b7280; line-height: 1.6; }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #059669; padding-bottom: 12px; margin-bottom: 24px; }
+    .company { font-size: 18px; font-weight: 800; color: #059669; letter-spacing: -0.5px; }
+    .company-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { font-size: 15px; font-weight: 700; color: #111; }
+    .doc-title .period { font-size: 10px; color: #6b7280; margin-top: 4px; }
+    .doc-title .printed { font-size: 9px; color: #9ca3af; margin-top: 2px; }
 
     /* Shareholder */
     .sh-block { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; }
@@ -317,13 +325,13 @@ function generateSharePlanHTML(shareholder: Shareholder, plans: InvestmentPlan[]
   <!-- Document header -->
   <div class="doc-header">
     <div>
-      <div class="brand">Onesoft</div>
-      <div class="brand-sub">Hull, UK &amp; Islamabad, Pakistan</div>
+      <div class="company">${s.companyName || "Onesoft"}</div>
+      <div class="company-sub">${locationLine}</div>
     </div>
-    <div class="doc-meta">
-      <div><strong>Share Plan Report</strong></div>
-      <div>Generated: ${date}</div>
-      <div>${plans.length} Plan${plans.length !== 1 ? "s" : ""} Linked</div>
+    <div class="doc-title">
+      <h1>Share Plan Report</h1>
+      <div class="period">${plans.length} Plan${plans.length !== 1 ? "s" : ""} — ${shareholder.name}</div>
+      <div class="printed">Printed: ${printedAt}</div>
     </div>
   </div>
 
