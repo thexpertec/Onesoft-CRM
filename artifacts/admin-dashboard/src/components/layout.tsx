@@ -277,12 +277,12 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
 ];
 
 // ─── Nav items (professional sequence) ───────────────────────────────────────
-// Order: Dashboard → CRM → Trading → Products → Manufacturing → Accounts → Documents → Investments → Settings
+// Order: Dashboard → CRM → Purchase & Sale → Products → Manufacturing → Accounts → Documents → Investments → Settings
 // HRM is appended dynamically based on permissions
 const OTHER_NAV: NavItem[] = [
   { key: "dashboard", href: "/", label: "Dashboard", icon: LayoutDashboard, items: null },
   { key: "crm",       label: "CRM",       icon: Users,    isMega: true },
-  { key: "sales",     label: "Trading",   icon: Receipt,  isMega: true },
+  { key: "sales",     label: "Purchase & Sale",   icon: Receipt,  isMega: true },
   { key: "products",  label: "Products",  icon: Package,  isMega: true },
   {
     key: "manufacturing", label: "Manufacturing", icon: Factory,
@@ -1064,7 +1064,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
                 {/* Trading */}
                 {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
-                  <SectionLabel label="Trading" />
+                  <SectionLabel label="Purchase & Sale" />
                   {isModuleAllowed("sales") && <>
                     <NavLink href="/sales"       icon={Receipt} label="All Sales" />
                     <NavLink href="/sales/new"   icon={Plus}    label="New Sale" />
