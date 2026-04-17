@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   Factory, Eye, Trash2, Plus, CheckCircle2, XCircle, FlaskConical,
   Package, DollarSign, AlertTriangle, ChevronRight, BookOpen, BookMarked,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Scale, CheckCircle, AlertCircle, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -211,6 +211,11 @@ export default function ManufacturingPage() {
   }, 0);
   const mainProductCost = totalCost - byProductsFixedCost;
   const mainCostPerUnit = mainQty > 0 ? mainProductCost / mainQty : 0;
+
+  // Reconciliation — total allocated to all outputs must equal total batch cost
+  const totalCostOut = mainProductCost + byProductsFixedCost;   // = totalCost by design
+  const variance     = totalCost - totalCostOut;
+  const balanced     = Math.abs(variance) < 0.005;              // float-safe tolerance
 
   // Active scale ratio — null when no recipe is loaded or base qty is 0
   const scaleRatio = (form.recipeBase && form.recipeBase.mainOutputQty > 0 && mainQty > 0)
@@ -1017,6 +1022,150 @@ export default function ManufacturingPage() {
                     )}
                   </div>
                 </div>
+
+                {/* ── Cost Reconciliation (Manufacturing Account) ── */}
+                {totalCost > 0 && (
+                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: balanced ? "#10b98130" : "#ef444430" }}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-2.5" style={{ background: balanced ? "linear-gradient(135deg,#10b98110,#059f7710)" : "linear-gradient(135deg,#ef444410,#dc262610)" }}>
+                      <div className="flex items-center gap-2">
+                        <Scale size={14} className={balanced ? "text-emerald-600" : "text-red-600"} />
+                        <h3 className="text-[13px] font-bold" style={{ color: balanced ? "#059669" : "#dc2626" }}>
+                          Cost Reconciliation
+                        </h3>
+                        <span className="text-[10px] text-muted-foreground">(Manufacturing Account)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${balanced ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : "bg-red-100 text-red-700"}`}>
+                        {balanced ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                        {balanced ? "Balanced" : "Unreconciled"}
+                      </div>
+                    </div>
+
+                    {/* T-Account grid */}
+                    <div className="grid grid-cols-2 divide-x text-[12px]">
+
+                      {/* ── LEFT: Costs In (Debits) ── */}
+                      <div className="p-3 space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Costs In — Debits</p>
+
+                        {/* RM lines */}
+                        <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-0.5">Raw Materials</p>
+                        {form.inputs.filter(i => i.rmName.trim()).map(inp => {
+                          const rm = rms.find(r => r.id === inp.rmId);
+                          const lc = (parseFloat(rm?.costPerUnit || "0") * (parseFloat(inp.qtyUsed) || 0));
+                          return (
+                            <div key={inp.id} className="flex justify-between items-center text-[11px] pl-2">
+                              <span className="text-muted-foreground truncate max-w-[55%]">{inp.rmName}</span>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-medium tabular-nums">{sym}{lc.toFixed(dp)}</span>
+                            </div>
+                          );
+                        })}
+                        <div className="flex justify-between items-center text-[11px] border-t border-emerald-200 dark:border-emerald-900 pt-0.5 mt-0.5">
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-400">RM Subtotal</span>
+                          <span className="font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{sym}{rmCost.toFixed(dp)}</span>
+                        </div>
+
+                        {/* Production cost lines */}
+                        {form.productionCosts.filter(c => c.description.trim()).length > 0 && (
+                          <>
+                            <div className="pt-2" />
+                            <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-400 mb-0.5">Production Costs</p>
+                            {form.productionCosts.filter(c => c.description.trim()).map(c => (
+                              <div key={c.id} className="flex justify-between items-center text-[11px] pl-2">
+                                <span className="text-muted-foreground truncate max-w-[55%]">{c.description}</span>
+                                <span className="text-violet-700 dark:text-violet-400 font-medium tabular-nums">{sym}{(parseFloat(c.amount) || 0).toFixed(dp)}</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between items-center text-[11px] border-t border-violet-200 dark:border-violet-900 pt-0.5 mt-0.5">
+                              <span className="font-semibold text-violet-700 dark:text-violet-400">Prod Subtotal</span>
+                              <span className="font-bold text-violet-700 dark:text-violet-400 tabular-nums">{sym}{prodCost.toFixed(dp)}</span>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Total In */}
+                        <div className="flex justify-between items-center text-[12px] rounded-lg px-2 py-1.5 mt-2 bg-slate-100 dark:bg-slate-800">
+                          <span className="font-bold">Total In</span>
+                          <span className="font-bold text-orange-600 tabular-nums">{sym}{totalCost.toFixed(dp)}</span>
+                        </div>
+                      </div>
+
+                      {/* ── RIGHT: Costs Out (Credits) ── */}
+                      <div className="p-3 space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Costs Out — Credits</p>
+
+                        {/* Main product */}
+                        {mainQty > 0 && (
+                          <>
+                            <p className="text-[10px] font-semibold text-orange-700 dark:text-orange-400 mb-0.5">Main Product</p>
+                            <div className="flex justify-between items-center text-[11px] pl-2">
+                              <span className="text-orange-700 dark:text-orange-400 font-semibold truncate max-w-[55%]">
+                                {form.mainOutput.productName || "Main"} ×{mainQty}
+                              </span>
+                              <span className="text-orange-700 dark:text-orange-400 font-bold tabular-nums">{sym}{mainProductCost.toFixed(dp)}</span>
+                            </div>
+                            <div className="text-[10px] text-orange-500 pl-3 pb-0.5">{sym}{mainCostPerUnit.toFixed(3)}/unit</div>
+                          </>
+                        )}
+
+                        {/* By-products */}
+                        {form.byProducts.filter(bp => bp.productName.trim()).length > 0 && (
+                          <>
+                            <div className="pt-1" />
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">By-products</p>
+                            {form.byProducts.filter(bp => bp.productName.trim()).map(bp => {
+                              const hasManual = bp.manualCost !== undefined && bp.manualCost !== "";
+                              const bpQty = parseFloat(bp.qty) || 0;
+                              const mc    = parseFloat(bp.manualCost || "0");
+                              const alloc = hasManual ? mc * bpQty : 0;
+                              return (
+                                <div key={bp.id} className="pl-2">
+                                  <div className="flex justify-between items-center text-[11px]">
+                                    <span className="text-muted-foreground font-medium truncate max-w-[55%]">
+                                      {bp.productName} ×{bp.qty}
+                                    </span>
+                                    <span className={`tabular-nums font-medium ${hasManual ? "text-foreground" : "text-muted-foreground italic"}`}>
+                                      {hasManual ? `${sym}${alloc.toFixed(dp)}` : "—"}
+                                    </span>
+                                  </div>
+                                  {hasManual
+                                    ? <div className="text-[9px] text-emerald-600 dark:text-emerald-400">{sym}{mc.toFixed(3)}/unit · FIXED</div>
+                                    : <div className="text-[9px] text-muted-foreground italic">absorbed by main product</div>
+                                  }
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+
+                        {/* Total Out */}
+                        <div className="flex justify-between items-center text-[12px] rounded-lg px-2 py-1.5 mt-2 bg-slate-100 dark:bg-slate-800">
+                          <span className="font-bold">Total Out</span>
+                          <span className="font-bold text-orange-600 tabular-nums">{sym}{totalCostOut.toFixed(dp)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Balance row */}
+                    <div className={`px-4 py-2.5 border-t flex items-center justify-between ${balanced ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+                      <div className="flex items-center gap-2">
+                        {balanced
+                          ? <CheckCircle size={14} className="text-emerald-600" />
+                          : <AlertCircle size={14} className="text-red-600" />}
+                        <span className={`text-[12px] font-bold ${balanced ? "text-emerald-700 dark:text-emerald-400" : "text-red-700"}`}>
+                          {balanced ? "Fully Reconciled — Cost In = Cost Out" : "Unreconciled — Check allocations"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <ArrowRight size={12} className="text-muted-foreground" />
+                        <span className={`text-[13px] font-bold tabular-nums ${balanced ? "text-emerald-600" : "text-red-600"}`}>
+                          {sym}{Math.abs(variance).toFixed(dp)} variance
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
           </div>
