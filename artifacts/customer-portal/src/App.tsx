@@ -1,4 +1,5 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,7 +16,17 @@ const queryClient = new QueryClient();
 
 function ProtectedRouter() {
   const { session } = useAuth();
-  const [, navigate] = useLocation();
+
+  /* When session first becomes truthy, check for a returnTo param and
+     redirect there (set by tenant-store checkout so the user comes back
+     to the cart after signing in / signing up). */
+  useEffect(() => {
+    if (!session) return;
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    if (returnTo) {
+      window.location.href = returnTo;
+    }
+  }, [session]);
 
   if (!session) {
     return <LoginPage />;

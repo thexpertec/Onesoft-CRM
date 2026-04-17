@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
 import { ShoppingBag, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -10,8 +9,7 @@ function getUrlParam(key: string): string | null {
 }
 
 export default function LoginPage() {
-  const { login, signup, loading, error, clearError, session, tenantId, settings } = useAuth();
-  const [, navigate] = useLocation();
+  const { login, signup, loading, error, clearError, tenantId, settings } = useAuth();
 
   /* Read returnTo + default tab from URL (set by tenant-store checkout) */
   const returnTo   = getUrlParam("returnTo");
@@ -25,14 +23,7 @@ export default function LoginPage() {
   const [showConf, setShowConf]     = useState(false);
   const [localErr, setLocalErr]     = useState("");
 
-  useEffect(() => {
-    if (!session) return;
-    if (returnTo) {
-      window.location.href = returnTo;   // redirect back to checkout (or wherever)
-    } else {
-      navigate("/");
-    }
-  }, [session, navigate, returnTo]);
+  /* Redirect is handled by ProtectedRouter in App.tsx — no local navigate needed */
 
   function switchTab(t: Tab) {
     setTab(t);
