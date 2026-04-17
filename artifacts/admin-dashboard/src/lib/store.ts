@@ -2359,6 +2359,7 @@ export type Invoice = {
   // Status & payment
   status:            InvoiceStatus;
   saleStatus?:       string;        // fulfilment status: Pending, Processing, Dispatched, etc.
+  stockReceived?:    boolean;       // true once items have been pushed to stock (purchase invoices)
   paymentMethod:     SalePayment;
   paymentTerms:      string;    // e.g. "Net 30", "Due on receipt"
   bankDetails:       string;    // bank account details for payment

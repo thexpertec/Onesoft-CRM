@@ -8,7 +8,7 @@ import {
   getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
-  createJournalEntry, getJournalEntries,
+  createJournalEntry, getJournalEntries, updateInvoice,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -20,7 +20,7 @@ import {
   CheckCircle, AlertTriangle, Ban, RotateCcw,
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
-  DollarSign, Receipt, BookOpen, ChevronRight,
+  DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -863,6 +863,29 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
                   <div className="grid grid-cols-2 gap-2">
+                    {/* Receive to Stock — purchase invoices only */}
+                    {invoiceType === "purchase" && s !== "Cancelled" && (() => {
+                      const alreadyReceived = !!invoice!.stockReceived;
+                      return (
+                        <button
+                          onClick={() => {
+                            if (alreadyReceived) return;
+                            receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
+                            updateInvoice(invoice!.id, { stockReceived: true });
+                            toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
+                          }}
+                          disabled={alreadyReceived}
+                          className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
+                            alreadyReceived
+                              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
+                              : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                          }`}
+                        >
+                          <PackagePlus size={12}/>
+                          {alreadyReceived ? "✓ Stock Already Received" : "Receive to Stock"}
+                        </button>
+                      );
+                    })()}
                     {s === "Draft" && invoiceType !== "purchase" && (
                       <button onClick={() => onStatusChange(inv!.id, "Sent")}
                         className="h-9 rounded-lg border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors">
@@ -1659,7 +1682,7 @@ export default function InvoicesPage() {
               <div className="text-right">Items</div>
               <div className="text-right">Total</div>
               <div className="text-right">Paid</div>
-              <div>Status</div>
+              <div>{isPurchase ? "Paid / P.Status" : "Status"}</div>
               <div />
             </div>
 
@@ -1716,8 +1739,13 @@ export default function InvoicesPage() {
                   </div>
 
                   {/* Status */}
-                  <div>
+                  <div className="flex flex-col gap-1">
                     <StatusBadge status={inv.status} />
+                    {isPurchase && inv.saleStatus && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 w-fit">
+                        {inv.saleStatus}
+                      </span>
+                    )}
                   </div>
 
                   {/* Open arrow */}
