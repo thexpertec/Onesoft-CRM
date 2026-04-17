@@ -126,11 +126,10 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 
   // ── Buyer lines ─────────────────────────────────────────────────────────────
   const buyerLines: string[] = [];
-  if (inv.buyerPhone)    buyerLines.push(`<strong>Mobile:</strong> ${esc(inv.buyerPhone)}`);
+  if (inv.buyerPhone)    buyerLines.push(esc(inv.buyerPhone));
   if (inv.buyerAddress)  buyerLines.push(nl2br(inv.buyerAddress));
   if (inv.buyerTown)     buyerLines.push(esc(inv.buyerTown));
   if (inv.agentName)     buyerLines.push(`<strong>Sales Officer:</strong> ${esc(inv.agentName)}`);
-  if (inv.buyerEmail)    buyerLines.push(esc(inv.buyerEmail));
 
   // ── Seller compact footer lines ──────────────────────────────────────────────
   const footerInfoParts: string[] = [];
