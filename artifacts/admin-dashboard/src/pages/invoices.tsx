@@ -470,12 +470,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const [docs, setDocs] = useState<DocBlock[]>(() => initDocs(invoice));
 
   useEffect(() => {
-    setForm(invoice ? { ...invoice } : blankInvoice());
+    setForm(invoice ? { ...invoice } : blankInvoice(defaultType));
     setItems(invoice?.items ?? [blankItem()]);
     setPayHist(invoice?.paymentHistory ?? []);
     setPayInput(invoice?.amountPaid ?? "");
     setDocs(initDocs(invoice));
-  }, [invoice?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice?.id, defaultType]);
 
   const products    = useMemo(() => getProducts(), []);
   const customers   = useMemo(() => getCustomers(), []);
@@ -863,8 +864,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {/* Receive to Stock — purchase invoices only */}
-                    {invoiceType === "purchase" && s !== "Cancelled" && (() => {
+                    {/* Receive to Stock — purchase invoices only (not on new forms) */}
+                    {invoiceType === "purchase" && !isNew && s !== "Cancelled" && (() => {
                       const alreadyReceived = !!invoice!.stockReceived;
                       return (
                         <button
@@ -1428,10 +1429,17 @@ export function InvoiceFormPage() {
 
   const handleDelete = useCallback((id: string) => {
     const inv = invoices.find(i => i.id === id);
-    if (inv?.stockDeducted) restoreStockForSale(inv.items, inv.invoiceNumber);
+    if (inv?.stockDeducted) {
+      if (inv.invoiceType === "purchase") {
+        reverseStockForPurchase(inv.items, inv.invoiceNumber);
+      } else {
+        restoreStockForSale(inv.items, inv.invoiceNumber);
+      }
+    }
     removeInvoice(id);
     toast({ title: "Invoice deleted", variant: "destructive" });
-    navigate("/invoices");
+    const backUrl = inv?.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
+    navigate(backUrl);
   }, [invoices, removeInvoice, toast, navigate]);
 
   const backUrl = defaultType === "purchase" ? "/invoices?type=purchase" : "/invoices";
