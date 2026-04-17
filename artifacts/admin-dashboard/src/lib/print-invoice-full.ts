@@ -3,7 +3,7 @@
  * Layout: compact header → Bill To only → items → totals →
  *         payment history → bank details table → terms → footer
  */
-import { Invoice, AppSettings, getCustomerPreviousBalance } from "./store";
+import { Invoice, AppSettings, getCustomerPreviousBalance, getInvoiceLabels } from "./store";
 
 const esc = (s: string) =>
   String(s ?? "")
@@ -106,6 +106,9 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   const paid        = parseFloat(inv.amountPaid) || 0;
   const balance     = Math.max(0, total - paid);
   const histTotal   = (inv.paymentHistory ?? []).reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
+
+  // ── Invoice labels (user-customisable) ──────────────────────────────────
+  const L = getInvoiceLabels();
 
   // ── Previous / New balance (sale invoices only) ──────────────────────────
   const isSale      = !inv.invoiceType || inv.invoiceType === "sale";
@@ -447,22 +450,22 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <!-- ══════════════════ BILL TO + META STRIP ══════════════════ -->
 <div class="subheader">
   <div class="bill-to-box">
-    <div class="bill-to-label">Bill To</div>
+    <div class="bill-to-label">${esc(L.billTo)}</div>
     <div class="bill-to-name">${esc(inv.customer || "—")}</div>
     ${buyerLines.map(l => `<div class="bill-to-line">${l}</div>`).join("")}
   </div>
   <div class="meta-strip">
     <div class="meta-row">
-      <span class="meta-label">Invoice Date</span>
+      <span class="meta-label">${esc(L.invoiceDateLabel)}</span>
       <span class="meta-value">${fmtDateShort(inv.invoiceDate)}</span>
     </div>
     <div class="meta-row">
-      <span class="meta-label">Due Date</span>
+      <span class="meta-label">${esc(L.dueDateLabel)}</span>
       <span class="meta-value${inv.status === "Overdue" ? " overdue" : ""}">${fmtDateShort(inv.dueDate)}</span>
     </div>
     ${inv.paymentMethod ? `
     <div class="meta-row">
-      <span class="meta-label">Payment Via</span>
+      <span class="meta-label">${esc(L.paymentViaLabel)}</span>
       <span class="meta-value">${esc(inv.paymentMethod)}</span>
     </div>` : ""}
     <span class="status-badge">${esc(inv.status)}</span>
@@ -476,19 +479,19 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">Items &amp; Services</div>
+    <div class="section-heading-text">${esc(L.itemsSectionTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <table>
     <thead>
       <tr>
-        <th class="td-center num-col">#</th>
-        <th>Description</th>
-        <th class="td-right" style="width:36pt">Unit</th>
-        <th class="td-right" style="width:32pt">Qty</th>
-        <th class="td-right" style="width:60pt">Unit Price</th>
-        <th class="td-right disc-col">Disc</th>
-        <th class="td-right total-col">Total</th>
+        <th class="td-center num-col">${esc(L.colNum)}</th>
+        <th>${esc(L.colDescription)}</th>
+        <th class="td-right" style="width:36pt">${esc(L.colUnit)}</th>
+        <th class="td-right" style="width:32pt">${esc(L.colQty)}</th>
+        <th class="td-right" style="width:60pt">${esc(L.colUnitPrice)}</th>
+        <th class="td-right disc-col">${esc(L.colDisc)}</th>
+        <th class="td-right total-col">${esc(L.colTotal)}</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
@@ -498,7 +501,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   <div class="totals-wrapper">
     <div class="totals-table">
       <div class="totals-row totals-subtotal-row">
-        <span class="totals-label">Subtotal</span>
+        <span class="totals-label">${esc(L.subtotalLabel)}</span>
         <span class="totals-value">${fmt(subtotal)}</span>
       </div>
       ${discountAmt > 0 ? `
@@ -512,42 +515,42 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       </div>` : ""}
       ${parseFloat(inv.taxRate) > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">VAT / Tax (${esc(inv.taxRate)}%)</span>
+        <span class="totals-label">${esc(L.vatLabel)} (${esc(inv.taxRate)}%)</span>
         <span class="totals-value">${fmt(taxAmt)}</span>
       </div>` : ""}
       ${shipping > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">Delivery${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
+        <span class="totals-label">${esc(L.deliveryLabel)}${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
         <span class="totals-value">${fmt(shipping)}</span>
       </div>` : ""}
       ${handling > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">Other Charges</span>
+        <span class="totals-label">${esc(L.otherChargesLabel)}</span>
         <span class="totals-value">${fmt(handling)}</span>
       </div>` : ""}
       <div class="totals-total">
-        <span class="totals-total-label">Total</span>
+        <span class="totals-total-label">${esc(L.totalLabel)}</span>
         <span class="totals-total-amount">${fmt(total)}</span>
       </div>
       ${paid > 0 ? `
       <div class="totals-row" style="margin-top:4pt;">
-        <span class="totals-label">Amount Paid</span>
+        <span class="totals-label">${esc(L.amountPaidLabel)}</span>
         <span class="totals-value" style="color:#10b981">−${fmt(paid)}</span>
       </div>` : ""}
       ${balance > 0 ? `
       <div class="totals-balance">
-        <span>Balance Due</span>
+        <span>${esc(L.balanceDueLabel)}</span>
         <span>${fmt(balance)}</span>
       </div>` : ""}
       ${paid >= total && total > 0 ? `
-      <div class="fully-paid">✓ &nbsp; Fully Paid${inv.paidAt ? " — " + fmtDate(inv.paidAt) : ""}</div>` : ""}
+      <div class="fully-paid">✓ &nbsp; ${esc(L.fullyPaidLabel)}${inv.paidAt ? " — " + fmtDate(inv.paidAt) : ""}</div>` : ""}
       ${isSale ? `
       <div class="totals-prev-bal">
-        <span>Previous Balance</span>
+        <span>${esc(L.previousBalanceLabel)}</span>
         <span>${fmt(prevBalance)}</span>
       </div>
       <div class="totals-new-bal">
-        <span class="totals-new-bal-label">New Balance</span>
+        <span class="totals-new-bal-label">${esc(L.newBalanceLabel)}</span>
         <span class="totals-new-bal-amount">${fmt(newBalance)}</span>
       </div>` : ""}
     </div>
@@ -559,7 +562,7 @@ ${(inv.paymentHistory ?? []).length > 0 ? `
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">Payment History</div>
+    <div class="section-heading-text">${esc(L.paymentHistoryTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <table class="hist-table">
@@ -589,7 +592,7 @@ ${docsToRender.length > 0 ? `
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">Terms &amp; Notes</div>
+    <div class="section-heading-text">${esc(L.termsSectionTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <div class="notes-stack">

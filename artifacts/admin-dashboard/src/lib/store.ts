@@ -3283,7 +3283,81 @@ export type AppSettings = {
   printHeaderNote?:          string;   // extra text/note shown in the invoice header band
   printFooterLegalNote?:     string;   // small legal note at the bottom of the footer
   printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
+  // ── Invoice label customisation ──
+  invoiceLabels?:            Partial<InvoiceLabels>;
 };
+
+export interface InvoiceLabels {
+  // Header / meta
+  billTo:               string;
+  invoiceDateLabel:     string;
+  dueDateLabel:         string;
+  paymentViaLabel:      string;
+  // Items table
+  itemsSectionTitle:    string;
+  colNum:               string;
+  colDescription:       string;
+  colUnit:              string;
+  colQty:               string;
+  colUnitPrice:         string;
+  colDisc:              string;
+  colTotal:             string;
+  // Totals
+  subtotalLabel:        string;
+  vatLabel:             string;
+  deliveryLabel:        string;
+  otherChargesLabel:    string;
+  totalLabel:           string;
+  amountPaidLabel:      string;
+  balanceDueLabel:      string;
+  previousBalanceLabel: string;
+  newBalanceLabel:      string;
+  fullyPaidLabel:       string;
+  // Sections
+  termsSectionTitle:    string;
+  paymentTermsTitle:    string;
+  additionalNotesTitle: string;
+  agreementTitle:       string;
+  // Payment history
+  paymentHistoryTitle:  string;
+  bankDetailsTitle:     string;
+}
+
+export const DEFAULT_INVOICE_LABELS: InvoiceLabels = {
+  billTo:               "Bill To",
+  invoiceDateLabel:     "Invoice Date",
+  dueDateLabel:         "Due Date",
+  paymentViaLabel:      "Payment Via",
+  itemsSectionTitle:    "Items & Services",
+  colNum:               "#",
+  colDescription:       "Description",
+  colUnit:              "Unit",
+  colQty:               "Qty",
+  colUnitPrice:         "Unit Price",
+  colDisc:              "Disc",
+  colTotal:             "Total",
+  subtotalLabel:        "Subtotal",
+  vatLabel:             "VAT / Tax",
+  deliveryLabel:        "Delivery",
+  otherChargesLabel:    "Other Charges",
+  totalLabel:           "Total",
+  amountPaidLabel:      "Amount Paid",
+  balanceDueLabel:      "Balance Due",
+  previousBalanceLabel: "Previous Balance",
+  newBalanceLabel:      "New Balance",
+  fullyPaidLabel:       "Fully Paid",
+  termsSectionTitle:    "Terms & Notes",
+  paymentTermsTitle:    "Payment Terms",
+  additionalNotesTitle: "Additional Notes",
+  agreementTitle:       "Agreement",
+  paymentHistoryTitle:  "Payment History",
+  bankDetailsTitle:     "Bank Details",
+};
+
+export function getInvoiceLabels(): InvoiceLabels {
+  const saved = getSettings().invoiceLabels ?? {};
+  return { ...DEFAULT_INVOICE_LABELS, ...saved };
+}
 
 export const DEFAULT_SETTINGS: AppSettings = {
   companyName:          "Onesoft",

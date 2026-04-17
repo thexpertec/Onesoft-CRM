@@ -1136,7 +1136,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {isModuleAllowed("settings") && <>
                   <SectionLabel label="Settings" />
                   <NavLink href="/settings"        icon={Settings}  label="Settings" />
-                  <NavLink href="/print-templates" icon={FileText}  label="Print Templates" />
+                  <NavLink href="/print-templates"  icon={FileText}  label="Print Templates" />
+                  <NavLink href="/invoice-template" icon={FileText}  label="Invoice Labels" />
                 </>}
                 {isSuperAdmin && !currentTenantId && <>
                   <SectionLabel label="Admin" />

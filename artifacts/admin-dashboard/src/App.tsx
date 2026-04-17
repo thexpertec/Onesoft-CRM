@@ -41,6 +41,7 @@ import InvestmentPlansPage from "@/pages/investment-plans";
 import MediaLibraryPage from "@/pages/media";
 import SettingsPage from "@/pages/settings";
 import PrintTemplatesPage from "@/pages/print-templates";
+import InvoiceTemplatePage from "@/pages/invoice-template";
 import TenantsPage from "@/pages/tenants";
 import ModuleGroupsPage from "@/pages/module-groups";
 import ChartOfAccountsPage from "@/pages/chart-of-accounts";
@@ -173,6 +174,7 @@ function Router() {
               <Route path="/repair" component={RepairPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route path="/print-templates" component={PrintTemplatesPage} />
+              <Route path="/invoice-template" component={InvoiceTemplatePage} />
               <Route component={NotFound} />
             </Switch>
             </PageErrorBoundary>
