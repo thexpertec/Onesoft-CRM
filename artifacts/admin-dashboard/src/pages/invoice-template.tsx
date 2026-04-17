@@ -347,6 +347,7 @@ export default function InvoiceTemplatePage() {
   const [dirty,       setDirty]       = useState(false);
   const [company]                     = useState<AppSettings>(() => getSettings());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [invoiceType, setInvoiceType] = useState<"sale" | "purchase">("sale");
 
   const markDirty = () => setDirty(true);
 
@@ -424,6 +425,22 @@ export default function InvoiceTemplatePage() {
               Click any <span className="bg-yellow-100 dark:bg-yellow-900/40 rounded px-1 text-yellow-800 dark:text-yellow-300 font-medium">highlighted</span> label to select · edit text or styling in the panel →
             </p>
           </div>
+          {/* Invoice type tabs */}
+          <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden bg-gray-50 dark:bg-zinc-800 p-0.5 gap-0.5">
+            {(["sale", "purchase"] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setInvoiceType(t)}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  invoiceType === t
+                    ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-zinc-100 shadow-sm"
+                    : "text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200"
+                }`}
+              >
+                {t === "sale" ? "Sale Invoice" : "Purchase Invoice"}
+              </button>
+            ))}
+          </div>
           <button
             onClick={handleReset}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
@@ -456,9 +473,11 @@ export default function InvoiceTemplatePage() {
               </div>
               <div className="text-right">
                 <div className="text-2xl font-extrabold tracking-widest text-slate-300 uppercase">
-                  {lbl("invoiceTitle")}
+                  {invoiceType === "sale" ? lbl("invoiceTitle") : lbl("purchaseInvoiceTitle")}
                 </div>
-                <div className="text-xs text-blue-300 mt-1">INV-202604-001</div>
+                <div className="text-xs text-blue-300 mt-1">
+                  {invoiceType === "sale" ? "INV-202604-001" : "PO-202604-001"}
+                </div>
               </div>
             </div>
 
@@ -468,13 +487,23 @@ export default function InvoiceTemplatePage() {
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-2">
                   {lbl("billTo")}
                 </div>
-                <div className="font-bold text-lg text-gray-900 dark:text-zinc-100">Abdul</div>
-                <div className="text-gray-500 dark:text-zinc-400 mt-0.5 text-xs">+92 333 1234567</div>
-                <div className="text-gray-500 dark:text-zinc-400 text-xs">123 Main Road, Lahore</div>
-                <div className="text-gray-500 dark:text-zinc-400 text-xs">Lahore</div>
-                <div className="text-xs text-gray-600 dark:text-zinc-400 mt-0.5">
-                  <strong>Sales Officer:</strong> Abdul Qayyum
-                </div>
+                {invoiceType === "sale" ? (<>
+                  <div className="font-bold text-lg text-gray-900 dark:text-zinc-100">Abdul</div>
+                  <div className="text-gray-500 dark:text-zinc-400 mt-0.5 text-xs">+92 333 1234567</div>
+                  <div className="text-gray-500 dark:text-zinc-400 text-xs">123 Main Road, Lahore</div>
+                  <div className="text-gray-500 dark:text-zinc-400 text-xs">Lahore</div>
+                  <div className="text-xs text-gray-600 dark:text-zinc-400 mt-0.5">
+                    <strong>Sales Officer:</strong> Abdul Qayyum
+                  </div>
+                </>) : (<>
+                  <div className="font-bold text-lg text-gray-900 dark:text-zinc-100">Allied Supplies Ltd.</div>
+                  <div className="text-gray-500 dark:text-zinc-400 mt-0.5 text-xs">+44 113 9876543</div>
+                  <div className="text-gray-500 dark:text-zinc-400 text-xs">45 Trade Park, Leeds</div>
+                  <div className="text-gray-500 dark:text-zinc-400 text-xs">West Yorkshire</div>
+                  <div className="text-xs text-gray-600 dark:text-zinc-400 mt-0.5">
+                    <strong>Ref:</strong> PO-2026-0041
+                  </div>
+                </>)}
               </div>
               <div className="px-8 py-5 min-w-[220px] space-y-2">
                 {([
@@ -556,13 +585,15 @@ export default function InvoiceTemplatePage() {
                   <span>{lbl("balanceDueLabel")}</span>
                   <span>{sym}1,280.00</span>
                 </div>
-                <div className="flex justify-between py-1 border-b border-gray-100 dark:border-zinc-800 text-gray-500 mt-1">
-                  <span>{lbl("previousBalanceLabel")}</span><span>{sym}5,000.00</span>
-                </div>
-                <div className="bg-slate-800 dark:bg-zinc-900 text-white flex justify-between items-center px-3 py-2 rounded-md border-t-2 border-double border-slate-500">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{lbl("newBalanceLabel")}</span>
-                  <span className="text-sm font-black">{sym}6,280.00</span>
-                </div>
+                {invoiceType === "sale" && (<>
+                  <div className="flex justify-between py-1 border-b border-gray-100 dark:border-zinc-800 text-gray-500 mt-1">
+                    <span>{lbl("previousBalanceLabel")}</span><span>{sym}5,000.00</span>
+                  </div>
+                  <div className="bg-slate-800 dark:bg-zinc-900 text-white flex justify-between items-center px-3 py-2 rounded-md border-t-2 border-double border-slate-500">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{lbl("newBalanceLabel")}</span>
+                    <span className="text-sm font-black">{sym}6,280.00</span>
+                  </div>
+                </>)}
               </div>
             </div>
 
