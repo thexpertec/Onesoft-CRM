@@ -3285,7 +3285,16 @@ export type AppSettings = {
   printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
   // ── Invoice label customisation ──
   invoiceLabels?:            Partial<InvoiceLabels>;
+  invoiceLabelStyles?:       Record<string, LabelStyle>;
 };
+
+export interface LabelStyle {
+  color?:         string;             // CSS hex colour e.g. "#1e40af"
+  fontSize?:      number;             // pt, e.g. 9
+  fontWeight?:    "normal" | "600" | "bold" | "800" | "900";
+  fontStyle?:     "normal" | "italic";
+  textTransform?: "none" | "uppercase" | "lowercase";
+}
 
 export interface InvoiceLabels {
   // Document title (header right)
@@ -3365,6 +3374,10 @@ export const DEFAULT_INVOICE_LABELS: InvoiceLabels = {
 export function getInvoiceLabels(): InvoiceLabels {
   const saved = getSettings().invoiceLabels ?? {};
   return { ...DEFAULT_INVOICE_LABELS, ...saved };
+}
+
+export function getInvoiceLabelStyles(): Record<string, LabelStyle> {
+  return getSettings().invoiceLabelStyles ?? {};
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

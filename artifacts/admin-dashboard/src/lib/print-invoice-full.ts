@@ -3,7 +3,19 @@
  * Layout: compact header → Bill To only → items → totals →
  *         payment history → bank details table → terms → footer
  */
-import { Invoice, AppSettings, getCustomerPreviousBalance, getInvoiceLabels } from "./store";
+import { Invoice, AppSettings, getCustomerPreviousBalance, getInvoiceLabels, getInvoiceLabelStyles, LabelStyle } from "./store";
+
+// Convert a LabelStyle to an inline CSS string for use in HTML attributes
+function toInlineCSS(s?: LabelStyle): string {
+  if (!s) return "";
+  const parts: string[] = [];
+  if (s.color)         parts.push(`color:${s.color}`);
+  if (s.fontSize)      parts.push(`font-size:${s.fontSize}pt`);
+  if (s.fontWeight)    parts.push(`font-weight:${s.fontWeight}`);
+  if (s.fontStyle)     parts.push(`font-style:${s.fontStyle}`);
+  if (s.textTransform && s.textTransform !== "none") parts.push(`text-transform:${s.textTransform}`);
+  return parts.join(";");
+}
 
 const esc = (s: string) =>
   String(s ?? "")
@@ -108,7 +120,14 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   const histTotal   = (inv.paymentHistory ?? []).reduce((s, r) => s + (parseFloat(r.amount)||0), 0);
 
   // ── Invoice labels (user-customisable) ──────────────────────────────────
-  const L = getInvoiceLabels();
+  const L  = getInvoiceLabels();
+  const LS = getInvoiceLabelStyles();
+  // Helper: wrap label text with inline style if custom style exists
+  const sl = (key: string, text: string, extra?: string): string => {
+    const css = toInlineCSS(LS[key]);
+    const s = [css, extra].filter(Boolean).join(";");
+    return s ? `<span style="${s}">${esc(text)}</span>` : esc(text);
+  };
 
   // ── Previous / New balance (sale invoices only) ──────────────────────────
   const isSale      = !inv.invoiceType || inv.invoiceType === "sale";
@@ -461,22 +480,22 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <!-- ══════════════════ BILL TO + META STRIP ══════════════════ -->
 <div class="subheader">
   <div class="bill-to-box">
-    <div class="bill-to-label">${esc(L.billTo)}</div>
+    <div class="bill-to-label">${sl("billTo", L.billTo)}</div>
     <div class="bill-to-name">${esc(inv.customer || "—")}</div>
     ${buyerLines.map(l => `<div class="bill-to-line">${l}</div>`).join("")}
   </div>
   <div class="meta-strip">
     <div class="meta-row">
-      <span class="meta-label">${esc(L.invoiceDateLabel)}</span>
+      <span class="meta-label">${sl("invoiceDateLabel", L.invoiceDateLabel)}</span>
       <span class="meta-value">${fmtDateShort(inv.invoiceDate)}</span>
     </div>
     <div class="meta-row">
-      <span class="meta-label">${esc(L.dueDateLabel)}</span>
+      <span class="meta-label">${sl("dueDateLabel", L.dueDateLabel)}</span>
       <span class="meta-value${inv.status === "Overdue" ? " overdue" : ""}">${fmtDateShort(inv.dueDate)}</span>
     </div>
     ${inv.paymentMethod ? `
     <div class="meta-row">
-      <span class="meta-label">${esc(L.paymentViaLabel)}</span>
+      <span class="meta-label">${sl("paymentViaLabel", L.paymentViaLabel)}</span>
       <span class="meta-value">${esc(inv.paymentMethod)}</span>
     </div>` : ""}
     <span class="status-badge">${esc(inv.status)}</span>
@@ -490,19 +509,19 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">${esc(L.itemsSectionTitle)}</div>
+    <div class="section-heading-text">${sl("itemsSectionTitle", L.itemsSectionTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <table>
     <thead>
       <tr>
-        <th class="td-center num-col">${esc(L.colNum)}</th>
-        <th>${esc(L.colDescription)}</th>
-        <th class="td-right" style="width:36pt">${esc(L.colUnit)}</th>
-        <th class="td-right" style="width:32pt">${esc(L.colQty)}</th>
-        <th class="td-right" style="width:60pt">${esc(L.colUnitPrice)}</th>
-        <th class="td-right disc-col">${esc(L.colDisc)}</th>
-        <th class="td-right total-col">${esc(L.colTotal)}</th>
+        <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
+        <th>${sl("colDescription", L.colDescription)}</th>
+        <th class="td-right" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
+        <th class="td-right" style="width:32pt">${sl("colQty", L.colQty)}</th>
+        <th class="td-right" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
+        <th class="td-right disc-col">${sl("colDisc", L.colDisc)}</th>
+        <th class="td-right total-col">${sl("colTotal", L.colTotal)}</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
@@ -512,7 +531,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   <div class="totals-wrapper">
     <div class="totals-table">
       <div class="totals-row totals-subtotal-row">
-        <span class="totals-label">${esc(L.subtotalLabel)}</span>
+        <span class="totals-label">${sl("subtotalLabel", L.subtotalLabel)}</span>
         <span class="totals-value">${fmt(subtotal)}</span>
       </div>
       ${discountAmt > 0 ? `
@@ -526,42 +545,42 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       </div>` : ""}
       ${parseFloat(inv.taxRate) > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">${esc(L.vatLabel)} (${esc(inv.taxRate)}%)</span>
+        <span class="totals-label">${sl("vatLabel", L.vatLabel)} (${esc(inv.taxRate)}%)</span>
         <span class="totals-value">${fmt(taxAmt)}</span>
       </div>` : ""}
       ${shipping > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">${esc(L.deliveryLabel)}${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
+        <span class="totals-label">${sl("deliveryLabel", L.deliveryLabel)}${inv.shippingMethod ? ` (${esc(inv.shippingMethod)})` : ""}</span>
         <span class="totals-value">${fmt(shipping)}</span>
       </div>` : ""}
       ${handling > 0 ? `
       <div class="totals-row">
-        <span class="totals-label">${esc(L.otherChargesLabel)}</span>
+        <span class="totals-label">${sl("otherChargesLabel", L.otherChargesLabel)}</span>
         <span class="totals-value">${fmt(handling)}</span>
       </div>` : ""}
       <div class="totals-total">
-        <span class="totals-total-label">${esc(L.totalLabel)}</span>
+        <span class="totals-total-label">${sl("totalLabel", L.totalLabel)}</span>
         <span class="totals-total-amount">${fmt(total)}</span>
       </div>
       ${paid > 0 ? `
       <div class="totals-row" style="margin-top:4pt;">
-        <span class="totals-label">${esc(L.amountPaidLabel)}</span>
+        <span class="totals-label">${sl("amountPaidLabel", L.amountPaidLabel)}</span>
         <span class="totals-value" style="color:#10b981">−${fmt(paid)}</span>
       </div>` : ""}
       ${balance > 0 ? `
       <div class="totals-balance">
-        <span>${esc(L.balanceDueLabel)}</span>
+        <span>${sl("balanceDueLabel", L.balanceDueLabel)}</span>
         <span>${fmt(balance)}</span>
       </div>` : ""}
       ${paid >= total && total > 0 ? `
-      <div class="fully-paid">✓ &nbsp; ${esc(L.fullyPaidLabel)}${inv.paidAt ? " — " + fmtDate(inv.paidAt) : ""}</div>` : ""}
+      <div class="fully-paid">✓ &nbsp; ${sl("fullyPaidLabel", L.fullyPaidLabel)}${inv.paidAt ? " — " + fmtDate(inv.paidAt) : ""}</div>` : ""}
       ${isSale ? `
       <div class="totals-prev-bal">
-        <span>${esc(L.previousBalanceLabel)}</span>
+        <span>${sl("previousBalanceLabel", L.previousBalanceLabel)}</span>
         <span>${fmt(prevBalance)}</span>
       </div>
       <div class="totals-new-bal">
-        <span class="totals-new-bal-label">${esc(L.newBalanceLabel)}</span>
+        <span class="totals-new-bal-label">${sl("newBalanceLabel", L.newBalanceLabel)}</span>
         <span class="totals-new-bal-amount">${fmt(newBalance)}</span>
       </div>` : ""}
     </div>
@@ -573,7 +592,7 @@ ${(inv.paymentHistory ?? []).length > 0 ? `
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">${esc(L.paymentHistoryTitle)}</div>
+    <div class="section-heading-text">${sl("paymentHistoryTitle", L.paymentHistoryTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <table class="hist-table">
@@ -603,7 +622,7 @@ ${docsToRender.length > 0 ? `
 <div class="section">
   <div class="section-heading">
     <div class="section-heading-bar"></div>
-    <div class="section-heading-text">${esc(L.termsSectionTitle)}</div>
+    <div class="section-heading-text">${sl("termsSectionTitle", L.termsSectionTitle)}</div>
     <div class="section-heading-rule"></div>
   </div>
   <div class="notes-stack">
