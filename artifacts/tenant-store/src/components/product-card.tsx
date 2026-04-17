@@ -246,10 +246,10 @@ export function ProductCard({ product, className }: ProductCardProps) {
       {/* Full-width Clubcard button — only when clubcard price is set */}
       {clubPrice && (
         <Link href={`/product/${product.id}`} className="block">
-          <div className="mx-3 mb-3 flex items-center justify-center gap-2 rounded-lg border border-red-400 dark:border-red-500 px-3 py-2 text-[11.5px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer">
+          <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg border border-red-400 dark:border-red-500 px-3 py-2 text-[11.5px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer">
             <CreditCard size={12} className="shrink-0" />
-            <span className="truncate">
-              Order with your ClubCard and Save {clubSaving > 0 ? formatPrice(clubSaving.toFixed(2)) : ""}
+            <span>
+              {clubSaving > 0 ? `Save ${formatPrice(clubSaving.toFixed(2))} with Clubcard` : "View Clubcard Price"}
             </span>
           </div>
         </Link>
