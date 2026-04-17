@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft, ShoppingCart, Heart, Share2, Star,
-  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight
+  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight, CreditCard
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
@@ -161,7 +161,7 @@ export function ProductDetailPage() {
             <span className="text-xs text-slate-400">(4.0) · 24 reviews</span>
           </div>
 
-          <div className="flex items-end gap-3 mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
+          <div className="mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
             {(() => {
               const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
                 ? product.websitePrice
@@ -169,17 +169,62 @@ export function ProductDetailPage() {
               const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
                 ? product.websitePriceWas
                 : null;
+              const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
+                ? product.clubcardPrice
+                : null;
+              const saving = clubPrice
+                ? (parseFloat(displayPrice) - parseFloat(clubPrice)).toFixed(2)
+                : null;
               return (
-                <>
-                  <div className="text-3xl font-bold text-slate-900 dark:text-white">
-                    {formatPrice(displayPrice)}
+                <div className="space-y-3">
+                  {/* Standard price row */}
+                  <div className="flex items-end gap-3">
+                    <div className={cn(
+                      "font-bold",
+                      clubPrice
+                        ? "text-xl text-slate-400 dark:text-slate-500 line-through"
+                        : "text-3xl text-slate-900 dark:text-white"
+                    )}>
+                      {formatPrice(displayPrice)}
+                    </div>
+                    {wasPrice && !clubPrice && (
+                      <div className="text-lg text-slate-400 line-through mb-0.5">
+                        {formatPrice(wasPrice)}
+                      </div>
+                    )}
                   </div>
-                  {wasPrice && (
-                    <div className="text-lg text-slate-400 line-through mb-0.5">
-                      {formatPrice(wasPrice)}
+
+                  {/* Clubcard price block */}
+                  {clubPrice && (
+                    <div className="rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3.5">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <CreditCard size={14} className="text-blue-600 dark:text-blue-400" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">
+                          Clubcard Price
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-3xl font-bold text-blue-700 dark:text-blue-300 tabular-nums">
+                          {formatPrice(clubPrice)}
+                        </span>
+                        {saving && parseFloat(saving) > 0 && (
+                          <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                            You save {formatPrice(saving)}
+                          </span>
+                        )}
+                      </div>
+                      <Link href="/clubcard">
+                        <button className="mt-2.5 flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
+                          <CreditCard size={11} />
+                          {saving && parseFloat(saving) > 0
+                            ? `Save ${formatPrice(saving)} with your Clubcard`
+                            : "View your Clubcard"}
+                          <ChevronRight size={11} />
+                        </button>
+                      </Link>
                     </div>
                   )}
-                </>
+                </div>
               );
             })()}
           </div>

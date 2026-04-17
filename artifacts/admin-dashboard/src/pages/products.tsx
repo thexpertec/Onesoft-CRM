@@ -21,7 +21,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas";
+type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas" | "clubcardPrice";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -42,7 +42,7 @@ const BLANK = (): Record<EditableField, string> => ({
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
-  status: "Active", condition: "", description: "", websitePrice: "", websitePriceWas: "",
+  status: "Active", condition: "", description: "", websitePrice: "", websitePriceWas: "", clubcardPrice: "",
 });
 
 // ── CSV helpers ─────────────────────────────────────────────────────────────
@@ -87,6 +87,9 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
   status:          ["status", "state", "availability"],
   condition:       ["condition", "itemcondition", "productcondition"],
   description:     ["description", "desc", "notes", "details", "remarks"],
+  websitePrice:    ["websiteprice", "webprice", "onlineprice", "siteprice"],
+  websitePriceWas: ["websitepricewas", "webpricewas", "onlinepricewas", "originalprice"],
+  clubcardPrice:   ["clubcardprice", "clubprice", "memberprice", "loyaltyprice", "ccprice"],
 };
 
 function downloadTemplate() {
@@ -612,6 +615,7 @@ export default function ProductsPage() {
     { field: "wholesaleProfit", label: `Wholesale Profit (${sym})`, minW: 140, type: "readonly" },
     { field: "websitePrice",    label: `Web Price (${sym})`,        minW: 115, type: "text"     },
     { field: "websitePriceWas", label: `Web Price Was (${sym})`,   minW: 130, type: "text"     },
+    { field: "clubcardPrice",   label: `Clubcard Price (${sym})`,  minW: 135, type: "text"     },
     { field: "showOnWeb",       label: "Show on Web",               minW: 105, type: "readonly" },
     { field: "stock",           label: "Stock",                     minW: 90,  type: "readonly" },
     { field: "status",      label: "Status",             minW: 120, type: "select",

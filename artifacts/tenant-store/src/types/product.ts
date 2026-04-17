@@ -21,6 +21,7 @@ export interface Product {
   showOnWeb?: boolean;
   websitePrice?: string;
   websitePriceWas?: string;
+  clubcardPrice?: string;
   createdAt: string;
   updatedAt: string;
 }

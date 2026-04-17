@@ -12,13 +12,14 @@ type FormFields = {
   name: string; localName: string; sku: string; barcode: string; brand: string;
   category: string; subcategory: string; unit: string;
   purchasePrice: string; costPrice: string; price: string; wholesalePrice: string;
+  clubcardPrice: string;
   commissionPct: string; openingStock: string; stockAlertValue: string;
   status: string; condition: string; description: string;
 };
 
 const BLANK = (): FormFields => ({
   name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
-  purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
+  purchasePrice: "", costPrice: "", price: "", wholesalePrice: "", clubcardPrice: "",
   commissionPct: "", openingStock: "", stockAlertValue: "",
   status: "Active", condition: "", description: "",
 });
@@ -96,6 +97,7 @@ export default function ProductNewPage() {
         subcategory: form.subcategory || undefined,
         unit: form.unit, purchasePrice: form.purchasePrice, costPrice: form.costPrice,
         price: form.price, wholesalePrice: form.wholesalePrice,
+        clubcardPrice: form.clubcardPrice || undefined,
         commissionPct: form.commissionPct || undefined,
         openingStock: form.openingStock || undefined,
         stockAlertValue: form.stockAlertValue || undefined,
@@ -277,6 +279,11 @@ export default function ProductNewPage() {
                 placeholder="0.00" className="h-9 text-sm tabular-nums" />
             </Field>
             <ProfitBadge profit={wsProfit} label="WS Profit" />
+            <Field label={`Clubcard (${sym})`} hint="Member price">
+              <Input type="number" min="0" step="0.01" value={form.clubcardPrice}
+                onChange={e => patch("clubcardPrice", e.target.value)}
+                placeholder="0.00" className="h-9 text-sm tabular-nums" />
+            </Field>
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-foreground">Commission</label>
               <div className="relative">

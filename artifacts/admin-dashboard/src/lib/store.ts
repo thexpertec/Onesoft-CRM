@@ -1118,6 +1118,7 @@ export type Product = {
   showOnWeb?: boolean;       // Whether the product is visible on the tenant store website
   websitePrice?: string;     // Current/sale price shown on the website
   websitePriceWas?: string;  // Original "was" price shown crossed out on the website
+  clubcardPrice?: string;    // Exclusive Clubcard member price
   createdAt: string;
   updatedAt: string;
 };

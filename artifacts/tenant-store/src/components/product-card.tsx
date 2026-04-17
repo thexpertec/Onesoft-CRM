@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch } from "lucide-react";
+import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch, CreditCard } from "lucide-react";
 import type { Product } from "@/types/product";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
@@ -135,6 +135,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
               {product.brand}
             </span>
           )}
+          {product.clubcardPrice && parseFloat(product.clubcardPrice) > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-md">
+              <CreditCard size={9} />
+              Clubcard
+            </span>
+          )}
         </div>
 
         {/* Quick actions */}
@@ -192,13 +198,33 @@ export function ProductCard({ product, className }: ProductCardProps) {
               const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
                 ? product.websitePriceWas
                 : null;
+              const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
+                ? product.clubcardPrice
+                : null;
+              const saving = clubPrice
+                ? parseFloat(displayPrice) - parseFloat(clubPrice)
+                : 0;
               return (
                 <>
-                  <div className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                  <div className={cn(
+                    "text-base font-extrabold tabular-nums",
+                    clubPrice ? "text-slate-400 dark:text-slate-500 line-through text-sm" : "text-slate-900 dark:text-white"
+                  )}>
                     {formatPrice(displayPrice)}
                   </div>
-                  {wasPrice && (
+                  {wasPrice && !clubPrice && (
                     <div className="text-xs text-slate-400 line-through">{formatPrice(wasPrice)}</div>
+                  )}
+                  {clubPrice && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <CreditCard size={10} className="text-blue-600 shrink-0" />
+                      <span className="text-[13px] font-extrabold text-blue-600 tabular-nums">{formatPrice(clubPrice)}</span>
+                      {saving > 0 && (
+                        <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 ml-0.5">
+                          Save {formatPrice(saving.toFixed(2))}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </>
               );
