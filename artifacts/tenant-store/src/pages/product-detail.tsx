@@ -2,17 +2,19 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft, ShoppingCart, Heart, Share2, Star,
-  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight, CreditCard
+  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight, CreditCard, BadgeCheck
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
 import { ProductCard, getProductTheme } from "@/components/product-card";
 import { formatPrice, getStockQty, stockLabel, cn } from "@/lib/utils";
+import { useCustomerSession } from "@/hooks/use-customer-session";
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { products, cms } = useStore();
   const { addItem } = useCart();
+  const { isLoggedIn } = useCustomerSession();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [wishlist, setWishlist] = useState(false);
@@ -161,73 +163,100 @@ export function ProductDetailPage() {
             <span className="text-xs text-slate-400">(4.0) · 24 reviews</span>
           </div>
 
-          <div className="mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
-            {(() => {
-              const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
-                ? product.websitePrice
-                : product.price;
-              const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
-                ? product.websitePriceWas
-                : null;
-              const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
-                ? product.clubcardPrice
-                : null;
-              const saving = clubPrice
-                ? (parseFloat(displayPrice) - parseFloat(clubPrice)).toFixed(2)
-                : null;
-              return (
-                <div className="space-y-3">
-                  {/* Standard price row */}
+          {(() => {
+            const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
+              ? product.websitePrice
+              : product.price;
+            const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
+              ? product.websitePriceWas
+              : null;
+            const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
+              ? product.clubcardPrice
+              : null;
+            const clubSaving = clubPrice
+              ? (parseFloat(displayPrice) - parseFloat(clubPrice)).toFixed(2)
+              : null;
+
+            return (
+              <div className="mb-6 pb-6 border-b border-gray-100 dark:border-slate-800 space-y-3">
+                {/* ── Price row ── */}
+                {clubPrice && isLoggedIn ? (
+                  /* Logged-in: show regular price tiny + struck, clubcard price large */
+                  <div>
+                    <p className="text-sm text-slate-400 dark:text-slate-500 line-through tabular-nums">
+                      {formatPrice(displayPrice)}
+                    </p>
+                    <div className="flex items-baseline gap-3 mt-0.5">
+                      <span className="text-3xl font-bold text-blue-700 dark:text-blue-300 tabular-nums">
+                        {formatPrice(clubPrice)}
+                      </span>
+                      {clubSaving && parseFloat(clubSaving) > 0 && (
+                        <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                          You save {formatPrice(clubSaving)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Guest or no clubcard: show current price, wasPrice struck */
                   <div className="flex items-end gap-3">
-                    <div className={cn(
-                      "font-bold",
-                      clubPrice
-                        ? "text-xl text-slate-400 dark:text-slate-500 line-through"
-                        : "text-3xl text-slate-900 dark:text-white"
-                    )}>
+                    <div className="text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
                       {formatPrice(displayPrice)}
                     </div>
-                    {wasPrice && !clubPrice && (
-                      <div className="text-lg text-slate-400 line-through mb-0.5">
+                    {wasPrice && (
+                      <div className="text-lg text-slate-400 line-through mb-0.5 tabular-nums">
                         {formatPrice(wasPrice)}
                       </div>
                     )}
                   </div>
+                )}
 
-                  {/* Clubcard price block */}
-                  {clubPrice && (
-                    <div className="rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-3.5">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <CreditCard size={14} className="text-blue-600 dark:text-blue-400" />
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">
-                          Clubcard Price
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-3">
-                        <span className="text-3xl font-bold text-blue-700 dark:text-blue-300 tabular-nums">
-                          {formatPrice(clubPrice)}
-                        </span>
-                        {saving && parseFloat(saving) > 0 && (
-                          <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                            You save {formatPrice(saving)}
+                {/* ── Clubcard block ── */}
+                {clubPrice && (
+                  isLoggedIn ? (
+                    /* Logged-in: green "Saved X | Clubcard" banner */
+                    <div className="rounded-xl bg-emerald-500 px-4 py-3 flex items-center gap-3">
+                      <BadgeCheck size={18} className="text-white shrink-0" />
+                      <div>
+                        <p className="text-white font-bold text-[14px]">
+                          {clubSaving && parseFloat(clubSaving) > 0
+                            ? `Saved ${formatPrice(clubSaving)} | Clubcard`
+                            : "Clubcard Price Applied"}
+                        </p>
+                        <Link href="/clubcard">
+                          <span className="text-emerald-100 text-[11px] hover:underline cursor-pointer">
+                            View your Clubcard →
                           </span>
-                        )}
+                        </Link>
                       </div>
+                    </div>
+                  ) : (
+                    /* Guest: red outline teaser */
+                    <div className="rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CreditCard size={14} className="text-red-500 dark:text-red-400" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-red-500 dark:text-red-400">
+                          Clubcard Price Available
+                        </span>
+                      </div>
+                      <p className="text-sm text-red-600 dark:text-red-300 font-medium">
+                        {clubSaving && parseFloat(clubSaving) > 0
+                          ? `Save ${formatPrice(clubSaving)} — sign in to unlock your Clubcard price`
+                          : "Sign in to see your exclusive Clubcard price"}
+                      </p>
                       <Link href="/clubcard">
-                        <button className="mt-2.5 flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
+                        <button className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-red-500 dark:text-red-400 hover:text-red-600 transition-colors">
                           <CreditCard size={11} />
-                          {saving && parseFloat(saving) > 0
-                            ? `Save ${formatPrice(saving)} with your Clubcard`
-                            : "View your Clubcard"}
+                          Get a Clubcard
                           <ChevronRight size={11} />
                         </button>
                       </Link>
                     </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
+                  )
+                )}
+              </div>
+            );
+          })()}
 
           {product.description && (
             <div className="mb-6">

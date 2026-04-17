@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch, CreditCard } from "lucide-react";
+import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones, Cable, Package, Cpu, Tablet, Camera, Battery, Wifi, Watch, CreditCard, BadgeCheck } from "lucide-react";
 import type { Product } from "@/types/product";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
 import { cn, formatPrice, getStockQty, stockLabel } from "@/lib/utils";
+import { useCustomerSession } from "@/hooks/use-customer-session";
 
 interface ProductCardProps {
   product: Product;
@@ -60,6 +61,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
   const hasImage = Boolean(product.thumbnail);
   const cartDisabled = isOutOfStock && !cms.shop.allowBackorder;
+  const { isLoggedIn } = useCustomerSession();
 
   // Pre-compute price variants for use throughout the card
   const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
@@ -203,22 +205,34 @@ export function ProductCard({ product, className }: ProductCardProps) {
         {/* Price + Cart */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">
-              {formatPrice(displayPrice)}
-            </div>
-            {wasPrice && (
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-xs text-slate-400 line-through tabular-nums">{formatPrice(wasPrice)}</span>
-                <span className="text-[9px] font-bold bg-red-100 text-red-600 rounded px-1 py-0.5">
-                  Save {formatPrice((parseFloat(wasPrice) - parseFloat(displayPrice)).toFixed(2))}
-                </span>
-              </div>
-            )}
-            {clubPrice && (
-              <div className="flex items-center gap-1 mt-0.5">
-                <CreditCard size={10} className="text-blue-600 shrink-0" />
-                <span className="text-[13px] font-extrabold text-blue-600 tabular-nums">{formatPrice(clubPrice)}</span>
-              </div>
+            {/* Logged-in Clubcard view: strike regular, show club price prominently */}
+            {clubPrice && isLoggedIn ? (
+              <>
+                <div className="text-xs tabular-nums text-slate-400 dark:text-slate-500 line-through">
+                  {formatPrice(displayPrice)}
+                </div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <CreditCard size={10} className="text-blue-600 shrink-0" />
+                  <span className="text-[15px] font-extrabold text-blue-700 dark:text-blue-400 tabular-nums">
+                    {formatPrice(clubPrice)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Guest view: current price bold, wasPrice struck through */}
+                <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">
+                  {formatPrice(displayPrice)}
+                </div>
+                {wasPrice && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-slate-400 line-through tabular-nums">{formatPrice(wasPrice)}</span>
+                    <span className="text-[9px] font-bold bg-red-100 text-red-600 rounded px-1 py-0.5">
+                      Save {formatPrice((parseFloat(wasPrice) - parseFloat(displayPrice)).toFixed(2))}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -242,13 +256,23 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
       {/* Full-width Clubcard button — only when clubcard price is set */}
       {clubPrice && (
-        <Link href={`/product/${product.id}`} className="block">
-          <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg border border-red-400 dark:border-red-500 px-3 py-2 text-[11.5px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer">
-            <CreditCard size={12} className="shrink-0" />
-            <span>
-              {clubSaving > 0 ? `Save ${formatPrice(clubSaving.toFixed(2))} with Clubcard` : "View Clubcard Price"}
-            </span>
-          </div>
+        <Link href={isLoggedIn ? `/product/${product.id}` : `/product/${product.id}`} className="block">
+          {isLoggedIn ? (
+            <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 px-3 py-2 text-[11.5px] font-semibold text-white transition-colors cursor-pointer shadow-sm shadow-emerald-200 dark:shadow-emerald-900/30">
+              <BadgeCheck size={12} className="shrink-0" />
+              <span>
+                {clubSaving > 0 ? `Saved ${formatPrice(clubSaving.toFixed(2))}` : "Clubcard Price"}
+                {" | "}Clubcard
+              </span>
+            </div>
+          ) : (
+            <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg border border-red-400 dark:border-red-500 px-3 py-2 text-[11.5px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer">
+              <CreditCard size={12} className="shrink-0" />
+              <span>
+                {clubSaving > 0 ? `Save ${formatPrice(clubSaving.toFixed(2))} with Clubcard` : "View Clubcard Price"}
+              </span>
+            </div>
+          )}
         </Link>
       )}
 
