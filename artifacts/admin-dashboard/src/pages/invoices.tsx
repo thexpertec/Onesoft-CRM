@@ -454,6 +454,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const [docsOpen, setDocsOpen]            = useState(false);
   const [moreOpen, setMoreOpen]            = useState(false);
 
+  // ── Stock-receive guard: prevents double-clicks before React re-render ──
+  const stockReceiveInProgress = useRef(false);
+  const [stockJustReceived, setStockJustReceived] = useState(
+    () => !!(invoice?.stockReceived || invoice?.stockDeducted)
+  );
+  // Sync the local flag whenever the invoice (re-)loads
+  useEffect(() => {
+    setStockJustReceived(!!(invoice?.stockReceived || invoice?.stockDeducted));
+    stockReceiveInProgress.current = false;
+  }, [invoice?.id, invoice?.stockReceived, invoice?.stockDeducted]);
+
   // ── Docs state ──
   const initDocs = (inv: Invoice | null): DocBlock[] => {
     if (!inv) return [];
@@ -865,30 +876,29 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
                   <div className="grid grid-cols-2 gap-2">
                     {/* Receive to Stock — purchase invoices only (not on new forms) */}
-                    {invoiceType === "purchase" && !isNew && s !== "Cancelled" && (() => {
-                      // Treat stockReceived OR stockDeducted as "already received" so marking
-                      // Paid (which sets stockDeducted) prevents a double-receipt via this button.
-                      const alreadyReceived = !!(invoice!.stockReceived || invoice!.stockDeducted);
-                      return (
-                        <button
-                          onClick={() => {
-                            if (alreadyReceived) return;
-                            receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
-                            editInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
-                            toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
-                          }}
-                          disabled={alreadyReceived}
-                          className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
-                            alreadyReceived
-                              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
-                              : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
-                          }`}
-                        >
-                          <PackagePlus size={12}/>
-                          {alreadyReceived ? "✓ Stock Already Received" : "Receive to Stock"}
-                        </button>
-                      );
-                    })()}
+                    {invoiceType === "purchase" && !isNew && s !== "Cancelled" && (
+                      <button
+                        onClick={() => {
+                          // Ref guard: synchronous, blocks re-entrant clicks instantly
+                          if (stockReceiveInProgress.current || stockJustReceived) return;
+                          stockReceiveInProgress.current = true;
+                          // Optimistically disable button before any re-render
+                          setStockJustReceived(true);
+                          receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
+                          editInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
+                          toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
+                        }}
+                        disabled={stockJustReceived}
+                        className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
+                          stockJustReceived
+                            ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
+                            : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                        }`}
+                      >
+                        <PackagePlus size={12}/>
+                        {stockJustReceived ? "✓ Stock Already Received" : "Receive to Stock"}
+                      </button>
+                    )}
                     {s === "Draft" && invoiceType !== "purchase" && (
                       <button onClick={() => onStatusChange(inv!.id, "Sent")}
                         className="h-9 rounded-lg border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-1.5 transition-colors">
@@ -1301,7 +1311,9 @@ export function InvoiceFormPage() {
   }, [editInvoice, addInvoice, toast, navigate]);
 
   const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
-    const inv = invoices.find(i => i.id === id);
+    // Read directly from localStorage for the freshest state — React state may be stale
+    // if the user clicks multiple status buttons in rapid succession.
+    const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
     const updates: Partial<Invoice> = { status };
     if (amountPaid !== undefined) updates.amountPaid = amountPaid;
@@ -1353,7 +1365,7 @@ export function InvoiceFormPage() {
     }
     editInvoice(id, updates);
     toast({ title: `Invoice marked ${status}` });
-  }, [invoices, editInvoice, toast]);
+  }, [editInvoice, toast]);
 
   const handleCollectPayment = useCallback((
     id: string,
@@ -1361,7 +1373,8 @@ export function InvoiceFormPage() {
     newTotalPaid: string,
     newStatus: InvoiceStatus
   ) => {
-    const inv = invoices.find(i => i.id === id);
+    // Read from localStorage for freshest state — React state may lag behind
+    const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
 
     const updatedHistory = [...(inv.paymentHistory ?? []), record];
@@ -1430,10 +1443,10 @@ export function InvoiceFormPage() {
     editInvoice(id, updates);
     const sym = getSettingsCurrencySymbol();
     toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} collected · ${newStatus}` });
-  }, [invoices, editInvoice, toast]);
+  }, [editInvoice, toast]);
 
   const handleDelete = useCallback((id: string) => {
-    const inv = invoices.find(i => i.id === id);
+    const inv = getInvoices().find(i => i.id === id);
     if (inv?.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         reverseStockForPurchase(inv.items, inv.invoiceNumber);
@@ -1445,7 +1458,7 @@ export function InvoiceFormPage() {
     toast({ title: "Invoice deleted", variant: "destructive" });
     const backUrl = inv?.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
     navigate(backUrl);
-  }, [invoices, removeInvoice, toast, navigate]);
+  }, [removeInvoice, toast, navigate]);
 
   const backUrl = defaultType === "purchase" ? "/invoices?type=purchase" : "/invoices";
 
