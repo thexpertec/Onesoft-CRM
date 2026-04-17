@@ -125,6 +125,56 @@ export function CheckoutPage() {
   const [placing,  setPlacing]  = useState(false);
   const [orderId,  setOrderId]  = useState<string>("");
 
+  /* ── Inline sign-in state ────────────────────────────────────────────── */
+  const [showInlineLogin, setShowInlineLogin] = useState(false);
+  const [loginEmail,      setLoginEmail]      = useState("");
+  const [loginPassword,   setLoginPassword]   = useState("");
+  const [loginLoading,    setLoginLoading]    = useState(false);
+  const [loginError,      setLoginError]      = useState("");
+
+  /* ── Inline sign-in handler (calls same API the portal uses) ─────────── */
+  async function handleInlineSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tenantId) return;
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const apiBase = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/tenant-store.*/, "")}/api`;
+      const ns = encodeURIComponent(`t:${tenantId}`);
+      const [accsRes, custsRes] = await Promise.all([
+        fetch(`${apiBase}/kv/${ns}/portal-accounts`).then(r => r.ok ? r.json() : { value: [] }),
+        fetch(`${apiBase}/kv/${ns}/admin-customers`).then(r => r.ok ? r.json() : { value: [] }),
+      ]);
+      const accounts: Array<{ email: string; passwordHash: string; customerId: string; name: string; createdAt: string }> =
+        accsRes?.value ?? [];
+      const customers: Array<{ id: string; name: string; email: string; phone?: string; city?: string }> =
+        custsRes?.value ?? [];
+      const email = loginEmail.trim().toLowerCase();
+      const encoded = new TextEncoder().encode(loginPassword);
+      const buffer = await crypto.subtle.digest("SHA-256", encoded);
+      const hash = Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+      const account = accounts.find(a => a.email.trim().toLowerCase() === email && a.passwordHash === hash);
+      if (!account) { setLoginError("Incorrect email or password."); return; }
+      const customer = customers.find(c => c.id === account.customerId) ?? {
+        id: account.customerId,
+        name: account.name || email.split("@")[0],
+        email: account.email,
+        phone: "", city: "",
+      };
+      const sessionData = { tenantId, customer, loginAt: new Date().toISOString() };
+      localStorage.setItem("cp_session", JSON.stringify(sessionData));
+      // Notify useCustomerSession hook on this tab immediately
+      window.dispatchEvent(new StorageEvent("storage", { key: "cp_session", newValue: JSON.stringify(sessionData) }));
+      setShowInlineLogin(false);
+      setLoginEmail("");
+      setLoginPassword("");
+    } catch {
+      setLoginError("Something went wrong. Please try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
   /* ── Auto-prefill form whenever session is detected / changes ──────── */
   useEffect(() => {
     if (!portalSession) return;
@@ -278,12 +328,9 @@ export function CheckoutPage() {
   /* ── Step: Info ─────────────────────────────────────────────────────── */
   function InfoStep() {
     const isLoggedIn = !!portalSession;
-    const returnTo   = encodeURIComponent(window.location.pathname + window.location.search);
-    const portalBase = tenantId
-      ? `/customer-portal/?t=${encodeURIComponent(tenantId)}&returnTo=${returnTo}`
-      : `/customer-portal/?returnTo=${returnTo}`;
-    const signInUrl  = `${portalBase}&tab=signin`;
-    const signUpUrl  = `${portalBase}&tab=signup`;
+    const signUpUrl  = tenantId
+      ? `/customer-portal/?t=${encodeURIComponent(tenantId)}&tab=signup`
+      : `/customer-portal/?tab=signup`;
 
     /* Calculate total potential Clubcard saving across all cart items */
     const clubcardSaving = items.reduce((sum, { product, quantity }) => {
@@ -295,6 +342,8 @@ export function CheckoutPage() {
       return sum;
     }, 0);
 
+    const accent = clubcardSaving > 0 ? "green" : "blue";
+
     const bannerSubtitle = clubcardSaving > 0
       ? `Sign in and save ${formatPrice(clubcardSaving)} on this order with your Clubcard.`
       : "Sign in to auto-fill your details and unlock Clubcard prices.";
@@ -304,51 +353,89 @@ export function CheckoutPage() {
 
         {/* ── Sign-in banner (guests only) ─────────────────────────────── */}
         {!isLoggedIn && (
-          <div className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between ${
-            clubcardSaving > 0
-              ? "border-green-200 dark:border-green-800 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40"
-              : "border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40"
+          <div className={`rounded-2xl border overflow-hidden ${
+            accent === "green"
+              ? "border-green-200 dark:border-green-800"
+              : "border-blue-200 dark:border-blue-800"
           }`}>
-            <div className="flex items-start gap-3">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                clubcardSaving > 0
-                  ? "bg-green-100 dark:bg-green-900"
-                  : "bg-blue-100 dark:bg-blue-900"
-              }`}>
-                <User size={16} className={clubcardSaving > 0 ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400"} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Already have an account?
-                </p>
-                <p className={`text-xs mt-0.5 ${
-                  clubcardSaving > 0
-                    ? "text-green-700 dark:text-green-400 font-medium"
-                    : "text-slate-500 dark:text-slate-400"
+            {/* Banner header row */}
+            <div className={`p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between ${
+              accent === "green"
+                ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40"
+                : "bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40"
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                  accent === "green" ? "bg-green-100 dark:bg-green-900" : "bg-blue-100 dark:bg-blue-900"
                 }`}>
-                  {bannerSubtitle}
-                </p>
+                  <User size={16} className={accent === "green" ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400"} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Already have an account?</p>
+                  <p className={`text-xs mt-0.5 ${
+                    accent === "green" ? "text-green-700 dark:text-green-400 font-medium" : "text-slate-500 dark:text-slate-400"
+                  }`}>{bannerSubtitle}</p>
+                </div>
               </div>
+              {!showInlineLogin && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <a href={signUpUrl}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                    Sign Up
+                  </a>
+                  <button type="button"
+                    onClick={() => { setShowInlineLogin(true); setLoginError(""); }}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-sm ${
+                      accent === "green" ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
+                    }`}>
+                    <UserCheck size={14} /> Sign In
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={signUpUrl}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700"
-              >
-                Sign Up
-              </a>
-              <a
-                href={signInUrl}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-sm ${
-                  clubcardSaving > 0
-                    ? "bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-green-900"
-                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-blue-900"
-                }`}
-              >
-                <UserCheck size={14} />
-                Sign In
-              </a>
-            </div>
+
+            {/* Inline sign-in form (shown when Sign In is clicked) */}
+            {showInlineLogin && (
+              <form onSubmit={handleInlineSignIn}
+                className="px-4 pb-4 pt-3 bg-white dark:bg-slate-800/90 space-y-3 border-t border-gray-100 dark:border-slate-700">
+                {loginError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">{loginError}</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Email</label>
+                    <input type="email" required autoFocus value={loginEmail}
+                      onChange={e => setLoginEmail(e.target.value)}
+                      placeholder="you@example.com" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Password</label>
+                    <input type="password" required value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                      placeholder="••••••••" className={inputCls} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <button type="button"
+                    onClick={() => { setShowInlineLogin(false); setLoginError(""); setLoginEmail(""); setLoginPassword(""); }}
+                    className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline">
+                    Cancel
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <a href={signUpUrl} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                      No account? Sign up
+                    </a>
+                    <button type="submit" disabled={loginLoading}
+                      className={`flex items-center gap-1.5 px-5 py-2 rounded-xl text-white text-sm font-semibold transition-colors disabled:opacity-60 ${
+                        accent === "green" ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
+                      }`}>
+                      {loginLoading ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
+                      {loginLoading ? "Signing in…" : "Sign In"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
