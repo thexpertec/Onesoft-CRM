@@ -30,6 +30,14 @@ const TX_COLORS: Record<LedgerTxType, string> = {
   "opening-balance":   "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-400",
 };
 
+const SOURCE_BADGE_COLORS: Record<string, string> = {
+  "Invoiced":        "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300",
+  "POS":             "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300",
+  "Online":          "bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300",
+  "Purchase":        "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
+  "Opening Balance": "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300",
+};
+
 const TX_PRINT_COLORS: Record<LedgerTxType, string> = {
   "purchase-receipt":  "#065f46",
   "sale":              "#9f1239",
@@ -691,6 +699,7 @@ export default function StockLedgerPage() {
                         <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
                         <th className="text-left px-4 py-3">Reference</th>
                         <th className="text-left px-4 py-3">Type</th>
+                        <th className="text-left px-4 py-3">Source</th>
                         {productId === "__all__" && <th className="text-left px-4 py-3">Product</th>}
                         <th className="text-right px-4 py-3 text-emerald-400">Qty In</th>
                         <th className="text-right px-4 py-3 text-rose-400">Qty Out</th>
@@ -706,7 +715,7 @@ export default function StockLedgerPage() {
                         <td className="text-center px-3 py-2.5 text-xs text-gray-300 dark:text-zinc-600">—</td>
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-zinc-400 whitespace-nowrap">{fmtDate(fromDate)}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 italic"
-                            colSpan={productId === "__all__" ? 3 : 2}>Opening Balance</td>
+                            colSpan={productId === "__all__" ? 4 : 3}>Opening Balance</td>
                         <td colSpan={2}/>
                         <td className="px-4 py-2.5 text-right font-bold text-gray-700 dark:text-zinc-300">
                           {openingQty.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
@@ -731,6 +740,15 @@ export default function StockLedgerPage() {
                             <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${TX_COLORS[row.txType] || "bg-gray-100 text-gray-600"}`}>
                               {LEDGER_TX_LABELS[row.txType] || row.txType}
                             </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {row.sourceType ? (
+                              <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${SOURCE_BADGE_COLORS[row.sourceType] ?? "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300"}`}>
+                                {row.sourceType}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
+                            )}
                           </td>
                           {productId === "__all__" && (
                             <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-zinc-300 max-w-[140px] truncate">{row.entityName}</td>
@@ -774,7 +792,7 @@ export default function StockLedgerPage() {
                       <tr className="bg-gray-800 dark:bg-zinc-950 text-white">
                         <td className="text-center px-3 py-3 text-xs text-gray-400">—</td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(toDate)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={productId === "__all__" ? 3 : 2}>Closing Balance</td>
+                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={productId === "__all__" ? 4 : 3}>Closing Balance</td>
                         <td className="px-4 py-3 text-right text-emerald-400 font-bold text-sm tabular-nums">
                           +{totalIn.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
                         </td>

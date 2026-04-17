@@ -2102,6 +2102,7 @@ export type StockLedgerEntry = {
   entityName:  string;
   date:        string;      // YYYY-MM-DD
   txType:      LedgerTxType;
+  sourceType?: string;      // "Invoiced" | "POS" | "Online" | "Purchase" | "Opening Balance" | …
   reference:   string;      // PO-001, SALE-001, MO-001
   qtyBefore:   number;
   qtyChange:   number;      // positive = IN, negative = OUT
@@ -2263,28 +2264,54 @@ export function reconcileAllStock(): number {
 }
 
 // ─── Stock Mutations (with Ledger) ────────────────────────────────────────────
-export const deductStockForSale = (saleItems: SaleItem[], reference = ""): void => {
+export const deductStockForSale = (saleItems: SaleItem[], reference = "", sourceType?: string): void => {
   const stocks = getStock();
   const today  = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
-  saleItems.forEach(item => {
-    if (!item.sku) return;
-    let remaining = parseFloat(item.qty) || 0;
-    for (let i = 0; i < stocks.length && remaining > 0; i++) {
-      if (stocks[i].sku !== item.sku) continue;
-      const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-      const deduct  = Math.min(current, remaining);
-      stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
-      remaining -= deduct;
-      if (deduct > 0) ledger.push({
-        entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-        date: today, txType: "sale", reference,
-        qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
-        unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
-      });
-    }
-  });
+  // Duplicate guard: skip entirely if this reference already has ledger entries
+  if (reference) {
+    const existing = getStockLedger();
+    const alreadyExists = (entityId: string) =>
+      existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "sale");
+
+    saleItems.forEach(item => {
+      if (!item.sku) return;
+      let remaining = parseFloat(item.qty) || 0;
+      for (let i = 0; i < stocks.length && remaining > 0; i++) {
+        if (stocks[i].sku !== item.sku) continue;
+        if (alreadyExists(stocks[i].id)) return; // skip — already recorded
+        const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+        const deduct  = Math.min(current, remaining);
+        stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+        remaining -= deduct;
+        if (deduct > 0) ledger.push({
+          entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+          date: today, txType: "sale", sourceType, reference,
+          qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+          unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
+        });
+      }
+    });
+  } else {
+    saleItems.forEach(item => {
+      if (!item.sku) return;
+      let remaining = parseFloat(item.qty) || 0;
+      for (let i = 0; i < stocks.length && remaining > 0; i++) {
+        if (stocks[i].sku !== item.sku) continue;
+        const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+        const deduct  = Math.min(current, remaining);
+        stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+        remaining -= deduct;
+        if (deduct > 0) ledger.push({
+          entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+          date: today, txType: "sale", sourceType, reference,
+          qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+          unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
+        });
+      }
+    });
+  }
 
   setStored(STOCK_KEY, stocks);
   batchLedger(ledger);
@@ -2317,10 +2344,15 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
 
 /** Add stock when a purchase invoice is paid / partially paid. Creates a new
  *  stock record for the SKU if one doesn't already exist. */
-export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void => {
-  const stocks = getStock();
-  const today  = new Date().toISOString().slice(0, 10);
+export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourceType?: string): void => {
+  const stocks  = getStock();
+  const today   = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+  // Duplicate guard: build a set of entityIds already recorded for this reference
+  const existing = reference ? getStockLedger() : [];
+  const alreadyReceived = (entityId: string) =>
+    reference && existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "purchase-receipt");
 
   items.forEach(item => {
     if (!item.sku) return;
@@ -2332,12 +2364,12 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void
     if (i < 0) i = stocks.findIndex(s => s.sku === item.sku);
 
     if (i >= 0) {
-      // Stock record exists — increment quantity
+      if (alreadyReceived(stocks[i].id)) return; // duplicate guard — skip
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
       stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
       ledger.push({
         entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-        date: today, txType: "purchase-receipt", reference,
+        date: today, txType: "purchase-receipt", sourceType, reference,
         qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
         unit: stocks[i].unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
       });
@@ -2361,7 +2393,7 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = ""): void
       stocks.push(newItem);
       ledger.push({
         entityType: "product", entityId: newItem.id, entityName: newItem.productName,
-        date: today, txType: "purchase-receipt", reference,
+        date: today, txType: "purchase-receipt", sourceType, reference,
         qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
         unit: newItem.unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
       });

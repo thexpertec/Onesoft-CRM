@@ -884,7 +884,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           stockReceiveInProgress.current = true;
                           // Optimistically disable button before any re-render
                           setStockJustReceived(true);
-                          receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber);
+                          receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber, "Purchase");
                           updateInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
                           toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
                         }}
@@ -1322,10 +1322,10 @@ export function InvoiceFormPage() {
     }
     if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
-        receiveStockForPurchase(inv.items, inv.invoiceNumber);
+        receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
         updates.stockReceived = true;   // keep in sync so the button shows ✓
       } else {
-        deductStockForSale(inv.items, inv.invoiceNumber);
+        deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       }
       updates.stockDeducted = true;
     }
@@ -1388,10 +1388,10 @@ export function InvoiceFormPage() {
     // Update stock once — add for purchases, deduct for sales
     if (!inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
-        receiveStockForPurchase(inv.items, inv.invoiceNumber);
+        receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
         updates.stockReceived = true;   // keep in sync with the "Receive to Stock" button
       } else {
-        deductStockForSale(inv.items, inv.invoiceNumber);
+        deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       }
       updates.stockDeducted = true;
     }

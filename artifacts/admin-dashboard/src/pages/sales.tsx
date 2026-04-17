@@ -2071,7 +2071,7 @@ export default function SalesPage() {
     let stockDeducted = wasDeducted;
 
     if (status === "On Credit" && !wasDeducted) {
-      deductStockForSale(localItems, detailSale?.saleNumber || "");
+      deductStockForSale(localItems, detailSale?.saleNumber || "", "POS");
       stockDeducted = true;
     }
     if ((status === "Refunded" || status === "Cancelled") && wasDeducted) {
@@ -2131,7 +2131,7 @@ export default function SalesPage() {
     try {
       // Deduct stock only if not already done (avoids double-deduction on re-payment)
       if (!(detailSale?.stockDeducted ?? false)) {
-        deductStockForSale(localItems, detailSale?.saleNumber || "");
+        deductStockForSale(localItems, detailSale?.saleNumber || "", "POS");
       }
 
       // Compute grand total from localMeta (tax, delivery, invoice discount)
