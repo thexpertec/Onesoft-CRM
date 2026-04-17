@@ -203,24 +203,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
         {/* Price + Cart */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className={cn(
-              "text-base font-extrabold tabular-nums",
-              clubPrice ? "text-slate-400 dark:text-slate-500 line-through text-sm" : "text-slate-900 dark:text-white"
-            )}>
+            <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">
               {formatPrice(displayPrice)}
             </div>
-            {wasPrice && !clubPrice && (
-              <div className="text-xs text-slate-400 line-through">{formatPrice(wasPrice)}</div>
+            {wasPrice && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-xs text-slate-400 line-through tabular-nums">{formatPrice(wasPrice)}</span>
+                <span className="text-[9px] font-bold bg-red-100 text-red-600 rounded px-1 py-0.5">
+                  Save {formatPrice((parseFloat(wasPrice) - parseFloat(displayPrice)).toFixed(2))}
+                </span>
+              </div>
             )}
             {clubPrice && (
               <div className="flex items-center gap-1 mt-0.5">
                 <CreditCard size={10} className="text-blue-600 shrink-0" />
                 <span className="text-[13px] font-extrabold text-blue-600 tabular-nums">{formatPrice(clubPrice)}</span>
-                {clubSaving > 0 && (
-                  <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 ml-0.5">
-                    Save {formatPrice(clubSaving.toFixed(2))}
-                  </span>
-                )}
               </div>
             )}
           </div>
