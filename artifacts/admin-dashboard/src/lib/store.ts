@@ -3288,6 +3288,11 @@ export type AppSettings = {
 };
 
 export interface InvoiceLabels {
+  // Document title (header right)
+  invoiceTitle:         string;    // e.g. "TAX INVOICE", "SALES INVOICE"
+  purchaseInvoiceTitle: string;    // e.g. "PURCHASE ORDER", "BILL"
+  // Footer note
+  footerNote:           string;    // short line at bottom of the invoice
   // Header / meta
   billTo:               string;
   invoiceDateLabel:     string;
@@ -3324,6 +3329,9 @@ export interface InvoiceLabels {
 }
 
 export const DEFAULT_INVOICE_LABELS: InvoiceLabels = {
+  invoiceTitle:         "TAX INVOICE",
+  purchaseInvoiceTitle: "PURCHASE ORDER",
+  footerNote:           "Thank you for your business.",
   billTo:               "Bill To",
   invoiceDateLabel:     "Invoice Date",
   dueDateLabel:         "Due Date",

@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getSettings, saveSettings,
   InvoiceLabels, DEFAULT_INVOICE_LABELS, getInvoiceLabels,
+  AppSettings,
 } from "@/lib/store";
 
 // ─── Inline-editable label ────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ export default function InvoiceTemplatePage() {
 
   const [labels, setLabels] = useState<InvoiceLabels>(() => getInvoiceLabels());
   const [dirty, setDirty] = useState(false);
+  const [company, setCompany] = useState<AppSettings>(() => getSettings());
 
   const update = useCallback((key: keyof InvoiceLabels, value: string) => {
     setLabels(prev => {
@@ -132,11 +134,13 @@ export default function InvoiceTemplatePage() {
           {/* Header */}
           <div className="bg-[#0f2447] text-white px-8 py-5 flex items-start justify-between">
             <div>
-              <div className="text-xl font-extrabold tracking-tight">Onesoft</div>
-              <div className="text-xs text-slate-400 mt-1">Software & IT Solutions</div>
+              <div className="text-xl font-extrabold tracking-tight">{company.companyName || "Your Company"}</div>
+              <div className="text-xs text-slate-400 mt-1">{company.companyTagline || ""}</div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-extrabold tracking-widest text-slate-300 uppercase">TAX INVOICE</div>
+              <div className="text-2xl font-extrabold tracking-widest text-slate-300 uppercase">
+                {lbl("invoiceTitle")}
+              </div>
               <div className="text-xs text-blue-300 mt-1">INV-202604-001</div>
             </div>
           </div>
@@ -291,9 +295,9 @@ export default function InvoiceTemplatePage() {
             </div>
           </div>
 
-          {/* Footer hint */}
-          <div className="bg-gray-50 dark:bg-zinc-900 border-t border-gray-100 dark:border-zinc-800 px-8 py-3 text-[10px] text-gray-400 dark:text-zinc-600 text-center">
-            Footer · contact info · legal note (controlled from Print Templates settings)
+          {/* Footer */}
+          <div className="bg-[#0f2447] text-center px-8 py-3 text-[10px] text-slate-400">
+            {lbl("footerNote")}
           </div>
         </div>
 

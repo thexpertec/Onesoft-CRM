@@ -442,7 +442,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
     </div>
   </div>
   <div class="inv-header-right">
-    <div class="inv-title">${esc(inv.invoiceTitle || "Invoice")}</div>
+    <div class="inv-title">${esc(inv.invoiceTitle || L.invoiceTitle || "Invoice")}</div>
     <div class="inv-number">${esc(inv.invoiceNumber)}</div>
   </div>
 </div>
@@ -613,6 +613,7 @@ ${docsToRender.length > 0 ? `
   </div>
   ${footerInfoParts.length > 0 ? `<div class="inv-footer-line">${footerInfoParts.join(" &nbsp;·&nbsp; ")}</div>` : ""}
   ${footerLegal ? `<div class="inv-footer-line">${nl2br(footerLegal)}</div>` : ""}
+  ${L.footerNote ? `<div class="inv-footer-line" style="font-style:italic;">${esc(L.footerNote)}</div>` : ""}
   ${footerLegalNote ? `<div class="inv-footer-legal">${nl2br(footerLegalNote)}</div>` : ""}
 </div>
 
