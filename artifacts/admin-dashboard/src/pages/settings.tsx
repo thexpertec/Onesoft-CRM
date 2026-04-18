@@ -7,6 +7,7 @@ import {
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
   PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer, Pencil, ExternalLink,
+  Plus, CreditCard,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
-  AppSettings, LegalDocument, getSettings, saveSettings, ALL_STORE_KEYS,
+  AppSettings, LegalDocument, BankAccount, getSettings, saveSettings, ALL_STORE_KEYS,
   clearAccountingLedger, clearAllStoredModules,
 } from "@/lib/store";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";

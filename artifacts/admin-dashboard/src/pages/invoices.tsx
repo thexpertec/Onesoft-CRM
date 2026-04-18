@@ -5,7 +5,8 @@ import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents,
+  BankAccount,
+  getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents, getBankAccounts,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, getJournalEntries, updateInvoice,
@@ -89,6 +90,7 @@ const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | 
     paymentMethod:  "Bank Transfer",
     paymentTerms:   "",
     bankDetails:    s.bankDetails || "",
+    bankAccountIds: (s.bankAccounts ?? []).filter(a => a.isDefault).map(a => a.id),
     amountPaid:     "",
     paidAt:         "",
     paymentHistory: [],
@@ -454,6 +456,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const [collectPayOpen, setCollectPayOpen] = useState(false);
   const [docsOpen, setDocsOpen]            = useState(false);
   const [moreOpen, setMoreOpen]            = useState(false);
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>(
+    () => invoice?.bankAccountIds ?? []
+  );
+  const availableBankAccounts = useMemo(() => getBankAccounts(), []);
 
   // ── Stock-receive guard: prevents double-clicks before React re-render ──
   const stockReceiveInProgress = useRef(false);
@@ -615,13 +621,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     onSave({
       ...form,
       items,
-      paymentHistory: payHistory,
-      amountPaid:     payInput,
-      invoiceDocs:    docs.map(({ id, title, content }) => ({ id, title, content })),
+      paymentHistory:  payHistory,
+      amountPaid:      payInput,
+      bankAccountIds:  selectedBankIds,
+      invoiceDocs:     docs.map(({ id, title, content }) => ({ id, title, content })),
       // Clear legacy fields — data now lives in invoiceDocs
-      paymentTerms:   "",
-      notes:          "",
-      agreement:      "",
+      paymentTerms:    "",
+      notes:           "",
+      agreement:       "",
     }, invoice?.id);
   };
 
@@ -909,10 +916,35 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Bank Details</label>
-                  <textarea rows={2} value={form.bankDetails} onChange={e => setF("bankDetails", e.target.value)}
-                    placeholder="Bank name, sort code, account no., IBAN…"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"/>
+                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Payment / Bank Accounts</label>
+                  {availableBankAccounts.length === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">
+                      No bank accounts configured. Add them in Settings → Invoice Defaults.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {availableBankAccounts.map(acc => {
+                        const selected = selectedBankIds.includes(acc.id);
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => setSelectedBankIds(prev =>
+                              selected ? prev.filter(id => id !== acc.id) : [...prev, acc.id]
+                            )}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+                              selected
+                                ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                                : "bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-600 text-gray-600 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400"
+                            }`}
+                          >
+                            {selected && <span className="text-[10px]">✓</span>}
+                            {acc.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -970,6 +1002,26 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               </div>
             </div>
           </div>{/* /section 4 */}
+
+          {/* ── Bank Account Detail Boxes (full width, shown when accounts selected) ── */}
+          {selectedBankIds.length > 0 && (() => {
+            const selected = availableBankAccounts.filter(a => selectedBankIds.includes(a.id));
+            return selected.length > 0 ? (
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+                <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+                  <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Payment Details</span>
+                </div>
+                <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {selected.map(acc => (
+                    <div key={acc.id} className="bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 rounded-xl px-4 py-3">
+                      <p className="text-xs font-bold text-blue-700 dark:text-blue-300 mb-1.5">{acc.name}</p>
+                      <pre className="text-[12px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{acc.details}</pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null;
+          })()}
 
           {/* ── Section 5: Document (full width) ────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">

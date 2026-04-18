@@ -2573,7 +2573,8 @@ export type Invoice = {
   stockReceived?:    boolean;       // true once items have been pushed to stock (purchase invoices)
   paymentMethod:     SalePayment;
   paymentTerms:      string;    // e.g. "Net 30", "Due on receipt"
-  bankDetails:       string;    // bank account details for payment
+  bankDetails:       string;    // bank account details for payment (legacy freetext)
+  bankAccountIds?:   string[];  // IDs of selected bank accounts from settings
   amountPaid:        string;
   paidAt:            string;    // ISO timestamp; "" if unpaid
   paymentHistory:    PaymentRecord[];
@@ -3232,6 +3233,13 @@ export type LegalDocument = {
   updatedAt:  string;
 };
 
+export type BankAccount = {
+  id:       string;
+  name:     string;   // e.g. "Barclays Bank plc"
+  details:  string;   // multiline: account no, sort code, IBAN, etc.
+  isDefault?: boolean;
+};
+
 export type AppSettings = {
   companyName:          string;
   companyTagline:       string;
@@ -3257,7 +3265,8 @@ export type AppSettings = {
   privacyPolicy:        string;
   legalDocuments:       LegalDocument[];
   // Invoice-related company info
-  bankDetails:          string;   // bank name, account no, sort code, IBAN, etc.
+  bankDetails:          string;   // legacy single freetext block
+  bankAccounts?:        BankAccount[]; // structured list of payment/bank accounts
   companyRegistration:  string;   // registered company number
   socialLinks:          string;   // social media links (one per line)
   invoiceTerms:         string;   // default payment terms text
@@ -3441,6 +3450,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   privacyPolicy:        "",
   legalDocuments:       [],
   bankDetails:          "",
+  bankAccounts:         [],
   companyRegistration:  "",
   socialLinks:          "",
   invoiceTerms:         "Payment is due within 30 days of the invoice date.",
@@ -3516,6 +3526,10 @@ export function saveSettings(s: AppSettings): void {
   _lsSet(sk, s);
   _apiWrite(sk, s);
   window.dispatchEvent(new CustomEvent("admin-settings-changed"));
+}
+
+export function getBankAccounts(): BankAccount[] {
+  return getSettings().bankAccounts ?? [];
 }
 
 // All localStorage keys for export/import/reset
