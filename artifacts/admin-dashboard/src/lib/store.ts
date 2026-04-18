@@ -3794,7 +3794,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // ─────────────────────────────────────────────────────────────────────────────
   { id: SYS_ACCS.REVENUE_GROUP,      code: "3000", name: "Revenue",                    head: "Revenue / Income", accountType: "Group",  parentId: null,                         subType: "Revenue",          description: "Income from business operations" },
   { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales — subsidiary ledgers per product" },
-  { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income" },
+  { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income — subsidiary ledgers per income type" },
 
   // ─────────────────────────────────────────────────────────────────────────────
   // EXPENSES  (codes 4xxx — same as original system)
@@ -3959,6 +3959,17 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
+  // ── Migrate sys-3200 (Other Income) from Ledger to Group ─────────────────────
+  const otherIncomeIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OTHER_INCOME && a.accountType === "Ledger");
+  if (otherIncomeIdx !== -1) {
+    workingAccounts[otherIncomeIdx] = {
+      ...workingAccounts[otherIncomeIdx],
+      accountType: "Group",
+      description: "Miscellaneous or non-operating income — subsidiary ledgers per income type",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   // ── Sync per-product Sales Revenue ledgers ────────────────────────────────────
   // Each product gets its own ledger under Sales Revenue (sys-3100) so revenue
   // can be tracked per product in the COA.
@@ -3993,7 +4004,7 @@ export function seedDefaultCoaAccounts(): void {
     productLedgersAdded++;
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || productLedgersAdded > 0) {
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || productLedgersAdded > 0) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
