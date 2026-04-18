@@ -1323,7 +1323,7 @@ function POSView({
                         : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 dark:shadow-none"
                     }`}
                   >
-                    {isCredit ? <><CreditCard size={17} /> Issue on Credit</> : <><Check size={17} /> Complete &amp; Pay</>}
+                    {isCredit ? <><CreditCard size={17} /> Issue on Credit</> : <><Check size={17} /> Confirm &amp; Pay</>}
                   </button>
                   {/* ── Secondary actions row ── */}
                   <div className="grid grid-cols-3 gap-2">
@@ -1367,7 +1367,7 @@ function POSView({
                     onClick={() => setPayModalOpen(true)}
                     className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
                   >
-                    <Check size={16} /> Accept &amp; Mark as Paid
+                    <Check size={16} /> Confirm &amp; Pay
                   </button>
                   <button
                     onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
