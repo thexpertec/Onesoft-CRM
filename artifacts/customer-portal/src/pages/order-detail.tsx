@@ -6,7 +6,7 @@ import { fetchSales, calcLineTotal, type Sale } from "@/lib/api";
 import { fmt, fmtDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Layout } from "@/components/layout";
-import { StatusBadge, DeliveryBadge } from "@/components/badges";
+import { StatusBadge, DeliveryBadge, PaymentBadge, derivePayStatus } from "@/components/badges";
 
 /* ── Pipeline stage definition ─────────────────────────────────────────────── */
 type StageStatus = "done" | "active" | "pending" | "cancelled";
@@ -220,6 +220,7 @@ export default function OrderDetailPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={sale.status} />
           {sale.deliveryStatus && <DeliveryBadge status={sale.deliveryStatus} />}
+          <PaymentBadge status={derivePayStatus(sale.amountPaid, grand)} />
         </div>
       </div>
 
