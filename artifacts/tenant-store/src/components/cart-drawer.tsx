@@ -8,11 +8,18 @@ import { useCustomerSession } from "@/hooks/use-customer-session";
 
 export function CartDrawer() {
   const { items, totalItems, removeItem, updateQty, clearCart, isOpen, closeCart } = useCart();
-  const { tenantId } = useStore();
+  const { tenantId, products } = useStore();
   const { isLoggedIn } = useCustomerSession();
 
+  /* Merge cart product snapshots with the latest live product data so
+     clubcardPrice (and any other new fields) are always fresh */
+  const freshItems = items.map(i => {
+    const live = products.find(p => p.id === i.product.id);
+    return live ? { ...i, product: live } : i;
+  });
+
   /* Recalculate using effective (clubcard) prices */
-  const effectiveTotal = items.reduce(
+  const effectiveTotal = freshItems.reduce(
     (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
     0,
   );
@@ -79,7 +86,7 @@ export function CartDrawer() {
               </Link>
             </div>
           ) : (
-            items.map(item => (
+            freshItems.map(item => (
               <div key={item.product.id} className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800 hover:border-gray-200 dark:hover:border-slate-700 transition-colors">
                 {/* Image */}
                 <div className="w-16 h-16 rounded-lg bg-gray-50 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
@@ -162,15 +169,24 @@ export function CartDrawer() {
               Continue Shopping
             </button>
 
-            {/* My Account prompt */}
+            {/* Sign-in / account prompt */}
             {tenantId && (
-              <a
-                href={`/customer-portal/?t=${encodeURIComponent(tenantId)}`}
-                className="flex items-center justify-center gap-2 w-full py-2 text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border-t border-gray-100 dark:border-slate-800 pt-3 mt-1"
-              >
-                <User size={13} />
-                Sign in to track your orders
-              </a>
+              isLoggedIn ? (
+                <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-green-600 dark:text-green-400 border-t border-gray-100 dark:border-slate-800 pt-3 mt-1 font-medium">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
+                  Clubcard prices applied
+                </div>
+              ) : (
+                <a
+                  href={`/customer-portal/?t=${encodeURIComponent(tenantId)}`}
+                  className="flex items-center justify-center gap-2 w-full py-2 text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border-t border-gray-100 dark:border-slate-800 pt-3 mt-1"
+                >
+                  <User size={13} />
+                  Sign in for Clubcard prices
+                </a>
+              )
             )}
           </div>
         )}

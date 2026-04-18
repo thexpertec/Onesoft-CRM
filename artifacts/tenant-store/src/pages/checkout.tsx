@@ -132,8 +132,14 @@ interface PortalProfile {
 
 /* ─── Main Component ─────────────────────────────────────────────────── */
 export function CheckoutPage() {
-  const { items, totalPrice, totalItems, clearCart } = useCart();
-  const { tenantId } = useStore();
+  const { items: rawItems, totalPrice, totalItems, clearCart } = useCart();
+  const { tenantId, products: storeProducts } = useStore();
+
+  /* Merge cart snapshots with live product data so clubcardPrice is always fresh */
+  const items = rawItems.map(i => {
+    const live = storeProducts.find(p => p.id === i.product.id);
+    return live ? { ...i, product: live } : i;
+  });
 
   /* ── Session state — managed locally so inline sign-in can update it immediately ── */
   const [portalSession, setPortalSession] = useState<StoredSession | null>(() => {
