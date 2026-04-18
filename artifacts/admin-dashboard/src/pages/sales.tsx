@@ -17,6 +17,7 @@ import {
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
   LayoutGrid, List, RefreshCw, Globe,
+  CheckCircle2, Circle, Clock, XCircle,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -455,6 +456,126 @@ interface POSViewProps {
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
 }
 
+// ─── Order Pipeline (admin) ───────────────────────────────────────────────────
+const DELIVERY_STAGES = ["Pending", "Processing", "Shipped", "Delivered"] as const;
+type DeliveryStage = (typeof DELIVERY_STAGES)[number];
+const DELIVERY_RANK: Record<DeliveryStage, number> = { Pending: 0, Processing: 1, Shipped: 2, Delivered: 3 };
+
+function AdminOrderPipeline({
+  sale,
+  deliveryStatus,
+  onChangeDelivery,
+}: {
+  sale: Sale;
+  deliveryStatus: DeliveryStage;
+  onChangeDelivery: (ds: DeliveryStage) => void;
+}) {
+  const rank = DELIVERY_RANK[deliveryStatus] ?? 0;
+  const isCancelled = sale.status === "Cancelled" || sale.status === "Refunded";
+  const isDraft      = sale.status === "Draft";
+
+  type Stage = { key: string; label: string; desc: string; done: boolean; active: boolean; ds?: DeliveryStage };
+
+  const stages: Stage[] = [
+    {
+      key: "placed", label: "Order Placed",
+      desc: new Date(sale.saleDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      done: true, active: false,
+    },
+    {
+      key: "confirmed", label: "Confirmed",
+      desc: isDraft ? "Awaiting confirmation" : "Order accepted",
+      done: !isDraft && !isCancelled, active: false,
+    },
+    {
+      key: "processing", label: "Processing",
+      desc: rank >= 1 ? "Preparing for dispatch" : "Not yet started",
+      done: rank >= 1, active: rank === 0 && !isCancelled && !isDraft,
+      ds: "Processing",
+    },
+    {
+      key: "shipped", label: "Shipped",
+      desc: rank >= 2 ? "On the way" : "Not yet dispatched",
+      done: rank >= 2, active: rank === 1,
+      ds: "Shipped",
+    },
+    {
+      key: "delivered", label: "Delivered",
+      desc: rank >= 3 ? "Successfully delivered" : "Awaiting delivery",
+      done: rank >= 3, active: rank === 2,
+      ds: "Delivered",
+    },
+  ];
+
+  return (
+    <div className="shrink-0 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-2.5">
+      <div className="flex items-start">
+        {stages.map((stage, idx) => {
+          const effectiveDone   = isCancelled ? stage.key === "placed" : stage.done;
+          const effectiveActive = isCancelled ? false : stage.active;
+          const isCancelledStage = isCancelled && stage.key !== "placed";
+
+          const lineColor = isCancelled
+            ? "bg-red-200 dark:bg-red-900/40"
+            : (stages[idx - 1]?.done ? "bg-emerald-400 dark:bg-emerald-600" : "bg-gray-200 dark:bg-zinc-700");
+
+          const canClick = !isDraft && !isCancelled && stage.ds !== undefined;
+
+          const labelColor = isCancelledStage
+            ? "text-red-400 dark:text-red-500"
+            : effectiveDone
+              ? "text-emerald-700 dark:text-emerald-400"
+              : effectiveActive
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-gray-400 dark:text-zinc-500";
+
+          return (
+            <div key={stage.key} className="flex-1 flex flex-col items-center relative min-w-0">
+              {/* connector line before */}
+              {idx > 0 && (
+                <div className={`absolute top-[9px] right-1/2 w-full h-[2px] ${lineColor}`} />
+              )}
+
+              {/* icon */}
+              <button
+                disabled={!canClick}
+                onClick={() => stage.ds && onChangeDelivery(stage.ds)}
+                title={canClick ? `Mark as ${stage.ds}` : undefined}
+                className={`relative z-10 bg-white dark:bg-zinc-900 px-1 transition-transform ${canClick ? "hover:scale-110 cursor-pointer" : "cursor-default"}`}
+              >
+                {isCancelledStage ? (
+                  <XCircle size={19} className="text-red-400 dark:text-red-500" />
+                ) : effectiveDone ? (
+                  <CheckCircle2 size={19} className="text-emerald-500 dark:text-emerald-400" />
+                ) : effectiveActive ? (
+                  <Clock size={19} className="text-blue-500 dark:text-blue-400 animate-pulse" />
+                ) : (
+                  <Circle size={19} className="text-gray-300 dark:text-zinc-600" />
+                )}
+              </button>
+
+              {/* label */}
+              <p className={`mt-1 text-[10.5px] font-semibold text-center leading-tight truncate w-full px-0.5 ${labelColor}`}>
+                {stage.label}
+              </p>
+
+              {/* description */}
+              <p className="text-[9.5px] text-center text-gray-400 dark:text-zinc-600 leading-tight truncate w-full px-0.5 hidden lg:block">
+                {stage.desc}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      {isCancelled && (
+        <p className="text-center text-[10px] text-red-500 dark:text-red-400 font-medium mt-1">
+          This order has been {sale.status.toLowerCase()}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function POSView({
   sale, localItems, localMeta, isFresh, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
@@ -836,6 +957,13 @@ function POSView({
           )}
         </div>
       </div>
+
+      {/* ── Order Pipeline ──────────────────────────────────────────────────── */}
+      <AdminOrderPipeline
+        sale={sale}
+        deliveryStatus={(localMeta.deliveryStatus ?? sale.deliveryStatus ?? "Pending") as DeliveryStage}
+        onChangeDelivery={ds => { onMetaChange({ deliveryStatus: ds }); onSaveMeta(); }}
+      />
 
       {/* ── Body: two panels ────────────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
