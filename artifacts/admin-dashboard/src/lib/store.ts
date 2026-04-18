@@ -3826,8 +3826,6 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.COGS,               code: "4100", name: "Cost of Goods Sold",         head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "COGS",             description: "Direct cost of goods or services sold" },
   { id: SYS_ACCS.SALARY_GROUP,       code: "4200", name: "Salary & Wages",             head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Payroll",          description: "Employee salaries and wages" },
   { id: SYS_ACCS.COMMISSION_GROUP,   code: "4300", name: "Sales Commission",           head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Commission",       description: "Commission paid to sales agents" },
-  { id: SYS_ACCS.OFFICE_EXP,         code: "4400", name: "Office & Admin Expenses",    head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Admin",            description: "Office supplies, rent, admin costs" },
-  { id: SYS_ACCS.UTILITIES,          code: "4500", name: "Utility Bills",              head: "Expense",          accountType: "Ledger", parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Utilities",        description: "Electricity, gas, water, internet" },
   { id: SYS_ACCS.PURCHASE_EXP,       code: "4600", name: "Purchases",                  head: "Expense",          accountType: "Group",  parentId: SYS_ACCS.EXPENSES_GROUP,      subType: "Purchases",        description: "Goods purchased for resale or use — subsidiary ledgers per product" },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -3923,7 +3921,9 @@ export function seedDefaultCoaAccounts(): void {
     SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
     SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
     SYS_ACCS.AR_TRADE,    // "Trade Receivables"   — removed; AR_GROUP used directly
-    SYS_ACCS.LT_LOANS,   // "Long-term Loans"     — tenant-created as needed
+    SYS_ACCS.LT_LOANS,   // "Long-term Loans"          — tenant-created as needed
+    SYS_ACCS.OFFICE_EXP, // "Office & Admin Expenses"  — tenant-created as needed
+    SYS_ACCS.UTILITIES,  // "Utility Bills"            — tenant-created as needed
   ]);
   workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
 
