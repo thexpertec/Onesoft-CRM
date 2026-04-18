@@ -815,7 +815,7 @@ export type ModuleId =
   | "hrm_staff" | "hrm_roles" | "hrm_org"
   // Accounting
   | "accounting_coa" | "accounting_journal" | "accounting_balance"
-  | "accounting_ledger" | "accounting_pls" | "accounting_trial"
+  | "accounting_ledger" | "accounting_pls" | "accounting_trial" | "accounting_trial6"
   | "accounting_income" | "accounting_expense" | "accounting_receipts"
   | "shareholders" | "investment_plans"
   // Manufacturing
@@ -872,6 +872,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "accounting_ledger",   label: "Ledger Report",      desc: "Account-by-account ledger detail",  group: "Accounting",    href: "/ledger-report"     },
   { id: "accounting_pls",      label: "P&L Statement",      desc: "Profit & loss report",              group: "Accounting",    href: "/pls-report"        },
   { id: "accounting_trial",    label: "Trial Balance",      desc: "Trial balance by date range",       group: "Accounting",    href: "/trial-balance"     },
+  { id: "accounting_trial6",   label: "6-Col Trial Balance",desc: "6-column trial balance report",      group: "Accounting",    href: "/trial-balance-6col"},
   { id: "accounting_income",   label: "Income Report",      desc: "Revenue breakdown & analysis",      group: "Accounting",    href: "/income-report"     },
   { id: "accounting_expense",  label: "Expense Report",     desc: "Expense breakdown & analysis",      group: "Accounting",    href: "/expense-report"    },
   { id: "accounting_receipts", label: "Receipts & Payments",desc: "Cash receipts & payments log",      group: "Accounting",    href: "/receipt-payment"   },
@@ -909,10 +910,38 @@ export type ModuleGroup = {
 
 const MODULE_GROUPS_KEY = "admin-module-groups";
 
+/** IDs that must always be present in a group when any module from the same
+ *  category is already present.  Add new module IDs here whenever a module
+ *  is added to MODULES_LIST so that existing groups auto-include them. */
+const MODULE_GROUP_PEERS: Record<string, string[]> = {
+  accounting_trial6: ["accounting_trial", "accounting_coa", "accounting_journal",
+                      "accounting_balance", "accounting_ledger", "accounting_pls",
+                      "accounting_income", "accounting_expense", "accounting_receipts"],
+};
+
 export const getModuleGroups = (): ModuleGroup[] => {
   try {
     const raw = _lsGet(MODULE_GROUPS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const groups: ModuleGroup[] = JSON.parse(raw);
+
+    // Self-healing: add any new module IDs to groups that already have a
+    // peer module from the same category.
+    let dirty = false;
+    for (const group of groups) {
+      for (const [newId, peers] of Object.entries(MODULE_GROUP_PEERS)) {
+        if (!group.modules.includes(newId as ModuleId) &&
+            peers.some(p => group.modules.includes(p as ModuleId))) {
+          group.modules = [...group.modules, newId as ModuleId];
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) {
+      _lsSet(MODULE_GROUPS_KEY, groups);
+      _apiWrite(MODULE_GROUPS_KEY, groups);
+    }
+    return groups;
   } catch { return []; }
 };
 

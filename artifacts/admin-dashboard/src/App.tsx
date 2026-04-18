@@ -48,6 +48,7 @@ import BalanceSheetPage from "@/pages/balance-sheet";
 import LedgerReportPage from "@/pages/ledger-report";
 import PlsReportPage from "@/pages/pls-report";
 import TrialBalancePage from "@/pages/trial-balance";
+import TrialBalance6ColPage from "@/pages/trial-balance-6col";
 import ExpenseReportPage from "@/pages/expense-report";
 import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
@@ -165,6 +166,7 @@ function Router() {
               <Route path="/ledger-report" component={LedgerReportPage} />
               <Route path="/pls-report" component={PlsReportPage} />
               <Route path="/trial-balance" component={TrialBalancePage} />
+              <Route path="/trial-balance-6col" component={TrialBalance6ColPage} />
               <Route path="/income-report" component={IncomeReportPage} />
               <Route path="/expense-report" component={ExpenseReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />

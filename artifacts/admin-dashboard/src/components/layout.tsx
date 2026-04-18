@@ -254,8 +254,9 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
     links: [
       { label: "Balance Sheet",  href: "/balance-sheet",  icon: LayoutDashboard, desc: "Assets, Liabilities & Equity" },
       { label: "P&L Statement", href: "/pls-report",     icon: TrendingUp,      desc: "Profit & Loss by period"     },
-      { label: "Trial Balance", href: "/trial-balance",  icon: Scale,           desc: "Trial balance by date range"  },
-      { label: "Ledger Report", href: "/ledger-report",  icon: FileBarChart,    desc: "Account statement & balance"  },
+      { label: "Trial Balance",       href: "/trial-balance",     icon: Scale,           desc: "Trial balance by date range"    },
+      { label: "6-Col Trial Balance", href: "/trial-balance-6col", icon: Scale,           desc: "6-column opening/movement/closing" },
+      { label: "Ledger Report",       href: "/ledger-report",     icon: FileBarChart,    desc: "Account statement & balance"    },
     ],
   },
   {
@@ -321,7 +322,7 @@ const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-ret
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/receipt-payment", "/expense-report", "/income-report", "/payment-accounts"];
+const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/expense-report", "/income-report", "/payment-accounts"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",         href: "/leads",                  icon: UserPlus     },
@@ -551,6 +552,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "journal-entry":     "accounting_journal",
     "pls-report":        "accounting_pls",
     "trial-balance":     "accounting_trial",
+    "trial-balance-6col": "accounting_trial6",
     "balance-sheet":     "accounting_balance",
     "chart-of-accounts":  "accounting_coa",
     "income-report":      "accounting_income",
@@ -595,7 +597,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         case "accounts":      return (
           isModuleAllowed("accounting_coa") || isModuleAllowed("accounting_journal") ||
           isModuleAllowed("accounting_balance") || isModuleAllowed("accounting_ledger") ||
-          isModuleAllowed("accounting_pls") || isModuleAllowed("accounting_income") ||
+          isModuleAllowed("accounting_pls") || isModuleAllowed("accounting_trial") ||
+          isModuleAllowed("accounting_trial6") || isModuleAllowed("accounting_income") ||
           isModuleAllowed("accounting_expense") || isModuleAllowed("accounting_receipts")
         );
         case "investments":   return isModuleAllowed("shareholders") || isModuleAllowed("investment_plans");
@@ -1098,6 +1101,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {isModuleAllowed("accounting_balance")  && <NavLink href="/balance-sheet"     icon={LayoutDashboard} label="Balance Sheet" />}
                   {isModuleAllowed("accounting_pls")      && <NavLink href="/pls-report"        icon={TrendingUp}      label="P&L Statement" />}
                   {isModuleAllowed("accounting_trial")    && <NavLink href="/trial-balance"     icon={Scale}           label="Trial Balance" />}
+                  {isModuleAllowed("accounting_trial6")   && <NavLink href="/trial-balance-6col" icon={Scale}           label="6-Col Trial Balance" />}
                   {isModuleAllowed("accounting_ledger")   && <NavLink href="/ledger-report"     icon={FileBarChart}    label="Ledger Report" />}
                   {isModuleAllowed("accounting_income")   && <NavLink href="/income-report"     icon={TrendingUp}      label="Income Report" />}
                   {isModuleAllowed("accounting_expense")  && <NavLink href="/expense-report"    icon={TrendingDown}    label="Expense Report" />}
