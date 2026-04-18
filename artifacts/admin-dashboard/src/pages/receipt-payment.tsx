@@ -182,9 +182,10 @@ interface AccDropdownProps {
   placeholder?: string;
   filterCashBank?: boolean;
   filterCurrentAssets?: boolean;
+  excludeIds?: string[];
 }
 
-function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false, filterCurrentAssets = false }: AccDropdownProps) {
+function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false, filterCurrentAssets = false, excludeIds = [] }: AccDropdownProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ]       = useState("");
   const trigRef         = useRef<HTMLButtonElement>(null);
@@ -204,13 +205,17 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
         a.head === "Assets" && !a.subType?.toLowerCase().includes("fixed")
       );
     }
+    // exclude already-used accounts (but always keep the currently selected one visible)
+    if (excludeIds.length > 0) {
+      base = base.filter(a => a.id === value || !excludeIds.includes(a.id));
+    }
     const sq = q.toLowerCase().trim();
     if (sq) base = base.filter(a =>
       a.name.toLowerCase().includes(sq) ||
       (a.code || "").toLowerCase().includes(sq)
     );
     return base;
-  }, [accounts, q, filterCashBank, filterCurrentAssets]);
+  }, [accounts, q, filterCashBank, filterCurrentAssets, excludeIds, value]);
 
   const selected = accounts.find(a => a.id === value);
 
@@ -487,14 +492,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                {vtype === "receipt" ? "Received Into (Cash/Bank) *" : "Paid From (Cash/Bank) *"}
-              </label>
-              {isPosted
-                ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{cbName || "—"}</div>
-                : <AccDropdown accounts={accounts} value={cbId} filterCashBank onChange={(id, name) => { setCbId(id); setCbName(name); }} placeholder="Select Cash / Bank account…" />}
-            </div>
+            {vtype === "payment" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Paid From (Cash/Bank) *
+                </label>
+                {isPosted
+                  ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{cbName || "—"}</div>
+                  : <AccDropdown accounts={accounts} value={cbId} filterCashBank onChange={(id, name) => { setCbId(id); setCbName(name); }} placeholder="Select Cash / Bank account…" />}
+              </div>
+            )}
             <div>
               <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Reference / Cheque #</label>
               <input
@@ -538,7 +545,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                       <td className="px-2 py-1.5">
                         {isPosted
                           ? <span className="px-1">{l.accountName || "—"}</span>
-                          : <AccDropdown accounts={accounts} value={l.accountId} onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })} placeholder="Account…" filterCurrentAssets={vtype === "receipt"} />}
+                          : <AccDropdown
+                              accounts={accounts}
+                              value={l.accountId}
+                              onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })}
+                              placeholder="Account…"
+                              filterCurrentAssets={vtype === "receipt"}
+                              excludeIds={lines.filter(r => r.id !== l.id && r.accountId).map(r => r.accountId)}
+                            />}
                       </td>
                       <td className="px-2 py-1.5">
                         {isPosted
