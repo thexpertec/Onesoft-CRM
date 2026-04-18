@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp,
   Image as ImageIcon, Phone, Share2, LayoutTemplate, Navigation,
-  Star, Megaphone, Plus, Trash2, Layers, ShoppingBag,
+  Star, Megaphone, Plus, Trash2, Layers, ShoppingBag, Upload, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -24,6 +24,8 @@ export type HeroSlide = {
 export type StoreCms = {
   brand: {
     logoUrl: string;
+    logoBase64?: string;
+    faviconBase64?: string;
     storeName: string;
     tagline: string;
     description: string;
@@ -72,6 +74,8 @@ export type StoreCms = {
 export const CMS_DEFAULTS: StoreCms = {
   brand: {
     logoUrl: "",
+    logoBase64: "",
+    faviconBase64: "",
     storeName: "",
     tagline: "Premium Tech, Delivered Fast",
     description: "Your one-stop destination for the latest in technology. Premium products, competitive prices, fast delivery.",
@@ -224,6 +228,155 @@ const ANNOUNCEMENT_COLORS: { value: StoreCms["header"]["announcementBg"]; label:
   { value: "slate",   label: "Dark",    cls: "bg-slate-800"  },
 ];
 
+// ─── Brand & Identity section with upload ─────────────────────────────────────
+function BrandSection({
+  cms, patch, inp,
+}: {
+  cms: StoreCms;
+  patch: <K extends keyof StoreCms>(section: K, updates: Partial<StoreCms[K]>) => void;
+  inp: string;
+}) {
+  const logoInputRef    = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
+
+  const readFile = (file: File, onDone: (b64: string) => void) => {
+    const reader = new FileReader();
+    reader.onload = e => { if (e.target?.result) onDone(e.target.result as string); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    readFile(file, b64 => patch("brand", { logoBase64: b64, logoUrl: "" }));
+    e.target.value = "";
+  };
+
+  const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    readFile(file, b64 => patch("brand", { faviconBase64: b64 }));
+    e.target.value = "";
+  };
+
+  const logoSrc = cms.brand.logoBase64 || cms.brand.logoUrl || "";
+
+  return (
+    <Section title="Brand & Identity" icon={<ImageIcon size={16} />}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* Logo upload */}
+        <div className="flex flex-col gap-2">
+          <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+            Website Logo
+          </label>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 -mt-1">
+            Upload a PNG/SVG/JPEG for the store header and footer.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+            >
+              <Upload size={13} /> Upload Logo
+            </button>
+            {logoSrc && (
+              <button
+                type="button"
+                onClick={() => patch("brand", { logoBase64: "", logoUrl: "" })}
+                className="flex items-center gap-1 px-2.5 py-2 text-[12px] rounded-lg border border-red-200 dark:border-red-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                title="Remove logo"
+              >
+                <X size={12} /> Remove
+              </button>
+            )}
+          </div>
+          <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+          {/* URL fallback (only shown when no upload) */}
+          {!cms.brand.logoBase64 && (
+            <input
+              className={inp}
+              value={cms.brand.logoUrl}
+              onChange={e => patch("brand", { logoUrl: e.target.value })}
+              placeholder="…or paste image URL (https://…)"
+            />
+          )}
+          {/* Preview */}
+          {logoSrc && (
+            <div className="p-3 bg-gray-900 rounded-xl border border-gray-200 dark:border-zinc-700 flex items-center gap-3 mt-1">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Preview</span>
+              <img src={logoSrc} alt="Logo" className="h-9 object-contain max-w-[160px]"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            </div>
+          )}
+        </div>
+
+        {/* Favicon upload */}
+        <div className="flex flex-col gap-2">
+          <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+            Favicon
+          </label>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 -mt-1">
+            ICO, PNG or SVG — shown in the browser tab. Ideally 32×32 or 64×64 px.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => faviconInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+            >
+              <Upload size={13} /> Upload Favicon
+            </button>
+            {cms.brand.faviconBase64 && (
+              <button
+                type="button"
+                onClick={() => patch("brand", { faviconBase64: "" })}
+                className="flex items-center gap-1 px-2.5 py-2 text-[12px] rounded-lg border border-red-200 dark:border-red-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                title="Remove favicon"
+              >
+                <X size={12} /> Remove
+              </button>
+            )}
+          </div>
+          <input ref={faviconInputRef} type="file" accept="image/*,.ico" className="hidden" onChange={handleFaviconUpload} />
+          {/* Preview */}
+          {cms.brand.faviconBase64 ? (
+            <div className="p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-100 dark:border-zinc-700 flex items-center gap-3 mt-1">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Preview</span>
+              <img src={cms.brand.faviconBase64} alt="Favicon" className="h-8 w-8 object-contain rounded"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <span className="text-[11px] text-gray-500 dark:text-zinc-400">Favicon uploaded ✓</span>
+            </div>
+          ) : (
+            <div className="mt-1 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 text-[11px] text-gray-400 dark:text-zinc-500">
+              No favicon uploaded — browser will use default.
+            </div>
+          )}
+        </div>
+
+        {/* Store Name */}
+        <Field label="Store Name Override" hint="Overrides the name from admin settings. Leave blank to use admin setting.">
+          <input className={inp} value={cms.brand.storeName} onChange={e => patch("brand", { storeName: e.target.value })} placeholder="TechZone" />
+        </Field>
+
+        {/* Tagline */}
+        <Field label="Tagline" hint="Short line shown beside/below the logo in the footer">
+          <input className={inp} value={cms.brand.tagline} onChange={e => patch("brand", { tagline: e.target.value })} placeholder="Premium Tech, Delivered Fast" />
+        </Field>
+
+        {/* Footer Description — spans full width */}
+        <div className="md:col-span-2">
+          <Field label="Footer Description" hint="Paragraph shown under logo in the footer">
+            <textarea className={inp + " resize-none h-20"} value={cms.brand.description} onChange={e => patch("brand", { description: e.target.value })} />
+          </Field>
+        </div>
+
+      </div>
+    </Section>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function WebsiteCmsPage() {
   const { toast } = useToast();
@@ -330,28 +483,7 @@ export default function WebsiteCmsPage() {
       )}
 
       {/* ── BRAND & IDENTITY ─────────────────────────────────────────────── */}
-      <Section title="Brand & Identity" icon={<ImageIcon size={16} />}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Logo URL" hint="Paste a direct image URL (PNG/SVG). Leave blank to use the default icon.">
-            <input className={inp} value={cms.brand.logoUrl} onChange={e => patch("brand", { logoUrl: e.target.value })} placeholder="https://example.com/logo.png" />
-          </Field>
-          <Field label="Store Name Override" hint="Overrides the name from admin settings. Leave blank to use admin setting.">
-            <input className={inp} value={cms.brand.storeName} onChange={e => patch("brand", { storeName: e.target.value })} placeholder="TechZone" />
-          </Field>
-          <Field label="Tagline" hint="Short line shown beside/below the logo in the footer">
-            <input className={inp} value={cms.brand.tagline} onChange={e => patch("brand", { tagline: e.target.value })} placeholder="Premium Tech, Delivered Fast" />
-          </Field>
-          <Field label="Footer Description" hint="Paragraph shown under logo in the footer">
-            <textarea className={inp + " resize-none h-20"} value={cms.brand.description} onChange={e => patch("brand", { description: e.target.value })} />
-          </Field>
-        </div>
-        {cms.brand.logoUrl && (
-          <div className="mt-4 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-100 dark:border-zinc-700 flex items-center gap-3">
-            <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Preview:</span>
-            <img src={cms.brand.logoUrl} alt="Logo preview" className="h-8 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </div>
-        )}
-      </Section>
+      <BrandSection cms={cms} patch={patch} inp={inp} />
 
       {/* ── CONTACT INFO ─────────────────────────────────────────────────── */}
       <Section title="Contact Information" icon={<Phone size={16} />}>

@@ -44,8 +44,8 @@ export function Footer() {
           {/* Brand */}
           <div className="space-y-4">
             <Link href="/home" className="flex items-center gap-2">
-              {brand.logoUrl ? (
-                <img src={brand.logoUrl} alt={storeName} className="h-8 w-auto object-contain"
+              {(brand.logoBase64 || brand.logoUrl) ? (
+                <img src={brand.logoBase64 || brand.logoUrl} alt={storeName} className="h-8 w-auto object-contain"
                   onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : (
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">

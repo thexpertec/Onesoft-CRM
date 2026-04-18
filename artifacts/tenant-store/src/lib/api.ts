@@ -25,6 +25,8 @@ export type HeroSlide = {
 export type StoreCms = {
   brand: {
     logoUrl: string;
+    logoBase64?: string;
+    faviconBase64?: string;
     storeName: string;
     tagline: string;
     description: string;

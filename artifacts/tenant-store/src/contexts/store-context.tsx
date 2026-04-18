@@ -61,6 +61,19 @@ export function StoreProvider({
   // CMS brand.storeName overrides admin setting if set
   const storeName = (cms.brand.storeName?.trim()) || adminStoreName;
 
+  // Apply favicon from CMS if provided
+  useEffect(() => {
+    const fav = cms.brand.faviconBase64;
+    if (!fav) return;
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = fav;
+  }, [cms.brand.faviconBase64]);
+
   return (
     <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, cms, refresh: load }}>
       {children}
