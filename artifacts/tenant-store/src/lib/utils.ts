@@ -17,6 +17,24 @@ export function getDisplayPrice(product: { price: string; websitePrice?: string 
   return product.price || "0";
 }
 
+/**
+ * Returns the effective price for a customer:
+ * - If logged in and the product has a valid clubcardPrice lower than the display price, return clubcardPrice.
+ * - Otherwise return getDisplayPrice.
+ */
+export function getEffectivePrice(
+  product: { price: string; websitePrice?: string; clubcardPrice?: string },
+  isLoggedIn: boolean,
+): string {
+  const base = getDisplayPrice(product);
+  if (isLoggedIn && product.clubcardPrice) {
+    const club = parseFloat(product.clubcardPrice);
+    const disp = parseFloat(base);
+    if (!isNaN(club) && club > 0 && club < disp) return product.clubcardPrice;
+  }
+  return base;
+}
+
 export function getStockQty(openingStock?: string): number {
   const n = parseFloat(openingStock ?? "0");
   return isNaN(n) ? 0 : Math.max(0, n);

@@ -2,12 +2,20 @@ import { X, ShoppingCart, Minus, Plus, Trash2, ArrowRight, User } from "lucide-r
 import { Link } from "wouter";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { formatPrice, getDisplayPrice } from "@/lib/utils";
+import { formatPrice, getDisplayPrice, getEffectivePrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useCustomerSession } from "@/hooks/use-customer-session";
 
 export function CartDrawer() {
-  const { items, totalItems, totalPrice, removeItem, updateQty, clearCart, isOpen, closeCart } = useCart();
+  const { items, totalItems, removeItem, updateQty, clearCart, isOpen, closeCart } = useCart();
   const { tenantId } = useStore();
+  const { isLoggedIn } = useCustomerSession();
+
+  /* Recalculate using effective (clubcard) prices */
+  const effectiveTotal = items.reduce(
+    (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
+    0,
+  );
 
   return (
     <>
@@ -93,7 +101,7 @@ export function CartDrawer() {
                     {item.product.name}
                   </p>
                   <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                    {formatPrice(getDisplayPrice(item.product))}
+                    {formatPrice(getEffectivePrice(item.product, isLoggedIn))}
                   </p>
 
                   {/* Qty controls */}
@@ -133,7 +141,7 @@ export function CartDrawer() {
           <div className="border-t border-gray-100 dark:border-slate-800 px-5 py-5 space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Subtotal ({totalItems} items)</span>
-              <span className="font-bold text-slate-900 dark:text-white text-base">{formatPrice(totalPrice)}</span>
+              <span className="font-bold text-slate-900 dark:text-white text-base">{formatPrice(effectiveTotal)}</span>
             </div>
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span>Shipping</span>

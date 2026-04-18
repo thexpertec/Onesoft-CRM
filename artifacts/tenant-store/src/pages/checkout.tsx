@@ -8,7 +8,7 @@ import {
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
 import { SESSION_KEY, type StoredSession } from "@/hooks/use-customer-session";
-import { cn, formatPrice, getDisplayPrice } from "@/lib/utils";
+import { cn, formatPrice, getDisplayPrice, getEffectivePrice } from "@/lib/utils";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 interface CustomerForm {
@@ -121,6 +121,9 @@ export function CheckoutPage() {
       return raw ? (JSON.parse(raw) as StoredSession) : null;
     } catch { return null; }
   });
+
+  /* Clubcard membership = any logged-in portal session */
+  const isLoggedIn = !!portalSession;
 
   /* Sync when user returns to tab or signs in from another tab */
   useEffect(() => {
@@ -297,7 +300,11 @@ export function CheckoutPage() {
     );
   }
 
-  const subtotal = totalPrice;
+  /* Recalculate subtotal using effective (clubcard) prices when logged in */
+  const subtotal = items.reduce(
+    (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
+    0,
+  );
   const taxRate  = 0.20; // 20% VAT
   const tax      = subtotal * taxRate;
   const total    = subtotal + tax + shipping.price;
@@ -333,9 +340,9 @@ export function CheckoutPage() {
         productId: i.product.id,
         name: i.product.name,
         sku: i.product.sku,
-        price: getDisplayPrice(i.product),
+        price: getEffectivePrice(i.product, isLoggedIn),
         quantity: i.quantity,
-        lineTotal: (parseFloat(getDisplayPrice(i.product)) * i.quantity).toFixed(2),
+        lineTotal: (parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity).toFixed(2),
       })),
       shipping: { option: shipping.id, label: shipping.label, cost: shipping.price },
       payment: payment,
@@ -398,7 +405,6 @@ export function CheckoutPage() {
 
   /* ── Step: Info ─────────────────────────────────────────────────────── */
   function InfoStep() {
-    const isLoggedIn = !!portalSession;
     const signUpUrl  = tenantId
       ? `/customer-portal/?t=${encodeURIComponent(tenantId)}&tab=signup`
       : `/customer-portal/?tab=signup`;
@@ -846,7 +852,7 @@ export function CheckoutPage() {
                 <p className="text-xs text-slate-400 mt-0.5">Qty: {item.quantity}</p>
               </div>
               <span className="text-xs font-bold text-slate-900 dark:text-white shrink-0">
-                {formatPrice(parseFloat(getDisplayPrice(item.product)) * item.quantity)}
+                {formatPrice(parseFloat(getEffectivePrice(item.product, isLoggedIn)) * item.quantity)}
               </span>
             </div>
           ))}
