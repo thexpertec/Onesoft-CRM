@@ -395,6 +395,49 @@ export const deleteArea = (id: string): void => {
   setStored(AREAS_KEY, getAreas().filter(a => a.id !== id));
 };
 
+// ─── Payment Accounts ─────────────────────────────────────────────────────────
+export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Cheque", "Card", "IBAN / Wire", "Mobile Money", "Online Transfer", "Other"] as const;
+export type PaymentMethodType = typeof PAYMENT_METHODS[number];
+
+export type PaymentAccount = {
+  id:            string;
+  accountTitle:  string;
+  paymentMethod: PaymentMethodType;
+  iban:          string;   // account number, IBAN, or card last-4
+  description:   string;  // notes / address
+  isActive:      boolean;
+  createdAt:     string;
+  updatedAt:     string;
+};
+
+const PAYMENT_ACCOUNTS_KEY = "admin-payment-accounts";
+
+export const getPaymentAccounts = (): PaymentAccount[] => getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
+
+export const createPaymentAccount = (data: Omit<PaymentAccount, "id" | "createdAt" | "updatedAt">): PaymentAccount => {
+  const item: PaymentAccount = {
+    ...data,
+    id:        crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(PAYMENT_ACCOUNTS_KEY, [...getPaymentAccounts(), item]);
+  return item;
+};
+
+export const updatePaymentAccount = (id: string, updates: Partial<Omit<PaymentAccount, "id" | "createdAt">>): PaymentAccount => {
+  const items = getPaymentAccounts();
+  const i = items.findIndex(a => a.id === id);
+  if (i === -1) throw new Error("Payment account not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PAYMENT_ACCOUNTS_KEY, items);
+  return items[i];
+};
+
+export const deletePaymentAccount = (id: string): void => {
+  setStored(PAYMENT_ACCOUNTS_KEY, getPaymentAccounts().filter(a => a.id !== id));
+};
+
 // ─── Customers API ────────────────────────────────────────────────────────────
 export type CustomerStatus = "Active" | "Inactive" | "Churned";
 
@@ -3538,7 +3581,7 @@ export const ALL_STORE_KEYS = [
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
   "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-hrm-departments", "admin-hrm-designations", "admin-users", "admin-team-members",
-  "admin-settings", "admin-journal-entries", "admin-stock-ledger",
+  "admin-settings", "admin-journal-entries", "admin-stock-ledger", "admin-payment-accounts",
 ] as const;
 
 export type StoreKey = typeof ALL_STORE_KEYS[number];

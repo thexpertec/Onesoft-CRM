@@ -3,6 +3,7 @@ import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
   getCities, createCity, updateCity, deleteCity,
   getAreas, createArea, updateArea, deleteArea,
+  getPaymentAccounts, createPaymentAccount, updatePaymentAccount, deletePaymentAccount,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup,
@@ -31,7 +32,7 @@ import {
   Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, Department, Designation, StockItem, Sale, Invoice, Account,
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgRecipe, MfgOutput, ProductionCost, RPVoucher,
-  City, Area,
+  City, Area, PaymentAccount,
 } from "@/lib/store";
 
 /**
@@ -473,4 +474,14 @@ export function useAreas() {
   const edit   = (id: string, u: Parameters<typeof updateArea>[1]) => { const a = updateArea(id, u); fetch(); return a; };
   const remove = (id: string)                                        => { deleteArea(id);              fetch(); };
   return { areas, add, edit, remove, refresh: fetch };
+}
+
+export function usePaymentAccounts() {
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+  const fetch = useCallback(() => setAccounts(getPaymentAccounts()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createPaymentAccount>[0])              => { const a = createPaymentAccount(d);    fetch(); return a; };
+  const edit   = (id: string, u: Parameters<typeof updatePaymentAccount>[1]) => { const a = updatePaymentAccount(id, u); fetch(); return a; };
+  const remove = (id: string)                                                  => { deletePaymentAccount(id);              fetch(); };
+  return { accounts, add, edit, remove, refresh: fetch };
 }

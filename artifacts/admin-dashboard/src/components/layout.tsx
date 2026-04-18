@@ -250,9 +250,10 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
     color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
     desc: "Core accounting records",
     links: [
-      { label: "Chart of Accounts", href: "/chart-of-accounts", icon: BookOpen,      desc: "Account hierarchy & ledgers" },
-      { label: "Journal Entry",     href: "/journal-entry",     icon: ClipboardList, desc: "Double-entry bookkeeping"    },
-      { label: "Receipt & Payment", href: "/receipt-payment",   icon: CreditCard,    desc: "Cash & bank transactions"    },
+      { label: "Chart of Accounts", href: "/chart-of-accounts",  icon: BookOpen,      desc: "Account hierarchy & ledgers"  },
+      { label: "Journal Entry",     href: "/journal-entry",      icon: ClipboardList, desc: "Double-entry bookkeeping"     },
+      { label: "Receipt & Payment", href: "/receipt-payment",    icon: CreditCard,    desc: "Cash & bank transactions"     },
+      { label: "Payment Accounts",  href: "/payment-accounts",   icon: CreditCard,    desc: "Bank & payment method setup"  },
     ],
   },
   {
@@ -328,7 +329,7 @@ const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-ret
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report"];
+const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/receipt-payment", "/expense-report", "/income-report", "/payment-accounts"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",         href: "/leads",                  icon: UserPlus     },
@@ -560,8 +561,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "journal-entry":     "accounting_journal",
     "pls-report":        "accounting_pls",
     "balance-sheet":     "accounting_balance",
-    "chart-of-accounts": "accounting_coa",
-    "income-report":     "accounting_income",
+    "chart-of-accounts":  "accounting_coa",
+    "income-report":      "accounting_income",
+    "payment-accounts":   "accounting_receipts",
     "leads":             "crm_leads",
     "customers":         "crm_customers",
     "suppliers":         "crm_suppliers",
