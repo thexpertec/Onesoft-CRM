@@ -3801,7 +3801,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // Current Assets
   { id: SYS_ACCS.CURRENT_ASSETS,     code: "1100", name: "Current Assets",             head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Current Asset",    description: "Assets expected to be realised within 12 months" },
   { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
-  { id: SYS_ACCS.CASH,               code: "1111", name: "Cash in Hand",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Physical cash on premises" },
+  { id: SYS_ACCS.CASH,               code: "1111", name: "Cash",                       head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Default cash account — physical cash on premises" },
   { id: SYS_ACCS.BANK,               code: "1112", name: "Bank Account",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Bank",             description: "Business bank account" },
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
   { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "General trade receivables ledger" },
@@ -3914,6 +3914,13 @@ export function seedDefaultCoaAccounts(): void {
     });
   }
 
+  // ── Migrate sys-1200 name: "Cash in Hand" → "Cash" ───────────────────────────
+  workingAccounts = workingAccounts.map(a => {
+    if (a.id === SYS_ACCS.CASH && a.name === "Cash in Hand")
+      return { ...a, name: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() };
+    return a;
+  });
+
   // ── Migrate CASH & BANK: re-parent from CURRENT_ASSETS → CB_GROUP ────────────
   // If CB_GROUP was just added (or already exists) but CASH/BANK still point at
   // CURRENT_ASSETS, move them under CB_GROUP and renumber codes.
@@ -4025,17 +4032,28 @@ export function seedDefaultCoaAccounts(): void {
     const nowPA = new Date().toISOString();
     const defaultCash: PaymentAccount = {
       id:              SYS_PA_CASH,
-      accountTitle:    "Cash in Hand",
+      accountTitle:    "Cash",
       bankName:        "",
       paymentMethod:   "Cash",
       iban:            "",
-      description:     "Default cash account",
+      description:     "Default cash account — physical cash on premises",
       isActive:        true,
       ledgerAccountId: SYS_ACCS.CASH,
       createdAt:       nowPA,
       updatedAt:       nowPA,
     };
     setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
+  }
+
+  // ── Migrate SYS_PA_CASH name: "Cash in Hand" → "Cash" ───────────────────────
+  const cashPA = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).find(p => p.id === SYS_PA_CASH);
+  if (cashPA && cashPA.accountTitle === "Cash in Hand") {
+    const patched = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).map(p =>
+      p.id === SYS_PA_CASH
+        ? { ...p, accountTitle: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() }
+        : p
+    );
+    setStored(PAYMENT_ACCOUNTS_KEY, patched);
   }
 
   // ── Backfill: create COA ledgers for existing payment accounts (no ledgerAccountId) ──

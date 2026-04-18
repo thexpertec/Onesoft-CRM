@@ -52,7 +52,13 @@ function buildFlatRows(
 ): FlatRow[] {
   const children = headAccounts
     .filter(a => (a.parentId ?? null) === parentId)
-    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    .sort((a, b) => {
+      // Empty codes sort after non-empty codes so sys-1111 "Cash" always appears first
+      if (!a.code && b.code) return 1;
+      if (a.code && !b.code) return -1;
+      if (!a.code && !b.code) return a.name.localeCompare(b.name);
+      return a.code.localeCompare(b.code, undefined, { numeric: true });
+    });
   const result: FlatRow[] = [];
   for (const acc of children) {
     const hasChildren = headAccounts.some(a => (a.parentId ?? null) === acc.id);
@@ -871,20 +877,26 @@ export default function ChartOfAccountsPage() {
           >
             <Pencil size={13} />
           </button>
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              if (hasChildren(acc.id)) {
-                toast({ title: "Cannot delete — has child accounts", description: "Remove children first.", variant: "destructive" });
-              } else {
-                setDeleteId(acc.id);
-              }
-            }}
-            className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-            title="Delete"
-          >
-            <Trash2 size={13} />
-          </button>
+          {acc.id.startsWith("sys-") ? (
+            <span className="p-1.5 w-8 inline-flex items-center justify-center" title="System account — protected">
+              <Trash2 size={13} className="text-gray-200 dark:text-zinc-700" />
+            </span>
+          ) : (
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                if (hasChildren(acc.id)) {
+                  toast({ title: "Cannot delete — has child accounts", description: "Remove children first.", variant: "destructive" });
+                } else {
+                  setDeleteId(acc.id);
+                }
+              }}
+              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+              title="Delete"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       </div>
     );

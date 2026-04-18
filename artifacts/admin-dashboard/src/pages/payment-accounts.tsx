@@ -220,7 +220,11 @@ export default function PaymentAccountsPage() {
           a.description.toLowerCase().includes(q)
         );
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => {
+        if (a.id === SYS_PA_CASH) return -1;
+        if (b.id === SYS_PA_CASH) return  1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
   }, [accounts, search, activeTab]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
