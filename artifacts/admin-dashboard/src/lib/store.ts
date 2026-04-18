@@ -3806,8 +3806,6 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value" },
   // Non-Current Assets
   { id: SYS_ACCS.NON_CURRENT_ASSETS, code: "1200", name: "Non-Current Assets",         head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Non-Current Asset", description: "Assets held for long-term use (over 12 months)" },
-  { id: SYS_ACCS.PPE,                code: "1210", name: "Property, Plant & Equipment",head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_ASSETS,  subType: "Fixed Asset",      description: "Tangible long-term assets — land, buildings, machinery" },
-  { id: SYS_ACCS.ACCUM_DEPR,         code: "1220", name: "Accumulated Depreciation",   head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_ASSETS,  subType: "Contra Asset",     description: "Cumulative depreciation on fixed assets (credit balance)" },
 
   // ─────────────────────────────────────────────────────────────────────────────
   // LIABILITIES  (IAS 1 — Current / Non-Current split)
@@ -3929,8 +3927,13 @@ export function seedDefaultCoaAccounts(): void {
     );
   }
 
-  // ── Remove sys-1210 "Bank Account" (no longer a default seed) ─────────────────
-  workingAccounts = workingAccounts.filter(a => a.id !== SYS_ACCS.BANK);
+  // ── Remove default-seeded accounts that are now tenant-managed ───────────────
+  const REMOVED_DEFAULTS = new Set([
+    SYS_ACCS.BANK,        // "Bank Account"   — user adds via Payment Accounts
+    SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
+    SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
+  ]);
+  workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
 
   // ── Migrate sys-5100 from Ledger to Group (so owner subsidiary ledgers work) ─
   const ownersCapitalIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OWNERS_CAPITAL && a.accountType === "Ledger");
