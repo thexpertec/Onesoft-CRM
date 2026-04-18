@@ -22,7 +22,6 @@ function buildPipeline(sale: Sale): PipelineStage[] {
   const ds = sale.deliveryStatus ?? "Pending";
   const st = sale.status ?? "Completed";
   const isCancelled = st === "Cancelled" || st === "Refunded";
-  const paid = parseFloat(sale.amountPaid ?? "0") || 0;
 
   const DELIVERY_RANK: Record<string, number> = {
     Pending: 0, Processing: 1, Shipped: 2, Delivered: 3,
@@ -34,16 +33,37 @@ function buildPipeline(sale: Sale): PipelineStage[] {
     status: isCancelled ? "cancelled" : done ? "done" : active ? "active" : "pending",
   });
 
+  // Stage → delivery rank mapping:
+  //   Pending(0)    → Confirmed=active,    rest pending
+  //   Processing(1) → Confirmed=done,      Processing=active, rest pending
+  //   Shipped(2)    → ...Processing=done,  Shipped=active,    Delivered=pending
+  //   Delivered(3)  → all done
   return [
-    stage("placed",     "Order Placed",  `Placed on ${fmtDate(sale.saleDate)}`, true,         false),
-    stage("confirmed",  "Confirmed",     st !== "Draft" ? "Order accepted" : "Awaiting confirmation",
-                                          st !== "Draft" && !isCancelled, false),
-    stage("processing", "Processing",    rank >= 1 ? "Being prepared for dispatch" : "Awaiting processing",
-                                          rank >= 1, rank === 0 && !isCancelled && st !== "Draft"),
-    stage("shipped",    "Shipped",       rank >= 2 ? "On the way to you" : "Not yet dispatched",
-                                          rank >= 2, rank === 1),
-    stage("delivered",  "Delivered",     rank >= 3 ? "Successfully delivered" : "Awaiting delivery",
-                                          rank >= 3, rank === 2),
+    stage("placed",
+          "Order Placed",
+          `Placed on ${fmtDate(sale.saleDate)}`,
+          true,
+          false),
+    stage("confirmed",
+          "Confirmed",
+          rank >= 1 ? "Order accepted" : st !== "Draft" ? "Awaiting confirmation" : "Order pending",
+          rank >= 1,
+          rank === 0 && !isCancelled && st !== "Draft"),
+    stage("processing",
+          "Processing",
+          rank >= 2 ? "Being prepared for dispatch" : "Awaiting processing",
+          rank >= 2,
+          rank === 1),
+    stage("shipped",
+          "Shipped",
+          rank >= 3 ? "On the way to you" : rank === 2 ? "On the way to you" : "Not yet dispatched",
+          rank >= 3,
+          rank === 2),
+    stage("delivered",
+          "Delivered",
+          rank >= 3 ? "Successfully delivered" : "Awaiting delivery",
+          rank >= 3,
+          false),
   ].map(s => isCancelled ? { ...s, status: s.key === "placed" ? "done" : "cancelled" } : s);
 }
 
