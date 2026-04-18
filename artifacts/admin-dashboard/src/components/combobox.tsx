@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import ReactDOM from "react-dom";
 
 export interface ComboOption {
   value: string;
@@ -30,8 +31,9 @@ export function Combobox({
   autoFocus, onBlur, onKeyDown, disabled, id,
   "data-testid": testId,
 }: ComboboxProps) {
-  const [open, setOpen]           = useState(false);
+  const [open, setOpen]               = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
   const listRef      = useRef<HTMLUListElement>(null);
@@ -55,9 +57,28 @@ export function Combobox({
     el?.scrollIntoView({ block: "nearest" });
   }, [highlighted, open]);
 
+  // Reposition dropdown when open
+  useEffect(() => {
+    if (!open || !inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const dropH = Math.min(224, filtered.length * 44);
+    const above = spaceBelow < dropH + 8 && rect.top > dropH + 8;
+    setDropdownStyle({
+      position: "fixed",
+      top:    above ? rect.top - dropH - 4 : rect.bottom + 4,
+      left:   rect.left,
+      width:  Math.max(rect.width, 240),
+      zIndex: 9999,
+    });
+  }, [open, filtered.length]);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      if (
+        containerRef.current && !containerRef.current.contains(e.target as Node) &&
+        listRef.current && !listRef.current.contains(e.target as Node)
+      ) setOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -94,30 +115,13 @@ export function Combobox({
     onKeyDown?.(e);
   };
 
-  return (
-    <div ref={containerRef} className={`relative ${className ?? ""}`}>
-      <input
-        ref={inputRef}
-        id={id}
-        autoFocus={autoFocus}
-        disabled={disabled}
-        value={value}
-        placeholder={placeholder}
-        data-testid={testId}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={e => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => { setOpen(false); onBlur?.(); }, 160); }}
-        onKeyDown={handleKeyDown}
-        className={inputClassName}
-      />
-
-      {open && filtered.length > 0 && (
+  const dropdown = open && filtered.length > 0
+    ? ReactDOM.createPortal(
         <ul
           ref={listRef}
           role="listbox"
-          className="absolute z-[200] left-0 mt-1 min-w-[220px] w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-md shadow-xl overflow-y-auto max-h-56 text-sm"
+          style={dropdownStyle}
+          className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-md shadow-xl overflow-y-auto max-h-56 text-sm"
         >
           {filtered.map((opt, i) => (
             <li
@@ -143,8 +147,30 @@ export function Combobox({
               )}
             </li>
           ))}
-        </ul>
-      )}
+        </ul>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div ref={containerRef} className={`relative ${className ?? ""}`}>
+      <input
+        ref={inputRef}
+        id={id}
+        autoFocus={autoFocus}
+        disabled={disabled}
+        value={value}
+        placeholder={placeholder}
+        data-testid={testId}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => { setOpen(false); onBlur?.(); }, 160); }}
+        onKeyDown={handleKeyDown}
+        className={inputClassName}
+      />
+      {dropdown}
     </div>
   );
 }
