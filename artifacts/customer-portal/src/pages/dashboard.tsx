@@ -19,7 +19,10 @@ export default function DashboardPage() {
     if (!session) return;
     fetchSales(session.tenantId)
       .then(all => {
-        const mine = all.filter(s => s.customer === session.customer.name);
+        const mine = all.filter(s =>
+          (s as Record<string, unknown>).portalCustomerId === session.customer.id ||
+          s.customer === session.customer.name
+        );
         setSales(mine);
       })
       .finally(() => setBusy(false));

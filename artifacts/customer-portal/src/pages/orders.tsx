@@ -19,7 +19,10 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!session) return;
     fetchSales(session.tenantId)
-      .then(all => setSales(all.filter(s => s.customer === session.customer.name)))
+      .then(all => setSales(all.filter(s =>
+        (s as Record<string, unknown>).portalCustomerId === session.customer.id ||
+        s.customer === session.customer.name
+      )))
       .finally(() => setBusy(false));
   }, [session]);
 

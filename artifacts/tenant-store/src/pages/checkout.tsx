@@ -69,26 +69,47 @@ async function saveOrder(order: Record<string, unknown>, tenantId: string | null
   });
 }
 
-async function saveToAdminSales(saleRecord: Record<string, unknown>): Promise<void> {
-  // Append to global online-orders list so the admin sales page can import it
-  let existing: unknown[] = [];
+async function saveToAdminSales(saleRecord: Record<string, unknown>, tenantId: string | null): Promise<void> {
+  const id = saleRecord.id as string;
+
+  // 1. Append to global online-orders list so the admin sales page can import it
   try {
+    let existing: unknown[] = [];
     const r = await fetch(`${apiBase()}/kv/global/online-orders`);
     if (r.ok) {
       const d = await r.json() as { value: unknown[] };
       if (Array.isArray(d.value)) existing = d.value;
     }
-  } catch { /* ignore */ }
-  // Avoid duplicates (by id)
-  const id = saleRecord.id as string;
-  if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
-    existing.push(saleRecord);
+    if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
+      existing.push(saleRecord);
+    }
+    await fetch(`${apiBase()}/kv/global/online-orders`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: existing }),
+    });
+  } catch { /* non-fatal */ }
+
+  // 2. Also write directly into the tenant's admin-sales so the customer portal can read it immediately
+  if (tenantId) {
+    try {
+      const ns = encodeURIComponent(`t:${tenantId}`);
+      let existing: unknown[] = [];
+      const r = await fetch(`${apiBase()}/kv/${ns}/admin-sales`);
+      if (r.ok) {
+        const d = await r.json() as { value: unknown[] };
+        if (Array.isArray(d.value)) existing = d.value;
+      }
+      if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
+        existing.push(saleRecord);
+      }
+      await fetch(`${apiBase()}/kv/${ns}/admin-sales`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: existing }),
+      });
+    } catch { /* non-fatal */ }
   }
-  await fetch(`${apiBase()}/kv/global/online-orders`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value: existing }),
-  });
 }
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
@@ -369,13 +390,17 @@ export function CheckoutPage() {
     };
 
     // Build a Sale-compatible record for the admin sales list
-    const customerName = `${form.firstName} ${form.lastName}`.trim();
+    /* Use the session name as the canonical customer name when logged in */
+    const customerName = isLoggedIn && portalSession?.customer?.name
+      ? portalSession.customer.name
+      : `${form.firstName} ${form.lastName}`.trim();
     const paymentMethod = payment === "bank" ? "Bank Transfer" : "Cash";
     const adminSaleRecord = {
       id,
       saleNumber: id,
       saleDate: now.slice(0, 10),
       customer: customerName,
+      portalCustomerId: portalSession?.customer?.id ?? null,
       status: "Completed",
       paymentMethod,
       notes: form.notes ? form.notes : `Online order · ${form.address1}, ${form.city} ${form.postcode}`,
@@ -411,7 +436,7 @@ export function CheckoutPage() {
       await saveOrder(order, tenantId);
     } catch { /* non-fatal */ }
     try {
-      await saveToAdminSales(adminSaleRecord);
+      await saveToAdminSales(adminSaleRecord, tenantId);
     } catch { /* non-fatal */ }
     setOrderId(id);
     clearCart();
