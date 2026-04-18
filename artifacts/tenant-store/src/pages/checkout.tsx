@@ -303,8 +303,10 @@ export function CheckoutPage() {
           ...f,
           phone:    p.phone      || f.phone,
           address1: p.address    || f.address1,
+          address2: (p as Record<string, string>).address2 || f.address2,
           city:     p.city       || f.city,
           postcode: p.postalCode || f.postcode,
+          country:  (p as Record<string, string>).country  || f.country,
         }));
       })
       .catch(() => { /* non-fatal */ });
@@ -444,6 +446,35 @@ export function CheckoutPage() {
     try {
       await saveToAdminSales(adminSaleRecord, tenantId);
     } catch { /* non-fatal */ }
+
+    /* Save the customer's phone + address to their portal profile for next time */
+    if (isLoggedIn && portalSession && tenantId) {
+      try {
+        const ns = encodeURIComponent(`t:${tenantId}`);
+        const cid = portalSession.customer.id;
+        const profilePayload = {
+          phone:      form.phone,
+          address:    form.address1,
+          address2:   form.address2,
+          city:       form.city,
+          state:      "",
+          postalCode: form.postcode,
+          country:    form.country,
+        };
+        await fetch(`${apiBase()}/kv/${ns}/portal-profile-${cid}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: profilePayload }),
+        });
+        /* Also patch the phone into the in-memory session so the "Signed in" card shows it */
+        const updated: StoredSession = {
+          ...portalSession,
+          customer: { ...portalSession.customer, phone: form.phone },
+        };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+        setPortalSession(updated);
+      } catch { /* non-fatal */ }
+    }
     setOrderId(id);
     clearCart();
     setStep("confirm");
