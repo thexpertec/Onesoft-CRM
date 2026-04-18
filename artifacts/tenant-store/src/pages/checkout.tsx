@@ -427,7 +427,7 @@ export function CheckoutPage() {
         notes: "",
         itemStatus: "Pending",
       })),
-      taxRate: "0",
+      taxRate: "20",
       amountPaid: "0",
       paidAt: "",
       stockDeducted: false,

@@ -107,9 +107,21 @@ export function CartDrawer() {
                   <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-2 leading-snug mb-1">
                     {item.product.name}
                   </p>
-                  <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                    {formatPrice(getEffectivePrice(item.product, isLoggedIn))}
-                  </p>
+                  {(() => {
+                    const eff  = getEffectivePrice(item.product, isLoggedIn);
+                    const disp = getDisplayPrice(item.product);
+                    const saved = parseFloat(disp) - parseFloat(eff);
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className={cn("text-sm font-bold", saved > 0.001 ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400")}>
+                          {formatPrice(eff)}
+                        </p>
+                        {saved > 0.001 && (
+                          <p className="text-xs text-slate-400 line-through">{formatPrice(disp)}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Qty controls */}
                   <div className="flex items-center gap-2 mt-2">

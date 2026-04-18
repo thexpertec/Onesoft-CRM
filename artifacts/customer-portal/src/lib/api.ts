@@ -53,11 +53,12 @@ export interface Customer {
 
 export interface SaleItem {
   id: string;
-  productId: string;
+  productId?: string;
   productName: string;
   sku: string;
   qty: string;
-  price: string;
+  price?: string;       // legacy field (portal-created)
+  unitPrice?: string;   // admin/online-order field
   discount: string;
   discountType: "pct" | "amt";
   unit: string;
@@ -172,7 +173,7 @@ export async function savePortalProfile(tenantId: string, customerId: string, pr
 }
 
 export function calcLineTotal(item: SaleItem): number {
-  const price = parseFloat(item.price) || 0;
+  const price = parseFloat(item.unitPrice ?? item.price ?? "0") || 0;
   const qty = parseFloat(item.qty) || 0;
   const disc = parseFloat(item.discount) || 0;
   const gross = price * qty;
