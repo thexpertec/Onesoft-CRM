@@ -229,6 +229,19 @@ export default function PaymentAccountsPage() {
   useEffect(() => { setPage(1); }, [search, activeTab]);
 
   const handleSave = (data: Omit<PaymentAccount, "id" | "createdAt" | "updatedAt">) => {
+    const titleLower = data.accountTitle.trim().toLowerCase();
+    const duplicate = accounts.find(a =>
+      a.accountTitle.trim().toLowerCase() === titleLower &&
+      a.id !== editing?.id
+    );
+    if (duplicate) {
+      toast({
+        title: "Duplicate account title",
+        description: `"${data.accountTitle}" already exists. Please use a different title.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (editing) {
       edit(editing.id, data);
       toast({ title: "Account updated", description: data.accountTitle });
