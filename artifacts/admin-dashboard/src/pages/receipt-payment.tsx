@@ -332,6 +332,21 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const [linkedInvId, setLinkedInvId] = useState<string | null>(null);
   const linkedInv = linkedInvId ? getInvoices().find(i => i.id === linkedInvId) ?? null : null;
 
+  const invBalance = useMemo(() => {
+    if (!linkedInv) return null;
+    const subtotal = (linkedInv.items || []).reduce((s, it) => {
+      const qty   = parseFloat(it.qty) || 0;
+      const price = parseFloat(it.unitPrice) || 0;
+      const disc  = parseFloat(it.discount) || 0;
+      const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+      return s + line;
+    }, 0);
+    const tax   = subtotal * (parseFloat(linkedInv.taxRate) || 0) / 100;
+    const grand = subtotal + tax + (parseFloat(linkedInv.shippingFee) || 0) + (parseFloat(linkedInv.handlingFee) || 0);
+    const paid  = parseFloat(linkedInv.amountPaid) || 0;
+    return Math.max(0, grand - paid);
+  }, [linkedInv]);
+
   const total = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
   const setLine = (id: string, patch: Partial<LineRow>) =>
@@ -359,11 +374,15 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
     status: "draft",
   });
 
+  const overBalance = invBalance !== null && total > invBalance + 0.001;
+
   const validate = (): string | null => {
     if (!date) return "Date is required.";
-    if (!cbId) return "Cash / Bank account is required.";
+    if (vtype === "payment" && !cbId) return "Cash / Bank account is required.";
     const validLines = lines.filter(l => l.accountId && parseFloat(l.amount) > 0);
     if (validLines.length === 0) return "At least one line with an account and amount is required.";
+    if (vtype === "receipt" && overBalance)
+      return `Total (${fmtAmt(total, sym)}) exceeds invoice balance (${fmtAmt(invBalance!, sym)}).`;
     return null;
   };
 
@@ -483,6 +502,21 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               />
             </div>
+            {vtype === "receipt" && invBalance !== null && (
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Invoice Balance Due
+                </label>
+                <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                  overBalance
+                    ? "border-red-400 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                    : "border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300"
+                }`}>
+                  {fmtAmt(invBalance, sym)}
+                  {overBalance && <span className="ml-2 text-[11px] font-normal">⚠ Total exceeds balance</span>}
+                </div>
+              </div>
+            )}
             {vtype === "payment" && (
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
