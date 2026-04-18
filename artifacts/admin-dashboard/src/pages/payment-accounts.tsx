@@ -2,10 +2,10 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import {
   CreditCard, Plus, Search, Pencil, Trash2, X, Check,
   Banknote, Building2, Wallet, ChevronLeft, ChevronRight,
-  ToggleLeft, ToggleRight, AlertTriangle,
+  ToggleLeft, ToggleRight, AlertTriangle, Lock,
 } from "lucide-react";
 import { usePaymentAccounts } from "@/hooks/use-data";
-import { PaymentAccount, PaymentMethodType, PAYMENT_METHODS } from "@/lib/store";
+import { PaymentAccount, PaymentMethodType, PAYMENT_METHODS, SYS_PA_CASH } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -402,16 +402,24 @@ export default function PaymentAccountsPage() {
                   <span className="pl-2 text-[12px] text-gray-500 dark:text-gray-400">{date}</span>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-center gap-1">
-                    <button onClick={() => openEdit(acc)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Edit">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => setDeleteTarget(acc)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  {acc.id === SYS_PA_CASH ? (
+                    <div className="flex items-center justify-center">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 text-[10px] font-medium" title="System default — cannot be edited or deleted">
+                        <Lock size={10} /> System
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => openEdit(acc)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Edit">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => setDeleteTarget(acc)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

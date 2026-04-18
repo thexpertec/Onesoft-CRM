@@ -414,6 +414,9 @@ export type PaymentAccount = {
 
 const PAYMENT_ACCOUNTS_KEY = "admin-payment-accounts";
 
+/** Stable ID for the built-in default Cash in Hand account — cannot be deleted or edited. */
+export const SYS_PA_CASH = "sys-pa-cash";
+
 export const getPaymentAccounts = (): PaymentAccount[] => getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
 
 /** Ensure the Cash & Bank Accounts group (sys-1150) exists in COA, create it if missing. */
@@ -4014,6 +4017,25 @@ export function seedDefaultCoaAccounts(): void {
   });
   if (suppliersUpdated) {
     setStored(SUPPLIERS_KEY, suppliersPatched);
+  }
+
+  // ── Seed default Cash in Hand payment account ────────────────────────────────
+  const existingPAs = getStored<{ id: string }>(PAYMENT_ACCOUNTS_KEY);
+  if (!existingPAs.some(p => p.id === SYS_PA_CASH)) {
+    const nowPA = new Date().toISOString();
+    const defaultCash: PaymentAccount = {
+      id:              SYS_PA_CASH,
+      accountTitle:    "Cash in Hand",
+      bankName:        "",
+      paymentMethod:   "Cash",
+      iban:            "",
+      description:     "Default cash account",
+      isActive:        true,
+      ledgerAccountId: SYS_ACCS.CASH,
+      createdAt:       nowPA,
+      updatedAt:       nowPA,
+    };
+    setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
   }
 
   // Shareholders → Owner's Capital Group
