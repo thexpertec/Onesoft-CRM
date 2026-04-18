@@ -3534,7 +3534,7 @@ export function getSettings(): AppSettings {
       // Handles existing saved settings that have "" from before system defaults existed.
       if (!merged.accSalesRevenue) merged.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
       if (!merged.accCash)         merged.accCash         = SYS_ACCS.CASH;
-      if (!merged.accReceivable)   merged.accReceivable   = SYS_ACCS.AR_TRADE;
+      if (!merged.accReceivable)   merged.accReceivable   = SYS_ACCS.AR_GROUP;
       if (!merged.accVatPayable)   merged.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
       if (!merged.accCogs)         merged.accCogs         = SYS_ACCS.COGS;
       if (!merged.accInventory)    merged.accInventory    = SYS_ACCS.INVENTORY;
@@ -3726,8 +3726,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
   { id: SYS_ACCS.CASH,               code: "1111", name: "Cash",                       head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Default cash account — physical cash on premises" },
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
-  { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "General trade receivables ledger" },
-  { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value" },
+  { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value — subsidiary ledgers per product/category" },
   // Non-Current Assets
   { id: SYS_ACCS.NON_CURRENT_ASSETS, code: "1200", name: "Non-Current Assets",         head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Non-Current Asset", description: "Assets held for long-term use (over 12 months)" },
 
@@ -3814,7 +3813,6 @@ export function seedDefaultCoaAccounts(): void {
     // Assets: wire Current Assets under the new Assets root
     { id: SYS_ACCS.CURRENT_ASSETS, updates: { parentId: SYS_ACCS.ASSETS_ROOT, code: "1100" } },
     { id: SYS_ACCS.AR_GROUP,       updates: { code: "1130" } },
-    { id: SYS_ACCS.AR_TRADE,       updates: { code: "1131" } },
     { id: SYS_ACCS.CASH,           updates: { code: "1110" } },
     { id: SYS_ACCS.INVENTORY,      updates: { code: "1140" } },
     // Liabilities: wire Current Liabilities under the new Liabilities root
@@ -3853,9 +3851,10 @@ export function seedDefaultCoaAccounts(): void {
 
   // ── Remove default-seeded accounts that are now tenant-managed ───────────────
   const REMOVED_DEFAULTS = new Set([
-    SYS_ACCS.BANK,        // "Bank Account"   — user adds via Payment Accounts
+    SYS_ACCS.BANK,        // "Bank Account"        — user adds via Payment Accounts
     SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
     SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
+    SYS_ACCS.AR_TRADE,    // "Trade Receivables"   — removed; AR_GROUP used directly
   ]);
   workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
 
@@ -3881,7 +3880,18 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1) {
+  // ── Migrate sys-1300 (Inventory / Stock) from Ledger to Group ────────────────
+  const inventoryIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.INVENTORY && a.accountType === "Ledger");
+  if (inventoryIdx !== -1) {
+    workingAccounts[inventoryIdx] = {
+      ...workingAccounts[inventoryIdx],
+      accountType: "Group",
+      description: "Stock & inventory value — subsidiary ledgers per product/category",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
@@ -3996,12 +4006,16 @@ export function seedDefaultCoaAccounts(): void {
   const mappingUpdates: Partial<AppSettings> = {};
   if (!s.accSalesRevenue) mappingUpdates.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
   if (!s.accCash)         mappingUpdates.accCash         = SYS_ACCS.CASH;
-  if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
+  if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_GROUP;
   if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
   if (!s.accCogs)         mappingUpdates.accCogs         = SYS_ACCS.COGS;
   if (!s.accInventory)    mappingUpdates.accInventory    = SYS_ACCS.INVENTORY;
   // sys-1210 "Bank Account" removed — clear accBank if it still points to it
   if (s.accBank === SYS_ACCS.BANK) mappingUpdates.accBank = "";
+  // sys-1101 "Trade Receivables" removed — redirect accReceivable to AR_GROUP
+  if (s.accReceivable === SYS_ACCS.AR_TRADE) {
+    mappingUpdates.accReceivable = SYS_ACCS.AR_GROUP;
+  }
   // AP_TRADE is now a Group — clear accPurchasePayable if it still points to it
   // (the JE now uses supplier-specific subsidiary ledgers directly)
   if (s.accPurchasePayable === SYS_ACCS.AP_TRADE) {
