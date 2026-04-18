@@ -4396,6 +4396,7 @@ export interface RPVoucher {
   narration: string;
   status: "draft" | "posted";
   journalEntryId?: string;
+  linkedInvoiceId?: string;    // invoice linked on receipt vouchers
   createdAt: string;
   updatedAt: string;
 }
@@ -4504,6 +4505,42 @@ export function postRPVoucherJE(id: string): JournalEntry {
   });
 
   updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: total });
+
+  // ── Update linked invoice balance ──────────────────────────────────────────
+  if (v.voucherType === "receipt" && v.linkedInvoiceId) {
+    const inv = getInvoices().find(i => i.id === v.linkedInvoiceId);
+    if (inv) {
+      const newPaid = (parseFloat(inv.amountPaid) || 0) + total;
+      // Compute invoice grand total to determine if fully paid
+      const subtotal = (inv.items || []).reduce((s, it) => {
+        const qty   = parseFloat(it.qty) || 0;
+        const price = parseFloat(it.unitPrice) || 0;
+        const disc  = parseFloat(it.discount) || 0;
+        const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+        return s + line;
+      }, 0);
+      const tax   = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
+      const grand = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+      const newStatus: InvoiceStatus =
+        newPaid >= grand - 0.01 ? "paid" :
+        newPaid > 0             ? "partial" :
+        inv.status;
+      const record: PaymentRecord = {
+        id:     crypto.randomUUID(),
+        date:   v.date,
+        amount: String(total),
+        method: "Receipt Voucher",
+        note:   `${v.voucherNumber}${v.narration ? " — " + v.narration : ""}`,
+      };
+      updateInvoice(inv.id, {
+        amountPaid:     String(newPaid),
+        status:         newStatus,
+        paymentHistory: [...(inv.paymentHistory || []), record],
+        paidAt:         newStatus === "paid" ? new Date().toISOString() : inv.paidAt,
+      });
+    }
+  }
+
   return je;
 }
 

@@ -363,6 +363,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
     cashBankAccountName: cbName,
     reference: ref,
     narration: narr,
+    linkedInvoiceId: linkedInvId ?? undefined,
     lines: lines.filter(l => l.accountId && parseFloat(l.amount) > 0).map(l => ({
       id: l.id,
       accountId: l.accountId,
