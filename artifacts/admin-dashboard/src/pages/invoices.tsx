@@ -577,6 +577,40 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const addItem    = () => setItems(p => [...p, blankItem()]);
   const removeItem = (id: string) => setItems(p => p.filter(i => i.id !== id));
 
+  const focusNextItemField = useCallback((itemId: string, field: "product" | "price" | "qty" | "discount") => {
+    const FIELDS = ["product", "price", "qty", "discount"] as const;
+    const fieldIdx  = FIELDS.indexOf(field);
+    setItems(prev => {
+      const itemIdx = prev.findIndex(i => i.id === itemId);
+      if (fieldIdx < FIELDS.length - 1) {
+        const nextField = FIELDS[fieldIdx + 1];
+        setTimeout(() => {
+          const el = nextField === "product"
+            ? document.querySelector<HTMLElement>(`[data-item-product="${itemId}"] input`)
+            : document.querySelector<HTMLElement>(`input[data-item-id="${itemId}"][data-field="${nextField}"]`);
+          el?.focus();
+        }, 0);
+      } else {
+        if (itemIdx < prev.length - 1) {
+          const nextId = prev[itemIdx + 1].id;
+          setTimeout(() => {
+            const el = document.querySelector<HTMLElement>(`[data-item-product="${nextId}"] input`);
+            el?.focus();
+          }, 0);
+        } else {
+          const fresh = blankItem();
+          const updated = [...prev, fresh];
+          setTimeout(() => {
+            const el = document.querySelector<HTMLElement>(`[data-item-product="${fresh.id}"] input`);
+            el?.focus();
+          }, 30);
+          return updated;
+        }
+      }
+      return prev;
+    });
+  }, []);
+
   const handleSave = () => {
     onSave({
       ...form,
@@ -635,8 +669,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
             {/* Customer Card */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <div className="flex items-center gap-2 px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">
                   {invoiceType === "purchase" ? "Supplier" : "Customer"}
                 </span>
               </div>
@@ -685,8 +719,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
             {/* Invoice Details Card */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Invoice Details</span>
+              <div className="flex items-center justify-between px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Invoice Details</span>
                 {!isNew && (
                   <span className="text-[10px] text-gray-400 dark:text-gray-500">
                     Created {new Date(invoice.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -762,13 +796,13 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Section 2: Line Items (full width) ──────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">#</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Product / Service</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Unit Price</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Qty</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Discount</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Sub Total</span>
+            <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">#</span>
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider pl-1">Product / Service</span>
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Unit Price</span>
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Qty</span>
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Discount</span>
+              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Sub Total</span>
               <span />
             </div>
 
@@ -787,20 +821,25 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     {/* # */}
                     <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{idx + 1}</span>
                     {/* Product */}
-                    <div className="pl-1 pr-2">
+                    <div className="pl-1 pr-2" data-item-product={item.id}>
                       <Combobox value={item.productName} onChange={v => pickProduct(item.id, v)}
                         onSelect={opt => pickProduct(item.id, opt.value)} options={productOpts} placeholder="Product / service…"
+                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
                         inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       {item.sku && <span className="text-[10px] text-gray-400 pl-1">SKU: {item.sku}</span>}
                     </div>
                     {/* Unit Price */}
                     <div className="px-1">
                       <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => updateItem(item.id, "unitPrice", e.target.value)} placeholder="0.00"
+                        data-item-id={item.id} data-field="price"
+                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "price"); } }}
                         className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-right text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                     </div>
                     {/* Qty */}
                     <div className="px-1">
                       <input type="number" min="0" value={item.qty} onChange={e => updateItem(item.id, "qty", e.target.value)}
+                        data-item-id={item.id} data-field="qty"
+                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "qty"); } }}
                         className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-center text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                     </div>
                     {/* Discount */}
@@ -808,6 +847,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       <input type="number" min="0" {...(item.discountType !== "amt" ? { max: "100" } : {})} step="0.01"
                         value={item.discount} onChange={e => updateItem(item.id, "discount", e.target.value)}
                         placeholder="0"
+                        data-item-id={item.id} data-field="discount"
+                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "discount"); } }}
                         className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-center text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       <button type="button"
                         onClick={() => updateItem(item.id, "discountType", item.discountType === "amt" ? "pct" : "amt")}
@@ -846,8 +887,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
           {/* ── Section 3: Charges + Bank Details (full width) ──────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-            <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Charges &amp; Bank Details</span>
+            <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+              <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Charges &amp; Bank Details</span>
             </div>
             <div className="px-5 py-4">
               <div className="grid lg:grid-cols-3 gap-4">
@@ -879,8 +920,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
           {/* ── Section 4: Totals (full width) ──────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-            <div className="px-5 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Summary</span>
+            <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+              <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Summary</span>
             </div>
             <div className="px-5 py-4">
               <div className="max-w-sm ml-auto space-y-1.5">
@@ -933,15 +974,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Section 5: Document (full width) ────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             <button onClick={() => setDocsOpen(o => !o)}
-              className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors">
+              className="w-full flex items-center justify-between px-5 py-3 bg-gray-800 dark:bg-zinc-950 hover:bg-gray-700 dark:hover:bg-zinc-900 border-b border-gray-700 dark:border-zinc-700 transition-colors">
               <div className="flex items-center gap-2">
-                <ChevronRight size={14} className={`text-gray-400 transition-transform ${docsOpen ? "rotate-90" : ""}`}/>
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Document</span>
+                <ChevronRight size={14} className={`text-gray-300 transition-transform ${docsOpen ? "rotate-90" : ""}`}/>
+                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Document</span>
                 {docs.length > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500">{docs.length}</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-600 text-gray-200">{docs.length}</span>
                 )}
               </div>
-              <span className="text-[11px] text-gray-400 dark:text-gray-500">Payment terms, agreement, notes</span>
+              <span className="text-[11px] text-gray-400">Payment terms, agreement, notes</span>
             </button>
             {docsOpen && (
               <div className="border-t border-gray-100 dark:border-zinc-800 px-5 py-4 space-y-3">
@@ -997,10 +1038,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Payments Card (existing invoices only) ───────────────────────── */}
           {!isNew && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50 dark:bg-zinc-800/60">
+              <div className="px-5 py-3 border-b border-gray-700 dark:border-zinc-700 flex items-center justify-between bg-gray-800 dark:bg-zinc-950">
                 <div className="flex items-center gap-2">
-                  <Receipt size={14} className="text-emerald-600 dark:text-emerald-400"/>
-                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payments</span>
+                  <Receipt size={14} className="text-emerald-400"/>
+                  <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Payments</span>
                 </div>
                 {jeId && (
                   <a href="#" onClick={e => e.preventDefault()}
