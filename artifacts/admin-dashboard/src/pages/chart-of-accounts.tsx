@@ -712,8 +712,14 @@ export default function ChartOfAccountsPage() {
   const hasChildren = (id: string) => accounts.some(a => (a.parentId ?? null) === id);
   const accountToDelete = accounts.find(a => a.id === deleteId);
 
+  /** Returns true for any account seeded by the system (cannot be deleted). */
+  const isSystemAccount = (id: string) =>
+    id.startsWith("sys-") || id.startsWith("sr-prod-") || id.startsWith("pur-prod-");
+
   const deleteBlockReason: string | null = useMemo(() => {
     if (!deleteId) return null;
+    if (isSystemAccount(deleteId))
+      return "This is a system account and is protected from deletion.";
     if (hasChildren(deleteId))
       return "This account has child accounts. Remove or reassign all children before deleting.";
     const entries = getJournalEntries();
@@ -877,7 +883,7 @@ export default function ChartOfAccountsPage() {
           >
             <Pencil size={13} />
           </button>
-          {acc.id.startsWith("sys-") ? (
+          {isSystemAccount(acc.id) ? (
             <span className="p-1.5 w-8 inline-flex items-center justify-center" title="System account — protected">
               <Trash2 size={13} className="text-gray-200 dark:text-zinc-700" />
             </span>
@@ -1158,7 +1164,13 @@ export default function ChartOfAccountsPage() {
                       </div>
                       <div className="w-20 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3 opacity-0 group-hover:opacity-100">
                         <button onClick={e => { e.stopPropagation(); openEdit(acc); }} className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50"><Pencil size={13} /></button>
-                        <button onClick={e => { e.stopPropagation(); setDeleteId(acc.id); }} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
+                        {isSystemAccount(acc.id) ? (
+                          <span className="p-1.5 w-8 inline-flex items-center justify-center" title="System account — protected">
+                            <Trash2 size={13} className="text-gray-200 dark:text-zinc-700" />
+                          </span>
+                        ) : (
+                          <button onClick={e => { e.stopPropagation(); setDeleteId(acc.id); }} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50"><Trash2 size={13} /></button>
+                        )}
                       </div>
                     </div>
                   );
