@@ -4038,6 +4038,34 @@ export function seedDefaultCoaAccounts(): void {
     setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
   }
 
+  // ── Backfill: create COA ledgers for existing payment accounts (no ledgerAccountId) ──
+  const allPAs = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
+  const needsBackfill = allPAs.some(pa => !pa.ledgerAccountId && pa.id !== SYS_PA_CASH);
+  if (needsBackfill) _ensureCBGroup();
+  let paUpdated = false;
+  const pAsPatched = allPAs.map(pa => {
+    if (pa.ledgerAccountId) return pa;         // already linked
+    if (pa.id === SYS_PA_CASH) return pa;      // default cash uses sys-1200 directly, already set above
+    const { name, subType } = _coaNameFromPA(pa);
+    const lid = createAccount({
+      code:           "",
+      name,
+      head:           "Assets",
+      subType,
+      description:    pa.description || `Payment account — ${pa.paymentMethod}`,
+      parentId:       SYS_ACCS.CB_GROUP,
+      accountType:    "Ledger",
+      openingBalance: 0,
+      paymentType:    "Debit",
+      isActive:       pa.isActive,
+    }).id;
+    paUpdated = true;
+    return { ...pa, ledgerAccountId: lid };
+  });
+  if (paUpdated) {
+    setStored(PAYMENT_ACCOUNTS_KEY, pAsPatched);
+  }
+
   // Shareholders → Owner's Capital Group
   const shareholders = getStored<{ id: string; name: string; ledgerAccountId?: string }>(SHAREHOLDERS_KEY);
   let shareholdersUpdated = false;
