@@ -949,23 +949,23 @@ function POSView({
           </>)}
         </div>
 
-        {/* Right: timestamps */}
-        <div className="px-4 py-2 flex flex-col justify-center text-right border-l border-gray-100 dark:border-zinc-800 shrink-0 gap-1.5">
-          <div>
+        {/* Right: timestamps — two columns */}
+        <div className="px-4 py-2 flex items-center border-l border-gray-100 dark:border-zinc-800 shrink-0 gap-4">
+          <div className="text-right">
             <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Created</div>
             <div className="text-[11px] font-semibold text-gray-500 font-mono mt-0.5">
               {new Date(sale.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
             </div>
           </div>
           {sale.paidAt ? (
-            <div>
+            <div className="text-right">
               <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">Paid at</div>
               <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
                 {new Date(sale.paidAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
               </div>
             </div>
           ) : (
-            <div>
+            <div className="text-right">
               <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Updated</div>
               <div className="text-[11px] font-semibold text-gray-400 font-mono mt-0.5">
                 {new Date(sale.updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
