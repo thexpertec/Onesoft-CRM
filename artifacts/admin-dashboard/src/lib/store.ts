@@ -1772,7 +1772,7 @@ export type Sale = {
   jeId?:        string;   // journal entry ID auto-created on completion (prevents duplicates)
   agentId?:     string;   // linked SalesAgent.id
   agentName?:   string;   // denormalised agent name
-  saleMode?:         "Retail" | "Wholesale";
+  saleMode?:         "Retail" | "Wholesale" | "Clubcard";
   deliveryStatus?:   "Pending" | "Processing" | "Shipped" | "Delivered";
   deliveryCharges?:  string;
   invoiceDiscount?:  string;

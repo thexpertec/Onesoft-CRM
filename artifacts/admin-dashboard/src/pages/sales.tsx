@@ -103,7 +103,7 @@ function Chip({ label, onRemove, color = "blue" }: { label: string; onRemove: ()
 type LocalMeta = {
   customer: string; saleDate: string; paymentMethod: SalePayment; notes: string;
   agentId?: string; agentName?: string;
-  saleMode?: "Retail" | "Wholesale";
+  saleMode?: "Retail" | "Wholesale" | "Clubcard";
   deliveryStatus?: "Pending" | "Processing" | "Shipped" | "Delivered";
   deliveryCharges?: string;
   invoiceDiscount?: string;
@@ -435,8 +435,8 @@ interface POSViewProps {
   onSaveItems: (items: SaleItem[]) => void;
   onDeleteItem: (itemId: string) => void;
   onAddProduct: (product: Product) => void;
-  priceMode: "retail" | "wholesale";
-  onPriceModeChange: (mode: "retail" | "wholesale") => void;
+  priceMode: "retail" | "wholesale" | "clubcard";
+  onPriceModeChange: (mode: "retail" | "wholesale" | "clubcard") => void;
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, paymentMethod: SalePayment) => void;
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
@@ -743,11 +743,11 @@ function POSView({
           <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Mode</span>
             <div className="flex rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden text-[11px] font-bold">
-              {(["Retail", "Wholesale"] as const).map(mode => (
+              {(["Retail", "Wholesale", "Clubcard"] as const).map(mode => (
                 <button
                   key={mode}
-                  onClick={() => { onMetaChange({ saleMode: mode }); onPriceModeChange(mode === "Retail" ? "retail" : "wholesale"); onSaveMeta(); }}
-                  className={`px-2.5 py-0.5 transition-colors ${mode !== "Retail" ? "border-l border-gray-200 dark:border-zinc-700" : ""} ${(localMeta.saleMode ?? "Retail") === mode ? (mode === "Retail" ? "bg-blue-600 text-white" : "bg-purple-600 text-white") : "bg-white dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
+                  onClick={() => { onMetaChange({ saleMode: mode }); onPriceModeChange(mode === "Retail" ? "retail" : mode === "Wholesale" ? "wholesale" : "clubcard"); onSaveMeta(); }}
+                  className={`px-2.5 py-0.5 transition-colors ${mode !== "Retail" ? "border-l border-gray-200 dark:border-zinc-700" : ""} ${(localMeta.saleMode ?? "Retail") === mode ? (mode === "Retail" ? "bg-blue-600 text-white" : mode === "Wholesale" ? "bg-purple-600 text-white" : "bg-emerald-600 text-white") : "bg-white dark:bg-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-700"}`}
                 >
                   {mode}
                 </button>
@@ -1493,7 +1493,7 @@ function POSView({
                   const lowStock     = stockQty !== null && availableQty > 0 && availableQty <= 5;
                   const stockBlocked = !allowNegativeStock && stockQty !== null && availableQty <= 0;
                   const isDisabled   = !isDraft || stockBlocked;
-                  const salePrice    = parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : product.price) || "0");
+                  const salePrice    = parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : priceMode === "clubcard" ? product.clubcardPrice || product.price : product.price) || "0");
                   return (
                     <button
                       key={product.id}
@@ -1533,7 +1533,7 @@ function POSView({
                             {product.category}
                           </span>
                         )}
-                        <span className={`text-[13px] font-extrabold font-mono tabular-nums ml-auto ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        <span className={`text-[13px] font-extrabold font-mono tabular-nums ml-auto ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                           {getSettingsCurrencySymbol()}{salePrice.toFixed(dp)}
                         </span>
                       </div>
@@ -1625,8 +1625,8 @@ function POSView({
                           {product.name}
                         </div>
                         <div className="flex items-center justify-between gap-1">
-                          <span className={`text-[12px] font-bold font-mono ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            {getSettingsCurrencySymbol()}{parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : product.price) || "0").toFixed(2)}
+                          <span className={`text-[12px] font-bold font-mono ${priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400" : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {getSettingsCurrencySymbol()}{parseFloat((priceMode === "wholesale" ? product.wholesalePrice || product.price : priceMode === "clubcard" ? product.clubcardPrice || product.price : product.price) || "0").toFixed(2)}
                           </span>
                           {product.category && (
                             <span className={`text-[8px] font-semibold px-1 py-0.5 rounded-full truncate max-w-[44px] ${catColor}`}>
@@ -1869,7 +1869,7 @@ export default function SalesPage() {
   // ── POS state ──
   const [detailId,               setDetailId]               = useState<string | null>(null);
   const [localItems,             setLocalItems]             = useState<SaleItem[]>([]);
-  const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale">("retail");
+  const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale" | "clubcard">("retail");
   const [localMeta,              setLocalMeta]              = useState<LocalMeta | null>(null);
   const [completedSaleForReceipt, setCompletedSaleForReceipt] = useState<Sale | null>(null);
 
@@ -1939,7 +1939,7 @@ export default function SalesPage() {
   // ── Open POS — accepts a Sale object directly (avoids stale-state lookup) ──
   const openDetailDirect = useCallback((sale: Sale) => {
     setLocalItems([...sale.items]);
-    setPriceMode((sale.saleMode === "Wholesale" ? "wholesale" : "retail") as "retail" | "wholesale");
+    setPriceMode(sale.saleMode === "Wholesale" ? "wholesale" : sale.saleMode === "Clubcard" ? "clubcard" : "retail");
     setLocalMeta({
       customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod,
       notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName,
@@ -1968,7 +1968,7 @@ export default function SalesPage() {
       const sale = sales.find(s => s.id === detailId);
       if (sale) {
         setLocalItems([...sale.items]);
-        setPriceMode((sale.saleMode === "Wholesale" ? "wholesale" : "retail") as "retail" | "wholesale");
+        setPriceMode(sale.saleMode === "Wholesale" ? "wholesale" : sale.saleMode === "Clubcard" ? "clubcard" : "retail");
         setLocalMeta({
           customer: sale.customer, saleDate: sale.saleDate, paymentMethod: sale.paymentMethod,
           notes: sale.notes, agentId: sale.agentId, agentName: sale.agentName,
@@ -2026,7 +2026,9 @@ export default function SalesPage() {
     const current = localItemsRef.current;
     const resolvedPrice = priceMode === "wholesale" && product.wholesalePrice
       ? product.wholesalePrice
-      : product.price || "0.00";
+      : priceMode === "clubcard" && product.clubcardPrice
+        ? product.clubcardPrice
+        : product.price || "0.00";
     const existing = current.find(i => i.sku === product.sku);
     if (existing) {
       const next = current.map(i =>
@@ -2355,7 +2357,7 @@ export default function SalesPage() {
         onDeleteItem={handleDeleteItem}
         onAddProduct={handleAddProductFromCatalogue}
         priceMode={priceMode}
-        onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : "Wholesale" } : m); }}
+        onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : mode === "wholesale" ? "Wholesale" : "Clubcard" } : m); }}
         onSetStatus={setStatus}
         onComplete={handleComplete}
         onAddCustomer={(name, phone, email, company) => {

@@ -412,6 +412,7 @@ export function CheckoutPage() {
       customer: customerName,
       portalCustomerId: portalSession?.customer?.id ?? null,
       status: "Completed",
+      saleMode: isLoggedIn ? "Clubcard" : "Retail",
       paymentMethod,
       notes: form.notes ? form.notes : `Online order · ${form.address1}, ${form.city} ${form.postcode}`,
       items: items.map(i => ({
