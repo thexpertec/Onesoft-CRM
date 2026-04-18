@@ -50,7 +50,7 @@ const lineTotal = (item: SaleItem) => {
   const q = parseFloat(item.qty) || 0;
   const p = parseFloat(item.unitPrice) || 0;
   const d = parseFloat(item.discount) || 0;
-  if (item.discountType === "amt") return Math.max(0, q * p - d * q);
+  if (item.discountType === "amt") return Math.max(0, q * p - d);
   return q * p * (1 - d / 100);
 };
 
@@ -61,7 +61,7 @@ const itemsDiscount = (items: SaleItem[]) =>
     const q = parseFloat(i.qty) || 0;
     const p = parseFloat(i.unitPrice) || 0;
     const d = parseFloat(i.discount) || 0;
-    if (i.discountType === "amt") return s + Math.min(d * q, q * p);
+    if (i.discountType === "amt") return s + Math.min(d, q * p);
     return s + q * p * (d / 100);
   }, 0);
 
