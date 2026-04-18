@@ -253,7 +253,7 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
       { label: "Chart of Accounts", href: "/chart-of-accounts",  icon: BookOpen,      desc: "Account hierarchy & ledgers"  },
       { label: "Journal Entry",     href: "/journal-entry",      icon: ClipboardList, desc: "Double-entry bookkeeping"     },
       { label: "Receipt & Payment", href: "/receipt-payment",    icon: CreditCard,    desc: "Cash & bank transactions"     },
-      { label: "Payment Accounts",  href: "/payment-accounts",   icon: CreditCard,    desc: "Bank & payment method setup"  },
+      { label: "Cash & Bank Accounts", href: "/payment-accounts", icon: CreditCard, desc: "Bank & payment method setup" },
     ],
   },
   {

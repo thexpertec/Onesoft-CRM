@@ -274,7 +274,7 @@ export default function PaymentAccountsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <CreditCard className="text-blue-600" size={22} />
-            Payment Accounts
+            Cash &amp; Bank Accounts
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Manage bank accounts, cash funds and payment methods used across invoices and transactions
