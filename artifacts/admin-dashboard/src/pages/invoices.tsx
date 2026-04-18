@@ -6,7 +6,7 @@ import {
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
   BankAccount,
-  getProducts, getCustomers, getSuppliers, getSettings, getSalesAgents, getBankAccounts,
+  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, getJournalEntries, updateInvoice,
@@ -498,7 +498,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
   const products    = useMemo(() => getProducts(), []);
   const customers   = useMemo(() => getCustomers(), []);
-  const suppliers   = useMemo(() => getSuppliers(), []);
   const settings    = useMemo(() => getSettings(), []);
   const legalDocs   = useMemo(() => settings.legalDocuments ?? [], [settings]);
   const productOpts = useMemo<ComboOption[]>(() =>
@@ -516,14 +515,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       sub:   [c.company, c.email, c.phone].filter(Boolean).join(" · "),
     })),
   [customers]);
-  const supplierOpts = useMemo<ComboOption[]>(() =>
-    suppliers.map(s => ({
-      value: s.company,
-      label: s.company,
-      sub:   [s.contactPerson, s.email, s.phone].filter(Boolean).join(" · "),
-    })),
-  [suppliers]);
-
   const handleCustomerSelect = useCallback((name: string) => {
     const c = customers.find(x => x.name === name);
     setForm(f => ({
@@ -538,17 +529,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     }));
   }, [customers]);
 
-  const handleSupplierSelect = useCallback((name: string) => {
-    const s = suppliers.find(x => x.company === name);
-    setForm(f => ({
-      ...f,
-      customer:    name,
-      customerId:  s ? s.id.slice(-8).toUpperCase() : f.customerId,
-      buyerPhone:  s?.phone  || f.buyerPhone,
-      buyerEmail:  s?.email  || f.buyerEmail,
-      buyerAddress: s ? [s.contactPerson, s.city, s.country].filter(Boolean).join(", ") : f.buyerAddress,
-    }));
-  }, [suppliers]);
 
   const setF = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -688,9 +668,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     {invoiceType === "purchase" ? "Supplier Name" : "Customer Name"}
                   </label>
                   {invoiceType === "purchase" ? (
-                    <Combobox value={form.customer} onChange={v => setF("customer", v)}
-                      onSelect={opt => handleSupplierSelect(opt.value)} options={supplierOpts} placeholder="Search supplier…"
-                      inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    <input value={form.customer} onChange={e => setF("customer", e.target.value)}
+                      placeholder="Enter supplier / vendor name…"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   ) : (
                     <Combobox value={form.customer} onChange={v => setF("customer", v)}
                       onSelect={opt => handleCustomerSelect(opt.value)} options={customerOpts} placeholder="Search customer…"
