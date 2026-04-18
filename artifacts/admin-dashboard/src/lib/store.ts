@@ -396,14 +396,15 @@ export const deleteArea = (id: string): void => {
 };
 
 // ─── Payment Accounts ─────────────────────────────────────────────────────────
-export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Cheque", "Card", "IBAN / Wire", "Mobile Money", "Online Transfer", "Other"] as const;
+export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Wallet"] as const;
 export type PaymentMethodType = typeof PAYMENT_METHODS[number];
 
 export type PaymentAccount = {
   id:            string;
   accountTitle:  string;
+  bankName:      string;   // bank / wallet provider name
   paymentMethod: PaymentMethodType;
-  iban:          string;   // account number, IBAN, or card last-4
+  iban:          string;   // account number, IBAN, or account ref
   description:   string;  // notes / address
   isActive:      boolean;
   createdAt:     string;
