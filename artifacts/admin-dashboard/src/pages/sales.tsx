@@ -71,6 +71,19 @@ const lineDiscAmt = (item: SaleItem): number => {
 };
 
 const saleTotal    = (items: SaleItem[]): number => items.reduce((s, i) => s + lineTotal(i), 0);
+
+/** Full order total — items after line-discounts → invoice-discount → tax → delivery. */
+const saleTotalFull = (sale: Sale): number => {
+  const sub       = saleTotal(sale.items);
+  const invDiscVal = parseFloat(sale.invoiceDiscount || "0") || 0;
+  const afterDisc  = invDiscVal <= 0 ? sub
+    : sale.invoiceDiscountType === "amt"
+      ? Math.max(0, sub - invDiscVal)
+      : sub * (1 - invDiscVal / 100);
+  const taxPct    = (parseFloat(sale.taxRate || "0") || 0) / 100;
+  const delivery  = parseFloat(sale.deliveryCharges || "0") || 0;
+  return afterDisc * (1 + taxPct) + delivery;
+};
 const discountTotal = (items: SaleItem[]): number => items.reduce((s, i) => s + lineDiscAmt(i), 0);
 const subTotal = (items: SaleItem[]): number =>
   items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0), 0);
@@ -1908,16 +1921,16 @@ export default function SalesPage() {
       const totalQty = sale.items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
       return Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
     }
-    if (field === "total")     return saleTotal(sale.items).toFixed(dp);
+    if (field === "total")     return saleTotalFull(sale).toFixed(dp);
     if (field === "balance") {
-      const total = saleTotal(sale.items);
+      const total = saleTotalFull(sale);
       const paid  = parseFloat(sale.amountPaid || "0");
       return Math.max(0, total - paid).toFixed(dp);
     }
     if (field === "payStatus") {
       if (sale.status === "Cancelled" || sale.status === "Refunded" || sale.status === "Draft") return "N/A";
       if (sale.status === "On Credit") return "On Credit";
-      const total = saleTotal(sale.items);
+      const total = saleTotalFull(sale);
       const paid  = parseFloat(sale.amountPaid || "0");
       if (paid >= total && total > 0) return "Paid";
       if (paid > 0)                   return "Partial";
@@ -2238,7 +2251,7 @@ export default function SalesPage() {
     }
     if (filterPayStatus) {
       rows = rows.filter(s => {
-        const total = saleTotal(s.items);
+        const total = saleTotalFull(s);
         const paid  = parseFloat(s.amountPaid || "0") || 0;
         switch (filterPayStatus) {
           case "paid":    return total > 0 && paid >= total;
@@ -2262,13 +2275,13 @@ export default function SalesPage() {
   }, [sales]);
 
   const revenue = useMemo(() =>
-    sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotal(s.items), 0), [sales]);
+    sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotalFull(s), 0), [sales]);
 
   const filteredSums = useMemo(() => ({
     items:   filtered.reduce((s, sale) => s + sale.items.reduce((q, i) => q + (parseFloat(i.qty) || 0), 0), 0),
-    total:   filtered.reduce((s, sale) => s + saleTotal(sale.items), 0),
+    total:   filtered.reduce((s, sale) => s + saleTotalFull(sale), 0),
     paid:    filtered.reduce((s, sale) => s + (parseFloat(sale.amountPaid || "0") || 0), 0),
-    balance: filtered.reduce((s, sale) => s + Math.max(0, saleTotal(sale.items) - (parseFloat(sale.amountPaid || "0") || 0)), 0),
+    balance: filtered.reduce((s, sale) => s + Math.max(0, saleTotalFull(sale) - (parseFloat(sale.amountPaid || "0") || 0)), 0),
   }), [filtered]);
 
   // ── Grid handlers ──
