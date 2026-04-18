@@ -35,13 +35,22 @@ import { getSettingsCurrencySymbol, fmtMoney, getSettingsDecimalPlaces } from "@
 const dp = getSettingsDecimalPlaces();
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const STATUS_BG: Record<SaleStatus, string> = {
+const STATUS_BG: Record<string, string> = {
   Draft:       "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
+  Hold:        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
   Completed:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
   "On Credit": "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
   Refunded:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Returned:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
   Cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
+
+/** Returns the human-readable status label for display.
+ *  POS orders with status "Draft" are shown as "Hold" — matching the Hold button in POS. */
+function saleDisplayStatus(sale: Sale): string {
+  if (sale.status === "Draft" && (sale.orderType === "POS" || !sale.orderType)) return "Hold";
+  return sale.status;
+}
 
 
 function getPaymentIcon(method: string): React.ReactNode {
@@ -802,7 +811,7 @@ function POSView({
           <div className="w-px h-6 bg-gray-200 dark:bg-zinc-700" />
           <div className="flex flex-col leading-none gap-1">
             <span className="text-[12px] font-bold text-gray-800 dark:text-gray-100 font-mono tracking-wide">{sale.saleNumber}</span>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full self-start ${STATUS_BG[sale.status]}`}>{sale.status}</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full self-start ${STATUS_BG[saleDisplayStatus(sale)] ?? STATUS_BG[sale.status]}`}>{saleDisplayStatus(sale)}</span>
           </div>
         </div>
 
@@ -2076,6 +2085,7 @@ export default function SalesPage() {
       if (ds === "Processing") return "Processing";
       return "Confirmed";
     }
+    if (field === "status") return saleDisplayStatus(sale);
     return String((sale as unknown as Record<string, string>)[field] ?? "");
   };
 
@@ -2568,7 +2578,7 @@ export default function SalesPage() {
             <button key={s} aria-pressed={isActive}
               onClick={() => setStatusFilter(prev => prev === s && s !== "All" ? "All" : s)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] ${colors.base} ${isActive ? `${colors.active} ring-offset-1 shadow-sm` : "ring-0 opacity-80 hover:opacity-100"}`}>
-              {s}: <span>{counts[s] ?? 0}</span>
+              {s === "Draft" ? "Hold" : s}: <span>{counts[s] ?? 0}</span>
               {isActive && s !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
             </button>
           );
