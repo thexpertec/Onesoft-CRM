@@ -400,27 +400,66 @@ export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Wallet"] as const;
 export type PaymentMethodType = typeof PAYMENT_METHODS[number];
 
 export type PaymentAccount = {
-  id:            string;
-  accountTitle:  string;
-  bankName:      string;   // bank / wallet provider name
-  paymentMethod: PaymentMethodType;
-  iban:          string;   // account number, IBAN, or account ref
-  description:   string;  // notes / address
-  isActive:      boolean;
-  createdAt:     string;
-  updatedAt:     string;
+  id:              string;
+  accountTitle:    string;
+  bankName:        string;   // bank / wallet provider name
+  paymentMethod:   PaymentMethodType;
+  iban:            string;   // account number, IBAN, or account ref
+  description:     string;  // notes / address
+  isActive:        boolean;
+  ledgerAccountId?: string; // linked COA Ledger account under CB_GROUP (assigned on create)
+  createdAt:       string;
+  updatedAt:       string;
 };
 
 const PAYMENT_ACCOUNTS_KEY = "admin-payment-accounts";
 
 export const getPaymentAccounts = (): PaymentAccount[] => getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
 
+/** Ensure the Cash & Bank Accounts group (sys-1150) exists in COA, create it if missing. */
+function _ensureCBGroup(): void {
+  const accounts = getAccounts();
+  if (accounts.some(a => a.id === SYS_ACCS.CB_GROUP)) return;
+  // Group missing — insert it, also ensure CURRENT_ASSETS exists as parent
+  const now = new Date().toISOString();
+  const toAdd: Account[] = [];
+  if (!accounts.some(a => a.id === SYS_ACCS.CURRENT_ASSETS)) {
+    toAdd.push({ id: SYS_ACCS.CURRENT_ASSETS, code: "1100", name: "Current Assets", head: "Assets", accountType: "Group", parentId: SYS_ACCS.ASSETS_ROOT, subType: "Current Asset", description: "Assets expected to be realised within 12 months", openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now });
+  }
+  toAdd.push({ id: SYS_ACCS.CB_GROUP, code: "1110", name: "Cash & Bank Accounts", head: "Assets", accountType: "Group", parentId: SYS_ACCS.CURRENT_ASSETS, subType: "Current Asset", description: "All cash, bank and wallet payment accounts", openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now });
+  _saveAccounts([...accounts, ...toAdd]);
+}
+
+/** Build the COA Ledger name and subType from a payment account. */
+function _coaNameFromPA(pa: Pick<PaymentAccount, "accountTitle" | "bankName" | "paymentMethod">): { name: string; subType: string } {
+  const name    = pa.bankName ? `${pa.accountTitle} (${pa.bankName})` : pa.accountTitle;
+  const subType = pa.paymentMethod === "Cash" ? "Cash" : pa.paymentMethod === "Wallet" ? "Wallet" : "Bank";
+  return { name, subType };
+}
+
 export const createPaymentAccount = (data: Omit<PaymentAccount, "id" | "createdAt" | "updatedAt">): PaymentAccount => {
+  _ensureCBGroup();
+  const now   = new Date().toISOString();
+  const { name, subType } = _coaNameFromPA(data);
+  // Create the matching COA Ledger account under CB_GROUP
+  const coaAcc = createAccount({
+    code:           "",
+    name,
+    head:           "Assets",
+    subType,
+    description:    data.description || `Payment account — ${data.paymentMethod}`,
+    parentId:       SYS_ACCS.CB_GROUP,
+    accountType:    "Ledger",
+    openingBalance: 0,
+    paymentType:    "Debit",
+    isActive:       data.isActive,
+  });
   const item: PaymentAccount = {
     ...data,
-    id:        crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    id:              crypto.randomUUID(),
+    ledgerAccountId: coaAcc.id,
+    createdAt:       now,
+    updatedAt:       now,
   };
   setStored(PAYMENT_ACCOUNTS_KEY, [...getPaymentAccounts(), item]);
   return item;
@@ -432,11 +471,25 @@ export const updatePaymentAccount = (id: string, updates: Partial<Omit<PaymentAc
   if (i === -1) throw new Error("Payment account not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PAYMENT_ACCOUNTS_KEY, items);
-  return items[i];
+  // Sync changes to linked COA account
+  const pa = items[i];
+  if (pa.ledgerAccountId) {
+    const { name, subType } = _coaNameFromPA(pa);
+    try {
+      updateAccount(pa.ledgerAccountId, { name, subType, isActive: pa.isActive, description: pa.description || `Payment account — ${pa.paymentMethod}` });
+    } catch { /* COA account may not exist on old records */ }
+  }
+  return pa;
 };
 
 export const deletePaymentAccount = (id: string): void => {
+  const pa = getPaymentAccounts().find(a => a.id === id);
   setStored(PAYMENT_ACCOUNTS_KEY, getPaymentAccounts().filter(a => a.id !== id));
+  // Remove the linked COA ledger (soft-fail if it has JE transactions)
+  if (pa?.ledgerAccountId) {
+    try { deleteAccount(pa.ledgerAccountId); } catch { /* has posted JEs — deactivate instead */ }
+    try { updateAccount(pa.ledgerAccountId, { isActive: false }); } catch { /* ignore */ }
+  }
 };
 
 // ─── Customers API ────────────────────────────────────────────────────────────
@@ -3695,6 +3748,7 @@ export const SYS_ACCS = {
   // Assets — root + sub-groups
   ASSETS_ROOT:        "sys-1000r",  // root Assets group (1000)
   CURRENT_ASSETS:     "sys-1000",   // Current Assets group (1100) — child of ASSETS_ROOT
+  CB_GROUP:           "sys-1150",   // Cash & Bank Accounts GROUP (1150) — parent for payment accounts
   AR_GROUP:           "sys-1100",   // Accounts Receivable GROUP (1130) — parent for per-customer ledgers
   AR_TRADE:           "sys-1101",   // Trade Receivables LEDGER (1131)
   CASH:               "sys-1200",   // Cash in Hand (1110)
@@ -3743,8 +3797,9 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.ASSETS_ROOT,        code: "1000", name: "Assets",                    head: "Assets",           accountType: "Group",  parentId: null,                         subType: "Asset",            description: "All assets of the business" },
   // Current Assets
   { id: SYS_ACCS.CURRENT_ASSETS,     code: "1100", name: "Current Assets",             head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Current Asset",    description: "Assets expected to be realised within 12 months" },
-  { id: SYS_ACCS.CASH,               code: "1110", name: "Cash in Hand",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Cash",             description: "Physical cash on premises" },
-  { id: SYS_ACCS.BANK,               code: "1120", name: "Bank Account",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Bank",             description: "Business bank account" },
+  { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
+  { id: SYS_ACCS.CASH,               code: "1111", name: "Cash in Hand",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Physical cash on premises" },
+  { id: SYS_ACCS.BANK,               code: "1112", name: "Bank Account",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Bank",             description: "Business bank account" },
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
   { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "General trade receivables ledger" },
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value" },
@@ -3853,6 +3908,22 @@ export function seedDefaultCoaAccounts(): void {
     workingAccounts = workingAccounts.map(acc => {
       const m = migrations.find(mg => mg.id === acc.id);
       return m ? { ...acc, ...m.updates, updatedAt: new Date().toISOString() } : acc;
+    });
+  }
+
+  // ── Migrate CASH & BANK: re-parent from CURRENT_ASSETS → CB_GROUP ────────────
+  // If CB_GROUP was just added (or already exists) but CASH/BANK still point at
+  // CURRENT_ASSETS, move them under CB_GROUP and renumber codes.
+  const needsCBReparent = workingAccounts.some(
+    a => (a.id === SYS_ACCS.CASH || a.id === SYS_ACCS.BANK) && a.parentId === SYS_ACCS.CURRENT_ASSETS
+  );
+  if (needsCBReparent) {
+    workingAccounts = workingAccounts.map(a => {
+      if (a.id === SYS_ACCS.CASH  && a.parentId === SYS_ACCS.CURRENT_ASSETS)
+        return { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1111", updatedAt: new Date().toISOString() };
+      if (a.id === SYS_ACCS.BANK  && a.parentId === SYS_ACCS.CURRENT_ASSETS)
+        return { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1112", updatedAt: new Date().toISOString() };
+      return a;
     });
   }
 
