@@ -17,7 +17,7 @@ import {
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
   LayoutGrid, List, RefreshCw, Globe,
-  CheckCircle2, Circle, Clock, XCircle,
+  CheckCircle2, Circle, Clock, XCircle, Truck,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -2039,6 +2039,7 @@ export default function SalesPage() {
     { field: "amountPaid",    label: `Paid (${sym})`,   minW: 110, type: "readonly" },
     { field: "balance",       label: `Balance (${sym})`,minW: 110, type: "readonly" },
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
+    { field: "orderStage",    label: "Order Stage",     minW: 120, type: "readonly" },
     { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
   ], [sym, agentNameOpts]);
@@ -2063,6 +2064,17 @@ export default function SalesPage() {
       if (paid >= total && total > 0) return "Paid";
       if (paid > 0)                   return "Partial";
       return "Unpaid";
+    }
+    if (field === "orderStage") {
+      const st = sale.status;
+      if (st === "Cancelled") return "Cancelled";
+      if (st === "Refunded")  return "Refunded";
+      if (st === "Draft")     return "Placed";
+      const ds = sale.deliveryStatus ?? "Pending";
+      if (ds === "Delivered")  return "Delivered";
+      if (ds === "Shipped")    return "Shipped";
+      if (ds === "Processing") return "Processing";
+      return "Confirmed";
     }
     return String((sale as unknown as Record<string, string>)[field] ?? "");
   };
@@ -2871,6 +2883,27 @@ export default function SalesPage() {
                                                     "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
                           }`}>{rawVal}</span>
                         )}
+                      </div>
+                    ) : c.field === "orderStage" ? (
+                      <div className={`w-full flex items-center px-3 ${wrapText ? "py-2" : "h-full"}`}>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          rawVal === "Delivered"  ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300" :
+                          rawVal === "Shipped"    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" :
+                          rawVal === "Processing" ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300" :
+                          rawVal === "Confirmed"  ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300" :
+                          rawVal === "Placed"     ? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300" :
+                          rawVal === "Cancelled"  ? "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400" :
+                          rawVal === "Refunded"   ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300" :
+                                                   "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                        }`}>
+                          {rawVal === "Delivered"  ? <CheckCircle2 size={10} /> :
+                           rawVal === "Shipped"    ? <Truck size={10} /> :
+                           rawVal === "Processing" ? <Clock size={10} /> :
+                           rawVal === "Confirmed"  ? <CheckCircle2 size={10} /> :
+                           rawVal === "Cancelled" || rawVal === "Refunded" ? <XCircle size={10} /> :
+                                                    <Circle size={10} />}
+                          {rawVal}
+                        </span>
                       </div>
                     ) : (
                       <EditableCell

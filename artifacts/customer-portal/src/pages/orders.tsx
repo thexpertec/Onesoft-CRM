@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { fetchSales, calcSaleTotal, type Sale } from "@/lib/api";
 import { fmt, fmtDate } from "@/lib/utils";
 import { Layout } from "@/components/layout";
-import { StatusBadge, DeliveryBadge, PaymentBadge, derivePayStatus } from "@/components/badges";
+import { StatusBadge, DeliveryBadge, PaymentBadge, derivePayStatus, OrderStageBadge, deriveOrderStage } from "@/components/badges";
 
 export default function OrdersPage() {
   const { session, settings } = useAuth();
@@ -32,12 +32,14 @@ export default function OrdersPage() {
     ? sorted.filter(s => {
         const q = query.toLowerCase();
         const total = calcSaleTotal(s.items, s.taxRate, s.deliveryCharges, s.invoiceDiscount, s.invoiceDiscountType);
-        const payStatus = derivePayStatus(s.amountPaid, total).toLowerCase();
+        const payStatus   = derivePayStatus(s.amountPaid, total).toLowerCase();
+        const orderStage  = deriveOrderStage(s.status, s.deliveryStatus).toLowerCase();
         return (
           s.saleNumber.toLowerCase().includes(q) ||
           (s.status || "").toLowerCase().includes(q) ||
           (s.deliveryStatus || "").toLowerCase().includes(q) ||
-          payStatus.includes(q)
+          payStatus.includes(q) ||
+          orderStage.includes(q)
         );
       })
     : sorted;
@@ -85,10 +87,11 @@ export default function OrdersPage() {
         ) : (
           <div className="divide-y divide-gray-100">
             {/* Header row */}
-            <div className="hidden sm:grid grid-cols-[1fr_100px_100px_90px_90px_32px] gap-4 px-5 py-2.5 text-[12px] font-semibold text-gray-400 uppercase tracking-wide">
+            <div className="hidden sm:grid grid-cols-[1fr_90px_90px_105px_80px_80px_32px] gap-3 px-5 py-2.5 text-[12px] font-semibold text-gray-400 uppercase tracking-wide">
               <span>Order</span>
               <span>Status</span>
               <span>Delivery</span>
+              <span>Order Stage</span>
               <span>Payment</span>
               <span className="text-right">Total</span>
               <span />
@@ -98,7 +101,7 @@ export default function OrdersPage() {
               const payStatus  = derivePayStatus(sale.amountPaid, total);
               return (
                 <Link key={sale.id} href={`/orders/${sale.id}`}>
-                  <div className="grid sm:grid-cols-[1fr_100px_100px_90px_90px_32px] gap-2 sm:gap-4 px-5 py-3.5 hover:bg-gray-50 cursor-pointer transition-colors items-center">
+                  <div className="grid sm:grid-cols-[1fr_90px_90px_105px_80px_80px_32px] gap-3 px-5 py-3.5 hover:bg-gray-50 cursor-pointer transition-colors items-center">
                     <div>
                       <p className="text-[13.5px] font-semibold text-gray-900">{sale.saleNumber}</p>
                       <p className="text-[12px] text-gray-400 mt-0.5">{fmtDate(sale.saleDate)} · {sale.items.length} item{sale.items.length !== 1 ? "s" : ""}</p>
@@ -109,6 +112,9 @@ export default function OrdersPage() {
                     <div>
                       <DeliveryBadge status={sale.deliveryStatus} />
                       {!sale.deliveryStatus && <span className="text-[12px] text-gray-300">—</span>}
+                    </div>
+                    <div>
+                      <OrderStageBadge status={sale.status} deliveryStatus={sale.deliveryStatus} />
                     </div>
                     <div>
                       <PaymentBadge status={payStatus} />
