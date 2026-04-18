@@ -3739,7 +3739,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
   { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Trade payables — subsidiary ledgers per supplier" },
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
-  { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid" },
+  { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
   // Non-Current Liabilities
   { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
   { id: SYS_ACCS.LT_LOANS,           code: "2210", name: "Long-term Loans",            head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_LIAB,    subType: "Loan",             description: "Bank loans and borrowings due after 12 months" },
@@ -3891,7 +3891,18 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1) {
+  // ── Migrate sys-2130 (Accrued Expenses) from Ledger to Group ─────────────────
+  const accruedExpIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.ACCRUED_EXP && a.accountType === "Ledger");
+  if (accruedExpIdx !== -1) {
+    workingAccounts[accruedExpIdx] = {
+      ...workingAccounts[accruedExpIdx],
+      accountType: "Group",
+      description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
