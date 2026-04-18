@@ -1,5 +1,31 @@
 import { cn } from "@/lib/utils";
 
+const PAYMENT_STYLE: Record<string, string> = {
+  Paid:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Partial: "bg-amber-50 text-amber-700 border-amber-200",
+  Unpaid:  "bg-red-50 text-red-600 border-red-200",
+};
+
+export type PayStatus = "Paid" | "Partial" | "Unpaid";
+
+/** Derive payment status the same way as the admin portal. */
+export function derivePayStatus(amountPaid: string | undefined, total: number): PayStatus {
+  const paid = parseFloat(amountPaid ?? "0") || 0;
+  if (total <= 0) return "Paid";
+  if (paid >= total - 0.005) return "Paid";
+  if (paid > 0) return "Partial";
+  return "Unpaid";
+}
+
+export function PaymentBadge({ status }: { status: PayStatus }) {
+  const style = PAYMENT_STYLE[status] ?? "bg-gray-100 text-gray-600 border-gray-200";
+  return (
+    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] font-medium border", style)}>
+      {status}
+    </span>
+  );
+}
+
 const STATUS_STYLE: Record<string, string> = {
   Completed:  "bg-emerald-50 text-emerald-700 border-emerald-200",
   Confirmed:  "bg-blue-50 text-blue-700 border-blue-200",
