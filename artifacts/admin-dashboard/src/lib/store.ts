@@ -815,8 +815,8 @@ export type ModuleId =
   | "hrm_staff" | "hrm_roles" | "hrm_org"
   // Accounting
   | "accounting_coa" | "accounting_journal" | "accounting_balance"
-  | "accounting_ledger" | "accounting_pls" | "accounting_income"
-  | "accounting_expense" | "accounting_receipts"
+  | "accounting_ledger" | "accounting_pls" | "accounting_trial"
+  | "accounting_income" | "accounting_expense" | "accounting_receipts"
   | "shareholders" | "investment_plans"
   // Manufacturing
   | "manufacturing" | "production_guide"
@@ -871,6 +871,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "accounting_balance",  label: "Balance Sheet",      desc: "Assets, liabilities & equity",      group: "Accounting",    href: "/balance-sheet"     },
   { id: "accounting_ledger",   label: "Ledger Report",      desc: "Account-by-account ledger detail",  group: "Accounting",    href: "/ledger-report"     },
   { id: "accounting_pls",      label: "P&L Statement",      desc: "Profit & loss report",              group: "Accounting",    href: "/pls-report"        },
+  { id: "accounting_trial",    label: "Trial Balance",      desc: "Trial balance by date range",       group: "Accounting",    href: "/trial-balance"     },
   { id: "accounting_income",   label: "Income Report",      desc: "Revenue breakdown & analysis",      group: "Accounting",    href: "/income-report"     },
   { id: "accounting_expense",  label: "Expense Report",     desc: "Expense breakdown & analysis",      group: "Accounting",    href: "/expense-report"    },
   { id: "accounting_receipts", label: "Receipts & Payments",desc: "Cash receipts & payments log",      group: "Accounting",    href: "/receipt-payment"   },
