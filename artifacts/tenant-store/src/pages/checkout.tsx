@@ -321,14 +321,21 @@ export function CheckoutPage() {
   /* Validation */
   function validate(): boolean {
     const e: Partial<CustomerForm> = {};
-    if (!form.firstName.trim()) e.firstName = "Required";
-    if (!form.lastName.trim())  e.lastName  = "Required";
-    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = "Valid email required";
-    if (!form.phone.trim())     e.phone     = "Required";
-    if (!form.address1.trim())  e.address1  = "Required";
-    if (!form.city.trim())      e.city      = "Required";
-    if (!form.postcode.trim())  e.postcode  = "Required";
+    /* Name fields are only required when NOT logged in (logged-in name comes from session) */
+    if (!isLoggedIn) {
+      if (!form.firstName.trim()) e.firstName = "Required";
+      if (!form.lastName.trim())  e.lastName  = "Required";
+      if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = "Valid email required";
+    }
+    if (!form.phone.trim())    e.phone    = "Required";
+    if (!form.address1.trim()) e.address1 = "Required";
+    if (!form.city.trim())     e.city     = "Required";
+    if (!form.postcode.trim()) e.postcode = "Required";
     setErrors(e);
+    /* Scroll to top of step so errors are visible */
+    if (Object.keys(e).length > 0) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
     return Object.keys(e).length === 0;
   }
 
