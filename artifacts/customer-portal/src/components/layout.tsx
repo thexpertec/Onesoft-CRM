@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X, Coins } from "lucide-react";
+import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X, Coins, Store } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {session?.tenantId && (
+              <a
+                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/home`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13.5px] font-medium transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <Store size={14} />
+                Shop
+              </a>
+            )}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -100,6 +109,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {session?.tenantId && (
+              <a
+                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/home`}
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-[14px] font-medium text-gray-600 hover:bg-gray-50"
+              >
+                <Store size={15} />
+                Shop
+              </a>
+            )}
             <button
               onClick={logout}
               className="flex items-center gap-2 px-3 py-2 text-[14px] text-gray-500 hover:text-gray-800 w-full rounded-md hover:bg-gray-50"
