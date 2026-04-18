@@ -119,16 +119,18 @@ export function Header() {
             {/* Logo */}
             <Link href="/home" className="flex items-center gap-2 shrink-0">
               {(brand.logoBase64 || brand.logoUrl) ? (
-                <img src={brand.logoBase64 || brand.logoUrl} alt={storeName} className="h-8 w-auto object-contain"
+                <img src={brand.logoBase64 || brand.logoUrl} alt={storeName} className="h-10 w-auto object-contain"
                   onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               ) : (
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Zap size={16} className="text-white fill-white" />
-                </div>
+                <>
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <Zap size={16} className="text-white fill-white" />
+                  </div>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                    {storeName}
+                  </span>
+                </>
               )}
-              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                {storeName}
-              </span>
             </Link>
 
             {/* Desktop Nav */}
