@@ -534,7 +534,7 @@ export function CheckoutPage() {
               </div>
               <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-300">
                 <Phone size={13} className="text-blue-400 shrink-0" />
-                {form.phone ? (
+                {portalSession?.customer?.phone ? (
                   <span>{form.phone}</span>
                 ) : (
                   <Field label="">
