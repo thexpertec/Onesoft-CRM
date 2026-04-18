@@ -3557,7 +3557,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   invoiceFooter:        "",
   accSalesRevenue:      "sys-3100",
   accCash:              "sys-1200",
-  accBank:              "sys-1210",
+  accBank:              "",
   accReceivable:        "sys-1101",
   accVatPayable:        "sys-2200",
   accCogs:              "sys-4100",
@@ -3610,7 +3610,6 @@ export function getSettings(): AppSettings {
       // Handles existing saved settings that have "" from before system defaults existed.
       if (!merged.accSalesRevenue) merged.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
       if (!merged.accCash)         merged.accCash         = SYS_ACCS.CASH;
-      if (!merged.accBank)         merged.accBank         = SYS_ACCS.BANK;
       if (!merged.accReceivable)   merged.accReceivable   = SYS_ACCS.AR_TRADE;
       if (!merged.accVatPayable)   merged.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
       if (!merged.accCogs)         merged.accCogs         = SYS_ACCS.COGS;
@@ -3802,7 +3801,6 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CURRENT_ASSETS,     code: "1100", name: "Current Assets",             head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Current Asset",    description: "Assets expected to be realised within 12 months" },
   { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
   { id: SYS_ACCS.CASH,               code: "1111", name: "Cash",                       head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Default cash account — physical cash on premises" },
-  { id: SYS_ACCS.BANK,               code: "1112", name: "Bank Account",               head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Bank",             description: "Business bank account" },
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
   { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "General trade receivables ledger" },
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value" },
@@ -3896,7 +3894,6 @@ export function seedDefaultCoaAccounts(): void {
     { id: SYS_ACCS.AR_GROUP,       updates: { code: "1130" } },
     { id: SYS_ACCS.AR_TRADE,       updates: { code: "1131" } },
     { id: SYS_ACCS.CASH,           updates: { code: "1110" } },
-    { id: SYS_ACCS.BANK,           updates: { code: "1120" } },
     { id: SYS_ACCS.INVENTORY,      updates: { code: "1140" } },
     // Liabilities: wire Current Liabilities under the new Liabilities root
     { id: SYS_ACCS.CURRENT_LIAB,   updates: { parentId: SYS_ACCS.LIAB_ROOT, code: "2100" } },
@@ -3921,21 +3918,19 @@ export function seedDefaultCoaAccounts(): void {
     return a;
   });
 
-  // ── Migrate CASH & BANK: re-parent from CURRENT_ASSETS → CB_GROUP ────────────
-  // If CB_GROUP was just added (or already exists) but CASH/BANK still point at
-  // CURRENT_ASSETS, move them under CB_GROUP and renumber codes.
-  const needsCBReparent = workingAccounts.some(
-    a => (a.id === SYS_ACCS.CASH || a.id === SYS_ACCS.BANK) && a.parentId === SYS_ACCS.CURRENT_ASSETS
-  );
-  if (needsCBReparent) {
-    workingAccounts = workingAccounts.map(a => {
-      if (a.id === SYS_ACCS.CASH  && a.parentId === SYS_ACCS.CURRENT_ASSETS)
-        return { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1111", updatedAt: new Date().toISOString() };
-      if (a.id === SYS_ACCS.BANK  && a.parentId === SYS_ACCS.CURRENT_ASSETS)
-        return { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1112", updatedAt: new Date().toISOString() };
-      return a;
-    });
+  // ── Migrate CASH: re-parent from CURRENT_ASSETS → CB_GROUP ──────────────────
+  // If CB_GROUP was just added (or already exists) but CASH still points at
+  // CURRENT_ASSETS, move it under CB_GROUP and renumber its code.
+  if (workingAccounts.some(a => a.id === SYS_ACCS.CASH && a.parentId === SYS_ACCS.CURRENT_ASSETS)) {
+    workingAccounts = workingAccounts.map(a =>
+      a.id === SYS_ACCS.CASH && a.parentId === SYS_ACCS.CURRENT_ASSETS
+        ? { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1111", updatedAt: new Date().toISOString() }
+        : a
+    );
   }
+
+  // ── Remove sys-1210 "Bank Account" (no longer a default seed) ─────────────────
+  workingAccounts = workingAccounts.filter(a => a.id !== SYS_ACCS.BANK);
 
   // ── Migrate sys-5100 from Ledger to Group (so owner subsidiary ledgers work) ─
   const ownersCapitalIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OWNERS_CAPITAL && a.accountType === "Ledger");
@@ -4114,11 +4109,12 @@ export function seedDefaultCoaAccounts(): void {
   const mappingUpdates: Partial<AppSettings> = {};
   if (!s.accSalesRevenue) mappingUpdates.accSalesRevenue = SYS_ACCS.SALES_REVENUE;
   if (!s.accCash)         mappingUpdates.accCash         = SYS_ACCS.CASH;
-  if (!s.accBank)         mappingUpdates.accBank         = SYS_ACCS.BANK;
   if (!s.accReceivable)   mappingUpdates.accReceivable   = SYS_ACCS.AR_TRADE;    // Ledger, not Group
   if (!s.accVatPayable)   mappingUpdates.accVatPayable   = SYS_ACCS.VAT_PAYABLE;
   if (!s.accCogs)         mappingUpdates.accCogs         = SYS_ACCS.COGS;
   if (!s.accInventory)    mappingUpdates.accInventory    = SYS_ACCS.INVENTORY;
+  // sys-1210 "Bank Account" removed — clear accBank if it still points to it
+  if (s.accBank === SYS_ACCS.BANK) mappingUpdates.accBank = "";
   // AP_TRADE is now a Group — clear accPurchasePayable if it still points to it
   // (the JE now uses supplier-specific subsidiary ledgers directly)
   if (s.accPurchasePayable === SYS_ACCS.AP_TRADE) {
