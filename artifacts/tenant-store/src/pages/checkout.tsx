@@ -305,6 +305,15 @@ export function CheckoutPage() {
     (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
     0,
   );
+
+  /* Total clubcard saving vs regular display price */
+  const clubSaving = isLoggedIn
+    ? items.reduce((s, i) => {
+        const disp = parseFloat(getDisplayPrice(i.product));
+        const eff  = parseFloat(getEffectivePrice(i.product, isLoggedIn));
+        return s + (disp - eff) * i.quantity;
+      }, 0)
+    : 0;
   const taxRate  = 0.20; // 20% VAT
   const tax      = subtotal * taxRate;
   const total    = subtotal + tax + shipping.price;
@@ -851,9 +860,25 @@ export function CheckoutPage() {
                 </p>
                 <p className="text-xs text-slate-400 mt-0.5">Qty: {item.quantity}</p>
               </div>
-              <span className="text-xs font-bold text-slate-900 dark:text-white shrink-0">
-                {formatPrice(parseFloat(getEffectivePrice(item.product, isLoggedIn)) * item.quantity)}
-              </span>
+              <div className="shrink-0 text-right">
+                {(() => {
+                  const eff  = parseFloat(getEffectivePrice(item.product, isLoggedIn));
+                  const disp = parseFloat(getDisplayPrice(item.product));
+                  const saved = disp - eff;
+                  return (
+                    <>
+                      {saved > 0 && (
+                        <p className="text-[10px] text-slate-400 line-through leading-none mb-0.5">
+                          {formatPrice(disp * item.quantity)}
+                        </p>
+                      )}
+                      <span className={cn("text-xs font-bold", saved > 0 ? "text-green-600 dark:text-green-400" : "text-slate-900 dark:text-white")}>
+                        {formatPrice(eff * item.quantity)}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           ))}
         </div>
@@ -863,6 +888,17 @@ export function CheckoutPage() {
             <span className="text-slate-500">Subtotal</span>
             <span className="font-medium text-slate-900 dark:text-white">{formatPrice(subtotal)}</span>
           </div>
+          {clubSaving > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                Clubcard Saving
+              </span>
+              <span className="font-semibold text-green-600 dark:text-green-400">-{formatPrice(clubSaving)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm">
             <span className="text-slate-500">Shipping</span>
             <span className={cn("font-medium", shipping.price === 0 ? "text-green-600" : "text-slate-900 dark:text-white")}>
