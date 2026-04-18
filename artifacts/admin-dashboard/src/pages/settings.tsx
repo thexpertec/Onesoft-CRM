@@ -1134,13 +1134,68 @@ export default function SettingsPage() {
                   <div className="col-span-2 pt-4 border-t border-gray-100 dark:border-zinc-800">
                     <h3 className="text-[13px] font-bold text-gray-800 dark:text-gray-100 mb-4">Invoice Defaults</h3>
                     <div className="grid gap-4">
-                      <Field label="Bank / Payment Details" hint="Printed on all invoices by default. Include account number, sort code, IBAN, etc.">
-                        <Textarea
-                          value={form.bankDetails}
-                          onChange={e => set("bankDetails", e.target.value)}
-                          className="text-[13px] resize-none font-mono" rows={5}
-                          placeholder={"Bank: HSBC UK\nAccount Name: Onesoft Ltd\nAccount No: 12345678\nSort Code: 40-47-84\nIBAN: GB29 NWBK 6016 1331 9268 19"} />
-                      </Field>
+                      {/* ── Bank Accounts Manager ── */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <label className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">Bank / Payment Accounts</label>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Accounts selectable per invoice. Tick "Default" to pre-select on new invoices.</p>
+                          </div>
+                          <Button size="sm" variant="outline" type="button"
+                            onClick={() => set("bankAccounts", [
+                              ...(form.bankAccounts ?? []),
+                              { id: crypto.randomUUID(), name: "", details: "", isDefault: false }
+                            ])}
+                            className="text-[12px] h-8 gap-1.5">
+                            <Plus className="w-3.5 h-3.5" /> Add Account
+                          </Button>
+                        </div>
+                        {(form.bankAccounts ?? []).length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-xl text-center">
+                            <CreditCard className="w-8 h-8 text-gray-300 dark:text-zinc-600 mb-2" />
+                            <p className="text-[12px] text-gray-400 dark:text-gray-500">No bank accounts yet. Click "Add Account" to add your first one.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {(form.bankAccounts ?? []).map((acc, idx) => (
+                              <div key={acc.id} className="bg-gray-50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700 rounded-xl p-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-1 space-y-2">
+                                    <Input
+                                      value={acc.name}
+                                      onChange={e => set("bankAccounts", (form.bankAccounts ?? []).map((a, i) => i === idx ? { ...a, name: e.target.value } : a))}
+                                      className="text-[13px] font-semibold"
+                                      placeholder="Account name (e.g. Barclays UK, IBAN EUR)" />
+                                    <Textarea
+                                      value={acc.details}
+                                      onChange={e => set("bankAccounts", (form.bankAccounts ?? []).map((a, i) => i === idx ? { ...a, details: e.target.value } : a))}
+                                      className="text-[12px] resize-none font-mono" rows={4}
+                                      placeholder={"Account Name: Onesoft Ltd\nAccount No: 12345678\nSort Code: 40-47-84\nIBAN: GB29 NWBK 6016 1331 9268 19\nSwift/BIC: BARCGB22"} />
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        id={`bank-default-${acc.id}`}
+                                        checked={!!acc.isDefault}
+                                        onChange={e => set("bankAccounts", (form.bankAccounts ?? []).map((a, i) => i === idx ? { ...a, isDefault: e.target.checked } : a))}
+                                        className="w-3.5 h-3.5 accent-blue-600 cursor-pointer" />
+                                      <label htmlFor={`bank-default-${acc.id}`} className="text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                                        Pre-select on new invoices
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <button type="button"
+                                    onClick={() => set("bankAccounts", (form.bankAccounts ?? []).filter((_, i) => i !== idx))}
+                                    className="mt-1 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* Legacy single bank details field (hidden but kept for backward compat) */}
+                      <input type="hidden" value={form.bankDetails} readOnly />
                       <Field label="Company Registration Number" hint="E.g. Companies House number (UK). Shown in invoice footer.">
                         <Input
                           value={form.companyRegistration}
