@@ -3742,7 +3742,6 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
   // Non-Current Liabilities
   { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
-  { id: SYS_ACCS.LT_LOANS,           code: "2210", name: "Long-term Loans",            head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.NON_CURRENT_LIAB,    subType: "Loan",             description: "Bank loans and borrowings due after 12 months" },
 
   // ─────────────────────────────────────────────────────────────────────────────
   // REVENUE / INCOME  (codes 3xxx — same as original system)
@@ -3855,6 +3854,7 @@ export function seedDefaultCoaAccounts(): void {
     SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
     SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
     SYS_ACCS.AR_TRADE,    // "Trade Receivables"   — removed; AR_GROUP used directly
+    SYS_ACCS.LT_LOANS,   // "Long-term Loans"     — tenant-created as needed
   ]);
   workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
 
