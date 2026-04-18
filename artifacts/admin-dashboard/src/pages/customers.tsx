@@ -176,12 +176,13 @@ const STATUS_COLORS: Record<string, string> = {
   Churned:  "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
-type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes" | "customerType";
+type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes" | "customerType" | "customerRole";
 
 const BLANK = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "", industry: "", city: "", area: "",
   status: "Active", customerSince: new Date().toISOString().split("T")[0], totalValue: "", notes: "",
   customerType: "Regular Customer",
+  customerRole: "Buyer",
 });
 
 const TABS = ["All Customers", "Convert from Leads"] as const;
@@ -211,6 +212,8 @@ export default function CustomersPage() {
     { field: "status",        label: "Status",        minW: 130, type: "select", options: CUSTOMER_STATUSES, optionColors: STATUS_COLORS },
     { field: "customerType",  label: "Type",          minW: 140, type: "select", options: ["Regular Customer", "POS Customer"],
       optionColors: { "Regular Customer": "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300", "POS Customer": "bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300" } },
+    { field: "customerRole",  label: "Customer Type", minW: 120, type: "select", options: ["Buyer", "Supplier"],
+      optionColors: { "Buyer": "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300", "Supplier": "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300" } },
     { field: "customerSince", label: "Since",         minW: 120, type: "date"   },
     { field: "totalValue",    label: "Value",         minW: 110, type: "text"   },
     { field: "notes",         label: "Notes",         minW: 180, type: "text"   },
@@ -351,6 +354,7 @@ export default function CustomersPage() {
       industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
       status: newRow.status as CustomerStatus,
       customerType: (newRow.customerType as "POS Customer" | "Regular Customer") || "Regular Customer",
+      customerRole: (newRow.customerRole as "Buyer" | "Supplier") || "Buyer",
       customerSince: newRow.customerSince, totalValue: newRow.totalValue, notes: newRow.notes,
       currency: "GBP", tags: [], source: "direct",
     });
@@ -652,7 +656,14 @@ export default function CustomersPage() {
               <div>
                 <h3 className="text-xl font-bold">{viewCust.name}</h3>
                 <p className="text-muted-foreground">{viewCust.company}</p>
-                <span className={`inline-flex mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold ${STATUS_COLORS[viewCust.status]}`}>{viewCust.status}</span>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={`inline-flex px-2.5 py-1 rounded-full text-[12px] font-semibold ${STATUS_COLORS[viewCust.status]}`}>{viewCust.status}</span>
+                  <span className={`inline-flex px-2.5 py-1 rounded-full text-[12px] font-semibold ${
+                    (viewCust.customerRole ?? "Buyer") === "Buyer"
+                      ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300"
+                      : "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300"
+                  }`}>{viewCust.customerRole ?? "Buyer"}</span>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 {[

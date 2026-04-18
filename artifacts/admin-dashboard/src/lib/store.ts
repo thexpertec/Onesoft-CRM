@@ -510,6 +510,7 @@ export type Customer = {
   status: CustomerStatus;
   source: "from_lead" | "direct";
   customerType?: "POS Customer" | "Regular Customer";
+  customerRole?: "Buyer" | "Supplier";
   leadId?: string;
   customerSince: string;
   totalValue: string;
