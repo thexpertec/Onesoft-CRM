@@ -9,7 +9,7 @@ import {
   deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv,
 } from "@/lib/store";
-import { buildSaleReceiptHtml, printReceiptHtml } from "@/lib/print-invoice";
+import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Search, X, Save, Trash2, Eye,
@@ -482,7 +482,7 @@ function AdminOrderPipeline({
 }) {
   const rank = DELIVERY_RANK[deliveryStatus] ?? 0;
   const isCancelled = sale.status === "Cancelled" || sale.status === "Refunded";
-  const isDraft      = sale.status === "Draft";
+  const isDraft      = sale.status === "Draft" || sale.status === "Pending";
 
   type Stage = { key: string; label: string; desc: string; done: boolean; active: boolean; ds?: DeliveryStage };
 
@@ -780,6 +780,7 @@ function POSView({
   const grandTotal     = afterInvDisc + liveTaxAmt + deliveryAmt;
   const discountAmt    = totalLineDisc;  // kept for in-line badge display
   const isDraft       = sale.status === "Draft";
+  const isPending     = sale.status === "Pending";
   const isCompleted   = sale.status === "Completed";
   const isOnCredit    = sale.status === "On Credit";
   const isCredit      = localMeta.paymentMethod === "Credit";
@@ -1353,6 +1354,34 @@ function POSView({
                     </button>
                   </div>
                 </>
+              )}
+              {isPending && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800">
+                    <Clock size={13} className="text-yellow-600 shrink-0" />
+                    <span className="text-[11px] text-yellow-700 dark:text-yellow-300 font-medium">
+                      Online order awaiting processing — accept to begin fulfilment.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setPayModalOpen(true)}
+                    className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
+                  >
+                    <Check size={16} /> Accept &amp; Mark as Paid
+                  </button>
+                  <button
+                    onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
+                    className="w-full h-10 rounded-xl border-2 border-blue-200 dark:border-blue-800 text-[13px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Printer size={14} /> Print Invoice
+                  </button>
+                  <button
+                    onClick={() => setCancelConfirmOpen(true)}
+                    className="w-full h-9 rounded-xl border-2 border-red-200 dark:border-red-900/60 text-[12px] font-semibold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Ban size={13} /> Cancel Order
+                  </button>
+                </div>
               )}
               {isOnCredit && (
                 <>
