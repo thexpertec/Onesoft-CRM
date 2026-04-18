@@ -334,7 +334,8 @@ interface PaymentModalProps {
   saleNumber: string;
   total: number;
   defaultPaymentMethod?: SalePayment;
-  onConfirm: (amountPaid: string, paymentMethod: SalePayment) => void;
+  defaultNotes?: string;
+  onConfirm: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
   onCancel: () => void;
 }
 
@@ -346,9 +347,10 @@ const PAY_METHOD_META: { method: SalePayment; icon: () => React.ReactNode; color
   { method: "Credit",          icon: () => <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
 ];
 
-function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConfirm, onCancel }: PaymentModalProps) {
+function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
   const [payAmount, setPayAmount] = useState("0");
   const [payMethod, setPayMethod] = useState<SalePayment>(defaultPaymentMethod);
+  const [notes,     setNotes]     = useState(defaultNotes);
 
   const sym  = getSettingsCurrencySymbol();
   const dp   = getSettingsDecimalPlaces();
@@ -410,7 +412,7 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConf
           ) : null}
 
           <div className="flex gap-2 mt-auto">
-            <button onClick={() => onConfirm(payAmount, payMethod)}
+            <button onClick={() => onConfirm(payAmount, payMethod, notes)}
               className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none">
               <Check size={16} /> Confirm Payment
             </button>
@@ -421,20 +423,32 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", onConf
           </div>
         </div>
 
-        {/* ── RIGHT: Payment method ─────────────────────────────────────── */}
-        <div className="w-[240px] flex-shrink-0 flex flex-col border-l border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/60 px-4 pt-5 pb-5">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
-          <div className="grid grid-cols-2 gap-2">
-            {PAY_METHOD_META.map(m => {
-              const isSelected = payMethod === m.method;
-              return (
-                <button key={m.method} onClick={() => setPayMethod(m.method)}
-                  className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${m.color} ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
-                  {m.icon()}
-                  <span className="leading-tight text-center">{m.method}</span>
-                </button>
-              );
-            })}
+        {/* ── RIGHT: Payment method + Notes ────────────────────────────── */}
+        <div className="w-[240px] flex-shrink-0 flex flex-col border-l border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/60 px-4 pt-5 pb-5 gap-4">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
+            <div className="grid grid-cols-2 gap-2">
+              {PAY_METHOD_META.map(m => {
+                const isSelected = payMethod === m.method;
+                return (
+                  <button key={m.method} onClick={() => setPayMethod(m.method)}
+                    className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${m.color} ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
+                    {m.icon()}
+                    <span className="leading-tight text-center">{m.method}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 mt-auto">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Notes</div>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Order notes (optional)…"
+              className="w-full resize-none rounded-xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 px-3 py-2 text-[12px] text-gray-700 dark:text-gray-200 placeholder:text-gray-300 dark:placeholder:text-zinc-500 focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+            />
           </div>
         </div>
       </div>
@@ -462,7 +476,7 @@ interface POSViewProps {
   priceMode: "retail" | "wholesale" | "clubcard";
   onPriceModeChange: (mode: "retail" | "wholesale" | "clubcard") => void;
   onSetStatus: (status: SaleStatus) => void;
-  onComplete: (amountPaid: string, paymentMethod: SalePayment) => void;
+  onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
 }
 
@@ -848,42 +862,6 @@ function POSView({
 
           <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
 
-          {/* DATE */}
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Date</span>
-            <input type="date"
-              value={localMeta.saleDate}
-              onChange={e => onMetaChange({ saleDate: e.target.value })}
-              onBlur={onSaveMeta}
-              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors w-36"
-            />
-          </div>
-
-          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
-
-          {/* PAYMENT METHOD + AMOUNT */}
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Payment</span>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 shrink-0 text-base leading-none">{getPaymentIcon(localMeta.paymentMethod)}</span>
-              <div className="relative flex items-center">
-                <select
-                  value={localMeta.paymentMethod}
-                  onChange={e => { onMetaChange({ paymentMethod: e.target.value as SalePayment }); onSaveMeta(); }}
-                  className="appearance-none border-0 border-b-2 border-gray-200 dark:border-zinc-700 pl-0 pr-5 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <ChevronDown size={10} className="absolute right-0 bottom-1 text-gray-400 pointer-events-none" />
-              </div>
-              <span className="text-[13px] font-bold text-blue-600 dark:text-blue-400 pl-2 border-l border-gray-200 dark:border-zinc-700">
-                {sym}{grandTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-
-          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
-
           {/* SALE MODE */}
           <div className="flex flex-col gap-0.5 shrink-0">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Mode</span>
@@ -898,20 +876,6 @@ function POSView({
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="w-px h-8 bg-gray-200 dark:bg-zinc-700 shrink-0" />
-
-          {/* NOTES */}
-          <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Notes</span>
-            <input
-              value={localMeta.notes}
-              onChange={e => onMetaChange({ notes: e.target.value })}
-              onBlur={onSaveMeta}
-              placeholder="Optional…"
-              className="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] text-gray-700 dark:text-gray-200 bg-transparent focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300 dark:placeholder:text-zinc-600 w-full"
-            />
           </div>
 
           {agentOpts.length > 0 && (<>
@@ -1845,9 +1809,10 @@ function POSView({
         saleNumber={sale.saleNumber}
         total={grandTotal}
         defaultPaymentMethod={localMeta.paymentMethod}
-        onConfirm={(amountPaid, paymentMethod) => {
+        defaultNotes={localMeta.notes ?? ""}
+        onConfirm={(amountPaid, paymentMethod, notes) => {
           setPayModalOpen(false);
-          onComplete(amountPaid, paymentMethod);
+          onComplete(amountPaid, paymentMethod, notes);
         }}
         onCancel={() => setPayModalOpen(false)}
       />
@@ -2321,7 +2286,7 @@ export default function SalesPage() {
     setLocalItems([]);
   };
 
-  const handleComplete = (amountPaid: string, paymentMethod: SalePayment) => {
+  const handleComplete = (amountPaid: string, paymentMethod: SalePayment, notes: string) => {
     if (!detailId || !localMeta) return;
 
     try {
@@ -2371,6 +2336,7 @@ export default function SalesPage() {
 
       const completedSale = editSale(detailId, {
         ...localMeta,
+        notes,
         paymentMethod,
         status: "Completed",
         items: localItems,
