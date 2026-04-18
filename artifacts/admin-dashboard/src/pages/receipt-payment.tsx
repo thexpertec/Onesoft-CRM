@@ -483,15 +483,19 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Party Name</label>
-              <input
-                type="text" value={party} onChange={e => setParty(e.target.value)}
-                placeholder={vtype === "receipt" ? "Customer / payer…" : "Supplier / payee…"}
-                disabled={isPosted}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              />
-            </div>
+            {vtype === "payment" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Party Name
+                </label>
+                <input
+                  type="text" value={party} onChange={e => setParty(e.target.value)}
+                  placeholder="Supplier / payee…"
+                  disabled={isPosted}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                />
+              </div>
+            )}
             {vtype === "payment" && (
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
@@ -502,15 +506,17 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   : <AccDropdown accounts={accounts} value={cbId} filterCashBank onChange={(id, name) => { setCbId(id); setCbName(name); }} placeholder="Select Cash / Bank account…" />}
               </div>
             )}
-            <div>
-              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Reference / Cheque #</label>
-              <input
-                type="text" value={ref} onChange={e => setRef(e.target.value)}
-                placeholder="CHQ-001, TXN-REF…"
-                disabled={isPosted}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              />
-            </div>
+            {vtype === "payment" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Reference / Cheque #</label>
+                <input
+                  type="text" value={ref} onChange={e => setRef(e.target.value)}
+                  placeholder="CHQ-001, TXN-REF…"
+                  disabled={isPosted}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                />
+              </div>
+            )}
           </div>
 
           {/* Lines */}
@@ -558,7 +564,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                         {isPosted
                           ? <span className="px-1">{l.description || "—"}</span>
                           : <input type="text" value={l.description} onChange={e => setLine(l.id, { description: e.target.value })}
-                              placeholder="Description…"
+                              placeholder="Ref. / Cheque"
                               className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />}
                       </td>
                       <td className="px-2 py-1.5 text-right">
