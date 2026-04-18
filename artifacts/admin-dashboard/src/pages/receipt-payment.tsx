@@ -3,11 +3,12 @@ import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, CheckCircle, Search, FileText, ArrowDownCircle,
   ArrowUpCircle, X, Pencil, ChevronDown, Eye, AlertTriangle, CreditCard,
+  User, Phone, Building2, Hash,
 } from "lucide-react";
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -34,15 +35,156 @@ function buildTrail(accounts: Account[], acc: Account): string {
 
 // ─── Account Dropdown (portal-based to avoid clipping) ───────────────────────
 
+// ─── Invoice Search Dropdown ──────────────────────────────────────────────────
+
+interface InvoiceSearchDropdownProps {
+  value: string | null;
+  onChange: (inv: Invoice) => void;
+  disabled?: boolean;
+}
+
+function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropdownProps) {
+  const [open, setOpen]   = useState(false);
+  const [q, setQ]         = useState("");
+  const trigRef           = useRef<HTMLButtonElement>(null);
+  const listRef           = useRef<HTMLDivElement>(null);
+  const [pos, setPos]     = useState({ top: 0, left: 0, width: 0 });
+
+  const invoices = useMemo(() => {
+    const all = getInvoices().filter(inv =>
+      inv.invoiceType !== "purchase" &&
+      inv.status !== "paid" &&
+      inv.status !== "cancelled"
+    );
+    const sq = q.toLowerCase().trim();
+    if (!sq) return all;
+    return all.filter(inv =>
+      inv.invoiceNumber.toLowerCase().includes(sq) ||
+      inv.customer.toLowerCase().includes(sq) ||
+      (inv.salesOfficer || "").toLowerCase().includes(sq)
+    );
+  }, [q]);
+
+  const selected = value ? getInvoices().find(i => i.id === value) : null;
+
+  const openDropdown = () => {
+    if (!trigRef.current || disabled) return;
+    const r = trigRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!trigRef.current?.contains(e.target as Node) && !listRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const STATUS_COLOR: Record<string, string> = {
+    draft:    "bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-gray-400",
+    sent:     "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+    overdue:  "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300",
+    partial:  "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  };
+
+  return (
+    <>
+      <button
+        ref={trigRef} type="button"
+        onClick={open ? () => setOpen(false) : openDropdown}
+        disabled={disabled}
+        className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+          {selected ? `${selected.invoiceNumber} — ${selected.customer}` : "Search invoice by number…"}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {value && !disabled && (
+            <span onClick={e => { e.stopPropagation(); onChange({ id: "" } as any); }}
+              className="text-muted-foreground hover:text-destructive p-0.5">
+              <X className="h-3 w-3" />
+            </span>
+          )}
+          <Search className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={listRef}
+          style={{ position: "absolute", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="rounded-md border border-input bg-popover shadow-lg overflow-hidden"
+        >
+          <div className="p-2 border-b border-border">
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-muted/60">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                autoFocus className="flex-1 text-sm bg-transparent outline-none"
+                placeholder="Invoice number, customer…" value={q}
+                onChange={e => setQ(e.target.value)}
+              />
+              {q && <button onClick={() => setQ("")}><X className="h-3 w-3 text-muted-foreground" /></button>}
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {invoices.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                {q ? "No invoices match" : "No receivable invoices found"}
+              </div>
+            ) : invoices.map(inv => {
+              const outstanding = (() => {
+                const total = inv.items.reduce((s, it) => {
+                  const qty = parseFloat(it.qty) || 0, price = parseFloat(it.unitPrice) || 0;
+                  const disc = parseFloat(it.discount) || 0;
+                  const sub = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+                  return s + sub;
+                }, 0);
+                const tax = total * (parseFloat(inv.taxRate) || 0) / 100;
+                const grand = total + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+                const paid = parseFloat(inv.amountPaid) || 0;
+                return grand - paid;
+              })();
+              return (
+                <button key={inv.id} type="button"
+                  onClick={() => { onChange(inv); setOpen(false); setQ(""); }}
+                  className={`w-full text-left px-3 py-2.5 text-sm hover:bg-accent/60 transition-colors border-b border-border/40 last:border-0 ${inv.id === value ? "bg-primary/10" : ""}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-foreground">{inv.invoiceNumber}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${STATUS_COLOR[inv.status] ?? STATUS_COLOR.draft}`}>
+                      {inv.status}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center justify-between">
+                    <span>{inv.customer}{inv.salesOfficer ? ` · ${inv.salesOfficer}` : ""}</span>
+                    <span className="font-medium text-amber-600 dark:text-amber-400">Due: {outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ─── Account Dropdown (portal-based to avoid clipping) ───────────────────────
+
 interface AccDropdownProps {
   accounts: Account[];
   value: string;
   onChange: (id: string, name: string) => void;
   placeholder?: string;
   filterCashBank?: boolean;
+  filterCurrentAssets?: boolean;
 }
 
-function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false }: AccDropdownProps) {
+function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false, filterCurrentAssets = false }: AccDropdownProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ]       = useState("");
   const trigRef         = useRef<HTMLButtonElement>(null);
@@ -57,13 +199,18 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
         return code.startsWith("12") || a.head === "Assets";
       });
     }
+    if (filterCurrentAssets) {
+      base = base.filter(a =>
+        a.head === "Assets" && !a.subType?.toLowerCase().includes("fixed")
+      );
+    }
     const sq = q.toLowerCase().trim();
     if (sq) base = base.filter(a =>
       a.name.toLowerCase().includes(sq) ||
       (a.code || "").toLowerCase().includes(sq)
     );
     return base;
-  }, [accounts, q, filterCashBank]);
+  }, [accounts, q, filterCashBank, filterCurrentAssets]);
 
   const selected = accounts.find(a => a.id === value);
 
@@ -177,6 +324,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       ? initial.lines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
       : [emptyLine()]
   );
+  const [linkedInvId, setLinkedInvId] = useState<string | null>(null);
+  const linkedInv = linkedInvId ? getInvoices().find(i => i.id === linkedInvId) ?? null : null;
 
   const total = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
@@ -267,6 +416,58 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             </div>
           )}
 
+          {/* ── Invoice Link (Receipt only) ── */}
+          {vtype === "receipt" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Link to Invoice <span className="text-[10px] normal-case font-normal opacity-70">(receivable invoices only)</span>
+                </label>
+                <InvoiceSearchDropdown
+                  value={linkedInvId}
+                  disabled={isPosted}
+                  onChange={inv => {
+                    if (!inv?.id) { setLinkedInvId(null); return; }
+                    setLinkedInvId(inv.id);
+                    if (inv.customer && !party) setParty(inv.customer);
+                  }}
+                />
+              </div>
+              {linkedInv && (
+                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</p>
+                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.invoiceNumber}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Payer Name</p>
+                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.customer || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
+                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.buyerPhone || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Company</p>
+                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.salesOfficer || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Core fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -309,7 +510,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                {vtype === "receipt" ? "Revenue / Income Lines" : "Expense / Account Lines"}
+                {vtype === "receipt" ? "Collection Account Lines" : "Expense / Account Lines"}
+                {vtype === "receipt" && <span className="ml-1 text-[10px] normal-case font-normal opacity-60">— Current Assets only</span>}
               </label>
               {!isPosted && (
                 <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
@@ -336,7 +538,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                       <td className="px-2 py-1.5">
                         {isPosted
                           ? <span className="px-1">{l.accountName || "—"}</span>
-                          : <AccDropdown accounts={accounts} value={l.accountId} onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })} placeholder="Account…" />}
+                          : <AccDropdown accounts={accounts} value={l.accountId} onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })} placeholder="Account…" filterCurrentAssets={vtype === "receipt"} />}
                       </td>
                       <td className="px-2 py-1.5">
                         {isPosted
