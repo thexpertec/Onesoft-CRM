@@ -7,7 +7,6 @@ import {
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
   getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup,
-  getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getShareholders, createShareholder, updateShareholder, deleteShareholder,
   getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,
   getProducts, createProduct, updateProduct, deleteProduct, reorderProducts,
@@ -29,7 +28,7 @@ import {
   getManufacturingOrders, createManufacturingOrder, updateManufacturingOrder, deleteManufacturingOrder, completeManufacturingOrder,
   getRecipes, createRecipe, deleteRecipe,
   getRPVouchers, createRPVoucher, updateRPVoucher, deleteRPVoucher, postRPVoucherJE,
-  Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Supplier, Shareholder, InvestmentPlan,
+  Lead, RequirementDoc, Customer, ProductCategory, ProductGroup, Shareholder, InvestmentPlan,
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, Department, Designation, StockItem, Sale, Invoice, Account,
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgRecipe, MfgOutput, ProductionCost, RPVoucher,
   City, Area, PaymentAccount,
@@ -227,34 +226,6 @@ export function useUnits() {
   return { units, addUnit, editUnit, removeUnit, refresh: fetchUnits };
 }
 
-export function useSuppliers() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-
-  const fetchSuppliers = useCallback(() => {
-    setSuppliers(getSuppliers());
-  }, []);
-
-  useStoreEffect(fetchSuppliers);
-
-  const addSupplier = (data: Parameters<typeof createSupplier>[0]) => {
-    const s = createSupplier(data);
-    fetchSuppliers();
-    return s;
-  };
-
-  const editSupplier = (id: string, updates: Parameters<typeof updateSupplier>[1]) => {
-    const s = updateSupplier(id, updates);
-    fetchSuppliers();
-    return s;
-  };
-
-  const removeSupplier = (id: string) => {
-    deleteSupplier(id);
-    fetchSuppliers();
-  };
-
-  return { suppliers, addSupplier, editSupplier, removeSupplier, refresh: fetchSuppliers };
-}
 
 export function usePurchaseOrders() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);

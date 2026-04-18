@@ -34,8 +34,6 @@ import ProductGroupsPage from "@/pages/product-groups";
 import BrandsPage from "@/pages/brands";
 import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
-import SuppliersPage from "@/pages/suppliers";
-import SupplierNewPage from "@/pages/supplier-new";
 import ShareholdersPage from "@/pages/shareholders";
 import InvestmentPlansPage from "@/pages/investment-plans";
 import MediaLibraryPage from "@/pages/media";
@@ -135,8 +133,6 @@ function Router() {
               <Route path="/product-groups" component={ProductGroupsPage} />
               <Route path="/attributes" component={AttributesPage} />
               <Route path="/units" component={UnitsPage} />
-              <Route path="/suppliers/new" component={SupplierNewPage} />
-              <Route path="/suppliers" component={SuppliersPage} />
               <Route path="/shareholders" component={ShareholdersPage} />
               <Route path="/investment-plans" component={InvestmentPlansPage} />
               <Route path="/purchases">{() => { const [,nav]=useLocation(); useEffect(()=>{nav("/invoices?type=purchase",{replace:true});},[]);return null; }}</Route>

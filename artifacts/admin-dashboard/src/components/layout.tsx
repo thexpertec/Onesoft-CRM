@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, FileText, Moon, Sun, Menu, X,
-  LogOut, Shield, UserCheck, Package, Truck,
+  LogOut, Shield, UserCheck, Package,
   Bell, Plus, Search, ChevronDown, UserPlus, FilePlus, Tag,
   ArrowRight, Bookmark, SlidersHorizontal, Ruler, FolderOpen, Layers,
   ShoppingCart, Users2, KeyRound, Building2, Receipt,
@@ -26,7 +26,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  getLeads, getCustomers, getSuppliers, getDocs, getProducts, getStaff,
+  getLeads, getCustomers, getDocs, getProducts, getStaff,
   getSales, getModuleGroupById, ModuleId,
   getActivities, clearActivities, ActivityEntry, ActivityAction,
   getSettings,
@@ -157,15 +157,6 @@ const CRM_COLUMNS: MegaColumn[] = [
       { label: "All Customers",     href: "/customers", icon: UserCheck  },
       { label: "Add Customer",      href: "/customers", icon: UserPlus   },
       { label: "Convert from Lead", href: "/customers", icon: ArrowRight },
-    ],
-  },
-  {
-    href: "/suppliers", label: "Suppliers", icon: Truck,
-    color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/40",
-    desc: "Vendor relationships",
-    links: [
-      { label: "All Suppliers", href: "/suppliers", icon: Truck     },
-      { label: "Add Supplier",  href: "/suppliers", icon: UserPlus  },
     ],
   },
   {
@@ -323,7 +314,7 @@ const OTHER_NAV: NavItem[] = [
   { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
 ];
 
-const CRM_ROUTES           = ["/leads", "/customers", "/suppliers"];
+const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-return"];
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users", "/sales-agents", "/agent-performance"];
@@ -338,7 +329,6 @@ const QUICK_ADD: SubItem[] = [
   { label: "Purchase Invoice", href: "/invoices?type=purchase", icon: ShoppingCart },
   { label: "New Document",     href: "/documents/new",          icon: FilePlus     },
   { label: "Journal Entry",    href: "/journal-entry",          icon: ClipboardList},
-  { label: "New Supplier",     href: "/suppliers",              icon: Truck        },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -457,7 +447,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     // CRM
     crm_leads:           ["View Leads",     "Add Leads",    "Edit Leads",    "Delete Leads",    "Manage Leads"],
     crm_customers:       ["View Customers", "Add Customers","Edit Customers","Delete Customers","Manage Customers"],
-    crm_suppliers:       ["View Suppliers", "Add Suppliers","Edit Suppliers","Delete Suppliers","Manage Suppliers"],
     // Products & Inventory
     products:            ["View Products",  "Add Products", "Edit Products", "Delete Products", "Manage Products"],
     categories:          ["View Categories","Add Categories","Edit Categories","Delete Categories","View Products","Manage Products"],
@@ -530,7 +519,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const LEFT_ITEM_MODULE: Partial<Record<string, ModuleId>> = {
     "l-leads":         "crm_leads",
     "l-customers":     "crm_customers",
-    "l-suppliers":     "crm_suppliers",
     "l-agents":        "sales_agents",
     "l-agent-perf":    "agent_performance",
     "l-areas":         "areas",
@@ -566,7 +554,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "payment-accounts":   "accounting_receipts",
     "leads":             "crm_leads",
     "customers":         "crm_customers",
-    "suppliers":         "crm_suppliers",
     "products":          "products",
     "stock-ledger":      "stock",
     "categories":        "products",
@@ -575,8 +562,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const allowedCrmColumns = CRM_COLUMNS.filter(col =>
     col.href === "/leads"     ? isModuleAllowed("crm_leads")     :
-    col.href === "/customers" ? isModuleAllowed("crm_customers") :
-    col.href === "/suppliers" ? isModuleAllowed("crm_suppliers") : true
+    col.href === "/customers" ? isModuleAllowed("crm_customers") : true
   );
 
   const hrmItems: SubItem[] = [
@@ -665,8 +651,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       l.name?.toLowerCase().includes(q) || l.company?.toLowerCase().includes(q)).slice(0, 4),
     customers: getCustomers().filter(c =>
       c.name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)).slice(0, 4),
-    suppliers: getSuppliers().filter(s =>
-      s.company?.toLowerCase().includes(q) || s.contactPerson?.toLowerCase().includes(q)).slice(0, 4),
     products:  getProducts().filter(p =>
       p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q)).slice(0, 4),
     staff:     getStaff().filter(s =>
@@ -679,7 +663,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const hasResults = searchResults &&
     (searchResults.leads.length + searchResults.customers.length +
-     searchResults.suppliers.length + searchResults.products.length +
+     searchResults.products.length +
      searchResults.staff.length + searchResults.sales.length +
      searchResults.docs.length) > 0;
 
@@ -1211,7 +1195,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center border-b border-border px-3">
               <Search size={15} className="text-muted-foreground mr-2 flex-shrink-0" />
               <CommandInput
-                placeholder="Search leads, customers, suppliers, documents..."
+                placeholder="Search leads, customers, products, documents..."
                 value={searchQuery}
                 onValueChange={setSearchQuery}
                 className="h-12 text-[13px]"
@@ -1250,18 +1234,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <UserCheck size={13} className="text-muted-foreground flex-shrink-0" />
                       <span className="font-medium">{c.name}</span>
                       {c.company && <span className="text-muted-foreground text-[11px]">· {c.company}</span>}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {hasQuery && searchResults?.suppliers.length ? (
-                <CommandGroup heading="Suppliers">
-                  {searchResults.suppliers.map(s => (
-                    <CommandItem key={s.id} className="text-[13px] gap-2 cursor-pointer"
-                      onSelect={() => { navigate("/suppliers"); setSearchOpen(false); setSearchQuery(""); }}>
-                      <Truck size={13} className="text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium">{s.company}</span>
-                      {s.contactPerson && <span className="text-muted-foreground text-[11px]">· {s.contactPerson}</span>}
                     </CommandItem>
                   ))}
                 </CommandGroup>

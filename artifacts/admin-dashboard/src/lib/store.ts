@@ -586,72 +586,6 @@ export const convertLeadToCustomer = (lead: Lead): Customer => {
   return customer;
 };
 
-// ─── Suppliers API ────────────────────────────────────────────────────────────
-export type SupplierStatus = "Active" | "Inactive" | "Blacklisted";
-
-export type Supplier = {
-  id: string;
-  company: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  category: string;
-  city: string;
-  area?: string;   // managed area/region
-  country: string;
-  status: SupplierStatus;
-  rating: number;
-  currency: string;
-  openingBalance?: number;   // Cr = positive (we owe them), Dr = negative
-  notes: string;
-  tags: string[];
-  productIds?: string[];     // products supplied by this supplier
-  ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Payable
-  createdAt: string;
-  updatedAt: string;
-};
-
-const SUPPLIERS_KEY = "admin-suppliers";
-
-export const getSuppliers = (): Supplier[] => getStored<Supplier>(SUPPLIERS_KEY);
-
-export const createSupplier = (data: Omit<Supplier, "id" | "createdAt" | "updatedAt">): Supplier => {
-  const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
-    parentId:    SYS_ACCS.AP_TRADE,
-    parentCode:  "2111",
-    name:        data.company + (data.contactPerson ? ` (${data.contactPerson})` : ""),
-    head:        "Liabilities",
-    subType:     "Payable",
-    description: `Payable account for supplier: ${data.company}`,
-  });
-  const item: Supplier = {
-    ...data,
-    ledgerAccountId,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(SUPPLIERS_KEY, [...getSuppliers(), item]);
-  addActivity({ action: "created", entity: "Supplier", entityName: item.company, detail: item.contactPerson || undefined });
-  return item;
-};
-
-export const updateSupplier = (id: string, updates: Partial<Omit<Supplier, "id" | "createdAt">>): Supplier => {
-  const items = getSuppliers();
-  const i = items.findIndex(s => s.id === id);
-  if (i === -1) throw new Error("Supplier not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SUPPLIERS_KEY, items);
-  addActivity({ action: "updated", entity: "Supplier", entityName: items[i].company });
-  return items[i];
-};
-
-export const deleteSupplier = (id: string): void => {
-  const item = getSuppliers().find(s => s.id === id);
-  setStored(SUPPLIERS_KEY, getSuppliers().filter(s => s.id !== id));
-  addActivity({ action: "deleted", entity: "Supplier", entityName: item?.company || id });
-};
-
 // ─── Shareholders API ─────────────────────────────────────────────────────────
 export type Shareholder = {
   id: string;
@@ -867,7 +801,7 @@ export const deleteProductGroup = (id: string): void => {
 // ─── Module Definitions (platform-level feature catalogue) ───────────────────
 export type ModuleId =
   // CRM
-  | "crm_leads" | "crm_customers" | "crm_suppliers"
+  | "crm_leads" | "crm_customers"
   // Products & Inventory
   | "products" | "categories" | "brands" | "product_groups" | "attributes" | "units"
   | "stock" | "raw_materials"
@@ -904,7 +838,6 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   // ── CRM ───────────────────────────────────────────────────────────────────
   { id: "crm_leads",      label: "Leads",              desc: "Lead pipeline & prospecting",       group: "CRM",           href: "/leads"             },
   { id: "crm_customers",  label: "Customers",           desc: "Customer records & history",        group: "CRM",           href: "/customers"         },
-  { id: "crm_suppliers",  label: "Suppliers",           desc: "Supplier contacts & details",       group: "CRM",           href: "/suppliers"         },
 
   // ── Products & Inventory ───────────────────────────────────────────────────
   { id: "products",       label: "Products",            desc: "Product catalogue management",      group: "Products",      href: "/products"          },
@@ -1084,7 +1017,7 @@ export const deleteTenant = (id: string): void => {
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
 export const getTenantStats = (tenantId: string): Record<string, number> => {
   const keys: string[] = [
-    "admin-leads", "admin-customers", "admin-suppliers", "admin-products",
+    "admin-leads", "admin-customers", "admin-products",
     "admin-sales", "admin-purchase-orders", "admin-stock", "admin-hrm-staff",
   ];
   const result: Record<string, number> = {};
@@ -1810,18 +1743,11 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       .filter(it => it.itemType === "raw-material")
       .reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
     const poTotal = inventoryTotal + rmTotal;
-    // Look up the supplier's subsidiary ledger to credit the correct payable account
-    const allSuppliers = getSuppliers();
-    const supplierRec = allSuppliers.find(s =>
-      s.company === order.supplier ||
-      s.contactPerson === order.supplier
-    );
     const je = autoPostPurchaseJE({
-      poNumber:         order.poNumber,
-      supplier:         order.supplier || "Supplier",
-      date:             today,
-      total:            poTotal,
-      supplierLedgerId: supplierRec?.ledgerAccountId,
+      poNumber: order.poNumber,
+      supplier: order.supplier || "Supplier",
+      date:     today,
+      total:    poTotal,
     });
     pos[i] = { ...pos[i], status: "Received", jeId: je?.id, updatedAt: new Date().toISOString() };
   } else {
@@ -3393,8 +3319,6 @@ export type AppSettings = {
   posProductView:       "image" | "list"; // POS catalogue layout: image grid (4-col) or text list (2-col)
   // ── CRM / HRM form display ──
   crmFormMode:          "dialog" | "sheet"; // default open mode for all CRM/HRM add-forms
-  // ── Supplier form options ──
-  supplierProductPicker: boolean; // show product multi-picker in add/edit supplier forms
   // ── Right sidebar quick-action customisation ──
   quickActionsRight?: { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
   // ── Left sidebar quick-action customisation ──
@@ -3570,7 +3494,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showPosProfit:        true,
   posProductView:       "image",
   crmFormMode:          "dialog",
-  supplierProductPicker: true,
   fontHeadRow:          12,
   fontDataRow:          13,
   fontButton:           13,
@@ -3633,7 +3556,7 @@ export function getBankAccounts(): BankAccount[] {
 
 // All localStorage keys for export/import/reset
 export const ALL_STORE_KEYS = [
-  "admin-leads", "admin-req-docs", "admin-customers", "admin-suppliers",
+  "admin-leads", "admin-req-docs", "admin-customers",
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
   "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-hrm-departments", "admin-hrm-designations", "admin-users", "admin-team-members",
@@ -3643,7 +3566,7 @@ export const ALL_STORE_KEYS = [
 export type StoreKey = typeof ALL_STORE_KEYS[number];
 
 export const MODULE_KEYS: Record<string, StoreKey[]> = {
-  CRM:                  ["admin-leads", "admin-customers", "admin-suppliers"],
+  CRM:                  ["admin-leads", "admin-customers"],
   Products:             ["admin-products", "admin-product-categories", "admin-brands", "admin-attributes", "admin-units"],
   Stock:                ["admin-stock"],
   Purchases:            ["admin-purchase-orders"],
@@ -3957,27 +3880,7 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  // ── Migrate existing supplier subsidiary ledgers from AP_GROUP → AP_TRADE ────
-  // Any COA account whose id appears in a supplier's ledgerAccountId and whose
-  // parentId is still AP_GROUP should be moved under AP_TRADE.
-  const suppliersForMigration = getStored<{ ledgerAccountId?: string }>(SUPPLIERS_KEY);
-  const supplierLedgerIds = new Set(
-    suppliersForMigration.map(s => s.ledgerAccountId).filter(Boolean) as string[]
-  );
-  let supplierLedgersMoved = false;
-  workingAccounts = workingAccounts.map(acc => {
-    if (supplierLedgerIds.has(acc.id) && acc.parentId === SYS_ACCS.AP_GROUP) {
-      supplierLedgersMoved = true;
-      // Recode from "2110-NNN" pattern to "2111-NNN" keeping the sequence number
-      const newCode = acc.code.startsWith("2110-")
-        ? `2111-${acc.code.slice(5)}`
-        : acc.code;
-      return { ...acc, parentId: SYS_ACCS.AP_TRADE, code: newCode, updatedAt: new Date().toISOString() };
-    }
-    return acc;
-  });
-
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || supplierLedgersMoved) {
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
@@ -4002,26 +3905,6 @@ export function seedDefaultCoaAccounts(): void {
   });
   if (customersUpdated) {
     setStored(CUSTOMERS_KEY, customersPatched);
-  }
-
-  // Suppliers → Trade Payables Group (AP_TRADE)
-  const suppliers = getStored<{ id: string; company: string; contactPerson?: string; ledgerAccountId?: string }>(SUPPLIERS_KEY);
-  let suppliersUpdated = false;
-  const suppliersPatched = suppliers.map(s => {
-    if (s.ledgerAccountId) return s;
-    const lid = createSubsidiaryLedger({
-      parentId:    SYS_ACCS.AP_TRADE,
-      parentCode:  "2111",
-      name:        s.company + (s.contactPerson ? ` (${s.contactPerson})` : ""),
-      head:        "Liabilities",
-      subType:     "Payable",
-      description: `Accounts payable ledger for ${s.company}`,
-    });
-    suppliersUpdated = true;
-    return { ...s, ledgerAccountId: lid };
-  });
-  if (suppliersUpdated) {
-    setStored(SUPPLIERS_KEY, suppliersPatched);
   }
 
   // ── Seed default Cash in Hand payment account ────────────────────────────────
