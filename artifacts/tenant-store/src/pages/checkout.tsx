@@ -411,7 +411,7 @@ export function CheckoutPage() {
       saleDate: now.slice(0, 10),
       customer: customerName,
       portalCustomerId: portalSession?.customer?.id ?? null,
-      status: "Completed",
+      status: "Pending",
       saleMode: isLoggedIn ? "Clubcard" : "Retail",
       paymentMethod,
       notes: form.notes ? form.notes : `Online order · ${form.address1}, ${form.city} ${form.postcode}`,

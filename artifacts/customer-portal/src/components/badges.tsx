@@ -41,6 +41,7 @@ export function deriveOrderStage(status: string, deliveryStatus?: string): strin
   if (status === "Cancelled") return "Cancelled";
   if (status === "Refunded")  return "Refunded";
   if (status === "Draft")     return "Placed";
+  if (status === "Pending")   return "Placed";
   const ds = deliveryStatus ?? "Pending";
   if (ds === "Delivered")  return "Delivered";
   if (ds === "Shipped")    return "Shipped";
@@ -59,11 +60,14 @@ export function OrderStageBadge({ status, deliveryStatus }: { status: string; de
 }
 
 const STATUS_STYLE: Record<string, string> = {
+  Pending:    "bg-yellow-50 text-yellow-700 border-yellow-200",
   Completed:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "On Credit":"bg-orange-50 text-orange-700 border-orange-200",
   Confirmed:  "bg-blue-50 text-blue-700 border-blue-200",
   Draft:      "bg-gray-100 text-gray-600 border-gray-200",
   Cancelled:  "bg-red-50 text-red-600 border-red-200",
   Returned:   "bg-orange-50 text-orange-600 border-orange-200",
+  Refunded:   "bg-amber-50 text-amber-700 border-amber-200",
 };
 
 const DELIVERY_STYLE: Record<string, string> = {

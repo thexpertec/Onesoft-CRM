@@ -1734,7 +1734,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
 };
 
 // ─── Sales / POS ─────────────────────────────────────────────────────────────
-export const SALE_STATUSES  = ["Draft", "Completed", "On Credit", "Refunded", "Cancelled"] as const;
+export const SALE_STATUSES  = ["Pending", "Draft", "Completed", "On Credit", "Refunded", "Cancelled"] as const;
 export type SaleStatus = typeof SALE_STATUSES[number];
 
 export const SALE_PAYMENTS  = ["Cash", "Card", "Bank Transfer", "Cheque", "Credit"] as const;

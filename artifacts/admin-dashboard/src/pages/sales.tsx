@@ -36,6 +36,7 @@ const dp = getSettingsDecimalPlaces();
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_BG: Record<string, string> = {
+  Pending:     "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300",
   Draft:       "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
   Hold:        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
   Completed:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -2079,6 +2080,7 @@ export default function SalesPage() {
       if (st === "Cancelled") return "Cancelled";
       if (st === "Refunded")  return "Refunded";
       if (st === "Draft")     return "Placed";
+      if (st === "Pending")   return "Placed";
       const ds = sale.deliveryStatus ?? "Pending";
       if (ds === "Delivered")  return "Delivered";
       if (ds === "Shipped")    return "Shipped";
@@ -2493,11 +2495,13 @@ export default function SalesPage() {
   }, []);
 
   const pillColors: Record<string, { base: string; active: string }> = {
-    All:       { base: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",               active: "ring-2 ring-gray-400"    },
-    Draft:     { base: "bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400",                active: "ring-2 ring-gray-400"    },
-    Completed: { base: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300", active: "ring-2 ring-emerald-500" },
-    Refunded:  { base: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",         active: "ring-2 ring-amber-400"   },
-    Cancelled: { base: "bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400",                 active: "ring-2 ring-red-500"     },
+    All:         { base: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",                 active: "ring-2 ring-gray-400"     },
+    Pending:     { base: "bg-yellow-50 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300",       active: "ring-2 ring-yellow-400"   },
+    Draft:       { base: "bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400",                  active: "ring-2 ring-gray-400"     },
+    Completed:   { base: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300",   active: "ring-2 ring-emerald-500"  },
+    "On Credit": { base: "bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300",       active: "ring-2 ring-orange-400"   },
+    Refunded:    { base: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",           active: "ring-2 ring-amber-400"    },
+    Cancelled:   { base: "bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400",                   active: "ring-2 ring-red-500"      },
   };
 
   // ─── If POS is open, render full-page POS ───────────────────────────────────
