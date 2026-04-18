@@ -173,8 +173,10 @@ export function CheckoutPage() {
   const [errors,  setErrors]  = useState<Partial<CustomerForm>>({});
   const [shipping, setShipping] = useState(SHIPPING_OPTIONS[0]);
   const [payment,  setPayment]  = useState<PaymentMethod>("cod");
-  const [placing,  setPlacing]  = useState(false);
-  const [orderId,  setOrderId]  = useState<string>("");
+  const [placing,          setPlacing]          = useState(false);
+  const [orderId,          setOrderId]          = useState<string>("");
+  const [confirmedTotal,   setConfirmedTotal]   = useState(0);
+  const [confirmedItems,   setConfirmedItems]   = useState(0);
 
   /* ── Inline sign-in state ────────────────────────────────────────────── */
   const [showInlineLogin, setShowInlineLogin] = useState(false);
@@ -476,6 +478,8 @@ export function CheckoutPage() {
       } catch { /* non-fatal */ }
     }
     setOrderId(id);
+    setConfirmedTotal(total);
+    setConfirmedItems(totalItems);
     clearCart();
     setStep("confirm");
     setPlacing(false);
@@ -873,11 +877,11 @@ export function CheckoutPage() {
           </div>
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Items</span>
-            <span className="text-sm font-semibold text-slate-900 dark:text-white">{totalItems}</span>
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">{confirmedItems}</span>
           </div>
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Paid</span>
-            <span className="text-sm font-bold text-emerald-600">{formatPrice(total)}</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total {payment === "cod" ? "Due" : "Paid"}</span>
+            <span className="text-sm font-bold text-emerald-600">{formatPrice(confirmedTotal)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment</span>
