@@ -807,11 +807,11 @@ export default function ChartOfAccountsPage() {
             <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-500 border border-gray-200 dark:border-zinc-700">
               <FileText size={8} /> Ledger
             </span>
-          ) : acc.hasChildren ? (
+          ) : (
             <span className={`flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${s.bg} ${s.text} ${s.border}`}>
               <GitBranch size={8} /> Group
             </span>
-          ) : null}
+          )}
           {/* Auto-linked subsidiary ledger indicator */}
           {isLedger && /^[0-9]+-[0-9]{3}$/.test(acc.code) && (
             <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800">
