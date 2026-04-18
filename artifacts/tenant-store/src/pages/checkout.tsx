@@ -420,9 +420,7 @@ export function CheckoutPage() {
         sku: i.product.sku || "",
         qty: String(i.quantity),
         unit: "pcs",
-        unitPrice: (i.product.websitePrice && parseFloat(i.product.websitePrice) > 0
-          ? i.product.websitePrice
-          : (i.product.price || "0")),
+        unitPrice: getEffectivePrice(i.product, isLoggedIn),
         discount: "0",
         discountType: "pct",
         notes: "",

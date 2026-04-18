@@ -55,7 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
             {session?.tenantId && (
               <a
-                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/home`}
+                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/shop`}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13.5px] font-medium transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               >
                 <Store size={14} />
@@ -111,7 +111,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
             {session?.tenantId && (
               <a
-                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/home`}
+                href={`/tenant-store/${encodeURIComponent(session.tenantId)}/shop`}
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 rounded-md text-[14px] font-medium text-gray-600 hover:bg-gray-50"
               >
