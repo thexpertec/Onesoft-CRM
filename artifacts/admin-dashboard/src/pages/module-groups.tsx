@@ -58,7 +58,7 @@ const PRESETS: { name: string; description: string; modules: ModuleId[]; color: 
     name: "Professional",
     description: "Full CRM, products, stock, sales, accounting & HRM for growing businesses.",
     modules: [
-      "crm_leads","crm_customers","crm_suppliers",
+      "crm_leads","crm_customers",
       "products","categories","brands","stock","purchases",
       "sales","invoices","sale_return","sales_agents",
       "hrm_staff","hrm_roles",
