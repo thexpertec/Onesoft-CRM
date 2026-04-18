@@ -494,6 +494,9 @@ function AdminOrderPipeline({
   deliveryStatus: DeliveryStage;
   onChangeDelivery: (ds: DeliveryStage) => void;
 }) {
+  const isOnline = sale.orderType === "Online";
+  const [expanded, setExpanded] = useState(isOnline);
+
   const rank = DELIVERY_RANK[deliveryStatus] ?? 0;
   const isCancelled = sale.status === "Cancelled" || sale.status === "Refunded";
   const isDraft      = sale.status === "Draft" || sale.status === "Pending";
@@ -531,70 +534,109 @@ function AdminOrderPipeline({
     },
   ];
 
+  const currentStageLabel = isCancelled
+    ? sale.status
+    : deliveryStatus === "Delivered" ? "Delivered"
+    : deliveryStatus === "Shipped" ? "Shipped"
+    : deliveryStatus === "Processing" ? "Processing"
+    : isDraft ? "Placed" : "Confirmed";
+
+  const stageBadgeColor = isCancelled
+    ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
+    : currentStageLabel === "Delivered" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+    : currentStageLabel === "Shipped"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+    : currentStageLabel === "Processing"? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+    : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
+
   return (
-    <div className="shrink-0 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 px-6 py-2.5">
-      <div className="flex items-start">
-        {stages.map((stage, idx) => {
-          const effectiveDone   = isCancelled ? stage.key === "placed" : stage.done;
-          const effectiveActive = isCancelled ? false : stage.active;
-          const isCancelledStage = isCancelled && stage.key !== "placed";
+    <div className="shrink-0 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800">
 
-          const lineColor = isCancelled
-            ? "bg-red-200 dark:bg-red-900/40"
-            : (stages[idx - 1]?.done ? "bg-emerald-400 dark:bg-emerald-600" : "bg-gray-200 dark:bg-zinc-700");
+      {/* ── Collapsed bar ─────────────────────────────────────────────────────── */}
+      {!expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center gap-2 px-6 py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800/60 transition-colors group"
+        >
+          <ChevronDown size={13} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors shrink-0" />
+          <span className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Order Pipeline</span>
+          <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${stageBadgeColor}`}>{currentStageLabel}</span>
+          {isCancelled && (
+            <span className="text-[10px] text-red-500 dark:text-red-400 font-medium">
+              · This order has been {sale.status.toLowerCase()}
+            </span>
+          )}
+        </button>
+      )}
 
-          const canClick = !isDraft && !isCancelled && stage.ds !== undefined;
+      {/* ── Expanded pipeline ─────────────────────────────────────────────────── */}
+      {expanded && (
+        <div className="px-6 py-2.5">
+          <div className="flex items-start">
+            {stages.map((stage, idx) => {
+              const effectiveDone   = isCancelled ? stage.key === "placed" : stage.done;
+              const effectiveActive = isCancelled ? false : stage.active;
+              const isCancelledStage = isCancelled && stage.key !== "placed";
 
-          const labelColor = isCancelledStage
-            ? "text-red-400 dark:text-red-500"
-            : effectiveDone
-              ? "text-emerald-700 dark:text-emerald-400"
-              : effectiveActive
-                ? "text-blue-600 dark:text-blue-400"
-                : "text-gray-400 dark:text-zinc-500";
+              const lineColor = isCancelled
+                ? "bg-red-200 dark:bg-red-900/40"
+                : (stages[idx - 1]?.done ? "bg-emerald-400 dark:bg-emerald-600" : "bg-gray-200 dark:bg-zinc-700");
 
-          return (
-            <div key={stage.key} className="flex-1 flex flex-col items-center relative min-w-0">
-              {/* connector line before */}
-              {idx > 0 && (
-                <div className={`absolute top-[9px] right-1/2 w-full h-[2px] ${lineColor}`} />
-              )}
+              const canClick = !isDraft && !isCancelled && stage.ds !== undefined;
 
-              {/* icon */}
-              <button
-                disabled={!canClick}
-                onClick={() => stage.ds && onChangeDelivery(stage.ds)}
-                title={canClick ? `Mark as ${stage.ds}` : undefined}
-                className={`relative z-10 bg-white dark:bg-zinc-900 px-1 transition-transform ${canClick ? "hover:scale-110 cursor-pointer" : "cursor-default"}`}
-              >
-                {isCancelledStage ? (
-                  <XCircle size={19} className="text-red-400 dark:text-red-500" />
-                ) : effectiveDone ? (
-                  <CheckCircle2 size={19} className="text-emerald-500 dark:text-emerald-400" />
-                ) : effectiveActive ? (
-                  <Clock size={19} className="text-blue-500 dark:text-blue-400 animate-pulse" />
-                ) : (
-                  <Circle size={19} className="text-gray-300 dark:text-zinc-600" />
-                )}
-              </button>
+              const labelColor = isCancelledStage
+                ? "text-red-400 dark:text-red-500"
+                : effectiveDone
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : effectiveActive
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-gray-400 dark:text-zinc-500";
 
-              {/* label */}
-              <p className={`mt-1 text-[10.5px] font-semibold text-center leading-tight truncate w-full px-0.5 ${labelColor}`}>
-                {stage.label}
-              </p>
+              return (
+                <div key={stage.key} className="flex-1 flex flex-col items-center relative min-w-0">
+                  {idx > 0 && (
+                    <div className={`absolute top-[9px] right-1/2 w-full h-[2px] ${lineColor}`} />
+                  )}
+                  <button
+                    disabled={!canClick}
+                    onClick={() => stage.ds && onChangeDelivery(stage.ds)}
+                    title={canClick ? `Mark as ${stage.ds}` : undefined}
+                    className={`relative z-10 bg-white dark:bg-zinc-900 px-1 transition-transform ${canClick ? "hover:scale-110 cursor-pointer" : "cursor-default"}`}
+                  >
+                    {isCancelledStage ? (
+                      <XCircle size={19} className="text-red-400 dark:text-red-500" />
+                    ) : effectiveDone ? (
+                      <CheckCircle2 size={19} className="text-emerald-500 dark:text-emerald-400" />
+                    ) : effectiveActive ? (
+                      <Clock size={19} className="text-blue-500 dark:text-blue-400 animate-pulse" />
+                    ) : (
+                      <Circle size={19} className="text-gray-300 dark:text-zinc-600" />
+                    )}
+                  </button>
+                  <p className={`mt-1 text-[10.5px] font-semibold text-center leading-tight truncate w-full px-0.5 ${labelColor}`}>
+                    {stage.label}
+                  </p>
+                  <p className="text-[9.5px] text-center text-gray-400 dark:text-zinc-600 leading-tight truncate w-full px-0.5 hidden lg:block">
+                    {stage.desc}
+                  </p>
+                </div>
+              );
+            })}
 
-              {/* description */}
-              <p className="text-[9.5px] text-center text-gray-400 dark:text-zinc-600 leading-tight truncate w-full px-0.5 hidden lg:block">
-                {stage.desc}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-      {isCancelled && (
-        <p className="text-center text-[10px] text-red-500 dark:text-red-400 font-medium mt-1">
-          This order has been {sale.status.toLowerCase()}.
-        </p>
+            {/* Collapse toggle */}
+            <button
+              onClick={() => setExpanded(false)}
+              title="Collapse pipeline"
+              className="shrink-0 ml-4 self-start mt-0.5 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <ChevronUp size={14} />
+            </button>
+          </div>
+          {isCancelled && (
+            <p className="text-center text-[10px] text-red-500 dark:text-red-400 font-medium mt-1">
+              This order has been {sale.status.toLowerCase()}.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
