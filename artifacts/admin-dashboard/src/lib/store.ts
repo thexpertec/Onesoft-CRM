@@ -1209,6 +1209,49 @@ const skuConflict = (sku: string, excludeId?: string): string | null => {
   return match ? match.name : null;
 };
 
+// ── COA ledger sync for per-product Sales Revenue accounts ───────────────────
+function _upsertProductSalesLedger(product: Product): void {
+  const sk = tenantKey(COA_KEY);
+  const raw = _lsGet(sk);
+  const accounts: Account[] = raw ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : [];
+  const ledgerId = `sr-prod-${product.id}`;
+  const idx = accounts.findIndex(a => a.id === ledgerId);
+  const now = new Date().toISOString();
+  if (idx === -1) {
+    const srChildren = accounts.filter(a => a.parentId === SYS_ACCS.SALES_REVENUE);
+    const nextCode = srChildren.reduce((max, a) => {
+      const n = parseInt(a.code ?? "0", 10); return n > max ? n : max;
+    }, 3100) + 1;
+    accounts.push({
+      id: ledgerId, code: String(nextCode), name: product.name,
+      head: "Revenue / Income", accountType: "Ledger",
+      parentId: SYS_ACCS.SALES_REVENUE, subType: "Sales",
+      description: `Sales revenue for ${product.name}`,
+      openingBalance: 0, paymentType: null, isActive: true,
+      createdAt: now, updatedAt: now,
+    });
+  } else if (accounts[idx].name !== product.name) {
+    accounts[idx] = { ...accounts[idx], name: product.name, description: `Sales revenue for ${product.name}`, updatedAt: now };
+  } else {
+    return; // nothing changed
+  }
+  _lsSet(sk, accounts);
+  _apiWrite(sk, accounts);
+}
+
+function _removeProductSalesLedger(productId: string): void {
+  const sk = tenantKey(COA_KEY);
+  const raw = _lsGet(sk);
+  if (!raw) return;
+  const accounts: Account[] = (() => { try { return JSON.parse(raw); } catch { return []; } })();
+  const ledgerId = `sr-prod-${productId}`;
+  const filtered = accounts.filter(a => a.id !== ledgerId);
+  if (filtered.length !== accounts.length) {
+    _lsSet(sk, filtered);
+    _apiWrite(sk, filtered);
+  }
+}
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
   if (data.sku?.trim()) {
     const conflict = skuConflict(data.sku);
@@ -1222,6 +1265,7 @@ export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedA
   };
   setStored(PRODUCTS_KEY, [...getProducts(), item]);
   addActivity({ action: "created", entity: "Product", entityName: item.name, detail: item.sku ? `SKU: ${item.sku}` : undefined });
+  _upsertProductSalesLedger(item);
   return item;
 };
 
@@ -1236,6 +1280,7 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PRODUCTS_KEY, items);
   addActivity({ action: "updated", entity: "Product", entityName: items[i].name });
+  _upsertProductSalesLedger(items[i]);
   return items[i];
 };
 
@@ -1243,6 +1288,7 @@ export const deleteProduct = (id: string): void => {
   const item = getProducts().find(p => p.id === id);
   setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
+  _removeProductSalesLedger(id);
 };
 
 export const reorderProducts = (orderedIds: string[]): void => {
@@ -3747,7 +3793,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // REVENUE / INCOME  (codes 3xxx — same as original system)
   // ─────────────────────────────────────────────────────────────────────────────
   { id: SYS_ACCS.REVENUE_GROUP,      code: "3000", name: "Revenue",                    head: "Revenue / Income", accountType: "Group",  parentId: null,                         subType: "Revenue",          description: "Income from business operations" },
-  { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales" },
+  { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales — subsidiary ledgers per product" },
   { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income" },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -3902,7 +3948,52 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1) {
+  // ── Migrate sys-3100 (Sales Revenue) from Ledger to Group ────────────────────
+  const salesRevIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.SALES_REVENUE && a.accountType === "Ledger");
+  if (salesRevIdx !== -1) {
+    workingAccounts[salesRevIdx] = {
+      ...workingAccounts[salesRevIdx],
+      accountType: "Group",
+      description: "Revenue from product and service sales — subsidiary ledgers per product",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ── Sync per-product Sales Revenue ledgers ────────────────────────────────────
+  // Each product gets its own ledger under Sales Revenue (sys-3100) so revenue
+  // can be tracked per product in the COA.
+  const products = getProducts();
+  const existingWorkingIds = new Set(workingAccounts.map(a => a.id));
+  // Find the highest numeric code already used under Sales Revenue (31xx range)
+  const srChildren = workingAccounts.filter(a => a.parentId === SYS_ACCS.SALES_REVENUE);
+  let nextSrCode = srChildren.reduce((max, a) => {
+    const n = parseInt(a.code ?? "0", 10);
+    return n > max ? n : max;
+  }, 3100) + 1;
+
+  let productLedgersAdded = 0;
+  for (const p of products) {
+    const ledgerId = `sr-prod-${p.id}`;
+    if (existingWorkingIds.has(ledgerId)) continue;
+    workingAccounts.push({
+      id:             ledgerId,
+      code:           String(nextSrCode++),
+      name:           p.name,
+      head:           "Revenue / Income",
+      accountType:    "Ledger",
+      parentId:       SYS_ACCS.SALES_REVENUE,
+      subType:        "Sales",
+      description:    `Sales revenue for ${p.name}`,
+      openingBalance: 0,
+      paymentType:    null,
+      isActive:       true,
+      createdAt:      now,
+      updatedAt:      now,
+    });
+    productLedgersAdded++;
+  }
+
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || productLedgersAdded > 0) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
