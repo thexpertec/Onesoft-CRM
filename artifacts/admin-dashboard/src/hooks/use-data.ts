@@ -11,6 +11,7 @@ import {
   getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,
   getProducts, createProduct, updateProduct, deleteProduct, reorderProducts,
   getBrands, createBrand, updateBrand, deleteBrand,
+  getProductDepartments, createProductDepartment, updateProductDepartment, deleteProductDepartment,
   getAttributes, createAttribute, updateAttribute, deleteAttribute,
   getUnits, createUnit, updateUnit, deleteUnit,
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
@@ -182,6 +183,20 @@ export function useProducts() {
   const reorderProds  = (ids: string[]) => { reorderProducts(ids); fetchProducts(); };
 
   return { products, addProduct, editProduct, removeProduct, reorderProds, refresh: fetchProducts };
+}
+
+export function useProductDepartments() {
+  const [productDepartments, setProductDepartments] = useState<import("@/lib/store").ProductDepartment[]>([]);
+
+  const fetch = useCallback(() => { setProductDepartments(getProductDepartments()); }, []);
+
+  useStoreEffect(fetch);
+
+  const add    = (data: Parameters<typeof createProductDepartment>[0])                               => { const d = createProductDepartment(data);        fetch(); return d; };
+  const edit   = (id: string, updates: Parameters<typeof updateProductDepartment>[1])                => { const d = updateProductDepartment(id, updates); fetch(); return d; };
+  const remove = (id: string)                                                                        => { deleteProductDepartment(id);                     fetch(); };
+
+  return { productDepartments, add, edit, remove, refresh: fetch };
 }
 
 export function useBrands() {

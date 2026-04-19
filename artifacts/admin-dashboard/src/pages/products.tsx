@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -602,6 +602,8 @@ export default function ProductsPage() {
   const unitOptions     = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
   const sym             = useMemo(() => getSettingsCurrencySymbol(), []);
 
+  const deptOptions     = useMemo(() => getProductDepartments().filter(d => d.status === "Active").map(d => d.name), [products]);
+
   const COLS: ColDef[] = useMemo(() => [
     { field: "name",        label: "Product Name",       minW: 200, type: "text" },
     { field: "localName",   label: "Local Name",         minW: 160, type: "text" },
@@ -610,7 +612,7 @@ export default function ProductsPage() {
     { field: "barcode",     label: "Barcode / QR",       minW: 150, type: "text" },
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
     { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
-    { field: "department",  label: "Department",         minW: 140, type: "text" },
+    { field: "department",  label: "Department",         minW: 140, type: "select", options: deptOptions.length ? deptOptions : undefined },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
     { field: "purchasePrice",   label: `Purchase (${sym})`,         minW: 120, type: "text"     },
     { field: "costPrice",       label: `Cost (${sym})`,             minW: 110, type: "text"     },

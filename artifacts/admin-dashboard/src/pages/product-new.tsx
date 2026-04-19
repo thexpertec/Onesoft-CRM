@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useProducts } from "@/hooks/use-data";
-import { Product, getBrands, getProductCategories, getUnits, getDepartments } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getProductDepartments } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, ArrowLeft, Package } from "lucide-react";
@@ -61,7 +61,7 @@ export default function ProductNewPage() {
     return cats.filter(c => !c.parentId).map(c => c.name);
   }, [products]);
   const unitOptions       = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
-  const departmentOptions = useMemo(() => getDepartments().map(d => d.name), []);
+  const departmentOptions = useMemo(() => getProductDepartments().map(d => d.name), []);
 
   const [form, setForm] = useState<FormFields>(BLANK());
   const [saving, setSaving] = useState(false);

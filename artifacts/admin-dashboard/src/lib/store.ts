@@ -813,6 +813,8 @@ export type ModuleId =
   | "sales_agents" | "agent_performance" | "areas"
   // HRM
   | "hrm_staff" | "hrm_roles" | "hrm_org"
+  // Products organisation
+  | "products_departments"
   // Accounting
   | "accounting_coa" | "accounting_journal" | "accounting_balance"
   | "accounting_ledger" | "accounting_pls" | "accounting_trial" | "accounting_trial6"
@@ -846,7 +848,8 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "brands",         label: "Brands",              desc: "Brand management",                  group: "Products",      href: "/brands"            },
   { id: "product_groups", label: "Product Groups",      desc: "Group products into bundles",       group: "Products",      href: "/product-groups"    },
   { id: "attributes",     label: "Attributes",          desc: "Custom product attributes",         group: "Products",      href: "/attributes"        },
-  { id: "units",          label: "Units of Measure",    desc: "Weight, volume & size units",       group: "Products",      href: "/units"             },
+  { id: "units",               label: "Units of Measure",    desc: "Weight, volume & size units",       group: "Products",      href: "/units"                  },
+  { id: "products_departments",label: "Product Departments", desc: "Departments for product classification", group: "Products",  href: "/product-departments"   },
   { id: "stock",          label: "Stock & Inventory",   desc: "Inventory levels & stock holds",    group: "Products",      href: "/stock-ledger"      },
   { id: "raw_materials",  label: "Raw Materials",       desc: "Raw material inventory & tracking", group: "Products",      href: "/raw-materials"     },
   { id: "purchases",      label: "Purchases",           desc: "Purchase orders from suppliers",    group: "Products",      href: "/purchases"         },
@@ -914,9 +917,10 @@ const MODULE_GROUPS_KEY = "admin-module-groups";
  *  category is already present.  Add new module IDs here whenever a module
  *  is added to MODULES_LIST so that existing groups auto-include them. */
 const MODULE_GROUP_PEERS: Record<string, string[]> = {
-  accounting_trial6: ["accounting_trial", "accounting_coa", "accounting_journal",
-                      "accounting_balance", "accounting_ledger", "accounting_pls",
-                      "accounting_income", "accounting_expense", "accounting_receipts"],
+  accounting_trial6:    ["accounting_trial", "accounting_coa", "accounting_journal",
+                         "accounting_balance", "accounting_ledger", "accounting_pls",
+                         "accounting_income", "accounting_expense", "accounting_receipts"],
+  products_departments: ["products", "categories", "brands", "attributes", "units", "product_groups"],
 };
 
 export const getModuleGroups = (): ModuleGroup[] => {
@@ -1558,6 +1562,47 @@ export const updateBrand = (id: string, updates: Partial<Omit<Brand, "id" | "cre
 
 export const deleteBrand = (id: string): void => {
   setStored(BRANDS_KEY, getBrands().filter(b => b.id !== id));
+};
+
+// ─── Product Departments API ──────────────────────────────────────────────────
+
+export type ProductDepartmentStatus = "Active" | "Inactive";
+
+export type ProductDepartment = {
+  id:          string;
+  name:        string;
+  description: string;
+  status:      ProductDepartmentStatus;
+  createdAt:   string;
+  updatedAt:   string;
+};
+
+const PRODUCT_DEPTS_KEY = "admin-product-departments";
+
+export const getProductDepartments = (): ProductDepartment[] => getStored<ProductDepartment>(PRODUCT_DEPTS_KEY);
+
+export const createProductDepartment = (data: Omit<ProductDepartment, "id" | "createdAt" | "updatedAt">): ProductDepartment => {
+  const item: ProductDepartment = {
+    ...data,
+    id:        crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(PRODUCT_DEPTS_KEY, [...getProductDepartments(), item]);
+  return item;
+};
+
+export const updateProductDepartment = (id: string, updates: Partial<Omit<ProductDepartment, "id" | "createdAt">>): ProductDepartment => {
+  const items = getProductDepartments();
+  const i = items.findIndex(d => d.id === id);
+  if (i === -1) throw new Error("Product department not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PRODUCT_DEPTS_KEY, items);
+  return items[i];
+};
+
+export const deleteProductDepartment = (id: string): void => {
+  setStored(PRODUCT_DEPTS_KEY, getProductDepartments().filter(d => d.id !== id));
 };
 
 // ─── Attributes API ───────────────────────────────────────────────────────────

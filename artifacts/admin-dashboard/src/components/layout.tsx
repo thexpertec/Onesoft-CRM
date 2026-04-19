@@ -217,10 +217,11 @@ const PRODUCTS_COLUMNS: MegaColumn[] = [
     color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
     desc: "Structure & classification",
     links: [
-      { label: "Brands",     href: "/brands",     icon: Bookmark,          desc: "Brand management"   },
-      { label: "Categories", href: "/categories", icon: FolderOpen,        desc: "Product grouping"   },
-      { label: "Attributes", href: "/attributes", icon: SlidersHorizontal, desc: "Product properties" },
-      { label: "Units",      href: "/units",      icon: Ruler,             desc: "Measurement units"  },
+      { label: "Brands",       href: "/brands",               icon: Bookmark,          desc: "Brand management"        },
+      { label: "Categories",   href: "/categories",           icon: FolderOpen,        desc: "Product grouping"        },
+      { label: "Attributes",   href: "/attributes",           icon: SlidersHorizontal, desc: "Product properties"      },
+      { label: "Units",        href: "/units",                icon: Ruler,             desc: "Measurement units"       },
+      { label: "Departments",  href: "/product-departments",  icon: Layers,            desc: "Product department list" },
     ],
   },
   {
@@ -317,7 +318,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES           = ["/leads", "/customers"];
-const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/media", "/stock-ledger"];
+const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-return"];
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
@@ -551,7 +552,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "expense":           "accounting_journal",
     "journal-entry":     "accounting_journal",
     "pls-report":        "accounting_pls",
-    "trial-balance":     "accounting_trial",
+    "product-departments": "products_departments",
+    "trial-balance":       "accounting_trial",
     "trial-balance-6col": "accounting_trial6",
     "balance-sheet":     "accounting_balance",
     "chart-of-accounts":  "accounting_coa",
@@ -1072,7 +1074,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <SectionLabel label="Products" />
                   <NavLink href="/products"       icon={Package}           label="All Products" />
                   <NavLink href="/product-groups" icon={Layers}            label="Product Groups" />
-                  <NavLink href="/brands"         icon={Bookmark}          label="Brands" />
+                  <NavLink href="/brands"              icon={Bookmark} label="Brands" />
+                  {isModuleAllowed("products_departments") && <NavLink href="/product-departments" icon={Layers} label="Departments" />}
                   <NavLink href="/categories"     icon={FolderOpen}        label="Categories" />
                   <NavLink href="/attributes"     icon={SlidersHorizontal} label="Attributes" />
                   <NavLink href="/units"          icon={Ruler}             label="Units" />

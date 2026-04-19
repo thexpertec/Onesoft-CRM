@@ -32,6 +32,7 @@ import ProductNewPage from "@/pages/product-new";
 import CategoriesPage from "@/pages/categories";
 import ProductGroupsPage from "@/pages/product-groups";
 import BrandsPage from "@/pages/brands";
+import ProductDepartmentsPage from "@/pages/product-departments";
 import AttributesPage from "@/pages/attributes";
 import UnitsPage from "@/pages/units";
 import ShareholdersPage from "@/pages/shareholders";
@@ -131,6 +132,7 @@ function Router() {
               <Route path="/products/new" component={ProductNewPage} />
               <Route path="/products" component={ProductsPage} />
               <Route path="/brands" component={BrandsPage} />
+              <Route path="/product-departments" component={ProductDepartmentsPage} />
               <Route path="/categories" component={CategoriesPage} />
               <Route path="/product-groups" component={ProductGroupsPage} />
               <Route path="/attributes" component={AttributesPage} />
