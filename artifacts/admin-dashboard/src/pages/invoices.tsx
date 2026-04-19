@@ -6,7 +6,7 @@ import {
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
   BankAccount,
-  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts,
+  getProducts, getCustomers, getSettings, saveSettings, getSalesAgents, getBankAccounts,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, getJournalEntries, updateInvoice,
@@ -22,6 +22,7 @@ import {
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
   DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
+  AlignRight,
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -143,8 +144,9 @@ function isOverdue(inv: Invoice): boolean {
 }
 
 // ─── Print — full A4 professional invoice ────────────────────────────────────
-function printInvoice(inv: Invoice) {
-  printFullInvoice(inv, getSettings());
+function printInvoice(inv: Invoice, colsRTL?: boolean) {
+  const s = getSettings();
+  printFullInvoice(inv, colsRTL !== undefined ? { ...s, invoiceColsRTL: colsRTL } : s);
 }
 
 // ─── Built-in template snippets per field kind ────────────────────────────────

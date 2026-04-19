@@ -180,22 +180,39 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   const footerLegalNote = settings.printFooterLegalNote
     ?? "This is a computer-generated document. No handwritten signature is required.";
 
+  // ── RTL flag ────────────────────────────────────────────────────────────────
+  const rtl = settings.invoiceColsRTL ?? false;
+
   // ── Item rows ───────────────────────────────────────────────────────────────
   const itemRows = inv.items.map((item, i) => {
     const lt   = lineTotal(item);
     const disc = parseFloat(item.discount) || 0;
-    return `
-      <tr class="${i % 2 === 1 ? "row-alt" : ""}">
-        <td class="td-center num-col">${i + 1}</td>
-        <td>
+    const descCell = `
           <div class="item-name">${esc(item.productName || "—")}</div>
           ${item.sku   ? `<div class="item-meta">SKU: ${esc(item.sku)}</div>` : ""}
-          ${item.notes ? `<div class="item-meta">${esc(item.notes)}</div>` : ""}
-        </td>
+          ${item.notes ? `<div class="item-meta">${esc(item.notes)}</div>` : ""}`;
+    const discCell = disc > 0 ? `<span class="disc-badge">${disc.toFixed(1)}%</span>` : "—";
+    const altClass = i % 2 === 1 ? "row-alt" : "";
+    if (rtl) {
+      return `
+      <tr class="${altClass}">
+        <td class="td-left total-col">${fmt(lt)}</td>
+        <td class="td-left disc-col">${discCell}</td>
+        <td class="td-left">${fmt(parseFloat(item.unitPrice)||0)}</td>
+        <td class="td-left">${parseFloat(item.qty)||0}</td>
+        <td class="td-left">${esc(item.unit)}</td>
+        <td>${descCell}</td>
+        <td class="td-center num-col">${i + 1}</td>
+      </tr>`;
+    }
+    return `
+      <tr class="${altClass}">
+        <td class="td-center num-col">${i + 1}</td>
+        <td>${descCell}</td>
         <td class="td-right">${esc(item.unit)}</td>
         <td class="td-right">${parseFloat(item.qty)||0}</td>
         <td class="td-right">${fmt(parseFloat(item.unitPrice)||0)}</td>
-        <td class="td-right disc-col">${disc > 0 ? `<span class="disc-badge">${disc.toFixed(1)}%</span>` : "—"}</td>
+        <td class="td-right disc-col">${discCell}</td>
         <td class="td-right total-col">${fmt(lt)}</td>
       </tr>`;
   }).join("");
@@ -405,6 +422,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .disc-col  { width: 38pt; }
   .total-col { width: 64pt; font-weight: 700; color: #0f172a; }
   .td-right  { text-align: right; }
+  .td-left   { text-align: left; }
   .td-center { text-align: center; }
   .fw-600    { font-weight: 600; }
   .item-name { font-weight: 700; font-size: 9.5pt; color: #0f172a; }
@@ -521,6 +539,15 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   <table>
     <thead>
       <tr>
+        ${rtl ? `
+        <th class="td-left total-col">${sl("colTotal", L.colTotal)}</th>
+        <th class="td-left disc-col">${sl("colDisc", L.colDisc)}</th>
+        <th class="td-left" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
+        <th class="td-left" style="width:32pt">${sl("colQty", L.colQty)}</th>
+        <th class="td-left" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
+        <th>${sl("colDescription", L.colDescription)}</th>
+        <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
+        ` : `
         <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
         <th>${sl("colDescription", L.colDescription)}</th>
         <th class="td-right" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
@@ -528,6 +555,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
         <th class="td-right" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
         <th class="td-right disc-col">${sl("colDisc", L.colDisc)}</th>
         <th class="td-right total-col">${sl("colTotal", L.colTotal)}</th>
+        `}
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>

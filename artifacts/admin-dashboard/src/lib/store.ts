@@ -3479,6 +3479,8 @@ export type AppSettings = {
   printHeaderNote?:          string;   // extra text/note shown in the invoice header band
   printFooterLegalNote?:     string;   // small legal note at the bottom of the footer
   printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
+  // ── Invoice items table direction ──
+  invoiceColsRTL?:           boolean;  // reverse items table column order (RTL layout for Arabic/Urdu invoices)
   // ── Invoice label customisation ──
   invoiceLabels?:             Partial<InvoiceLabels>;
   invoiceLabelStyles?:        Record<string, LabelStyle>;
@@ -3648,6 +3650,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   printHeaderNote:          "",
   printFooterLegalNote:     "This is a computer-generated document. No handwritten signature is required.",
   printFooterShowContact:   true,
+  invoiceColsRTL:           false,
 };
 
 export function getSettings(): AppSettings {
