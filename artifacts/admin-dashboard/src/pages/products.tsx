@@ -21,7 +21,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas" | "clubcardPrice";
+type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "department" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas" | "clubcardPrice";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -38,7 +38,8 @@ const CONDITION_COLORS: Record<string, string> = {
 };
 
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", localName: "", model: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
+  name: "", localName: "", model: "", sku: "", barcode: "", brand: "", category: "", subcategory: "",
+  department: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
@@ -49,7 +50,7 @@ const BLANK = (): Record<EditableField, string> => ({
 // Canonical field order for both template download and import parsing
 const CSV_HEADERS: EditableField[] = [
   "name", "localName", "model", "sku", "barcode", "brand",
-  "category", "subcategory", "unit",
+  "category", "subcategory", "department", "unit",
   "purchasePrice", "costPrice", "price", "wholesalePrice",
   "openingStock", "stockAlertValue", "commissionPct",
   "status", "condition", "description",
@@ -58,7 +59,7 @@ const CSV_HEADERS: EditableField[] = [
 // Human-readable header labels (same order as CSV_HEADERS)
 const CSV_HEADER_LABELS: string[] = [
   "name", "localName", "model", "sku", "barcode", "brand",
-  "category", "subcategory", "unit",
+  "category", "subcategory", "department", "unit",
   "purchasePrice", "costPrice", "retailPrice", "wholesalePrice",
   "openingStock", "stockAlertQty", "commissionPct",
   "status", "condition", "description",
@@ -74,6 +75,7 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
   brand:           ["brand", "brandname", "manufacturer", "make"],
   category:        ["category", "categoryname", "cat", "group", "productgroup"],
   subcategory:     ["subcategory", "subcat", "subcategoryname", "sub", "subc", "subgroup"],
+  department:      ["department", "dept", "departmentname", "div", "division", "section"],
   unit:            ["unit", "uom", "unitofmeasure", "unitofmeasurement", "measure"],
   purchasePrice:   ["purchaseprice", "buyprice", "costofpurchase", "pp"],
   costPrice:       ["costprice", "cost", "cogs", "cp"],
@@ -96,11 +98,13 @@ function downloadTemplate() {
   const sample: string[] = [
     "Onesoft CRM Software",  // name
     "",                       // localName
+    "",                       // model
     "SKU-001",               // sku
     "",                       // barcode
     "Onesoft",               // brand
     "Software",              // category
-    "CRM",                   // subcategory ← now included
+    "CRM",                   // subcategory
+    "",                       // department
     "Licence",               // unit
     "600.00",                // purchasePrice
     "750.00",                // costPrice
@@ -606,6 +610,7 @@ export default function ProductsPage() {
     { field: "barcode",     label: "Barcode / QR",       minW: 150, type: "text" },
     { field: "brand",       label: "Brand",              minW: 140, type: "select", options: brandOptions.length    ? brandOptions    : undefined   },
     { field: "category",    label: "Category",           minW: 140, type: "select", options: categoryOptions.length ? categoryOptions : undefined   },
+    { field: "department",  label: "Department",         minW: 140, type: "text" },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
     { field: "purchasePrice",   label: `Purchase (${sym})`,         minW: 120, type: "text"     },
     { field: "costPrice",       label: `Cost (${sym})`,             minW: 110, type: "text"     },
@@ -689,7 +694,7 @@ export default function ProductsPage() {
   useKeyboardScanner({ onScan: handleProductScan, enabled: true });
 
   const filtered = products
-    .filter(p => !search || [p.name, p.localName, p.sku, p.barcode, p.brand, p.category, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
+    .filter(p => !search || [p.name, p.localName, p.sku, p.barcode, p.brand, p.category, p.department, p.description, p.status, p.condition, p.purchasePrice, p.costPrice, p.price, p.wholesalePrice].some(v => v?.toLowerCase().includes(search.toLowerCase())))
     .filter(applyStatusFilter)
     .filter(p => !filterCategory    || p.category    === filterCategory)
     .filter(p => !filterSubcategory || p.subcategory === filterSubcategory)

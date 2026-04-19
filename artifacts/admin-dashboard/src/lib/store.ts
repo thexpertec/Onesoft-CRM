@@ -1183,6 +1183,7 @@ export type Product = {
   brand: string;
   category: string;
   subcategory?: string;      // Subcategory within the product category
+  department?: string;       // Department this product belongs to (optional)
   unit: string;
   purchasePrice?: string;    // Purchase price (from supplier)
   costPrice?: string;        // Cost price per unit (internal cost including overheads)

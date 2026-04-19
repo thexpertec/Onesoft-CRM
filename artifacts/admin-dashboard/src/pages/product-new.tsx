@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useProducts } from "@/hooks/use-data";
-import { Product, getBrands, getProductCategories, getUnits } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getDepartments } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, ArrowLeft, Package } from "lucide-react";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 
 type FormFields = {
   name: string; localName: string; sku: string; barcode: string; brand: string;
-  category: string; subcategory: string; unit: string;
+  category: string; subcategory: string; department: string; unit: string;
   purchasePrice: string; costPrice: string; price: string; wholesalePrice: string;
   clubcardPrice: string;
   commissionPct: string; openingStock: string; stockAlertValue: string;
@@ -18,7 +18,8 @@ type FormFields = {
 };
 
 const BLANK = (): FormFields => ({
-  name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "", unit: "",
+  name: "", localName: "", sku: "", barcode: "", brand: "", category: "", subcategory: "",
+  department: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "", clubcardPrice: "",
   commissionPct: "", openingStock: "", stockAlertValue: "",
   status: "Active", condition: "", description: "",
@@ -59,7 +60,8 @@ export default function ProductNewPage() {
     const cats = getProductCategories();
     return cats.filter(c => !c.parentId).map(c => c.name);
   }, [products]);
-  const unitOptions = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
+  const unitOptions       = useMemo(() => getUnits().map(u => u.symbol ? `${u.name} (${u.symbol})` : u.name), [products]);
+  const departmentOptions = useMemo(() => getDepartments().map(d => d.name), []);
 
   const [form, setForm] = useState<FormFields>(BLANK());
   const [saving, setSaving] = useState(false);
@@ -95,6 +97,7 @@ export default function ProductNewPage() {
         sku: form.sku, barcode: form.barcode || undefined,
         brand: form.brand, category: form.category,
         subcategory: form.subcategory || undefined,
+        department: form.department || undefined,
         unit: form.unit, purchasePrice: form.purchasePrice, costPrice: form.costPrice,
         price: form.price, wholesalePrice: form.wholesalePrice,
         clubcardPrice: form.clubcardPrice || undefined,
@@ -162,7 +165,7 @@ export default function ProductNewPage() {
 
           <Divider label="Identity" />
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
             <Field label="SKU">
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
                 placeholder="ODT-001" className="h-9 text-sm font-mono" />
@@ -202,6 +205,17 @@ export default function ProductNewPage() {
               ) : (
                 <Input value={form.subcategory} onChange={e => patch("subcategory", e.target.value)}
                   placeholder="Subcategory" className="h-9 text-sm" />
+              )}
+            </Field>
+            <Field label="Department" hint="Optional">
+              {departmentOptions.length > 0 ? (
+                <NativeSelect value={form.department} onChange={v => patch("department", v)}>
+                  <option value="">— select —</option>
+                  {departmentOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </NativeSelect>
+              ) : (
+                <Input value={form.department} onChange={e => patch("department", e.target.value)}
+                  placeholder="e.g. Electronics" className="h-9 text-sm" />
               )}
             </Field>
             <Field label="Unit">
