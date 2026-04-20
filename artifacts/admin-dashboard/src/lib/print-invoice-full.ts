@@ -7,6 +7,7 @@ import {
   Invoice, AppSettings, getCustomerPreviousBalance, LabelStyle,
   getInvoiceLabels, getInvoiceLabelStyles,
   getPurchaseInvoiceLabels, getPurchaseInvoiceLabelStyles,
+  getCustomers,
 } from "./store";
 
 // Convert a LabelStyle to an inline CSS string for use in HTML attributes
@@ -183,12 +184,14 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   // ── RTL flag ────────────────────────────────────────────────────────────────
   const rtl = settings.invoiceColsRTL ?? false;
 
-  // ── Resolve product display name at print time ───────────────────────────────
-  // If the setting is "localName" and the item carries a localName, use it;
-  // otherwise fall back to productName (handles both old and new invoices).
-  const useLocalName = (settings.invoiceProductNameField ?? "name") === "localName";
+  // ── Company name: prefer the customer's company field over their personal name ─
+  const allCustomers = getCustomers();
+  const customerRecord = allCustomers.find(c => c.id === inv.customerId || c.name === inv.customer);
+  const billToName = customerRecord?.company?.trim() || inv.customer || "—";
+
+  // ── Resolve product display name: always prefer localName over productName ────
   const resolveItemName = (item: { productName: string; localName?: string }): string =>
-    useLocalName && item.localName?.trim() ? item.localName.trim() : item.productName || "—";
+    item.localName?.trim() || item.productName || "—";
 
   // ── Item rows ───────────────────────────────────────────────────────────────
   const itemRows = inv.items.map((item, i) => {
@@ -206,7 +209,6 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       <tr class="${altClass}">
         <td class="td-center num-col">${i + 1}</td>
         <td class="td-start">${descCell}</td>
-        <td class="td-end">${esc(item.unit)}</td>
         <td class="td-end">${parseFloat(item.qty)||0}</td>
         <td class="td-end">${fmt(parseFloat(item.unitPrice)||0)}</td>
         <td class="td-end disc-col">${discCell}</td>
@@ -504,7 +506,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 <div class="subheader">
   <div class="bill-to-box">
     <div class="bill-to-label">${sl("billTo", L.billTo)}</div>
-    <div class="bill-to-name">${esc(inv.customer || "—")}</div>
+    <div class="bill-to-name">${esc(billToName)}</div>
     ${buyerLines.map(l => `<div class="bill-to-line">${l}</div>`).join("")}
   </div>
   <div class="meta-strip">
@@ -540,7 +542,6 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
       <tr>
         <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
         <th class="td-start">${sl("colDescription", L.colDescription)}</th>
-        <th class="td-end" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
         <th class="td-end" style="width:32pt">${sl("colQty", L.colQty)}</th>
         <th class="td-end" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
         <th class="td-end disc-col">${sl("colDisc", L.colDisc)}</th>
