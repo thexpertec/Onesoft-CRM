@@ -82,10 +82,14 @@ export default function CategoriesPage() {
   const [editCell, setEditCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editVal,  setEditVal]  = useState("");
 
-  const tableRef = useRef<HTMLDivElement>(null);
+  const tableRef   = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+      const node = e.target as Node;
+      const inTable   = tableRef.current?.contains(node);
+      const inToolbar = toolbarRef.current?.contains(node);
+      if (!inTable && !inToolbar) {
         setEditCell(null);
         setNewRow(null);
       }
@@ -315,7 +319,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex gap-2 flex-wrap items-center">
+      <div ref={toolbarRef} className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search categories..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
