@@ -201,27 +201,16 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
           ${item.notes ? `<div class="item-meta">${esc(item.notes)}</div>` : ""}`;
     const discCell = disc > 0 ? `<span class="disc-badge">${disc.toFixed(1)}%</span>` : "—";
     const altClass = i % 2 === 1 ? "row-alt" : "";
-    if (rtl) {
-      return `
-      <tr class="${altClass}">
-        <td class="td-left total-col">${fmt(lt)}</td>
-        <td class="td-left disc-col">${discCell}</td>
-        <td class="td-left">${fmt(parseFloat(item.unitPrice)||0)}</td>
-        <td class="td-left">${parseFloat(item.qty)||0}</td>
-        <td class="td-left">${esc(item.unit)}</td>
-        <td class="td-right">${descCell}</td>
-        <td class="td-center num-col">${i + 1}</td>
-      </tr>`;
-    }
+    // Single row structure — browser reverses visual order via dir="rtl" on <html>
     return `
       <tr class="${altClass}">
         <td class="td-center num-col">${i + 1}</td>
-        <td>${descCell}</td>
-        <td class="td-right">${esc(item.unit)}</td>
-        <td class="td-right">${parseFloat(item.qty)||0}</td>
-        <td class="td-right">${fmt(parseFloat(item.unitPrice)||0)}</td>
-        <td class="td-right disc-col">${discCell}</td>
-        <td class="td-right total-col">${fmt(lt)}</td>
+        <td class="td-start">${descCell}</td>
+        <td class="td-end">${esc(item.unit)}</td>
+        <td class="td-end">${parseFloat(item.qty)||0}</td>
+        <td class="td-end">${fmt(parseFloat(item.unitPrice)||0)}</td>
+        <td class="td-end disc-col">${discCell}</td>
+        <td class="td-end total-col">${fmt(lt)}</td>
       </tr>`;
   }).join("");
 
@@ -419,26 +408,28 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   /* ── ITEMS TABLE ───────────────────────────────────────────────────────── */
   table { width: 100%; border-collapse: collapse; }
   thead tr { background: #0f2447; }
-  thead th { color: #94a3b8; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 7pt 10pt; text-align: left; }
-  thead th.td-right  { text-align: right; }
-  thead th.td-center { text-align: center; }
+  thead th { color: #94a3b8; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 7pt 10pt; text-align: start; }
   tbody tr { border-bottom: 1px solid #f1f5f9; }
   tbody tr.row-alt { background: #f8fafc; }
-  tbody td { padding: 7pt 10pt; vertical-align: top; font-size: 9pt; }
+  tbody td { padding: 7pt 10pt; vertical-align: top; font-size: 9pt; text-align: start; }
   tbody tr:last-child { border-bottom: 2px solid #e2e8f0; }
   .num-col   { width: 22pt; color: #94a3b8; font-size: 8pt; }
   .disc-col  { width: 38pt; }
   .total-col { width: 64pt; font-weight: 700; color: #0f172a; }
-  .td-right  { text-align: right; }
-  .td-left   { text-align: left; }
+  /* Logical alignment — works correctly in both LTR and RTL documents */
+  .td-end    { text-align: end; }    /* right in LTR, left in RTL  */
+  .td-start  { text-align: start; }  /* left in LTR, right in RTL  */
   .td-center { text-align: center; }
+  .td-right  { text-align: right; }  /* physical right (kept for compat) */
+  .td-left   { text-align: left; }   /* physical left  (kept for compat) */
   .fw-600    { font-weight: 600; }
   .item-name { font-weight: 700; font-size: 9.5pt; color: #0f172a; }
   .item-meta { font-size: 7.5pt; color: #94a3b8; margin-top: 2pt; }
   .disc-badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 7pt; font-weight: 700; padding: 1pt 4pt; border-radius: 3pt; }
 
   /* ── TOTALS BLOCK ──────────────────────────────────────────────────────── */
-  .totals-wrapper { display: flex; justify-content: ${rtl ? "flex-start" : "flex-end"}; margin-top: 8pt; }
+  /* flex-end = right in LTR, LEFT in RTL — correct for both directions */
+  .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 8pt; }
   .totals-table { width: 220pt; }
   .totals-row { display: flex; justify-content: space-between; align-items: center; padding: 4pt 8pt; font-size: 9pt; border-bottom: 1px solid #f1f5f9; }
   .totals-row:last-child { border-bottom: none; }
@@ -547,23 +538,13 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   <table>
     <thead>
       <tr>
-        ${rtl ? `
-        <th class="td-left total-col">${sl("colTotal", L.colTotal)}</th>
-        <th class="td-left disc-col">${sl("colDisc", L.colDisc)}</th>
-        <th class="td-left" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
-        <th class="td-left" style="width:32pt">${sl("colQty", L.colQty)}</th>
-        <th class="td-left" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
-        <th class="td-right">${sl("colDescription", L.colDescription)}</th>
         <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
-        ` : `
-        <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
-        <th>${sl("colDescription", L.colDescription)}</th>
-        <th class="td-right" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
-        <th class="td-right" style="width:32pt">${sl("colQty", L.colQty)}</th>
-        <th class="td-right" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
-        <th class="td-right disc-col">${sl("colDisc", L.colDisc)}</th>
-        <th class="td-right total-col">${sl("colTotal", L.colTotal)}</th>
-        `}
+        <th class="td-start">${sl("colDescription", L.colDescription)}</th>
+        <th class="td-end" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
+        <th class="td-end" style="width:32pt">${sl("colQty", L.colQty)}</th>
+        <th class="td-end" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
+        <th class="td-end disc-col">${sl("colDisc", L.colDisc)}</th>
+        <th class="td-end total-col">${sl("colTotal", L.colTotal)}</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
