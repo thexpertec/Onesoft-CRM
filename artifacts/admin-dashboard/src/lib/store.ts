@@ -67,20 +67,7 @@ const DEMO_LEAD_IDS = ["l-1", "l-2", "l-3"];
 const DEMO_DOC_IDS  = ["d-1"];
 
 function clearDemoData() {
-  try {
-    const leadsRaw = localStorage.getItem(LEADS_KEY);
-    if (leadsRaw) {
-      const leads: Lead[] = JSON.parse(leadsRaw);
-      const filtered = leads.filter((l) => !DEMO_LEAD_IDS.includes(l.id));
-      if (filtered.length !== leads.length) { try { localStorage.setItem(LEADS_KEY, JSON.stringify(filtered)); } catch { /* ignore */ } }
-    }
-    const docsRaw = localStorage.getItem(DOCS_KEY);
-    if (docsRaw) {
-      const docs: RequirementDoc[] = JSON.parse(docsRaw);
-      const filtered = docs.filter((d) => !DEMO_DOC_IDS.includes(d.id));
-      if (filtered.length !== docs.length) { try { localStorage.setItem(DOCS_KEY, JSON.stringify(filtered)); } catch { /* ignore */ } }
-    }
-  } catch { /* ignore */ }
+  // Demo-data cleanup now runs via server sync; localStorage path removed.
 }
 clearDemoData();
 
@@ -151,54 +138,50 @@ export function clearActivities(): void {
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 //
-// Architecture: in-memory Map (_memRaw) is the PRIMARY fast store (no quota).
-// localStorage is a SECONDARY best-effort cache (writes are try/catch).
-// PostgreSQL KV store (via _apiWrite) is the DURABLE persistent store.
-// On login, syncAllFromServer() loads the server data into both _memRaw and
-// localStorage so the app starts with a full warm cache.
+// Architecture:
+// _memRaw (in-memory Map) — PRIMARY fast store, no quota, lives for the tab session.
+// PostgreSQL KV (via API server) — DURABLE persistent store, source of truth.
+// localStorage — READ-ONLY warm-start cache: populated by syncAllFromServer so the
+//   next page load renders quickly before the async server sync completes.
+//   Mutations NEVER write to localStorage — only server + memory.
 
 /** Raw JSON cache — no browser quota limit, survives within the tab session. */
 const _memRaw = new Map<string, string>();
 
-/** Read from in-memory cache first, then fall back to localStorage. */
+/**
+ * Read: in-memory first (fastest), then localStorage warm-start cache.
+ * localStorage is only populated by syncAllFromServer, never by mutations.
+ */
 function _lsGet(storageKey: string): string | null {
   if (_memRaw.has(storageKey)) return _memRaw.get(storageKey)!;
   try { return localStorage.getItem(storageKey); } catch { return null; }
 }
 
-/** Write to in-memory cache + best-effort localStorage (auto-evicts on quota). */
+/**
+ * Mutation write: in-memory only. Server persistence is handled by _apiWrite.
+ * Does NOT write to localStorage — server is the durable store.
+ */
 function _lsSet(storageKey: string, data: unknown): void {
-  const json = JSON.stringify(data);
-  _memRaw.set(storageKey, json);
-  try {
-    localStorage.setItem(storageKey, json);
-  } catch {
-    // Quota exceeded — try to free space by removing the largest non-essential keys
-    try {
-      const keySizes: [string, number][] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k !== storageKey) keySizes.push([k, (localStorage.getItem(k) ?? "").length]);
-      }
-      keySizes.sort((a, b) => b[1] - a[1]);
-      // Evict up to 3 largest items (they are re-fetchable from server on next load)
-      for (let i = 0; i < Math.min(3, keySizes.length); i++) {
-        localStorage.removeItem(keySizes[i][0]);
-      }
-      localStorage.setItem(storageKey, json);
-    } catch { /* still full — server has the authoritative copy */ }
-  }
-}
-
-/** Remove from in-memory cache + best-effort localStorage. */
-function _lsRemove(storageKey: string): void {
-  _memRaw.delete(storageKey);
-  try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+  _memRaw.set(storageKey, JSON.stringify(data));
 }
 
 /**
- * Fire-and-forget write to the PostgreSQL KV store.
- * storageKey is the raw localStorage key (may include "t:{id}:" prefix).
+ * Sync-cache write: called only by syncAllFromServer to update the warm-start
+ * localStorage cache so future page loads render quickly before the server sync.
+ */
+function _lsCache(storageKey: string, data: unknown): void {
+  _memRaw.set(storageKey, JSON.stringify(data));
+  try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch { /* quota — skip cache, server is authoritative */ }
+}
+
+/** Remove from in-memory cache. localStorage cache will be corrected on next sync. */
+function _lsRemove(storageKey: string): void {
+  _memRaw.delete(storageKey);
+}
+
+/**
+ * Fire-and-forget write to the PostgreSQL KV store via the API server.
+ * storageKey may include "t:{id}:" tenant prefix.
  */
 function _apiWrite(storageKey: string, value: unknown): void {
   let ns: string;
@@ -212,7 +195,7 @@ function _apiWrite(storageKey: string, value: unknown): void {
     key = storageKey;
   }
   kvPut(ns, key, value).catch((err) => {
-    console.warn(`[kv] write failed for ${ns}/${key}:`, err instanceof Error ? err.message : err);
+    console.error(`[kv] server write FAILED for ${ns}/${key}:`, err instanceof Error ? err.message : err);
   });
 }
 
@@ -228,7 +211,7 @@ function getStored<T>(key: string): T[] {
   return [];
 }
 
-/** Tenant-namespaced write — also persists to PostgreSQL. */
+/** Tenant-namespaced write: memory + server. No localStorage write. */
 function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
   _lsSet(sk, data);
@@ -1439,11 +1422,9 @@ export const bulkImportProducts = async (
   const finalList = [...existing, ...created];
   console.info(`[bulkImport] products: ${existing.length} existing + ${created.length} new = ${finalList.length} total`);
 
-  // Write to memory + localStorage immediately (so UI can update)
+  // Write to memory immediately (so UI can update); server write follows via _apiWrite.
   const _lsSetLocal = (storageKey: string, value: unknown) => {
-    const json = JSON.stringify(value);
-    _memRaw.set(storageKey, json);
-    try { localStorage.setItem(storageKey, json); } catch { /* quota */ }
+    _memRaw.set(storageKey, JSON.stringify(value));
   };
 
   // Helper: resolve namespace + key for kvPut from a storageKey
@@ -4968,46 +4949,10 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     if (globalData) {
       for (const [key, value] of Object.entries(globalData)) {
         if (value !== undefined && value !== null) {
-          // For array keys: compare local vs server count and keep the larger one.
-          // If local has more records, the server is stale — push local up to the DB.
-          if (Array.isArray(value)) {
-            const localRaw = _lsGet(key);
-            if (localRaw) {
-              try {
-                const localArr = JSON.parse(localRaw);
-                if (Array.isArray(localArr) && localArr.length > (value as unknown[]).length) {
-                  // Local has more data — server is behind. Push local to DB and keep local.
-                  console.info(`[sync] local "${key}" has ${localArr.length} vs server ${(value as unknown[]).length} — pushing local to DB`);
-                  kvPut("global", key, localArr).catch(() => {});
-                  // _memRaw already has the local data; skip overwrite
-                  continue;
-                }
-              } catch { /* malformed local JSON — fall through to server value */ }
-            }
-          }
-          // Populate both in-memory cache and best-effort localStorage
-          _lsSet(key, value);
+          // Server is authoritative. Use _lsCache so next page load gets a
+          // warm-start from localStorage without needing to wait for the server.
+          _lsCache(key, value);
         }
-      }
-
-      // ── One-time migration: push any data that is in _memRaw or localStorage
-      //    but missing from the DB (created before PostgreSQL integration).
-      const allLocalKeys = new Set<string>([
-        ..._memRaw.keys(),
-        ...Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? "").filter(Boolean),
-      ]);
-      for (const lsKey of allLocalKeys) {
-        // Only global keys (no tenant prefix, starts with "admin-")
-        if (lsKey.startsWith("t:") || !lsKey.startsWith("admin-")) continue;
-        if (lsKey in globalData) continue; // already in DB, skip
-        try {
-          const raw = _lsGet(lsKey);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            // Fire-and-forget migration write to DB
-            kvPut("global", lsKey, parsed).catch(() => {});
-          }
-        } catch { /* ignore malformed entries */ }
       }
     }
 
@@ -5018,32 +4963,13 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       if (tenantData) {
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
-            const lsKey = `t:${tenantId}:${key}`;
-            // For arrays: prefer local if it has more records (server may be stale)
-            if (Array.isArray(value)) {
-              const localRaw = _lsGet(lsKey);
-              if (localRaw) {
-                try {
-                  const localArr = JSON.parse(localRaw);
-                  if (Array.isArray(localArr) && localArr.length > (value as unknown[]).length) {
-                    console.info(`[sync] tenant "${key}" local ${localArr.length} > server ${(value as unknown[]).length} — pushing local to DB`);
-                    kvPut(ns, key, localArr).catch(() => {});
-                    continue;
-                  }
-                } catch { /* fall through */ }
-              }
-            }
-            _lsSet(lsKey, value);
+            _lsCache(`t:${tenantId}:${key}`, value);
           }
         }
       }
     }
 
     // ── Auto-repair: deduplicate products and stock by name ─────────────────
-    // The DB may contain duplicate records from repeated CSV imports run before
-    // the name-based dedup guard was added. This block detects and removes them
-    // in one pass, then writes the clean list back to the DB so the fix is
-    // permanent (it becomes a no-op on every subsequent sync).
     {
       const prodsStorageKey = tenantId ? `t:${tenantId}:${PRODUCTS_KEY}` : PRODUCTS_KEY;
       const prodsRaw = _memRaw.get(prodsStorageKey);
@@ -5056,16 +4982,15 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
               p => ((p as Product).name || "").trim().toLowerCase(),
             );
             if (clean !== prods) {
-              console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length} (removed ${prods.length - clean.length} duplicates)`);
-              _lsSet(prodsStorageKey, clean);
-              const ns = tenantId ? `t:${tenantId}` : "global";
-              kvPut(ns, PRODUCTS_KEY, clean).catch(() => {});
+              console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length}`);
+              _lsCache(prodsStorageKey, clean);
+              const dedupeNs = tenantId ? `t:${tenantId}` : "global";
+              kvPut(dedupeNs, PRODUCTS_KEY, clean).catch(() => {});
             }
           }
         } catch { /* malformed JSON — leave as-is */ }
       }
 
-      // Also deduplicate stock: keep one entry per (productName, sku, store, stockType)
       const stockStorageKey = tenantId ? `t:${tenantId}:${STOCK_KEY}` : STOCK_KEY;
       const stockRaw = _memRaw.get(stockStorageKey);
       if (stockRaw) {
@@ -5082,10 +5007,10 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
               ].join("|"),
             );
             if (clean !== items) {
-              console.info(`[sync] Auto-dedup stock: ${items.length} → ${clean.length} (removed ${items.length - clean.length} duplicates)`);
-              _lsSet(stockStorageKey, clean);
-              const ns = tenantId ? `t:${tenantId}` : "global";
-              kvPut(ns, STOCK_KEY, clean).catch(() => {});
+              console.info(`[sync] Auto-dedup stock: ${items.length} → ${clean.length}`);
+              _lsCache(stockStorageKey, clean);
+              const dedupeNs = tenantId ? `t:${tenantId}` : "global";
+              kvPut(dedupeNs, STOCK_KEY, clean).catch(() => {});
             }
           }
         } catch { /* malformed JSON */ }
