@@ -98,6 +98,12 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
   }
 }
 
+function PurchasesRedirect() {
+  const [, nav] = useLocation();
+  useEffect(() => { nav("/invoices?type=purchase", { replace: true }); }, []);
+  return null;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [location, navigate] = useLocation();
@@ -140,7 +146,7 @@ function Router() {
               <Route path="/units" component={UnitsPage} />
               <Route path="/shareholders" component={ShareholdersPage} />
               <Route path="/investment-plans" component={InvestmentPlansPage} />
-              <Route path="/purchases">{() => { const [,nav]=useLocation(); useEffect(()=>{nav("/invoices?type=purchase",{replace:true});},[]);return null; }}</Route>
+              <Route path="/purchases" component={PurchasesRedirect} />
               <Route path="/media" component={MediaLibraryPage} />
               <Route path="/invoices/new" component={InvoiceFormPage} />
               <Route path="/invoices/:id" component={InvoiceFormPage} />
