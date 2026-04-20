@@ -1,8 +1,10 @@
 /**
  * Barcode label printer
- * Opens a new window with barcode labels and auto-prints
- * Uses JsBarcode via CDN for rendering
+ * Generates SVG barcodes in-page using the bundled jsbarcode package,
+ * then embeds them as inline SVG strings in a print window.
+ * No CDN dependency — barcodes are always rendered correctly.
  */
+import JsBarcode from "jsbarcode";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -18,18 +20,42 @@ export type BarcodePrintItem = {
   qty?: number;
 };
 
+/** Generate an SVG barcode string using the bundled jsbarcode */
+function makeSvgBarcode(code: string): string {
+  if (!code?.trim()) return "";
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  try {
+    JsBarcode(svg, code.trim(), {
+      format: "AUTO",
+      width: 1.4,
+      height: 44,
+      displayValue: false,
+      margin: 4,
+      background: "#ffffff",
+      lineColor: "#000000",
+    });
+    svg.setAttribute("xmlns", ns);
+    svg.classList.add("barcode");
+    return svg.outerHTML;
+  } catch {
+    return "";
+  }
+}
+
 export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, currencySymbol = "") {
   const labels: string[] = [];
 
   for (const item of items) {
     const qty = Math.max(1, item.qty ?? 1);
+    const svgBarcode = makeSvgBarcode(item.barcode);
     for (let i = 0; i < qty; i++) {
       labels.push(`
         <div class="label">
           <div class="prod-name">${esc(item.name)}</div>
           ${item.localName ? `<div class="local-name">${esc(item.localName)}</div>` : ""}
           ${item.brand ? `<div class="prod-brand">${esc(item.brand)}</div>` : ""}
-          <svg class="barcode" data-code="${esc(item.barcode)}"></svg>
+          ${svgBarcode}
           <div class="barcode-num">${esc(item.barcode)}</div>
           ${item.sku ? `<div class="prod-sku">SKU: ${esc(item.sku)}</div>` : ""}
           ${item.price && item.price !== "" && item.price !== "0"
@@ -46,7 +72,6 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
 <head>
   <meta charset="utf-8" />
   <title>Barcode Labels</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
@@ -78,23 +103,7 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
   </div>
   <script>
     window.addEventListener("load", function () {
-      document.querySelectorAll(".barcode[data-code]").forEach(function (el) {
-        var code = el.getAttribute("data-code");
-        try {
-          JsBarcode(el, code, {
-            format: "AUTO",
-            width: 1.4,
-            height: 44,
-            displayValue: false,
-            margin: 4,
-            background: "#ffffff",
-            lineColor: "#000000",
-          });
-        } catch (e) {
-          el.remove();
-        }
-      });
-      setTimeout(function () { window.print(); }, 300);
+      setTimeout(function () { window.print(); }, 150);
     });
   <\/script>
 </body>
