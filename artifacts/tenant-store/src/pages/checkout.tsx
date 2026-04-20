@@ -416,18 +416,23 @@ export function CheckoutPage() {
       saleMode: isLoggedIn ? "Clubcard" : "Retail",
       paymentMethod,
       notes: form.notes ? form.notes : `Online order · ${form.address1}, ${form.city} ${form.postcode}`,
-      items: items.map(i => ({
-        id: crypto.randomUUID(),
-        productName: i.product.name,
-        sku: i.product.sku || "",
-        qty: String(i.quantity),
-        unit: "pcs",
-        unitPrice: getEffectivePrice(i.product, isLoggedIn),
-        discount: "0",
-        discountType: "pct",
-        notes: "",
-        itemStatus: "Pending",
-      })),
+      items: items.map(i => {
+        const bogoOn = isBogo(i.product, isLoggedIn);
+        // BOGO: cart qty is already doubled (buy N get N free).
+        // Set 50% discount so the admin line total = qty × price × 0.5 = charged price.
+        return {
+          id: crypto.randomUUID(),
+          productName: i.product.name,
+          sku: i.product.sku || "",
+          qty: String(i.quantity),
+          unit: "pcs",
+          unitPrice: getEffectivePrice(i.product, isLoggedIn),
+          discount: bogoOn ? "50" : "0",
+          discountType: "pct",
+          notes: bogoOn ? "B1G1 Clubcard Offer" : "",
+          itemStatus: "Pending",
+        };
+      }),
       taxRate: "20",
       amountPaid: "0",
       paidAt: "",
