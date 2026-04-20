@@ -505,17 +505,23 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     products.map(p => ({
       value: p.name,
       label: p.name,
-      sub:   p.sku,
+      sub:   [p.sku, p.brand].filter(Boolean).join(" · "),
       tag:   p.category || undefined,
     })),
   [products]);
-  const customerOpts = useMemo<ComboOption[]>(() =>
-    customers.map(c => ({
+  const customerOpts = useMemo<ComboOption[]>(() => {
+    const mapped = customers.map(c => ({
       value: c.name,
       label: c.name,
-      sub:   [c.company, c.email, c.phone].filter(Boolean).join(" · "),
-    })),
-  [customers]);
+      sub:   [c.company, c.phone].filter(Boolean).join(" · "),
+      tag:   (c.customerRole as string | undefined) || undefined,
+    }));
+    const preferred = invoiceType === "purchase" ? "Supplier" : "Buyer";
+    return [
+      ...mapped.filter(o => o.tag === preferred),
+      ...mapped.filter(o => o.tag !== preferred),
+    ];
+  }, [customers, invoiceType]);
   const handleCustomerSelect = useCallback((name: string) => {
     const c = customers.find(x => x.name === name);
     setForm(f => ({
@@ -671,15 +677,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
                     {invoiceType === "purchase" ? "Supplier Name" : "Customer Name"}
                   </label>
-                  {invoiceType === "purchase" ? (
-                    <input value={form.customer} onChange={e => setF("customer", e.target.value)}
-                      placeholder="Enter supplier / vendor name…"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                  ) : (
-                    <Combobox value={form.customer} onChange={v => setF("customer", v)}
-                      onSelect={opt => handleCustomerSelect(opt.value)} options={customerOpts} placeholder="Search customer…"
-                      inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                  )}
+                  <Combobox
+                    value={form.customer}
+                    onChange={v => setF("customer", v)}
+                    onSelect={opt => handleCustomerSelect(opt.value)}
+                    options={customerOpts}
+                    maxResults={20}
+                    minDropdownWidth={380}
+                    placeholder={invoiceType === "purchase" ? "Search supplier…" : "Search customer…"}
+                    inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
                 </div>
                 {/* Company */}
                 <div>
@@ -815,6 +822,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <div className="pl-1 pr-2" data-item-product={item.id}>
                       <Combobox value={item.productName} onChange={v => pickProduct(item.id, v)}
                         onSelect={opt => pickProduct(item.id, opt.value)} options={productOpts} placeholder="Product / service…"
+                        maxResults={15} minDropdownWidth={320}
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
                         inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       {item.sku && <span className="text-[10px] text-gray-400 pl-1">SKU: {item.sku}</span>}
