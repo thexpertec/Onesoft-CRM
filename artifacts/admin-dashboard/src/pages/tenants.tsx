@@ -11,7 +11,7 @@ import {
 import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, createTenant, updateTenant, deleteTenant,
-  getTenantStats, seedTenantCOA,
+  getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
 } from "@/lib/store";
@@ -502,12 +502,7 @@ export default function TenantsPage() {
       toast({ title: `"${data.name}" updated` });
     } else {
       const t = createTenant(data);
-      // Count how many COA accounts were seeded
-      let coaCount = 0;
-      try {
-        const raw = localStorage.getItem(`t:${t.id}:admin-chart-of-accounts`);
-        coaCount = raw ? (JSON.parse(raw) as unknown[]).length : 0;
-      } catch { /* ignore */ }
+      const coaCount = getChartOfAccountsForTenant(t.id).length;
       toast({
         title: `Tenant "${data.name}" created`,
         description: `Login: ${data.adminUsername}${coaCount > 0 ? ` · ${coaCount} COA accounts seeded` : ""}`,
@@ -535,11 +530,7 @@ export default function TenantsPage() {
   function handleSeedCOA(tenant: Tenant) {
     try {
       seedTenantCOA(tenant.id);
-      let coaCount = 0;
-      try {
-        const raw = localStorage.getItem(`t:${tenant.id}:admin-chart-of-accounts`);
-        coaCount = raw ? (JSON.parse(raw) as unknown[]).length : 0;
-      } catch { /* ignore */ }
+      const coaCount = getChartOfAccountsForTenant(tenant.id).length;
       toast({
         title: `COA seeded for ${tenant.name}`,
         description: coaCount > 0 ? `${coaCount} accounts copied from system template` : "COA structure applied",

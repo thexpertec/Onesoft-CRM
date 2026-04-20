@@ -3788,6 +3788,51 @@ export function clearAllStoredModules(): void {
 }
 
 /**
+ * Returns Chart of Accounts for a specific tenant (or active tenant if omitted).
+ * Reads from in-memory cache — never from localStorage.
+ */
+export function getChartOfAccountsForTenant(tenantId?: string): Account[] {
+  const key = tenantId ? `t:${tenantId}:${COA_KEY}` : tenantKey(COA_KEY);
+  try { return JSON.parse(_lsGet(key) || "[]") as Account[]; }
+  catch { return []; }
+}
+
+/**
+ * Reads all module data from in-memory cache (populated from server on sync).
+ * Use this for backup/export — never read from localStorage directly.
+ */
+export function getStoredModuleSnapshot(): Record<string, unknown> {
+  const snapshot: Record<string, unknown> = {};
+  ALL_STORE_KEYS.forEach(k => {
+    const raw = _lsGet(tenantKey(k));
+    if (raw) {
+      try { snapshot[k] = JSON.parse(raw); } catch { /* skip malformed */ }
+    }
+  });
+  return snapshot;
+}
+
+/**
+ * Restores a module snapshot to memory + server.
+ * Use this for backup restore — never write to localStorage directly.
+ * Returns the number of modules restored.
+ */
+export function restoreStoredModuleSnapshot(data: Record<string, unknown>): number {
+  let count = 0;
+  ALL_STORE_KEYS.forEach(k => {
+    if (k in data && Array.isArray(data[k])) {
+      const sk = tenantKey(k);
+      _lsSet(sk, data[k]);
+      _apiWrite(sk, data[k]);
+      count++;
+    }
+  });
+  // Notify all data hooks that data changed
+  try { window.dispatchEvent(new CustomEvent("onesoft:data-synced")); } catch { /* SSR guard */ }
+  return count;
+}
+
+/**
  * Resets the accounting ledger to zero:
  *  1. Deletes all journal entries.
  *  2. Resets every COA account's opening balance to 0.

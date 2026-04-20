@@ -26,8 +26,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
-  AppSettings, LegalDocument, BankAccount, getSettings, saveSettings, ALL_STORE_KEYS,
+  AppSettings, LegalDocument, BankAccount, getSettings, saveSettings,
   clearAccountingLedger, clearAllStoredModules,
+  getStoredModuleSnapshot, restoreStoredModuleSnapshot,
 } from "@/lib/store";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
@@ -634,14 +635,8 @@ export default function SettingsPage() {
 
   // ── Export ──────────────────────────────────────────────────────────────────
   function handleExport() {
-    const snapshot: Record<string, unknown> = {};
-    ALL_STORE_KEYS.forEach(k => {
-      const raw = localStorage.getItem(k);
-      if (raw) {
-        try { snapshot[k] = JSON.parse(raw); }
-        catch { snapshot[k] = raw; }
-      }
-    });
+    // Read from in-memory cache (populated from server on login/sync) — not localStorage.
+    const snapshot = getStoredModuleSnapshot();
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
@@ -649,7 +644,7 @@ export default function SettingsPage() {
     a.download = `onesoft-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Backup downloaded", description: "All data exported to JSON." });
+    toast({ title: "Backup downloaded", description: `${Object.keys(snapshot).length} modules exported to JSON.` });
   }
 
   // ── Import ──────────────────────────────────────────────────────────────────
@@ -658,14 +653,9 @@ export default function SettingsPage() {
     reader.onload = e => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        let count = 0;
-        ALL_STORE_KEYS.forEach(k => {
-          if (k in data) {
-            try { localStorage.setItem(k, JSON.stringify(data[k])); } catch { /* quota — server import still succeeded */ }
-            count++;
-          }
-        });
-        toast({ title: "Import complete", description: `${count} modules restored. Reload the page to see changes.` });
+        // Write through memory + server — never to localStorage directly.
+        const count = restoreStoredModuleSnapshot(data);
+        toast({ title: "Import complete", description: `${count} modules restored and saved to server.` });
       } catch {
         toast({ title: "Import failed", description: "Invalid backup file.", variant: "destructive" });
       }
