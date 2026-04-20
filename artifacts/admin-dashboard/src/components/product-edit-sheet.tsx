@@ -105,7 +105,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
 
-  const allAttrs = useMemo(() => getAttributes().filter(a => a.type === "select" && a.values.trim()), []);
+  const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim()), []);
   const [selectedAttrNames, setSelectedAttrNames] = useState<string[]>(product?.productAttributes ?? []);
   const [variants, setVariants] = useState<ProductVariant[]>(product?.variants ?? []);
 
@@ -506,7 +506,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           {allAttrs.length === 0 ? (
             <p className="text-[11px] text-muted-foreground text-center py-2">
-              No "select" type attributes yet — go to <strong>Attributes</strong> and add some with comma-separated values.
+              No attributes with values yet — go to <strong>Attributes</strong> and add comma-separated values.
             </p>
           ) : (
             <div className="space-y-3">
