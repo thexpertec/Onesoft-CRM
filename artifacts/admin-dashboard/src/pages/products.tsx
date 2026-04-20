@@ -1381,6 +1381,7 @@ export default function ProductsPage() {
                         barcode: p.barcode!,
                         sku: p.sku || undefined,
                         price: p.price || undefined,
+                        priceWas: p.websitePriceWas || undefined,
                         brand: p.brand || undefined,
                       })),
                       3,

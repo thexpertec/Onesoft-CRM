@@ -1,8 +1,6 @@
 /**
  * Barcode label printer
- * Generates SVG barcodes in-page using the bundled jsbarcode package,
- * then embeds them as inline SVG strings in a print window.
- * No CDN dependency — barcodes are always rendered correctly.
+ * Renders barcodes to canvas → PNG data URL (more reliable than SVG in popup windows).
  */
 import JsBarcode from "jsbarcode";
 
@@ -16,28 +14,26 @@ export type BarcodePrintItem = {
   barcode: string;
   sku?: string;
   price?: string;
+  priceWas?: string;
   brand?: string;
   qty?: number;
 };
 
-/** Generate an SVG barcode string using the bundled jsbarcode */
-function makeSvgBarcode(code: string): string {
+/** Render barcode to a canvas and return a PNG data URL */
+function makeBarcodeDataUrl(code: string): string {
   if (!code?.trim()) return "";
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
+  const canvas = document.createElement("canvas");
   try {
-    JsBarcode(svg, code.trim(), {
+    JsBarcode(canvas, code.trim(), {
       format: "AUTO",
-      width: 1.4,
-      height: 44,
+      width: 2,
+      height: 56,
       displayValue: false,
-      margin: 4,
+      margin: 6,
       background: "#ffffff",
       lineColor: "#000000",
     });
-    svg.setAttribute("xmlns", ns);
-    svg.classList.add("barcode");
-    return svg.outerHTML;
+    return canvas.toDataURL("image/png");
   } catch {
     return "";
   }
@@ -48,19 +44,33 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
 
   for (const item of items) {
     const qty = Math.max(1, item.qty ?? 1);
-    const svgBarcode = makeSvgBarcode(item.barcode);
+    const barcodePng = makeBarcodeDataUrl(item.barcode);
+    const sym = esc(currencySymbol);
+
+    // Price display: was / now
+    const hasNow = item.price && item.price !== "" && parseFloat(item.price) > 0;
+    const hasWas = item.priceWas && item.priceWas !== "" && parseFloat(item.priceWas) > 0;
+    let priceHtml = "";
+    if (hasNow && hasWas) {
+      priceHtml = `
+        <div class="price-row">
+          <span class="price-was">${sym}${esc(item.priceWas!)}</span>
+          <span class="price-now">${sym}${esc(item.price!)}</span>
+        </div>`;
+    } else if (hasNow) {
+      priceHtml = `<div class="price-single">${sym}${esc(item.price!)}</div>`;
+    }
+
     for (let i = 0; i < qty; i++) {
       labels.push(`
         <div class="label">
           <div class="prod-name">${esc(item.name)}</div>
           ${item.localName ? `<div class="local-name">${esc(item.localName)}</div>` : ""}
           ${item.brand ? `<div class="prod-brand">${esc(item.brand)}</div>` : ""}
-          ${svgBarcode}
+          ${barcodePng ? `<img class="barcode-img" src="${barcodePng}" alt="${esc(item.barcode)}" />` : ""}
           <div class="barcode-num">${esc(item.barcode)}</div>
           ${item.sku ? `<div class="prod-sku">SKU: ${esc(item.sku)}</div>` : ""}
-          ${item.price && item.price !== "" && item.price !== "0"
-            ? `<div class="prod-price">${esc(currencySymbol)}${esc(item.price)}</div>`
-            : ""}
+          ${priceHtml}
         </div>`);
     }
   }
@@ -78,19 +88,22 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
     .grid { display: flex; flex-wrap: wrap; }
     .label {
       width: ${labelW}%;
-      padding: 6pt 4pt;
+      padding: 6pt 5pt 5pt;
       border: 0.5pt dashed #bbb;
       text-align: center;
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    .prod-name  { font-size: 9pt;  font-weight: 700; line-height: 1.2; margin-bottom: 1pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .local-name { font-size: 8pt;  color: #555; margin-bottom: 1pt; direction: rtl; }
-    .prod-brand { font-size: 7pt;  color: #777; margin-bottom: 2pt; text-transform: uppercase; letter-spacing: .04em; }
-    .barcode    { max-width: 100%; display: block; margin: 0 auto; }
-    .barcode-num{ font-size: 7pt;  font-family: "Courier New", monospace; color: #333; margin-top: 1pt; }
-    .prod-sku   { font-size: 6.5pt; color: #888; margin-top: 1pt; }
-    .prod-price { font-size: 11pt; font-weight: 800; color: #111; margin-top: 3pt; }
+    .prod-name  { font-size: 9pt; font-weight: 700; line-height: 1.25; margin-bottom: 1pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .local-name { font-size: 7.5pt; color: #555; margin-bottom: 1pt; direction: rtl; }
+    .prod-brand { font-size: 6.5pt; color: #888; margin-bottom: 2pt; text-transform: uppercase; letter-spacing: .04em; }
+    .barcode-img { max-width: 100%; display: block; margin: 2pt auto 0; }
+    .barcode-num { font-size: 7pt; font-family: "Courier New", monospace; color: #333; margin-top: 1pt; letter-spacing: .05em; }
+    .prod-sku   { font-size: 6pt; color: #999; margin-top: 1pt; }
+    .price-row  { display: flex; align-items: baseline; justify-content: center; gap: 5pt; margin-top: 4pt; }
+    .price-was  { font-size: 8pt; color: #999; text-decoration: line-through; }
+    .price-now  { font-size: 12pt; font-weight: 800; color: #111; }
+    .price-single { font-size: 12pt; font-weight: 800; color: #111; margin-top: 4pt; }
     @media print {
       body { margin: 0; }
       @page { margin: 8mm; }
@@ -103,7 +116,7 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
   </div>
   <script>
     window.addEventListener("load", function () {
-      setTimeout(function () { window.print(); }, 150);
+      setTimeout(function () { window.print(); }, 200);
     });
   <\/script>
 </body>

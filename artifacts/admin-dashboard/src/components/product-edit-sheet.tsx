@@ -210,6 +210,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
       barcode,
       sku: form.sku || undefined,
       price: form.price || undefined,
+      priceWas: form.websitePriceWas || undefined,
       brand: form.brand || undefined,
     }], 3, sym);
   };
