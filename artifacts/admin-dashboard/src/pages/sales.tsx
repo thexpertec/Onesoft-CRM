@@ -2298,7 +2298,9 @@ export default function SalesPage() {
   const syncOnlineOrders = useCallback(async () => {
     setSyncing(true);
     try {
-      const n = await importOnlineSalesFromKv("global");
+      // Use the active tenant's namespace so orders never bleed across tenants
+      const ns = currentTenantId ? `t:${currentTenantId}` : "global";
+      const n = await importOnlineSalesFromKv(ns);
       setLastSyncCount(n);
       if (n > 0) {
         refresh();
@@ -2307,11 +2309,11 @@ export default function SalesPage() {
     } finally {
       setSyncing(false);
     }
-  }, [refresh, toast]);
+  }, [currentTenantId, refresh, toast]);
 
-  // Auto-sync online orders when the sales list mounts (global/admin context only)
+  // Auto-sync online orders whenever the sales list mounts
   useEffect(() => {
-    if (!currentTenantId) syncOnlineOrders();
+    syncOnlineOrders();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearAdvFilters = () => {

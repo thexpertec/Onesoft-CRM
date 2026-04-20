@@ -72,10 +72,12 @@ async function saveOrder(order: Record<string, unknown>, tenantId: string | null
 async function saveToAdminSales(saleRecord: Record<string, unknown>, tenantId: string | null): Promise<void> {
   const id = saleRecord.id as string;
 
-  // 1. Append to global online-orders list so the admin sales page can import it
+  // 1. Append to the tenant's own online-orders list so the admin sales page can import it.
+  //    Use the tenant namespace when available so orders are never mixed across tenants.
+  const onlineOrdersNs = tenantId ? encodeURIComponent(`t:${tenantId}`) : "global";
   try {
     let existing: unknown[] = [];
-    const r = await fetch(`${apiBase()}/kv/global/online-orders`);
+    const r = await fetch(`${apiBase()}/kv/${onlineOrdersNs}/online-orders`);
     if (r.ok) {
       const d = await r.json() as { value: unknown[] };
       if (Array.isArray(d.value)) existing = d.value;
@@ -83,7 +85,7 @@ async function saveToAdminSales(saleRecord: Record<string, unknown>, tenantId: s
     if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
       existing.push(saleRecord);
     }
-    await fetch(`${apiBase()}/kv/global/online-orders`, {
+    await fetch(`${apiBase()}/kv/${onlineOrdersNs}/online-orders`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: existing }),
