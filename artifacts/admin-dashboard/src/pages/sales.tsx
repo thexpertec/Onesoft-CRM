@@ -5,14 +5,14 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment,
   SALE_STATUSES, SALE_PAYMENTS,
-  getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product,
-  deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
+  getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
+  getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Receipt, Plus, Search, X, Save, Trash2, Eye,
+  Receipt, Plus, Minus, Search, X, Save, Trash2, Eye,
   ShoppingCart, Check, RotateCcw, Ban, CreditCard, Banknote,
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
@@ -453,6 +453,229 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaul
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Variant Picker Dialog ────────────────────────────────────────────────────
+interface VariantPickerDialogProps {
+  product: Product | null;
+  priceMode: "retail" | "wholesale" | "clubcard";
+  localItems: SaleItem[];
+  onClose: () => void;
+  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => void;
+  onAddBase: (product: Product) => void;
+}
+
+function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, onAddBase }: VariantPickerDialogProps) {
+  const curr = getSettingsCurrencySymbol();
+  const variants = product?.variants ?? [];
+  const attrName = variants[0] ? Object.keys(variants[0].attributes)[0] ?? "" : "";
+
+  const allowNegativeStock = getSettings().allowNegativeStock !== false;
+
+  // Build stock + cart maps for quick lookup
+  const stockMap = useMemo<Record<string, number>>(() => {
+    const all = getStock();
+    const m: Record<string, number> = {};
+    all.forEach(s => { m[s.sku] = (m[s.sku] ?? 0) + (parseFloat(s.quantity) || 0); });
+    return m;
+  }, [product]);
+
+  const cartQtyMap = useMemo<Record<string, number>>(() => {
+    const m: Record<string, number> = {};
+    localItems.forEach(i => { m[i.sku] = (m[i.sku] ?? 0) + (parseFloat(i.qty) || 0); });
+    return m;
+  }, [localItems]);
+
+  const [selected, setSelected] = useState<ProductVariant | null>(null);
+  const [qty, setQty] = useState(1);
+
+  // Reset when product changes
+  useEffect(() => {
+    setSelected(null);
+    setQty(1);
+  }, [product?.id]);
+
+  const variantLabel = (v: ProductVariant) => Object.values(v.attributes).join(" / ");
+
+  const resolvedPrice = (v: ProductVariant) => {
+    const base = priceMode === "wholesale" && product?.wholesalePrice
+      ? product.wholesalePrice
+      : priceMode === "clubcard" && product?.clubcardPrice
+        ? product.clubcardPrice
+        : v.price || product?.price || "0.00";
+    return base;
+  };
+
+  const variantStock = (v: ProductVariant) => {
+    const sku = v.sku || product?.sku || "";
+    return stockMap[sku] ?? null;
+  };
+
+  const isBlocked = (v: ProductVariant) => {
+    if (allowNegativeStock) return false;
+    const stk = variantStock(v);
+    if (stk === null) return false;
+    const inCart = cartQtyMap[v.sku || product?.sku || ""] || 0;
+    return (stk - inCart) <= 0;
+  };
+
+  const handleAdd = () => {
+    if (!selected || !product) return;
+    const sku = selected.sku || product.sku;
+    const name = `${product.name} — ${variantLabel(selected)}`;
+    const price = resolvedPrice(selected);
+    onAdd(sku, name, price, qty, product.unit || "pcs");
+  };
+
+  if (!product) return null;
+
+  const selStock = selected ? variantStock(selected) : null;
+  const selInCart = selected ? (cartQtyMap[selected.sku || product.sku] || 0) : 0;
+  const selAvailable = selStock !== null ? selStock - selInCart : null;
+
+  return (
+    <Dialog open={!!product} onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-[480px] p-0 overflow-hidden rounded-2xl gap-0">
+        {/* Header */}
+        <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800">
+          {product.thumbnail && (
+            <img src={product.thumbnail} alt={product.name}
+              className="w-14 h-14 rounded-xl object-cover border border-gray-200 dark:border-zinc-700 flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-[15px] text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{product.name}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {product.brand && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 uppercase tracking-wide">{product.brand}</span>
+              )}
+              {product.category && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">{product.category}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Variant chips */}
+        <div className="px-5 pt-4 pb-3">
+          {attrName && (
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2.5">
+              Choose {attrName}:
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {variants.map(v => {
+              const label = variantLabel(v);
+              const price = resolvedPrice(v);
+              const blocked = isBlocked(v);
+              const isSelected = selected?.id === v.id;
+              const stk = variantStock(v);
+              const inCart = cartQtyMap[v.sku || product.sku] || 0;
+              const avail = stk !== null ? stk - inCart : null;
+              return (
+                <button
+                  key={v.id}
+                  disabled={blocked}
+                  onClick={() => { setSelected(v); setQty(1); }}
+                  className={`relative flex flex-col items-center gap-0.5 px-3.5 py-2.5 rounded-xl border-2 transition-all text-left min-w-[80px] ${
+                    blocked
+                      ? "border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 opacity-50 cursor-not-allowed"
+                      : isSelected
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40 shadow-sm"
+                        : "border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm"
+                  }`}>
+                  {/* Variant image if present */}
+                  {v.image && (
+                    <img src={v.image} alt={label}
+                      className="w-10 h-10 object-cover rounded-lg mb-1 border border-gray-100 dark:border-zinc-700" />
+                  )}
+                  {/* Selection tick */}
+                  {isSelected && (
+                    <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                      <Check size={9} strokeWidth={3} className="text-white" />
+                    </span>
+                  )}
+                  <span className={`text-[12px] font-semibold leading-tight text-center ${
+                    isSelected ? "text-blue-700 dark:text-blue-300" : "text-gray-800 dark:text-gray-200"
+                  }`}>{label}</span>
+                  <span className={`text-[11px] font-bold font-mono tabular-nums ${
+                    priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400"
+                    : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400"
+                    : "text-emerald-600 dark:text-emerald-400"
+                  }`}>{curr}{parseFloat(price || "0").toFixed(dp)}</span>
+                  {blocked ? (
+                    <span className="text-[9px] text-red-500 font-semibold">No Stock</span>
+                  ) : avail !== null ? (
+                    <span className={`text-[9px] font-medium ${avail <= 5 ? "text-amber-500" : "text-gray-400 dark:text-zinc-500"}`}>
+                      {avail <= 0 ? "0 left" : avail <= 5 ? `⚠ ${avail} left` : `${avail} in stock`}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selected info + qty stepper */}
+        {selected && (
+          <div className="px-5 pb-4 space-y-3">
+            <div className="flex items-center gap-4 py-2.5 px-3.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-gray-500 dark:text-zinc-400">Selected</p>
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">{variantLabel(selected)}</p>
+                <p className={`text-[13px] font-extrabold font-mono tabular-nums ${
+                  priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400"
+                  : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+                }`}>{curr}{parseFloat(resolvedPrice(selected) || "0").toFixed(dp)}</p>
+              </div>
+              {selAvailable !== null && (
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500">Stock</p>
+                  <p className={`text-[13px] font-bold tabular-nums ${
+                    selAvailable <= 0 ? "text-red-500" : selAvailable <= 5 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
+                  }`}>{selAvailable}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Qty stepper */}
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-gray-600 dark:text-zinc-300">Quantity</span>
+              <div className="flex items-center gap-0">
+                <button onClick={() => setQty(q => Math.max(1, q - 1))}
+                  className="w-9 h-9 rounded-l-xl border border-r-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
+                  <Minus size={14} strokeWidth={2.5} />
+                </button>
+                <div className="w-12 h-9 border-y border-gray-200 dark:border-zinc-700 flex items-center justify-center text-[15px] font-bold text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-900 tabular-nums select-none">
+                  {qty}
+                </div>
+                <button onClick={() => setQty(q => q + 1)}
+                  className="w-9 h-9 rounded-r-xl border border-l-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
+                  <Plus size={14} strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <DialogFooter className="px-5 pb-5 pt-2 flex-col gap-2 sm:flex-col">
+          <Button
+            onClick={handleAdd}
+            disabled={!selected}
+            className="w-full h-12 text-[14px] font-bold rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
+            <ShoppingCart size={16} />
+            {selected ? `Add ${qty > 1 ? `${qty}×` : ""} ${variantLabel(selected)} to Cart` : "Select a variant above"}
+          </Button>
+          <button
+            onClick={() => { onAddBase(product); onClose(); }}
+            className="text-[11px] text-gray-400 dark:text-zinc-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors py-1 text-center w-full">
+            Add base product without variant
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2059,6 +2282,7 @@ export default function SalesPage() {
   const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale" | "clubcard">("retail");
   const [localMeta,              setLocalMeta]              = useState<LocalMeta | null>(null);
   const [completedSaleForReceipt, setCompletedSaleForReceipt] = useState<Sale | null>(null);
+  const [variantPickerProduct,   setVariantPickerProduct]   = useState<Product | null>(null);
 
   // Refs so callbacks always see latest values without stale-closure issues
   const localItemsRef = useRef<SaleItem[]>(localItems);
@@ -2197,8 +2421,37 @@ export default function SalesPage() {
     editSale(detailId, { ...meta, items });
   }, [detailId, editSale]);
 
+  // ── Add variant from picker ──
+  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => {
+    setVariantPickerProduct(null);
+    const current = localItemsRef.current;
+    const settings = getSettings();
+    const defaultDiscountType = settings.posDiscountType ?? "pct";
+    const existing = current.find(i => i.sku === variantSku);
+    if (existing) {
+      saveItems(current.map(i => i.sku === variantSku ? { ...i, qty: String((parseFloat(i.qty) || 0) + qty) } : i));
+    } else {
+      const item: SaleItem = {
+        ...blankSaleItem(),
+        productName: variantName,
+        sku: variantSku,
+        unit,
+        unitPrice: variantPrice,
+        qty: String(qty),
+        discountType: defaultDiscountType,
+      };
+      saveItems([...current, item]);
+      toast({ title: `${variantName} added` });
+    }
+  }, [saveItems, toast]);
+
   // ── Add product from right panel ──
   const handleAddProductFromCatalogue = useCallback((product: Product) => {
+    // If product has variants, open the picker instead of adding directly
+    if (product.variants && product.variants.length > 0) {
+      setVariantPickerProduct(product);
+      return;
+    }
     const settings = getSettings();
     const allowNeg = settings.allowNegativeStock !== false; // default true
 
@@ -2544,37 +2797,47 @@ export default function SalesPage() {
   // ─── If POS is open, render full-page POS ───────────────────────────────────
   if (detailId && detailSale && localMeta) {
     return (
-      <POSView
-        sale={detailSale}
-        localItems={localItems}
-        localMeta={localMeta}
-        isFresh={detailId === freshSaleIdRef.current}
-        customerComboOpts={customerComboOpts}
-        productComboOpts={productComboOpts}
-        agentOpts={agentOpts}
-        onClose={closePOS}
-        onMetaChange={patch => setLocalMeta(m => m ? { ...m, ...patch } : m)}
-        onSaveMeta={saveMeta}
-        onItemChange={handleItemFieldChange}
-        onItemBlur={handleItemBlur}
-        onSaveItems={saveItems}
-        onDeleteItem={handleDeleteItem}
-        onAddProduct={handleAddProductFromCatalogue}
-        priceMode={priceMode}
-        onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : mode === "wholesale" ? "Wholesale" : "Clubcard" } : m); }}
-        onSetStatus={setStatus}
-        onComplete={handleComplete}
-        onAddCustomer={(name, phone, email, company) => {
-          addCustomer({
-            name, phone, email,
-            company: company || "", industry: "", city: "", status: "Active",
-            source: "direct", customerType: "POS Customer",
-            customerSince: new Date().toISOString().slice(0, 10),
-            totalValue: "0", currency: "GBP", notes: "", tags: [],
-          });
-          toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
-        }}
-      />
+      <>
+        <POSView
+          sale={detailSale}
+          localItems={localItems}
+          localMeta={localMeta}
+          isFresh={detailId === freshSaleIdRef.current}
+          customerComboOpts={customerComboOpts}
+          productComboOpts={productComboOpts}
+          agentOpts={agentOpts}
+          onClose={closePOS}
+          onMetaChange={patch => setLocalMeta(m => m ? { ...m, ...patch } : m)}
+          onSaveMeta={saveMeta}
+          onItemChange={handleItemFieldChange}
+          onItemBlur={handleItemBlur}
+          onSaveItems={saveItems}
+          onDeleteItem={handleDeleteItem}
+          onAddProduct={handleAddProductFromCatalogue}
+          priceMode={priceMode}
+          onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : mode === "wholesale" ? "Wholesale" : "Clubcard" } : m); }}
+          onSetStatus={setStatus}
+          onComplete={handleComplete}
+          onAddCustomer={(name, phone, email, company) => {
+            addCustomer({
+              name, phone, email,
+              company: company || "", industry: "", city: "", status: "Active",
+              source: "direct", customerType: "POS Customer",
+              customerSince: new Date().toISOString().slice(0, 10),
+              totalValue: "0", currency: "GBP", notes: "", tags: [],
+            });
+            toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
+          }}
+        />
+        <VariantPickerDialog
+          product={variantPickerProduct}
+          priceMode={priceMode}
+          localItems={localItems}
+          onClose={() => setVariantPickerProduct(null)}
+          onAdd={handleAddVariant}
+          onAddBase={p => { setVariantPickerProduct(null); handleAddProductFromCatalogue({ ...p, variants: [] }); }}
+        />
+      </>
     );
   }
 
