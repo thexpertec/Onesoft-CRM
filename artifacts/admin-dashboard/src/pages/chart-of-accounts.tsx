@@ -1329,7 +1329,12 @@ export default function ChartOfAccountsPage() {
                         <div className="px-12 py-4 text-[12px] text-gray-400 italic border-b border-gray-100 dark:border-zinc-800">
                           No accounts yet. Click "+ Add" above or click any existing account.
                         </div>
-                      ) : flatRows.map((row, ri) => renderRow(row, ri))
+                      ) : flatRows.map((row, ri) => (
+                        <div key={row.id}>
+                          {renderRow(row, ri)}
+                          {row.id === "sys-1300" && !nodeCollapsed["sys-1300"] && renderInventoryProductRows(row.depth + 1)}
+                        </div>
+                      ))
                     )}
                   </div>
                 );
