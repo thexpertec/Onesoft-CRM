@@ -92,6 +92,9 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim() && a.active !== false), []);
   const [selectedAttrName, setSelectedAttrName] = useState<string>(product?.productAttributes?.[0] ?? "");
   const [variants, setVariants] = useState<ProductVariant[]>(product?.variants ?? []);
+  const [selectedValues, setSelectedValues] = useState<Set<string>>(
+    () => new Set((product?.variants ?? []).map(v => Object.values(v.attributes)[0] ?? "").filter(Boolean))
+  );
 
   const { loading: lookupLoading, found, result: lookupResult, lookup, reset: resetLookup } = useBarcodeLookup();
 
@@ -102,24 +105,69 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
       resetLookup();
       setSelectedAttrName(product.productAttributes?.[0] ?? "");
       setVariants(product.variants ?? []);
+      setSelectedValues(new Set((product.variants ?? []).map(v => Object.values(v.attributes)[0] ?? "").filter(Boolean)));
     }
   }, [product?.id]);
 
-  const selectAttr = useCallback((name: string) => {
-    setSelectedAttrName(prev => {
-      const next = prev === name ? "" : name;
-      const attr = allAttrs.find(a => a.name === next);
-      const vals = attr ? [...new Set(attr.values.split(",").map(v => v.trim()).filter(Boolean))] : [];
-      setVariants(existing => {
-        const map = new Map(existing.map(v => [Object.values(v.attributes)[0] ?? "", v]));
-        return vals.map(val => {
-          const attrs = { [next]: val };
-          return map.get(val) ?? { id: crypto.randomUUID(), attributes: attrs, price: "", image: "" };
-        });
+  // All values for the currently selected attribute
+  const attrValues = useMemo(() => {
+    if (!selectedAttrName) return [];
+    const attr = allAttrs.find(a => a.name === selectedAttrName);
+    return attr ? [...new Set(attr.values.split(",").map(v => v.trim()).filter(Boolean))] : [];
+  }, [selectedAttrName, allAttrs]);
+
+  // Select / deselect an attribute type
+  const handleSelectAttr = useCallback((name: string) => {
+    const next = selectedAttrName === name ? "" : name;
+    setSelectedAttrName(next);
+    if (!next) {
+      setSelectedValues(new Set());
+      setVariants([]);
+    } else {
+      // Switching attribute: keep only variants that belong to this attribute
+      setVariants(prev => {
+        const kept = prev.filter(v => Object.keys(v.attributes)[0] === next);
+        setSelectedValues(new Set(kept.map(v => Object.values(v.attributes)[0] ?? "").filter(Boolean)));
+        return kept;
       });
+    }
+  }, [selectedAttrName]);
+
+  // Toggle an individual attribute value on/off
+  const toggleValue = useCallback((val: string) => {
+    setSelectedValues(prev => {
+      const next = new Set(prev);
+      if (next.has(val)) {
+        next.delete(val);
+        setVariants(vs => vs.filter(v => Object.values(v.attributes)[0] !== val));
+      } else {
+        next.add(val);
+        setVariants(vs => {
+          if (vs.find(v => Object.values(v.attributes)[0] === val)) return vs;
+          return [...vs, { id: crypto.randomUUID(), attributes: { [selectedAttrName]: val }, price: "", image: "" }];
+        });
+      }
       return next;
     });
-  }, [allAttrs]);
+  }, [selectedAttrName]);
+
+  // Select all / clear all values for current attribute
+  const selectAllValues = useCallback(() => {
+    setSelectedValues(new Set(attrValues));
+    setVariants(prev => {
+      const map = new Map(prev.map(v => [Object.values(v.attributes)[0] ?? "", v]));
+      return attrValues.map(val =>
+        map.get(val) ?? { id: crypto.randomUUID(), attributes: { [selectedAttrName]: val }, price: "", image: "" }
+      );
+    });
+  }, [attrValues, selectedAttrName]);
+
+  const clearAllValues = useCallback(() => {
+    setSelectedValues(new Set());
+    setVariants([]);
+  }, []);
+
+  const selectAttr = handleSelectAttr; // keep compat alias (unused externally)
 
   const patchVariantPrice = (id: string, price: string) =>
     setVariants(prev => prev.map(v => v.id === id ? { ...v, price } : v));
@@ -525,13 +573,14 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             </p>
           ) : (
             <div className="space-y-3">
+              {/* ── Attribute type selector ── */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select one attribute</label>
                 <div className="flex flex-wrap gap-2">
                   {allAttrs.map(a => {
                     const active = selectedAttrName === a.name;
                     return (
-                      <button key={a.id} type="button" onClick={() => selectAttr(a.name)}
+                      <button key={a.id} type="button" onClick={() => handleSelectAttr(a.name)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium border transition-all ${
                           active
                             ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -545,6 +594,46 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                   })}
                 </div>
               </div>
+
+              {/* ── Value chips — shown when an attribute is selected ── */}
+              {selectedAttrName && attrValues.length > 0 && (
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {selectedAttrName} values
+                      <span className="ml-1.5 text-[10px] font-normal normal-case">
+                        ({selectedValues.size} of {attrValues.length} selected)
+                      </span>
+                    </span>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <button type="button" onClick={selectAllValues}
+                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                        Select all
+                      </button>
+                      <button type="button" onClick={clearAllValues}
+                        className="text-muted-foreground hover:text-foreground hover:underline">
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {attrValues.map(val => {
+                      const active = selectedValues.has(val);
+                      return (
+                        <button key={val} type="button" onClick={() => toggleValue(val)}
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium border transition-all active:scale-95 ${
+                            active
+                              ? "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 shadow-sm"
+                              : "bg-background border-border text-muted-foreground hover:border-blue-300 hover:text-blue-600 dark:hover:border-blue-600 dark:hover:text-blue-400"
+                          }`}>
+                          {active && <span className="mr-1 text-[10px]">✓</span>}
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {variants.length > 0 && (
                 <div className="rounded-lg border border-border overflow-hidden">
