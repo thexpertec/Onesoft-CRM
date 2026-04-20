@@ -79,7 +79,8 @@ export function ProductDetailPage() {
   const cartDisabled = isOutOfStock && !cms.shop.allowBackorder;
   const theme = getProductTheme(product);
   const ThemeIcon = theme.Icon;
-  const hasImage = Boolean(product.thumbnail);
+  const displayImage = selectedVariant?.image || product.thumbnail || undefined;
+  const hasImage = Boolean(displayImage);
 
   function handleAdd() {
     if (!product || cartDisabled) return;
@@ -119,7 +120,7 @@ export function ProductDetailPage() {
               <>
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
                 <img
-                  src={product.thumbnail}
+                  src={displayImage}
                   alt={product.name}
                   className="relative w-full h-full object-contain"
                 />

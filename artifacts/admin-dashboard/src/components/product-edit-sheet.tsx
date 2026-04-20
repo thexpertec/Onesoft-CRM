@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Product, ProductVariant, Attribute, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13 } from "@/lib/store";
+import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
@@ -8,28 +8,9 @@ import BarcodeScanner from "@/components/barcode-scanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, Plus, Trash2 } from "lucide-react";
+import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon } from "lucide-react";
 import { printBarcodeLabels } from "@/lib/print-barcode";
 
-function buildCombosFixed(attrNames: string[], allAttrs: Attribute[]): Record<string, string>[] {
-  const lists: { name: string; vals: string[] }[] = [];
-  for (const name of attrNames) {
-    const a = allAttrs.find(x => x.name === name);
-    if (!a) continue;
-    const vals = a.values.split(",").map(v => v.trim()).filter(Boolean);
-    if (vals.length) lists.push({ name, vals });
-  }
-  if (!lists.length) return [];
-  let result: Record<string, string>[] = [{}];
-  for (const { name, vals } of lists) {
-    result = result.flatMap(combo => vals.map(v => ({ ...combo, [name]: v })));
-  }
-  return result;
-}
-
-function variantKey(attrs: Record<string, string>): string {
-  return Object.keys(attrs).sort().map(k => `${k}:${attrs[k]}`).join("|");
-}
 
 type FormFields = {
   name: string; localName: string; model: string; sku: string; barcode: string; brand: string;
@@ -106,7 +87,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const [scanOpen, setScanOpen] = useState(false);
 
   const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim()), []);
-  const [selectedAttrNames, setSelectedAttrNames] = useState<string[]>(product?.productAttributes ?? []);
+  const [selectedAttrName, setSelectedAttrName] = useState<string>(product?.productAttributes?.[0] ?? "");
   const [variants, setVariants] = useState<ProductVariant[]>(product?.variants ?? []);
 
   const { loading: lookupLoading, found, result: lookupResult, lookup, reset: resetLookup } = useBarcodeLookup();
@@ -115,20 +96,21 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
     if (product) {
       setForm(toForm(product));
       resetLookup();
-      setSelectedAttrNames(product.productAttributes ?? []);
+      setSelectedAttrName(product.productAttributes?.[0] ?? "");
       setVariants(product.variants ?? []);
     }
   }, [product?.id]);
 
-  const toggleAttr = useCallback((name: string) => {
-    setSelectedAttrNames(prev => {
-      const next = prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name];
-      const newCombos = buildCombosFixed(next, allAttrs);
+  const selectAttr = useCallback((name: string) => {
+    setSelectedAttrName(prev => {
+      const next = prev === name ? "" : name;
+      const attr = allAttrs.find(a => a.name === next);
+      const vals = attr ? attr.values.split(",").map(v => v.trim()).filter(Boolean) : [];
       setVariants(existing => {
-        const map = new Map(existing.map(v => [variantKey(v.attributes), v]));
-        return newCombos.map(attrs => {
-          const key = variantKey(attrs);
-          return map.get(key) ?? { id: crypto.randomUUID(), attributes: attrs, price: "" };
+        const map = new Map(existing.map(v => [Object.values(v.attributes)[0] ?? "", v]));
+        return vals.map(val => {
+          const attrs = { [next]: val };
+          return map.get(val) ?? { id: crypto.randomUUID(), attributes: attrs, price: "", image: "" };
         });
       });
       return next;
@@ -137,6 +119,9 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
   const patchVariantPrice = (id: string, price: string) =>
     setVariants(prev => prev.map(v => v.id === id ? { ...v, price } : v));
+
+  const patchVariantImage = (id: string, image: string) =>
+    setVariants(prev => prev.map(v => v.id === id ? { ...v, image } : v));
 
   const patch = (key: keyof FormFields, value: string) => setForm(p => ({ ...p, [key]: value }));
 
@@ -246,7 +231,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
         status:            (form.status as Product["status"]) || "Active",
         condition:         (form.condition as Product["condition"]) || undefined,
         description:       form.description,
-        productAttributes: selectedAttrNames.length ? selectedAttrNames : undefined,
+        productAttributes: selectedAttrName ? [selectedAttrName] : undefined,
         variants:          variants.length ? variants : undefined,
       });
       toast({ title: "Product updated", description: `"${form.name}" saved successfully.` });
@@ -510,13 +495,13 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             </p>
           ) : (
             <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select Attributes for this Product</label>
-                <div className="flex flex-wrap gap-2 mt-1">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select one attribute</label>
+                <div className="flex flex-wrap gap-2">
                   {allAttrs.map(a => {
-                    const active = selectedAttrNames.includes(a.name);
+                    const active = selectedAttrName === a.name;
                     return (
-                      <button key={a.id} type="button" onClick={() => toggleAttr(a.name)}
+                      <button key={a.id} type="button" onClick={() => selectAttr(a.name)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium border transition-all ${
                           active
                             ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
@@ -533,41 +518,54 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
               {variants.length > 0 && (
                 <div className="rounded-lg border border-border overflow-hidden">
-                  <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2">
-                    {selectedAttrNames.map(n => (
-                      <span key={n} className="flex-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">{n}</span>
-                    ))}
-                    <span className="w-[90px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right shrink-0">Price ({sym})</span>
+                  <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex-1">Name</span>
+                    <span className="w-[82px] shrink-0 text-right">Price ({sym})</span>
+                    <span className="w-[140px] shrink-0">Image (optional)</span>
                   </div>
-                  <div className="divide-y divide-border max-h-64 overflow-y-auto">
-                    {variants.map(v => (
-                      <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors">
-                        {selectedAttrNames.map((n, i) => (
-                          <span key={n}
-                            className={`flex-1 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate ${
-                              i % 2 === 0
-                                ? "text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50"
-                                : "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/50"
-                            }`}>
-                            {v.attributes[n] ?? "—"}
+                  <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                    {variants.map(v => {
+                      const label = Object.values(v.attributes)[0] ?? "—";
+                      return (
+                        <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors">
+                          <span className="flex-1 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
+                            {label}
                           </span>
-                        ))}
-                        <Input
-                          type="number" min="0" step="0.01"
-                          value={v.price}
-                          onChange={e => patchVariantPrice(v.id, e.target.value)}
-                          placeholder={form.price || "0.00"}
-                          className="h-7 w-[90px] shrink-0 text-xs tabular-nums text-right px-2"
-                        />
-                      </div>
-                    ))}
+                          <Input
+                            type="number" min="0" step="0.01"
+                            value={v.price}
+                            onChange={e => patchVariantPrice(v.id, e.target.value)}
+                            placeholder={form.price || "0.00"}
+                            className="h-7 w-[82px] shrink-0 text-xs tabular-nums text-right px-2"
+                          />
+                          <div className="flex items-center gap-1.5 w-[140px] shrink-0">
+                            {v.image ? (
+                              <img src={v.image} alt={label}
+                                className="w-7 h-7 rounded object-cover border border-border shrink-0"
+                                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <div className="w-7 h-7 rounded border border-dashed border-border bg-muted/50 flex items-center justify-center shrink-0">
+                                <ImageIcon size={11} className="text-muted-foreground/40" />
+                              </div>
+                            )}
+                            <Input
+                              type="text"
+                              value={v.image ?? ""}
+                              onChange={e => patchVariantImage(v.id, e.target.value)}
+                              placeholder="https://…"
+                              className="h-7 text-[10px] px-2 flex-1 min-w-0"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {selectedAttrNames.length > 0 && variants.length === 0 && (
+              {selectedAttrName && variants.length === 0 && (
                 <p className="text-[11px] text-muted-foreground text-center py-1">
-                  The selected attribute(s) have no values defined yet.
+                  This attribute has no values defined yet.
                 </p>
               )}
             </div>

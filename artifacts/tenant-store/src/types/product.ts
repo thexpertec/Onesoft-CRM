@@ -4,6 +4,7 @@ export interface ProductVariant {
   id: string;
   attributes: Record<string, string>;
   price: string;
+  image?: string;
   sku?: string;
   barcode?: string;
   stock?: string;

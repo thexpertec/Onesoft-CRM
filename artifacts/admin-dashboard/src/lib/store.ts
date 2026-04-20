@@ -1182,8 +1182,9 @@ export type ProductCondition = "New" | "Used" | "Fresh" | "Refurbished" | "Damag
 
 export type ProductVariant = {
   id: string;
-  attributes: Record<string, string>; // e.g. { "Color": "Red", "Size": "M" }
+  attributes: Record<string, string>; // e.g. { "Color": "Red" }
   price: string;
+  image?: string;
   sku?: string;
   barcode?: string;
   stock?: string;
