@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries } from "@/lib/store";
+import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries, getProducts, getStock } from "@/lib/store";
 import { useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Plus, Search, X, Trash2, Save, Pencil,
   CheckCircle, XCircle, ChevronDown, ChevronRight,
-  GitBranch, FolderOpen, FileText,
+  GitBranch, FolderOpen, FileText, Package,
   Upload, Download, AlertTriangle, Info, FileSpreadsheet, ChevronUp,
 } from "lucide-react";
 import {
@@ -745,6 +745,20 @@ export default function ChartOfAccountsPage() {
     return opts;
   }, [accounts, editForm, editingId]);
 
+  // ── Products under 1140 Inventory / Stock ────────────────────────────────────
+  const allProducts = useMemo(() => getProducts(), []);
+  const allStock    = useMemo(() => getStock(), []);
+
+  /** Total "For Sale" qty in stock per product name */
+  const productStockMap = useMemo<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    for (const s of allStock) {
+      const qty = parseFloat(s.quantity) || 0;
+      if (qty > 0) map.set(s.productName, (map.get(s.productName) || 0) + qty);
+    }
+    return map;
+  }, [allStock]);
+
   // ── Row renderer ─────────────────────────────────────────────────────────────
   const INDENT_W = 22;
 
@@ -905,6 +919,111 @@ export default function ChartOfAccountsPage() {
           )}
         </div>
       </div>
+    );
+  };
+
+  // ── Inventory product rows (shown under 1140 Inventory / Stock) ──────────────
+  const renderInventoryProductRows = (depth: number) => {
+    const rows = allProducts.length === 0
+      ? [
+          <div key="inv-empty"
+            className="flex items-center border-b border-gray-100 dark:border-zinc-800 min-h-[36px] bg-teal-50/20 dark:bg-teal-950/10 text-[12px] text-gray-400 italic"
+            style={{ paddingLeft: 44 + depth * INDENT_W }}
+          >
+            No products added yet.
+          </div>,
+        ]
+      : allProducts.map((p, pi) => {
+          const qty   = productStockMap.get(p.name) || 0;
+          const cost  = parseFloat(p.purchasePrice || p.price) || 0;
+          const value = qty * cost;
+          const isLast = pi === allProducts.length - 1;
+          return (
+            <div key={p.id}
+              className="flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 min-h-[38px] bg-teal-50/10 dark:bg-teal-950/10 hover:bg-teal-50/30 dark:hover:bg-teal-950/20 transition-colors"
+            >
+              {/* Indent + icon */}
+              <div className="flex items-center flex-shrink-0 pl-3" style={{ width: 44 + depth * INDENT_W }}>
+                <div className="flex items-center flex-shrink-0" style={{ width: depth * INDENT_W }}>
+                  {Array.from({ length: depth }).map((_, di) => (
+                    <span key={di}
+                      className={`flex-shrink-0 font-mono ${di === depth - 1 ? "text-gray-400 dark:text-zinc-500" : "text-transparent"}`}
+                      style={{ width: INDENT_W, fontSize: 13, lineHeight: 1 }}
+                    >
+                      {di === depth - 1 ? (isLast ? "└" : "├") : "│"}
+                    </span>
+                  ))}
+                </div>
+                <div className="w-5 flex-shrink-0 flex justify-center">
+                  <Package size={11} className="text-teal-400 dark:text-teal-500" />
+                </div>
+              </div>
+
+              {/* Row # */}
+              <div className="w-7 flex-shrink-0 text-[11px] text-gray-400 font-mono">{pi + 1}</div>
+
+              {/* SKU (code column) */}
+              <div className="w-24 flex-shrink-0 font-mono text-[11px] text-teal-600 dark:text-teal-400 pr-2 truncate">{p.sku || "—"}</div>
+
+              {/* Name + category badge */}
+              <div className="flex-1 min-w-0 flex items-center gap-1.5 pr-3">
+                <span className="text-[12px] text-gray-700 dark:text-gray-300 truncate">{p.name}</span>
+                {p.category && (
+                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800 whitespace-nowrap">
+                    {p.category}
+                  </span>
+                )}
+              </div>
+
+              {/* Stock qty (opening bal column) */}
+              <div className="w-36 flex-shrink-0 pr-2 flex items-center justify-end gap-1.5">
+                <span className="text-[12px] font-mono text-gray-700 dark:text-gray-300">
+                  {qty > 0 ? qty.toLocaleString() : "—"}
+                </span>
+                {qty > 0 && <span className="text-[9px] text-gray-400 flex-shrink-0">{p.unit}</span>}
+              </div>
+
+              {/* Stock value (parent col) */}
+              <div className="w-52 flex-shrink-0 pr-2">
+                <span className="text-[11px] font-mono text-gray-600 dark:text-gray-400">
+                  {value > 0
+                    ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : "—"}
+                </span>
+              </div>
+
+              {/* Status */}
+              <div className="w-20 flex-shrink-0 flex justify-center">
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                  p.status === "Active"
+                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                    : "bg-gray-100 dark:bg-zinc-800 text-gray-400"
+                }`}>
+                  {p.status}
+                </span>
+              </div>
+
+              {/* Empty actions column */}
+              <div className="w-20 flex-shrink-0" />
+            </div>
+          );
+        });
+
+    return (
+      <>
+        {/* Column header for the product block */}
+        <div className="flex items-center border-b border-teal-100 dark:border-teal-900/30 min-h-[26px] bg-teal-50/40 dark:bg-teal-950/20">
+          <div className="flex-shrink-0" style={{ width: 44 + depth * INDENT_W }} />
+          <div className="w-7 flex-shrink-0 text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider">#</div>
+          <div className="w-24 flex-shrink-0 text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider pr-2">SKU</div>
+          <div className="flex-1 text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider">Product · Category</div>
+          <div className="w-36 flex-shrink-0 text-right pr-2 text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider">Stock Qty</div>
+          <div className="w-52 flex-shrink-0 pr-2 text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider">Stock Value (cost × qty)</div>
+          <div className="w-20 flex-shrink-0 text-center text-[9px] font-bold text-teal-500 dark:text-teal-400 uppercase tracking-wider">Status</div>
+          <div className="w-20 flex-shrink-0" />
+        </div>
+        {rows}
+      </>
     );
   };
 
