@@ -430,7 +430,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .disc-badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 7pt; font-weight: 700; padding: 1pt 4pt; border-radius: 3pt; }
 
   /* ── TOTALS BLOCK ──────────────────────────────────────────────────────── */
-  .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 8pt; }
+  .totals-wrapper { display: flex; justify-content: ${rtl ? "flex-start" : "flex-end"}; margin-top: 8pt; }
   .totals-table { width: 220pt; }
   .totals-row { display: flex; justify-content: space-between; align-items: center; padding: 4pt 8pt; font-size: 9pt; border-bottom: 1px solid #f1f5f9; }
   .totals-row:last-child { border-bottom: none; }

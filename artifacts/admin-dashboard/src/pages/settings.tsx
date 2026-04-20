@@ -1195,6 +1195,36 @@ export default function SettingsPage() {
                           className="text-[13px] resize-none" rows={3}
                           placeholder={"linkedin.com/company/onesoft\ntwitter.com/onesoft"} />
                       </Field>
+                      {/* ── Column Direction (LTR / RTL) ── */}
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Invoice Print Column Direction
+                        </label>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+                          LTR: Sr → Product → Unit → QTY → Price → Disc → Total &nbsp;·&nbsp;
+                          RTL reverses the order and moves the totals panel to the left side.
+                        </p>
+                        <div className="flex gap-2">
+                          {([
+                            { val: false, label: "LTR (Default)" },
+                            { val: true,  label: "RTL (Arabic / Urdu)" },
+                          ] as const).map(opt => (
+                            <button
+                              key={String(opt.val)}
+                              type="button"
+                              onClick={() => set("invoiceColsRTL", opt.val)}
+                              className={`flex-1 py-2 rounded-lg border text-[12px] font-semibold transition-colors ${
+                                (form.invoiceColsRTL ?? false) === opt.val
+                                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                                  : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* ── Product Name Field ── */}
                       <div>
                         <label className="block text-[12px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
