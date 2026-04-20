@@ -546,6 +546,11 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
 export const deleteCustomer = (id: string): void => {
   const customer = getCustomers().find(c => c.id === id);
   setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
+  // Remove the linked COA ledger (soft-fail if it has posted journal entries)
+  if (customer?.ledgerAccountId) {
+    try { deleteAccount(customer.ledgerAccountId); } catch { /* has JEs — deactivate instead */ }
+    try { updateAccount(customer.ledgerAccountId, { isActive: false }); } catch { /* ignore */ }
+  }
   addActivity({ action: "deleted", entity: "Customer", entityName: customer?.name || id });
 };
 
@@ -4201,6 +4206,24 @@ export function seedDefaultCoaAccounts(): void {
     console.info(`[COA] Removed ${orphansRemoved} orphaned product ledger(s) — products no longer exist`);
   }
 
+  // ── Orphaned contact ledger cleanup ─────────────────────────────────────────
+  // Accounts under AP_TRADE (Trade Payables) or AR_GROUP (Accounts Receivable)
+  // with accountType "Ledger" are auto-created per-customer/supplier.
+  // If the customer/contact no longer exists, remove the orphaned ledger.
+  const allCustomers = getStored<{ ledgerAccountId?: string }>(CUSTOMERS_KEY);
+  const contactLedgerIds = new Set(allCustomers.map(c => c.ledgerAccountId).filter(Boolean) as string[]);
+  const CONTACT_PARENT_IDS = new Set([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
+  const beforeContactClean = workingAccounts.length;
+  workingAccounts = workingAccounts.filter(a => {
+    if (a.accountType !== "Ledger") return true;
+    if (!CONTACT_PARENT_IDS.has(a.parentId || "")) return true;
+    return contactLedgerIds.has(a.id); // keep only if a customer still references it
+  });
+  const contactOrphansRemoved = beforeContactClean - workingAccounts.length;
+  if (contactOrphansRemoved > 0) {
+    console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact ledger(s) — customers/suppliers no longer exist`);
+  }
+
   // Rename any old sr-prod-* ledgers that were named without "| Revenue" suffix
   workingAccounts = workingAccounts.map(a => {
     if (a.id.startsWith("sr-prod-") && !a.name.endsWith("| Revenue")) {
@@ -4238,7 +4261,7 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0 || orphansRemoved > 0) {
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0 || orphansRemoved > 0 || contactOrphansRemoved > 0) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
