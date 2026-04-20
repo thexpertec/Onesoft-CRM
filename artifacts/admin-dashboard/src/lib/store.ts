@@ -812,7 +812,7 @@ export type ModuleId =
   | "sales" | "invoices" | "sale_return" | "calc_invoice"
   | "sales_agents" | "agent_performance" | "areas"
   // HRM
-  | "hrm_staff" | "hrm_roles" | "hrm_org"
+  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_recruitment"
   // Products organisation
   | "products_departments"
   // Accounting
@@ -864,9 +864,10 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "areas",             label: "Delivery Areas",     desc: "Regional delivery zones & coverage",    group: "Sales", href: "/areas"             },
 
   // ── HRM ───────────────────────────────────────────────────────────────────
-  { id: "hrm_staff",  label: "Staff",                       desc: "Employee records & departments",    group: "HRM",           href: "/staff"    },
-  { id: "hrm_roles",  label: "Roles",                       desc: "Permission roles & access control", group: "HRM",           href: "/roles"    },
-  { id: "hrm_org",    label: "Departments & Designations",  desc: "Org chart & job descriptions",      group: "HRM",           href: "/hrm-org"  },
+  { id: "hrm_staff",       label: "Staff",                       desc: "Employee records & departments",    group: "HRM", href: "/staff"         },
+  { id: "hrm_roles",       label: "Roles",                       desc: "Permission roles & access control", group: "HRM", href: "/roles"         },
+  { id: "hrm_org",         label: "Departments & Designations",  desc: "Org chart & job descriptions",      group: "HRM", href: "/hrm-org"       },
+  { id: "hrm_recruitment", label: "Recruitment",                 desc: "Job postings, applicants & interviews", group: "HRM", href: "/recruitment" },
 
   // ── Accounting ────────────────────────────────────────────────────────────
   { id: "accounting_coa",      label: "Chart of Accounts",  desc: "Account structure & COA",           group: "Accounting",    href: "/chart-of-accounts" },
@@ -4990,3 +4991,138 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     window.dispatchEvent(new CustomEvent("onesoft:data-synced"));
   } catch { /* SSR guard */ }
 }
+
+// ─── Recruitment — Job Postings ───────────────────────────────────────────────
+export type JobStatus = "open" | "closed" | "draft";
+export type JobType   = "full-time" | "part-time" | "contract" | "internship";
+
+export type JobPosting = {
+  id:           string;
+  title:        string;
+  department:   string;
+  location:     string;
+  type:         JobType;
+  status:       JobStatus;
+  description:  string;
+  requirements: string;
+  salary?:      string;
+  createdAt:    string;
+  updatedAt:    string;
+};
+
+const JOBS_KEY = "admin-hrm-jobs";
+export const getJobPostings   = (): JobPosting[] => getStored<JobPosting>(JOBS_KEY);
+export const createJobPosting = (data: Omit<JobPosting, "id" | "createdAt" | "updatedAt">): JobPosting => {
+  const item: JobPosting = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(JOBS_KEY, [...getJobPostings(), item]);
+  return item;
+};
+export const updateJobPosting = (id: string, updates: Partial<Omit<JobPosting, "id" | "createdAt">>): JobPosting => {
+  const items = getJobPostings();
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Job not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(JOBS_KEY, items);
+  return items[i];
+};
+export const deleteJobPosting = (id: string): void => {
+  setStored(JOBS_KEY, getJobPostings().filter(x => x.id !== id));
+};
+
+// ─── Recruitment — Job Applicants ─────────────────────────────────────────────
+export type ApplicantStage = "applied" | "screening" | "interview" | "offer" | "hired" | "rejected";
+
+export type JobApplicant = {
+  id:          string;
+  jobId:       string;
+  fullName:    string;
+  email:       string;
+  phone?:      string;
+  experience:  string;   // e.g. "4y"
+  education:   string;   // e.g. "Master's Degree"
+  match:       number;   // 0–100
+  stage:       ApplicantStage;
+  round?:      string;
+  rating?:     number;
+  decision?:   string;
+  resumeUrl?:  string;
+  notes?:      string;
+  appliedAt:   string;
+  createdAt:   string;
+  updatedAt:   string;
+};
+
+const APPLICANTS_KEY = "admin-hrm-applicants";
+export const getJobApplicants   = (jobId?: string): JobApplicant[] => {
+  const all = getStored<JobApplicant>(APPLICANTS_KEY);
+  return jobId ? all.filter(a => a.jobId === jobId) : all;
+};
+export const createJobApplicant = (data: Omit<JobApplicant, "id" | "createdAt" | "updatedAt">): JobApplicant => {
+  const item: JobApplicant = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(APPLICANTS_KEY, [...getJobApplicants(), item]);
+  return item;
+};
+export const updateJobApplicant = (id: string, updates: Partial<Omit<JobApplicant, "id" | "createdAt">>): JobApplicant => {
+  const items = getJobApplicants();
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Applicant not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(APPLICANTS_KEY, items);
+  return items[i];
+};
+export const deleteJobApplicant = (id: string): void => {
+  setStored(APPLICANTS_KEY, getJobApplicants().filter(x => x.id !== id));
+};
+
+// ─── Recruitment — Interview Schedules ────────────────────────────────────────
+export type InterviewStatus = "scheduled" | "completed" | "cancelled" | "no-show" | "rescheduled";
+
+export type InterviewSchedule = {
+  id:            string;
+  jobId:         string;
+  applicantId:   string;
+  interviewerId: string;   // AdminUser.id
+  date:          string;   // YYYY-MM-DD
+  time:          string;   // HH:mm
+  link:          string;   // video call link
+  status:        InterviewStatus;
+  notes?:        string;
+  emailSent?:    boolean;
+  createdAt:     string;
+  updatedAt:     string;
+};
+
+const INTERVIEWS_KEY = "admin-hrm-interviews";
+export const getInterviewSchedules   = (jobId?: string): InterviewSchedule[] => {
+  const all = getStored<InterviewSchedule>(INTERVIEWS_KEY);
+  return jobId ? all.filter(i => i.jobId === jobId) : all;
+};
+export const getInterviewByApplicant = (applicantId: string): InterviewSchedule | undefined =>
+  getStored<InterviewSchedule>(INTERVIEWS_KEY).find(i => i.applicantId === applicantId);
+export const createInterviewSchedule = (data: Omit<InterviewSchedule, "id" | "createdAt" | "updatedAt">): InterviewSchedule => {
+  const item: InterviewSchedule = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(INTERVIEWS_KEY, [...getInterviewSchedules(), item]);
+  return item;
+};
+export const upsertInterviewSchedule = (applicantId: string, data: Omit<InterviewSchedule, "id" | "createdAt" | "updatedAt">): InterviewSchedule => {
+  const existing = getInterviewByApplicant(applicantId);
+  if (existing) {
+    const all = getStored<InterviewSchedule>(INTERVIEWS_KEY);
+    const i = all.findIndex(x => x.id === existing.id);
+    all[i] = { ...all[i], ...data, updatedAt: new Date().toISOString() };
+    setStored(INTERVIEWS_KEY, all);
+    return all[i];
+  }
+  return createInterviewSchedule(data);
+};
+export const updateInterviewSchedule = (id: string, updates: Partial<Omit<InterviewSchedule, "id" | "createdAt">>): InterviewSchedule => {
+  const items = getStored<InterviewSchedule>(INTERVIEWS_KEY);
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Interview not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(INTERVIEWS_KEY, items);
+  return items[i];
+};
+export const deleteInterviewSchedule = (id: string): void => {
+  setStored(INTERVIEWS_KEY, getStored<InterviewSchedule>(INTERVIEWS_KEY).filter(x => x.id !== id));
+};
