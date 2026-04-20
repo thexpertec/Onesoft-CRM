@@ -3484,6 +3484,8 @@ export type AppSettings = {
   printFooterShowContact?:   boolean;  // show company contact info line in footer (default: true)
   // ── Invoice items table direction ──
   invoiceColsRTL?:           boolean;  // reverse items table column order (RTL layout for Arabic/Urdu invoices)
+  // ── Invoice product name field ──
+  invoiceProductNameField?:  "name" | "localName"; // which product name field to use in invoice line items
   // ── Invoice label customisation ──
   invoiceLabels?:             Partial<InvoiceLabels>;
   invoiceLabelStyles?:        Record<string, LabelStyle>;
@@ -3654,6 +3656,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   printFooterLegalNote:     "This is a computer-generated document. No handwritten signature is required.",
   printFooterShowContact:   true,
   invoiceColsRTL:           false,
+  invoiceProductNameField:  "name",
 };
 
 export function getSettings(): AppSettings {
@@ -3693,6 +3696,13 @@ export function getSettings(): AppSettings {
     }
   } catch { /* ignore */ }
   return { ...DEFAULT_SETTINGS };
+}
+
+/** Returns the display name for a product as it should appear in invoice line items. */
+export function getInvoiceProductName(p: Pick<Product, "name" | "localName">): string {
+  const field = getSettings().invoiceProductNameField ?? "name";
+  if (field === "localName") return p.localName?.trim() || p.name;
+  return p.name;
 }
 
 export function saveSettings(s: AppSettings): void {

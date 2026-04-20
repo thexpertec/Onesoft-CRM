@@ -9,7 +9,7 @@ import {
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
-  createJournalEntry, updateInvoice,
+  createJournalEntry, updateInvoice, getInvoiceProductName,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -565,7 +565,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       : p.price;
     setItems(prev => prev.map(i =>
       i.id === id
-        ? { ...i, productName: p.name, sku: p.sku, unit: p.unit, unitPrice: autoPrice }
+        ? { ...i, productName: getInvoiceProductName(p), sku: p.sku, unit: p.unit, unitPrice: autoPrice }
         : i
     ));
   };

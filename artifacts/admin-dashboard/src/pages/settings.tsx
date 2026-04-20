@@ -1195,6 +1195,32 @@ export default function SettingsPage() {
                           className="text-[13px] resize-none" rows={3}
                           placeholder={"linkedin.com/company/onesoft\ntwitter.com/onesoft"} />
                       </Field>
+                      {/* ── Product Name Field ── */}
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Product Name on Invoices
+                        </label>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+                          Choose which product name field appears in invoice line items. The search dropdown is unaffected.
+                        </p>
+                        <div className="flex gap-2">
+                          {(["name", "localName"] as const).map(opt => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => set("invoiceProductNameField", opt)}
+                              className={`flex-1 py-2 rounded-lg border text-[12px] font-semibold transition-colors ${
+                                (form.invoiceProductNameField ?? "name") === opt
+                                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                                  : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {opt === "name" ? "Name (Default)" : "Local Name"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <Field label="Default Payment Terms" hint="Pre-fills the Payment Terms field on every new invoice.">
                         <Input
                           value={form.invoiceTerms}
