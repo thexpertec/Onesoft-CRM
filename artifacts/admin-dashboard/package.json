@@ -24,7 +24,9 @@
     "@tiptap/pm": "^3.22.1",
     "@tiptap/react": "^3.22.1",
     "@tiptap/starter-kit": "^3.22.1",
+    "@types/jsbarcode": "^3.11.4",
     "html5-qrcode": "^2.3.8",
+    "jsbarcode": "^3.12.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

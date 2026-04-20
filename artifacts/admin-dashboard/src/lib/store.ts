@@ -1313,6 +1313,13 @@ function _removeProductLedgers(productId: string): void {
   _removeProductLedger(`pur-prod-${productId}`);
 }
 
+/** Generate a random EAN-13 barcode (12 random digits + check digit). */
+export function generateEan13(): string {
+  const digits = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10));
+  const check  = (10 - (digits.reduce((s, d, i) => s + d * (i % 2 === 0 ? 1 : 3), 0) % 10)) % 10;
+  return [...digits, check].join("");
+}
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
   if (data.sku?.trim()) {
     const conflict = skuConflict(data.sku);
@@ -1320,6 +1327,7 @@ export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedA
   }
   const item: Product = {
     ...data,
+    barcode: data.barcode?.trim() || generateEan13(),
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

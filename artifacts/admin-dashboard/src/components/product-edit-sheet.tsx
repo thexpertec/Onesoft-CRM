@@ -1,11 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
-import { Product, getBrands, getProductCategories, getUnits, getProductDepartments } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, generateEan13 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
+import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
+import { BarcodePreview } from "@/components/barcode-preview";
+import BarcodeScanner from "@/components/barcode-scanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Save, Package } from "lucide-react";
+import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer } from "lucide-react";
+import { printBarcodeLabels } from "@/lib/print-barcode";
 
 type FormFields = {
   name: string; localName: string; model: string; sku: string; barcode: string; brand: string;
@@ -79,12 +83,52 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
   const [form, setForm] = useState<FormFields>(product ? toForm(product) : {} as FormFields);
   const [saving, setSaving] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+
+  const { loading: lookupLoading, found, result: lookupResult, lookup, reset: resetLookup } = useBarcodeLookup();
 
   useEffect(() => {
-    if (product) setForm(toForm(product));
+    if (product) { setForm(toForm(product)); resetLookup(); }
   }, [product?.id]);
 
   const patch = (key: keyof FormFields, value: string) => setForm(p => ({ ...p, [key]: value }));
+
+  const handleBarcodeLookup = async (code?: string) => {
+    const barcode = (code ?? form.barcode).trim();
+    if (!barcode) return;
+    const res = await lookup(barcode);
+    if (res) {
+      setForm(p => ({
+        ...p,
+        name:     res.name     || p.name,
+        brand:    res.brand    || p.brand,
+        category: res.category || p.category,
+        description: res.description || p.description,
+      }));
+      toast({ title: "Product found", description: `Filled from barcode: ${barcode}` });
+    } else {
+      toast({ title: "Not found", description: `No data for barcode: ${barcode}`, variant: "destructive" });
+    }
+  };
+
+  const handleScan = (code: string) => {
+    setScanOpen(false);
+    patch("barcode", code);
+    resetLookup();
+    handleBarcodeLookup(code);
+  };
+
+  const handlePrintBarcode = () => {
+    const barcode = (form.barcode || product?.barcode || generateEan13()).trim();
+    printBarcodeLabels([{
+      name: form.name || product?.name || "Product",
+      localName: form.localName || undefined,
+      barcode,
+      sku: form.sku || undefined,
+      price: form.price || undefined,
+      brand: form.brand || undefined,
+    }], 3, sym);
+  };
 
   const brandOptions    = useMemo(() => getBrands().map(b => b.name), []);
   const categoryOptions = useMemo(() => {
@@ -166,6 +210,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   if (!product) return null;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col overflow-hidden">
         {/* Header */}
@@ -203,10 +248,54 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
                 placeholder="ODT-001" className="h-9 text-sm font-mono" />
             </Field>
-            <Field label="Barcode / QR">
-              <Input value={form.barcode} onChange={e => patch("barcode", e.target.value)}
-                placeholder="Scan or type…" className="h-9 text-sm font-mono" />
-            </Field>
+
+            {/* ── Barcode field with scan + lookup ── */}
+            <div className="col-span-2 space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
+              <div className="flex gap-1.5">
+                <Input
+                  value={form.barcode}
+                  onChange={e => { patch("barcode", e.target.value); resetLookup(); }}
+                  onKeyDown={e => { if (e.key === "Enter") handleBarcodeLookup(); }}
+                  placeholder="Scan, type, or generate…"
+                  className="h-9 text-sm font-mono flex-1"
+                />
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with camera"
+                  onClick={() => setScanOpen(true)}>
+                  <Camera size={14} />
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Lookup product info"
+                  onClick={() => handleBarcodeLookup()} disabled={!form.barcode.trim() || lookupLoading}>
+                  {lookupLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Auto-generate EAN-13"
+                  onClick={() => { patch("barcode", generateEan13()); resetLookup(); }}>
+                  <Wand2 size={14} />
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Print barcode label"
+                  onClick={handlePrintBarcode}>
+                  <Printer size={14} />
+                </Button>
+              </div>
+              {found === true && lookupResult && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle size={12} />
+                  <span>Found: {lookupResult.name || "—"} · Brand: {lookupResult.brand || "—"} · Category: {lookupResult.category || "—"}</span>
+                </div>
+              )}
+              {found === false && (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                  <XCircle size={12} />
+                  <span>No product data found for this barcode</span>
+                </div>
+              )}
+              {form.barcode.trim() && (
+                <div className="rounded-md border border-border bg-muted/30 px-2 py-1">
+                  <BarcodePreview value={form.barcode} />
+                </div>
+              )}
+            </div>
+
             <Field label="Model">
               <Input value={form.model} onChange={e => patch("model", e.target.value)}
                 placeholder="Model no." className="h-9 text-sm" />
@@ -398,5 +487,14 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
         </div>
       </SheetContent>
     </Sheet>
+
+    <BarcodeScanner
+      open={scanOpen}
+      onClose={() => setScanOpen(false)}
+      onScan={handleScan}
+      title="Scan Product Barcode"
+      hint="Point the camera at the product's barcode to auto-fill product details"
+    />
+    </>
   );
 }

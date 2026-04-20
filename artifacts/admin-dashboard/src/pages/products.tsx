@@ -6,8 +6,10 @@ import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil, Printer } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
+import { printBarcodeLabels } from "@/lib/print-barcode";
+import { getSettingsCurrencySymbol as _getCurrSym } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
@@ -1366,6 +1368,24 @@ export default function ProductsPage() {
                     ]);
                   }}>
                     <FileDown size={12} /> Export
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => {
+                    const rows = displayRows.filter(p => selectedIds.has(p.id));
+                    const currSym = _getCurrSym();
+                    printBarcodeLabels(
+                      rows.filter(p => p.barcode?.trim()).map(p => ({
+                        name: p.name,
+                        localName: p.localName,
+                        barcode: p.barcode!,
+                        sku: p.sku || undefined,
+                        price: p.price || undefined,
+                        brand: p.brand || undefined,
+                      })),
+                      3,
+                      currSym
+                    );
+                  }}>
+                    <Printer size={12} /> Print Barcodes
                   </Button>
                   <Button size="sm" variant="destructive" className="h-8 gap-1.5 text-[12px]" onClick={() => setBulkDeleteOpen(true)}>
                     <Trash2 size={12} /> Delete {selectedIds.size}

@@ -1,12 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useProducts } from "@/hooks/use-data";
-import { Product, getBrands, getProductCategories, getUnits, getProductDepartments } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, generateEan13 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, Package } from "lucide-react";
+import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
+import { BarcodePreview } from "@/components/barcode-preview";
+import BarcodeScanner from "@/components/barcode-scanner";
+import { Plus, ArrowLeft, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { printBarcodeLabels } from "@/lib/print-barcode";
 
 type FormFields = {
   name: string; localName: string; sku: string; barcode: string; brand: string;
@@ -65,6 +69,11 @@ export default function ProductNewPage() {
 
   const [form, setForm] = useState<FormFields>(BLANK());
   const [saving, setSaving] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  const { loading: lookupLoading, found, result: lookupResult, lookup, reset: resetLookup } = useBarcodeLookup();
+
   const patch = (key: keyof FormFields, value: string) => setForm(p => ({ ...p, [key]: value }));
 
   const subCatOptions = useMemo(() => {
@@ -87,6 +96,37 @@ export default function ProductNewPage() {
     const retail = parseFloat(form.price); const pct = parseFloat(form.commissionPct);
     return !isNaN(retail) && retail > 0 && !isNaN(pct) && pct > 0 ? (retail * pct / 100).toFixed(dp) : null;
   })();
+
+  const handleBarcodeLookup = async (code?: string) => {
+    const barcode = (code ?? form.barcode).trim();
+    if (!barcode) return;
+    const res = await lookup(barcode);
+    if (res) {
+      setForm(p => ({
+        ...p,
+        name:     res.name     || p.name,
+        brand:    res.brand    || p.brand,
+        category: res.category || p.category,
+        description: res.description || p.description,
+      }));
+      toast({ title: "Product found", description: `Filled from barcode: ${barcode}` });
+    } else {
+      toast({ title: "Product not found", description: `No data for barcode: ${barcode}`, variant: "destructive" });
+    }
+  };
+
+  const handleScan = (code: string) => {
+    setScanOpen(false);
+    patch("barcode", code);
+    resetLookup();
+    handleBarcodeLookup(code);
+  };
+
+  const handleGenerateBarcode = () => {
+    const code = generateEan13();
+    patch("barcode", code);
+    resetLookup();
+  };
 
   const handleSubmit = () => {
     if (!form.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); return; }
@@ -113,6 +153,18 @@ export default function ProductNewPage() {
     } catch (err: unknown) {
       toast({ title: "Cannot add product", description: err instanceof Error ? err.message : "An error occurred.", variant: "destructive" });
     } finally { setSaving(false); }
+  };
+
+  const handlePrintBarcode = () => {
+    const barcode = form.barcode.trim() || generateEan13();
+    printBarcodeLabels([{
+      name: form.name || "New Product",
+      localName: form.localName || undefined,
+      barcode,
+      sku: form.sku || undefined,
+      price: form.price || undefined,
+      brand: form.brand || undefined,
+    }], 3, sym);
   };
 
   const ProfitBadge = ({ profit, label }: { profit: number | null; label: string }) => (
@@ -170,10 +222,57 @@ export default function ProductNewPage() {
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
                 placeholder="ODT-001" className="h-9 text-sm font-mono" />
             </Field>
-            <Field label="Barcode / QR">
-              <Input value={form.barcode} onChange={e => patch("barcode", e.target.value)}
-                placeholder="Scan or type…" className="h-9 text-sm font-mono" />
-            </Field>
+
+            {/* ── Barcode field with scan + lookup ── */}
+            <div className="col-span-2 space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
+              <div className="flex gap-1.5">
+                <Input
+                  ref={barcodeInputRef}
+                  value={form.barcode}
+                  onChange={e => { patch("barcode", e.target.value); resetLookup(); }}
+                  onKeyDown={e => { if (e.key === "Enter") handleBarcodeLookup(); }}
+                  placeholder="Scan, type, or generate…"
+                  className="h-9 text-sm font-mono flex-1"
+                />
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with camera"
+                  onClick={() => setScanOpen(true)}>
+                  <Camera size={14} />
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Lookup product info"
+                  onClick={() => handleBarcodeLookup()} disabled={!form.barcode.trim() || lookupLoading}>
+                  {lookupLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Auto-generate EAN-13"
+                  onClick={handleGenerateBarcode}>
+                  <Wand2 size={14} />
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Print barcode label"
+                  onClick={handlePrintBarcode}>
+                  <Printer size={14} />
+                </Button>
+              </div>
+              {/* Lookup status */}
+              {found === true && lookupResult && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle size={12} />
+                  <span>Found: {lookupResult.name || "—"} · Brand: {lookupResult.brand || "—"} · Category: {lookupResult.category || "—"}</span>
+                </div>
+              )}
+              {found === false && (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                  <XCircle size={12} />
+                  <span>No product data found for this barcode</span>
+                </div>
+              )}
+              {/* Barcode preview */}
+              {form.barcode.trim() && (
+                <div className="rounded-md border border-border bg-muted/30 px-2 py-1">
+                  <BarcodePreview value={form.barcode} />
+                </div>
+              )}
+            </div>
+
             <Field label="Brand">
               {brandOptions.length > 0 ? (
                 <NativeSelect value={form.brand} onChange={v => patch("brand", v)}>
@@ -342,6 +441,14 @@ export default function ProductNewPage() {
           </Button>
         </div>
       </div>
+
+      <BarcodeScanner
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScan={handleScan}
+        title="Scan Product Barcode"
+        hint="Point the camera at the product's barcode to auto-fill product details"
+      />
     </div>
   );
 }
