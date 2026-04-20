@@ -1034,6 +1034,8 @@ export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt"
   const now = new Date().toISOString();
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   setGlobal(TENANTS_KEY, [...getTenants(), tenant]);
+  // Seed the new tenant's COA from the system template (runs after module init is complete)
+  try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
   return tenant;
 };
 
@@ -4296,6 +4298,58 @@ export function reconcileAccountingData(): {
     accountsAdded:  Math.max(0, after - before),
     settingsWired:  hadMissingMappings,
   };
+}
+
+/**
+ * Seed a brand-new tenant's Chart of Accounts from the superadmin (system) template.
+ *
+ * Strategy:
+ *   1. Read the superadmin's COA — it is stored under the un-prefixed key (no tenant namespace)
+ *      and represents the canonical system-wide account structure.
+ *   2. If the superadmin has no COA yet, fall back to seeding from the built-in SYSTEM_ACCOUNTS.
+ *   3. Write the accounts to the new tenant's namespace with opening balances reset to 0
+ *      (new tenant starts clean — no inherited balances).
+ *   4. Does NOT overwrite if the tenant already has accounts (idempotent).
+ */
+export function seedTenantCOA(tenantId: string): void {
+  const tenantCoaKey = `t:${tenantId}:${COA_KEY}`;
+
+  // Guard: don't overwrite if the tenant already has accounts
+  try {
+    const existing = _lsGet(tenantCoaKey);
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (Array.isArray(parsed) && parsed.length > 0) return;
+    }
+  } catch { /* continue */ }
+
+  // Read the superadmin's COA (no prefix = system-level key)
+  let templateAccounts: Account[] = [];
+  try {
+    const raw = _lsGet(COA_KEY);
+    templateAccounts = raw ? (JSON.parse(raw) as Account[]) : [];
+  } catch { templateAccounts = []; }
+
+  if (templateAccounts.length === 0) {
+    // Superadmin hasn't built a COA yet — seed from built-in system defaults
+    // Temporarily switch context so seedDefaultCoaAccounts writes to the new tenant
+    const prev = _activeTenantId;
+    _activeTenantId = tenantId;
+    try { seedDefaultCoaAccounts(); } finally { _activeTenantId = prev; }
+    return;
+  }
+
+  // Copy the template: preserve IDs and hierarchy, but zero-out opening balances
+  const now = new Date().toISOString();
+  const tenantAccounts: Account[] = templateAccounts.map(a => ({
+    ...a,
+    openingBalance: 0,   // new tenant starts with clean balances
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  _lsSet(tenantCoaKey, tenantAccounts);
+  _apiWrite(tenantCoaKey, tenantAccounts);
 }
 
 /**

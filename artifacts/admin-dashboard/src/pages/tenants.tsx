@@ -11,7 +11,7 @@ import {
 import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, createTenant, updateTenant, deleteTenant,
-  getTenantStats,
+  getTenantStats, seedTenantCOA,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
 } from "@/lib/store";
@@ -501,8 +501,17 @@ export default function TenantsPage() {
       updateTenant(editing.id, updates);
       toast({ title: `"${data.name}" updated` });
     } else {
-      createTenant(data);
-      toast({ title: `Tenant "${data.name}" created`, description: `Login: ${data.adminUsername}` });
+      const t = createTenant(data);
+      // Count how many COA accounts were seeded
+      let coaCount = 0;
+      try {
+        const raw = localStorage.getItem(`t:${t.id}:admin-chart-of-accounts`);
+        coaCount = raw ? (JSON.parse(raw) as unknown[]).length : 0;
+      } catch { /* ignore */ }
+      toast({
+        title: `Tenant "${data.name}" created`,
+        description: `Login: ${data.adminUsername}${coaCount > 0 ? ` · ${coaCount} COA accounts seeded` : ""}`,
+      });
     }
     reload();
     setModalOpen(false);
@@ -521,6 +530,23 @@ export default function TenantsPage() {
     switchTenant(tenant.id);
     navigate("/");
     toast({ title: `Switched to ${tenant.name}`, description: "You are now viewing this tenant's data." });
+  }
+
+  function handleSeedCOA(tenant: Tenant) {
+    try {
+      seedTenantCOA(tenant.id);
+      let coaCount = 0;
+      try {
+        const raw = localStorage.getItem(`t:${tenant.id}:admin-chart-of-accounts`);
+        coaCount = raw ? (JSON.parse(raw) as unknown[]).length : 0;
+      } catch { /* ignore */ }
+      toast({
+        title: `COA seeded for ${tenant.name}`,
+        description: coaCount > 0 ? `${coaCount} accounts copied from system template` : "COA structure applied",
+      });
+    } catch (e) {
+      toast({ title: "COA seed failed", description: String(e), variant: "destructive" });
+    }
   }
 
   function handleExitSwitch() {
@@ -758,6 +784,20 @@ export default function TenantsPage() {
                     <Trash2 size={13} />
                   </Button>
                 </div>
+
+                {/* COA seed row — always visible for non-active-context tenants */}
+                {!isActive && (
+                  <div className="pt-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-7 gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 border border-dashed border-emerald-200 dark:border-emerald-800"
+                      onClick={() => handleSeedCOA(t)}
+                    >
+                      <BarChart3 size={11} /> Seed / Rebuild COA
+                    </Button>
+                  </div>
+                )}
 
                 {/* Demo data row — only visible on demo-flagged tenants */}
                 {t.isDemo && (
