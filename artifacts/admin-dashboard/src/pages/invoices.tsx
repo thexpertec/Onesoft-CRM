@@ -445,6 +445,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const invoiceType: "sale" | "purchase" = (invoice?.invoiceType ?? defaultType) as "sale" | "purchase";
   const sym = getSettingsCurrencySymbol();
   const dp  = getSettingsDecimalPlaces();
+  const [, navigate] = useLocation();
 
   const [form, setForm]         = useState<ReturnType<typeof blankInvoice>>(
     () => invoice ? { ...invoice } : blankInvoice(defaultType)
@@ -1219,10 +1220,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             </button>
           )}
 
-          {/* Collect / Pay — existing, not fully paid/cancelled */}
+          {/* Collect / Pay — navigate to receipt-payment page with invoice pre-filled */}
           {!isNew && s !== "Paid" && s !== "Cancelled" && (
             <button
-              onClick={() => setCollectPayOpen(true)}
+              onClick={() => {
+                const params = new URLSearchParams({
+                  invoiceId:     invoice!.id,
+                  invoiceNumber: invoice!.invoiceNumber,
+                  customer:      form.customer,
+                  amount:        balance.toFixed(dp),
+                  type:          invoiceType === "purchase" ? "payment" : "receipt",
+                });
+                navigate(`/receipt-payment?${params.toString()}`);
+              }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
             >
               <DollarSign size={14}/> {invoiceType === "purchase" ? "Pay Supplier" : "Collect Payment"}

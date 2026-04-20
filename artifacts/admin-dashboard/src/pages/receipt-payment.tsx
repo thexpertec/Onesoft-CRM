@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo, useLayoutEffect } from "react";
+import { useSearch } from "wouter";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, CheckCircle, Search, FileText, ArrowDownCircle,
@@ -329,7 +330,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       ? initial.lines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
       : [emptyLine()]
   );
-  const [linkedInvId, setLinkedInvId] = useState<string | null>(null);
+  const [linkedInvId, setLinkedInvId] = useState<string | null>(initial?.linkedInvoiceId ?? null);
   const linkedInv = linkedInvId ? getInvoices().find(i => i.id === linkedInvId) ?? null : null;
 
   const invBalance = useMemo(() => {
@@ -694,14 +695,47 @@ export default function ReceiptPaymentPage() {
   const { accounts } = useAccounts();
   const { toast }    = useToast();
   const sym          = getSettingsCurrencySymbol();
+  const searchStr    = useSearch();
 
   const [typeFilter,   setTypeFilter]   = useState<"all" | "receipt" | "payment">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "posted">("all");
   const [search,       setSearch]       = useState("");
   const [formOpen,     setFormOpen]     = useState(false);
   const [editVoucher,  setEditVoucher]  = useState<RPVoucher | null>(null);
+  const [prefillData,  setPrefillData]  = useState<Partial<RPVoucher> | null>(null);
   const [newType,      setNewType]      = useState<"receipt" | "payment">("receipt");
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
+
+  // ── Auto-open form when arriving from an invoice's "Collect Payment" button ─
+  useLayoutEffect(() => {
+    if (!searchStr) return;
+    const p = new URLSearchParams(searchStr);
+    const invoiceId     = p.get("invoiceId");
+    const invoiceNumber = p.get("invoiceNumber");
+    const customer      = p.get("customer");
+    const amount        = p.get("amount");
+    const type          = (p.get("type") === "payment" ? "payment" : "receipt") as "receipt" | "payment";
+    if (!invoiceId || !invoiceNumber) return;
+    const prefill: Partial<RPVoucher> = {
+      voucherType:        type,
+      partyName:          customer ?? "",
+      linkedInvoiceId:    invoiceId,
+      narration:          `Payment for invoice ${invoiceNumber}`,
+      lines: [{
+        id:          crypto.randomUUID(),
+        accountId:   "",
+        accountName: "",
+        description: invoiceNumber,
+        amount:      parseFloat(amount ?? "0") || 0,
+      }],
+    };
+    setNewType(type);
+    setEditVoucher(null);
+    setPrefillData(prefill);
+    setFormOpen(true);
+  // Run once on mount only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     let list = [...vouchers].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -933,10 +967,10 @@ export default function ReceiptPaymentPage() {
       {formOpen && (
         <VoucherForm
           accounts={accounts}
-          initial={editVoucher}
+          initial={editVoucher ?? prefillData}
           defaultType={newType}
           sym={sym}
-          onClose={() => { setFormOpen(false); setEditVoucher(null); }}
+          onClose={() => { setFormOpen(false); setEditVoucher(null); setPrefillData(null); }}
           onSave={handleSave}
           onPost={handlePost}
           onDelete={handleDelete}
