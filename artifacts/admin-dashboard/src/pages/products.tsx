@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { ProductImagesDialog } from "@/components/product-images-dialog";
+import { ProductEditSheet } from "@/components/product-edit-sheet";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
@@ -224,6 +225,7 @@ export default function ProductsPage() {
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);
   const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
   const [viewProdId,    setViewProdId]    = useState<string | null>(null);
+  const [editProdId,    setEditProdId]    = useState<string | null>(null);
 
   const [showHelp,      setShowHelp]      = useState(false);
 
@@ -1772,6 +1774,12 @@ export default function ProductsPage() {
                         <Eye size={13} />
                       </button>
                       {can("Edit Products") && (
+                        <button className="p-1 rounded text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="Edit product"
+                          onClick={e => { e.stopPropagation(); setEditProdId(prod.id); }}>
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {can("Edit Products") && (
                         <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Manage images"
                           onClick={() => setImagesDialogId(prod.id)}>
                           <Camera size={13} />
@@ -1853,6 +1861,14 @@ export default function ProductsPage() {
           />
         );
       })()}
+
+      {/* ── Product Edit Sheet ────────────────────────────────────────────── */}
+      <ProductEditSheet
+        product={editProdId ? (products.find(p => p.id === editProdId) ?? null) : null}
+        open={!!editProdId}
+        onClose={() => setEditProdId(null)}
+        editProduct={editProduct}
+      />
 
       {/* ── Import Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={importOpen} onOpenChange={v => { if (!v) resetImport(); }}>
