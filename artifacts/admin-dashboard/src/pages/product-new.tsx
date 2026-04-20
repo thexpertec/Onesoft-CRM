@@ -75,7 +75,7 @@ export default function ProductNewPage() {
   const [pickerVariantId, setPickerVariantId] = useState<string | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim()), []);
+  const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim() && a.active !== false), []);
   const [selectedAttrName, setSelectedAttrName] = useState<string>("");
   const [variants, setVariants] = useState<ProductVariant[]>([]);
 
@@ -87,7 +87,7 @@ export default function ProductNewPage() {
     setSelectedAttrName(prev => {
       const next = prev === name ? "" : name;
       const attr = allAttrs.find(a => a.name === next);
-      const vals = attr ? attr.values.split(",").map(v => v.trim()).filter(Boolean) : [];
+      const vals = attr ? [...new Set(attr.values.split(",").map(v => v.trim()).filter(Boolean))] : [];
       setVariants(existing => {
         const map = new Map(existing.map(v => [Object.values(v.attributes)[0] ?? "", v]));
         return vals.map(val => {

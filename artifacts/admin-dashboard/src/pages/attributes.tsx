@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Attribute } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { SlidersHorizontal, Plus, Search, X, Save, Trash2 } from "lucide-react";
+import { SlidersHorizontal, Plus, Search, X, Save, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -129,6 +129,14 @@ export default function AttributesPage() {
           <SlidersHorizontal size={15} className="text-primary" />
           {attributes.length} {attributes.length === 1 ? "attribute" : "attributes"} defined
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+          <strong>{attributes.filter(a => a.active !== false).length}</strong> active
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />
+          <strong>{attributes.filter(a => a.active === false).length}</strong> inactive
+        </span>
         {["text", "number", "boolean", "select"].map(t => {
           const count = attributes.filter(a => a.type === t).length;
           if (count === 0) return null;
@@ -208,9 +216,15 @@ export default function AttributesPage() {
             </td></tr>
           ) : filtered.map((attr, ri) => {
             const isRowActive = activeCell?.id === attr.id;
+            const isEnabled = attr.active !== false;
             return (
               <tr key={attr.id} data-testid={`row-attribute-${attr.id}`}
-                className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
+                className={`border-b border-gray-100 dark:border-border transition-colors group ${
+                  isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10"
+                  : !isEnabled ? "bg-gray-50 dark:bg-muted/5 opacity-60"
+                  : ri % 2 === 0 ? "bg-white dark:bg-card"
+                  : "bg-gray-50/50 dark:bg-muted/10"
+                } hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none" style={{ height: `${CELL_H}px` }}>{ri + 1}</td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === attr.id && activeCell.col === ci;
@@ -233,10 +247,25 @@ export default function AttributesPage() {
                     </td>
                   );
                 })}
-                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center px-2" style={{ height: `${CELL_H}px`, minWidth: 100 }} onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-center gap-1.5">
+                    {/* Active/Inactive toggle — always visible */}
+                    <button
+                      onClick={() => editAttribute(attr.id, { active: !isEnabled })}
+                      title={isEnabled ? "Click to deactivate" : "Click to activate"}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
+                        isEnabled
+                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                          : "bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-gray-700"
+                      }`}>
+                      {isEnabled
+                        ? <><ToggleRight size={11} /> Active</>
+                        : <><ToggleLeft size={11} /> Inactive</>
+                      }
+                    </button>
+                    {/* Delete — hover only */}
                     {can("Delete Attributes") && (
-                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
+                      <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors opacity-0 group-hover:opacity-100" title="Delete"
                         onClick={() => setDeleteId(attr.id)} data-testid={`btn-delete-attribute-${attr.id}`}>
                         <Trash2 size={13} />
                       </button>

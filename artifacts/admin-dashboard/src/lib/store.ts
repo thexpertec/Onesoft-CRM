@@ -1659,6 +1659,7 @@ export type Attribute = {
   type: AttributeType;
   values: string;
   description: string;
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1667,8 +1668,9 @@ const ATTRIBUTES_KEY = "admin-attributes";
 
 export const getAttributes = (): Attribute[] => getStored<Attribute>(ATTRIBUTES_KEY);
 
-export const createAttribute = (data: Omit<Attribute, "id" | "createdAt" | "updatedAt">): Attribute => {
+export const createAttribute = (data: Omit<Attribute, "id" | "createdAt" | "updatedAt" | "active"> & { active?: boolean }): Attribute => {
   const item: Attribute = {
+    active: true,
     ...data,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
