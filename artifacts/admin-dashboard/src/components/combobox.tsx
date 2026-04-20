@@ -17,6 +17,7 @@ interface ComboboxProps {
   className?: string;
   inputClassName?: string;
   maxResults?: number;
+  minDropdownWidth?: number;
   autoFocus?: boolean;
   onBlur?: () => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
@@ -27,7 +28,7 @@ interface ComboboxProps {
 
 export function Combobox({
   value, onChange, onSelect, options, placeholder,
-  className, inputClassName, maxResults = 10,
+  className, inputClassName, maxResults = 10, minDropdownWidth = 240,
   autoFocus, onBlur, onKeyDown, disabled, id,
   "data-testid": testId,
 }: ComboboxProps) {
@@ -45,7 +46,8 @@ export function Combobox({
         .filter(o =>
           o.label.toLowerCase().includes(q) ||
           o.value.toLowerCase().includes(q) ||
-          (o.sub?.toLowerCase().includes(q))
+          o.sub?.toLowerCase().includes(q) ||
+          o.tag?.toLowerCase().includes(q)
         )
         .slice(0, maxResults);
 
@@ -68,7 +70,7 @@ export function Combobox({
       position: "fixed",
       top:    above ? rect.top - dropH - 4 : rect.bottom + 4,
       left:   rect.left,
-      width:  Math.max(rect.width, 240),
+      width:  Math.max(rect.width, minDropdownWidth),
       zIndex: 9999,
     });
   }, [open, filtered.length]);
