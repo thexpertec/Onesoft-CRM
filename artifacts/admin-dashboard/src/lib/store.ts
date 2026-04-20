@@ -1224,6 +1224,28 @@ export type Product = {
   updatedAt: string;
 };
 
+// ─── Media Library ────────────────────────────────────────────────────────────
+export type MediaLibraryItem = {
+  id:        string;
+  src:       string;    // base64 data URL or external URL
+  name:      string;
+  createdAt: number;
+};
+
+const MEDIA_LIBRARY_KEY = "admin-media-library";
+
+export const getMediaLibraryItems = (): MediaLibraryItem[] =>
+  getStored<MediaLibraryItem>(MEDIA_LIBRARY_KEY);
+
+export function addMediaLibraryItem(item: MediaLibraryItem): void {
+  setStored(MEDIA_LIBRARY_KEY, [...getMediaLibraryItems(), item]);
+}
+
+export function deleteMediaLibraryItem(id: string): void {
+  setStored(MEDIA_LIBRARY_KEY, getMediaLibraryItems().filter(i => i.id !== id));
+}
+
+// ─── Products (catalogue) ─────────────────────────────────────────────────────
 const PRODUCTS_KEY = "admin-products";
 
 export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);

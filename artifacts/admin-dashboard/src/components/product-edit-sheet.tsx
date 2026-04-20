@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon } from "lucide-react";
 import { printBarcodeLabels } from "@/lib/print-barcode";
+import { MediaPickerDialog } from "@/components/media-picker-dialog";
 
 
 type FormFields = {
@@ -85,6 +86,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const [form, setForm] = useState<FormFields>(product ? toForm(product) : {} as FormFields);
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [pickerVariantId, setPickerVariantId] = useState<string | null>(null);
 
   const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim()), []);
   const [selectedAttrName, setSelectedAttrName] = useState<string>(product?.productAttributes?.[0] ?? "");
@@ -521,7 +523,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                   <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex-1">Name</span>
                     <span className="w-[82px] shrink-0 text-right">Price ({sym})</span>
-                    <span className="w-[140px] shrink-0">Image (optional)</span>
+                    <span className="w-[90px] shrink-0">Image</span>
                   </div>
                   <div className="divide-y divide-border max-h-72 overflow-y-auto">
                     {variants.map(v => {
@@ -538,23 +540,24 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                             placeholder={form.price || "0.00"}
                             className="h-7 w-[82px] shrink-0 text-xs tabular-nums text-right px-2"
                           />
-                          <div className="flex items-center gap-1.5 w-[140px] shrink-0">
-                            {v.image ? (
-                              <img src={v.image} alt={label}
-                                className="w-7 h-7 rounded object-cover border border-border shrink-0"
-                                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            ) : (
-                              <div className="w-7 h-7 rounded border border-dashed border-border bg-muted/50 flex items-center justify-center shrink-0">
-                                <ImageIcon size={11} className="text-muted-foreground/40" />
-                              </div>
+                          <div className="flex items-center gap-1.5 w-[90px] shrink-0">
+                            <button type="button"
+                              onClick={() => setPickerVariantId(v.id)}
+                              className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 w-full">
+                              {v.image ? (
+                                <img src={v.image} alt={label}
+                                  className="w-5 h-5 rounded object-cover border border-border shrink-0" />
+                              ) : (
+                                <ImageIcon size={11} className="shrink-0 opacity-50" />
+                              )}
+                              <span className="truncate">{v.image ? "Change" : "Image…"}</span>
+                            </button>
+                            {v.image && (
+                              <button type="button" onClick={() => patchVariantImage(v.id, "")}
+                                className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
+                                <ImageIcon size={9} className="opacity-40" />
+                              </button>
                             )}
-                            <Input
-                              type="text"
-                              value={v.image ?? ""}
-                              onChange={e => patchVariantImage(v.id, e.target.value)}
-                              placeholder="https://…"
-                              className="h-7 text-[10px] px-2 flex-1 min-w-0"
-                            />
                           </div>
                         </div>
                       );
@@ -612,6 +615,17 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
       onScan={handleScan}
       title="Scan Product Barcode"
       hint="Point the camera at the product's barcode to auto-fill product details"
+    />
+
+    <MediaPickerDialog
+      open={pickerVariantId !== null}
+      onClose={() => setPickerVariantId(null)}
+      onSelect={url => {
+        if (pickerVariantId) patchVariantImage(pickerVariantId, url);
+        setPickerVariantId(null);
+      }}
+      currentUrl={pickerVariantId ? (variants.find(v => v.id === pickerVariantId)?.image ?? "") : ""}
+      title="Select Variant Image"
     />
     </>
   );
