@@ -6,7 +6,7 @@ import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
