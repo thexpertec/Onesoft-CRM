@@ -1298,7 +1298,7 @@ function _upsertProductLedger(
   parentSysId: string,
   baseCode: number,
   label: string,           // " | Revenue" or " | Purchase"
-  head: string,
+  head: AccountHead,
   subType: string,
 ): void {
   const accounts = _coaAccounts();
@@ -4053,7 +4053,7 @@ export function seedDefaultCoaAccounts(): void {
   }
 
   // ── Remove default-seeded accounts that are now tenant-managed ───────────────
-  const REMOVED_DEFAULTS = new Set([
+  const REMOVED_DEFAULTS = new Set<string>([
     SYS_ACCS.BANK,        // "Bank Account"        — user adds via Payment Accounts
     SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
     SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
@@ -4905,14 +4905,14 @@ export function postRPVoucherJE(id: string): JournalEntry {
         const qty   = parseFloat(it.qty) || 0;
         const price = parseFloat(it.unitPrice) || 0;
         const disc  = parseFloat(it.discount) || 0;
-        const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+        const line  = qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc);
         return s + line;
       }, 0);
       const tax   = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
       const grand = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
       const newStatus: InvoiceStatus =
-        newPaid >= grand - 0.01 ? "paid" :
-        newPaid > 0             ? "partial" :
+        newPaid >= grand - 0.01 ? "Paid" :
+        newPaid > 0             ? "Partial" :
         inv.status;
       const record: PaymentRecord = {
         id:     crypto.randomUUID(),
@@ -4925,7 +4925,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
         amountPaid:     String(newPaid),
         status:         newStatus,
         paymentHistory: [...(inv.paymentHistory || []), record],
-        paidAt:         newStatus === "paid" ? new Date().toISOString() : inv.paidAt,
+        paidAt:         newStatus === "Paid" ? new Date().toISOString() : inv.paidAt,
       });
     }
   }
