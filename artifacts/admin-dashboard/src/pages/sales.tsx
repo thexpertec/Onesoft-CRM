@@ -10,6 +10,7 @@ import {
   importOnlineSalesFromKv,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
+import { kvGet } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import {
   Receipt, Plus, Minus, Search, X, Save, Trash2, Eye,
@@ -705,6 +706,7 @@ interface POSViewProps {
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
+  tenantId: string | null;
 }
 
 // ─── Order Pipeline (admin) ───────────────────────────────────────────────────
@@ -873,7 +875,7 @@ function POSView({
   sale, localItems, localMeta, isFresh, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
   onSaveItems, onDeleteItem, onAddProduct, priceMode, onPriceModeChange,
-  onSetStatus, onComplete, onAddCustomer,
+  onSetStatus, onComplete, onAddCustomer, tenantId,
 }: POSViewProps) {
   const { stock } = useStock();
   const settings = getSettings();
@@ -894,7 +896,49 @@ function POSView({
   const { toast } = useToast();
 
   // ── Barcode / QR scanner — shared lookup for both camera and keyboard ──────
-  const handleScan = useCallback((code: string) => {
+  const handleScan = useCallback(async (code: string) => {
+    // ── Clubcard QR detection (format: CCxxxx-9999) ──────────────────────────
+    if (/^CC[A-Z]{4}-\d{4}$/.test(code)) {
+      setScannerOpen(false);
+      const tid = tenantId;
+      if (!tid) {
+        toast({ title: "Clubcard scan failed", description: "No active tenant", variant: "destructive" });
+        return;
+      }
+      try {
+        // 1. Fetch all portal accounts for this tenant
+        const accounts = (await kvGet(`t:${tid}`, "portal-accounts")) as Array<{ email: string; name: string; customerId: string }> | null;
+        if (!accounts || accounts.length === 0) {
+          toast({ title: "Card not found", description: `No portal accounts for this tenant`, variant: "destructive" });
+          return;
+        }
+        // 2. Find which account has this cardId in their clubcard record
+        let matchName = "";
+        let matchCoins = 0;
+        for (const acc of accounts) {
+          const card = (await kvGet(`t:${tid}`, `clubcard-${acc.customerId}`)) as { cardId?: string; coins?: number } | null;
+          if (card?.cardId === code) {
+            matchName = acc.name || acc.email;
+            matchCoins = card.coins ?? 0;
+            break;
+          }
+        }
+        if (!matchName) {
+          toast({ title: "Card not found", description: `Clubcard "${code}" is not registered`, variant: "destructive" });
+          return;
+        }
+        // 3. Set customer + switch to Clubcard mode
+        onMetaChange({ customer: matchName, saleMode: "Clubcard" });
+        onPriceModeChange("clubcard");
+        onSaveMeta();
+        toast({ title: `Clubcard: ${matchName}`, description: `${matchCoins} coins · Clubcard prices applied` });
+      } catch {
+        toast({ title: "Clubcard scan error", description: "Could not look up the card, try again", variant: "destructive" });
+      }
+      return;
+    }
+
+    // ── Product barcode / SKU lookup ─────────────────────────────────────────
     const allProducts = getProducts().filter(p => p.status !== "Inactive");
     const q = code.toLowerCase();
     const found = allProducts.find(
@@ -913,7 +957,7 @@ function POSView({
       setScannerOpen(false);
       toast({ title: "Product not found", description: `No match for "${code}" — check barcode or SKU`, variant: "destructive" });
     }
-  }, [onAddProduct, toast]);
+  }, [onAddProduct, toast, tenantId, onMetaChange, onPriceModeChange, onSaveMeta]);
 
   // ── Keyboard-wedge scanner (USB / Bluetooth hardware scanner) ─────────────
   // When the search box is NOT focused the hook intercepts scanner keystrokes.
@@ -1117,6 +1161,14 @@ function POSView({
                 className="w-48"
                 inputClassName="border-0 border-b-2 border-gray-200 dark:border-zinc-700 px-0 pb-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-200 bg-transparent w-48 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-300"
               />
+              {/* Scan Clubcard QR button */}
+              <button
+                onClick={() => setScannerOpen(true)}
+                title="Scan customer's Clubcard QR code"
+                className="flex-shrink-0 w-6 h-6 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors mb-0.5"
+              >
+                <ScanLine size={12} />
+              </button>
               {showAddBtn && (
                 <button
                   onClick={openQuickAdd}
@@ -2183,7 +2235,7 @@ function POSView({
       onClose={() => setScannerOpen(false)}
       onScan={handleScan}
       title="Scan to Add Product"
-      hint="Scan a product barcode or QR code to instantly add it to the cart"
+      hint="Scan a product barcode / QR code to add it, or a customer's Clubcard QR to select them and apply Clubcard prices"
     />
     </>
   );
@@ -2842,6 +2894,7 @@ export default function SalesPage() {
             });
             toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
           }}
+          tenantId={currentTenantId}
         />
         <VariantPickerDialog
           product={variantPickerProduct}
