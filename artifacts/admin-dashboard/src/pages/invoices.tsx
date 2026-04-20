@@ -565,7 +565,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       : p.price;
     setItems(prev => prev.map(i =>
       i.id === id
-        ? { ...i, productName: getInvoiceProductName(p), sku: p.sku, unit: p.unit, unitPrice: autoPrice }
+        ? { ...i, productName: getInvoiceProductName(p), localName: p.localName || "", sku: p.sku, unit: p.unit, unitPrice: autoPrice }
         : i
     ));
   };

@@ -1920,15 +1920,16 @@ export type ItemStatus = typeof ITEM_STATUSES[number];
 
 export type SaleItem = {
   id: string;
-  productName: string; // locked — sourced from Products master
-  sku: string;         // locked — sourced from Products master
+  productName: string;       // locked — sourced from Products master (primary / English name)
+  localName?: string;        // locked — sourced from Products master (local / Urdu / Arabic name)
+  sku: string;               // locked — sourced from Products master
   qty: string;
   unit: string;
   unitPrice: string;
-  discount: string;        // value — interpreted as % or flat amount depending on discountType
+  discount: string;          // value — interpreted as % or flat amount depending on discountType
   discountType?: "pct" | "amt"; // "pct" = percentage (default), "amt" = flat amount
   notes: string;
-  itemStatus: ItemStatus; // per-line delivery status
+  itemStatus: ItemStatus;    // per-line delivery status
 };
 
 export type Sale = {

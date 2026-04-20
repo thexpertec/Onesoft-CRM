@@ -183,12 +183,20 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   // ── RTL flag ────────────────────────────────────────────────────────────────
   const rtl = settings.invoiceColsRTL ?? false;
 
+  // ── Resolve product display name at print time ───────────────────────────────
+  // If the setting is "localName" and the item carries a localName, use it;
+  // otherwise fall back to productName (handles both old and new invoices).
+  const useLocalName = (settings.invoiceProductNameField ?? "name") === "localName";
+  const resolveItemName = (item: { productName: string; localName?: string }): string =>
+    useLocalName && item.localName?.trim() ? item.localName.trim() : item.productName || "—";
+
   // ── Item rows ───────────────────────────────────────────────────────────────
   const itemRows = inv.items.map((item, i) => {
     const lt   = lineTotal(item);
     const disc = parseFloat(item.discount) || 0;
+    const displayName = resolveItemName(item);
     const descCell = `
-          <div class="item-name">${esc(item.productName || "—")}</div>
+          <div class="item-name">${esc(displayName)}</div>
           ${item.sku   ? `<div class="item-meta">SKU: ${esc(item.sku)}</div>` : ""}
           ${item.notes ? `<div class="item-meta">${esc(item.notes)}</div>` : ""}`;
     const discCell = disc > 0 ? `<span class="disc-badge">${disc.toFixed(1)}%</span>` : "—";
@@ -201,7 +209,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
         <td class="td-left">${fmt(parseFloat(item.unitPrice)||0)}</td>
         <td class="td-left">${parseFloat(item.qty)||0}</td>
         <td class="td-left">${esc(item.unit)}</td>
-        <td>${descCell}</td>
+        <td class="td-right">${descCell}</td>
         <td class="td-center num-col">${i + 1}</td>
       </tr>`;
     }
@@ -293,7 +301,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
 
   // ────────────────────────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${rtl ? "ur" : "en"}" dir="${rtl ? "rtl" : "ltr"}">
 <head>
 <meta charset="utf-8"/>
 <title>${esc(inv.invoiceTitle || "Invoice")} ${esc(inv.invoiceNumber)}</title>
@@ -545,7 +553,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
         <th class="td-left" style="width:60pt">${sl("colUnitPrice", L.colUnitPrice)}</th>
         <th class="td-left" style="width:32pt">${sl("colQty", L.colQty)}</th>
         <th class="td-left" style="width:36pt">${sl("colUnit", L.colUnit)}</th>
-        <th>${sl("colDescription", L.colDescription)}</th>
+        <th class="td-right">${sl("colDescription", L.colDescription)}</th>
         <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
         ` : `
         <th class="td-center num-col">${sl("colNum", L.colNum)}</th>
