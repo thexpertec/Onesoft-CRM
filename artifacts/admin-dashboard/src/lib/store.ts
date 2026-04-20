@@ -4138,6 +4138,24 @@ export function seedDefaultCoaAccounts(): void {
 
   let productLedgersAdded = 0;
 
+  // ── Remove orphaned per-product ledgers ────────────────────────────────────
+  // Any sr-prod-*, pur-prod-*, or inv-prod-* account whose product no longer
+  // exists must be deleted from the COA.  This is the authoritative cleanup:
+  // it runs on every initTenantCOA call and ensures the server copy is correct.
+  const productIdSet = new Set(products.map(p => p.id));
+  const PROD_PREFIXES = ["sr-prod-", "pur-prod-", "inv-prod-"];
+  const beforeClean = workingAccounts.length;
+  workingAccounts = workingAccounts.filter(a => {
+    const matchedPrefix = PROD_PREFIXES.find(pfx => a.id.startsWith(pfx));
+    if (!matchedPrefix) return true; // not a product ledger — keep
+    const prodId = a.id.slice(matchedPrefix.length);
+    return productIdSet.has(prodId); // keep only if product still exists
+  });
+  const orphansRemoved = beforeClean - workingAccounts.length;
+  if (orphansRemoved > 0) {
+    console.info(`[COA] Removed ${orphansRemoved} orphaned product ledger(s) — products no longer exist`);
+  }
+
   // Rename any old sr-prod-* ledgers that were named without "| Revenue" suffix
   workingAccounts = workingAccounts.map(a => {
     if (a.id.startsWith("sr-prod-") && !a.name.endsWith("| Revenue")) {
@@ -4175,7 +4193,7 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0) {
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0 || orphansRemoved > 0) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
