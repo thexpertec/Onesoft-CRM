@@ -72,6 +72,7 @@ const TEMP_DOT: Record<string, string> = { Hot: "🔴", Warm: "🟡", Cold: "�
 
 const COLS: { field: EditableField; label: string; minW: number; type: "text" | "email" | "tel" | "select" | "agent-select" | "temp-select" | "date" }[] = [
   { field: "name",        label: "Name",        minW: 160, type: "text"         },
+  { field: "company",     label: "Company",     minW: 140, type: "text"         },
   { field: "phone",       label: "Phone",       minW: 130, type: "tel"          },
   { field: "industry",    label: "Industry",    minW: 120, type: "text"         },
   { field: "temperature", label: "Temp",        minW: 90,  type: "temp-select"  },
