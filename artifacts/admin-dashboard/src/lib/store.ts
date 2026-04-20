@@ -234,7 +234,7 @@ function getGlobal<T>(key: string): T[] {
 
 /** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
-  _lsSet(key, data);
+  _lsCache(key, data);  // write to _memRaw + localStorage immediately (warm-start cache)
   _apiWrite(key, data);
 }
 

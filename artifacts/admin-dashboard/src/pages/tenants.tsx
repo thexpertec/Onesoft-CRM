@@ -398,7 +398,7 @@ function TenantModal({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TenantsPage() {
-  const { switchTenant, currentTenantId, isSuperAdmin } = useAuth();
+  const { switchTenant, currentTenantId, isSuperAdmin, isSyncing } = useAuth();
   const { toast }   = useToast();
   const [, navigate] = useLocation();
 
@@ -416,6 +416,13 @@ export default function TenantsPage() {
     setTenants(getTenants());
     setDemoSeeded(isDemoSeeded());
   };
+
+  // After every server sync completes, re-read the latest tenant list
+  // (this catches the case where a deleted tenant reappears after page refresh)
+  useEffect(() => {
+    if (!isSyncing) reload();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSyncing]);
 
   function handleLoadDemo() {
     setDemoLoading(true);
