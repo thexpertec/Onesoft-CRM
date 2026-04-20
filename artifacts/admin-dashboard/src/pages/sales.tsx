@@ -68,6 +68,8 @@ function getPaymentIcon(method: string): React.ReactNode {
 const lineTotal = (item: SaleItem): number => {
   const q = parseFloat(item.qty) || 0;
   const p = parseFloat(item.unitPrice) || 0;
+  // BOGO: every 2nd unit is free → charge for ceil(q/2) units
+  if (item.bogoApplied) return Math.ceil(q / 2) * p;
   const d = parseFloat(item.discount) || 0;
   if (item.discountType === "amt") return Math.max(0, q * p - d);
   return q * p * (1 - d / 100);
@@ -76,6 +78,8 @@ const lineTotal = (item: SaleItem): number => {
 const lineDiscAmt = (item: SaleItem): number => {
   const q = parseFloat(item.qty) || 0;
   const p = parseFloat(item.unitPrice) || 0;
+  // BOGO: discount = value of free units = floor(q/2) units
+  if (item.bogoApplied) return Math.floor(q / 2) * p;
   const d = parseFloat(item.discount) || 0;
   if (item.discountType === "amt") return Math.min(d, q * p);
   return q * p * (d / 100);
@@ -1268,6 +1272,11 @@ function POSView({
                           {parseFloat(prod?.costPrice ?? "0") > 0 && (
                             <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 text-red-400 dark:text-red-500 tabular-nums">
                               {sym}{parseFloat(prod!.costPrice).toFixed(2)}
+                            </span>
+                          )}
+                          {item.bogoApplied && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300">
+                              B1G1 · {Math.floor(parseFloat(item.qty) || 0) - Math.ceil((parseFloat(item.qty) || 0) / 2)} FREE
                             </span>
                           )}
                           {(() => {
@@ -2478,16 +2487,19 @@ export default function SalesPage() {
     }
 
     const current = localItemsRef.current;
+    const isBogo = priceMode === "clubcard" && product.clubcardBogo === true;
     const resolvedPrice = priceMode === "wholesale" && product.wholesalePrice
       ? product.wholesalePrice
-      : priceMode === "clubcard" && product.clubcardPrice
+      : priceMode === "clubcard" && !isBogo && product.clubcardPrice
         ? product.clubcardPrice
         : product.price || "0.00";
     const existing = current.find(i => i.sku === product.sku);
     if (existing) {
+      // For BOGO: increment by 2 to maintain pairs; otherwise +1
+      const addQty = isBogo ? 2 : 1;
       const next = current.map(i =>
         i.sku === product.sku
-          ? { ...i, qty: String((parseFloat(i.qty) || 0) + 1) }
+          ? { ...i, qty: String((parseFloat(i.qty) || 0) + addQty), bogoApplied: isBogo || i.bogoApplied }
           : i
       );
       saveItems(next);
@@ -2500,9 +2512,11 @@ export default function SalesPage() {
         unit: product.unit || "pcs",
         unitPrice: resolvedPrice,
         discountType: defaultDiscountType,
+        qty: isBogo ? "2" : "1",
+        bogoApplied: isBogo || undefined,
       };
       saveItems([...current, item]);
-      toast({ title: `${product.name} added` });
+      toast({ title: isBogo ? `${product.name} added — B1G1 applied` : `${product.name} added` });
     }
   }, [saveItems, toast, priceMode]);
 

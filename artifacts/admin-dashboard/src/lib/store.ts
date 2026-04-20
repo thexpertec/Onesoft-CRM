@@ -1218,6 +1218,7 @@ export type Product = {
   websitePrice?: string;     // Current/sale price shown on the website
   websitePriceWas?: string;  // Original "was" price shown crossed out on the website
   clubcardPrice?: string;    // Exclusive Clubcard member price
+  clubcardBogo?: boolean;    // Clubcard Option 2: Buy 1 Get 1 Free
   productAttributes?: string[];  // attribute names assigned to this product
   variants?: ProductVariant[];   // per-variant price/stock combinations
   createdAt: string;
@@ -1974,6 +1975,7 @@ export type SaleItem = {
   discountType?: "pct" | "amt"; // "pct" = percentage (default), "amt" = flat amount
   notes: string;
   itemStatus: ItemStatus;    // per-line delivery status
+  bogoApplied?: boolean;     // Clubcard Buy-1-Get-1-Free applied; every 2nd unit is free
 };
 
 export type Sale = {

@@ -627,6 +627,7 @@ export default function ProductsPage() {
     { field: "websitePrice",    label: `Web Price (${sym})`,        minW: 115, type: "text"     },
     { field: "websitePriceWas", label: `Web Price Was (${sym})`,   minW: 130, type: "text"     },
     { field: "clubcardPrice",   label: `Clubcard Price (${sym})`,  minW: 135, type: "text"     },
+    { field: "clubcardBogo",    label: "Clubcard BOGO",             minW: 120, type: "readonly" },
     { field: "showOnWeb",       label: "Show on Web",               minW: 105, type: "readonly" },
     { field: "stock",           label: "Stock",                     minW: 90,  type: "readonly" },
     { field: "status",      label: "Status",             minW: 120, type: "select",
@@ -1701,6 +1702,35 @@ export default function ProductsPage() {
                       : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
                       : "text-muted-foreground")
                     : "";
+
+                  // clubcardBogo — clickable toggle pill (Buy 1 Get 1 Free)
+                  if (c.field === "clubcardBogo") {
+                    const active = prod.clubcardBogo === true;
+                    return (
+                      <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
+                        style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                        <div className="w-full h-full flex items-center justify-center px-2">
+                          {can("Edit Products") ? (
+                            <button
+                              onClick={() => editProduct(prod.id, { clubcardBogo: !active })}
+                              title={active ? "BOGO active — click to remove" : "Enable Buy 1 Get 1 Free for Clubcard"}
+                              className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full transition-colors cursor-pointer
+                                ${active
+                                  ? "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400 hover:bg-teal-200 dark:hover:bg-teal-900/60"
+                                  : "bg-gray-100 text-gray-400 dark:bg-zinc-800 dark:text-zinc-500 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                                }`}>
+                              {active ? "B1G1" : "Off"}
+                            </button>
+                          ) : (
+                            <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full
+                              ${active ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-400"}`}>
+                              {active ? "B1G1" : "Off"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  }
 
                   // showOnWeb — clickable toggle pill
                   if (c.field === "showOnWeb") {

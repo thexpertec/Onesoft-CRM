@@ -7,7 +7,7 @@ import {
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
 import { ProductCard, getProductTheme } from "@/components/product-card";
-import { formatPrice, getStockQty, stockLabel, cn } from "@/lib/utils";
+import { formatPrice, getStockQty, stockLabel, cn, isBogo } from "@/lib/utils";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import type { ProductVariant } from "@/types/product";
 
@@ -82,10 +82,14 @@ export function ProductDetailPage() {
   const displayImage = selectedVariant?.image || product.thumbnail || undefined;
   const hasImage = Boolean(displayImage);
 
+  const bogoActive = isBogo(product ?? {}, isLoggedIn);
+
   function handleAdd() {
     if (!product || cartDisabled) return;
     if (hasVariants && !allAttrsSelected) return;
-    addItem(product, qty, selectedVariant);
+    // BOGO: each "1 selected" gives 2 physical items (buy 1, get 1 free)
+    const cartQty = bogoActive ? qty * 2 : qty;
+    addItem(product, cartQty, selectedVariant);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   }
@@ -246,8 +250,44 @@ export function ProductDetailPage() {
                   </div>
                 )}
 
-                {/* ── Clubcard block ── */}
-                {clubPrice && (
+                {/* ── Clubcard BOGO block ── */}
+                {product.clubcardBogo && (
+                  bogoActive ? (
+                    /* Logged-in: BOGO active banner */
+                    <div className="rounded-xl bg-teal-500 px-4 py-3 flex items-center gap-3">
+                      <BadgeCheck size={18} className="text-white shrink-0" />
+                      <div>
+                        <p className="text-white font-bold text-[14px]">Buy 1 Get 1 Free — Clubcard Offer</p>
+                        <p className="text-teal-100 text-[11px]">
+                          Adding {qty} gives you {qty * 2} items — the 2nd item is free for Clubcard members.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Guest: teal BOGO teaser */
+                    <div className="rounded-xl border-2 border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/30 p-3.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <BadgeCheck size={14} className="text-teal-600 dark:text-teal-400" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-teal-600 dark:text-teal-400">
+                          Clubcard Offer: Buy 1 Get 1 Free
+                        </span>
+                      </div>
+                      <p className="text-sm text-teal-700 dark:text-teal-300 font-medium">
+                        Sign in with your Clubcard to get every 2nd item free on this product.
+                      </p>
+                      <Link href="/clubcard">
+                        <button className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 transition-colors">
+                          <BadgeCheck size={11} />
+                          Get a Clubcard
+                          <ChevronRight size={11} />
+                        </button>
+                      </Link>
+                    </div>
+                  )
+                )}
+
+                {/* ── Clubcard price block (only when no BOGO) ── */}
+                {!product.clubcardBogo && clubPrice && (
                   isLoggedIn ? (
                     /* Logged-in: green "Saved X | Clubcard" banner */
                     <div className="rounded-xl bg-emerald-500 px-4 py-3 flex items-center gap-3">

@@ -20,6 +20,7 @@ export function getDisplayPrice(product: { price: string; websitePrice?: string 
 /**
  * Returns the effective price for a customer:
  * - If logged in and the product has a valid clubcardPrice lower than the display price, return clubcardPrice.
+ * - BOGO does not change unit price — it affects how many units are charged.
  * - Otherwise return getDisplayPrice.
  */
 export function getEffectivePrice(
@@ -33,6 +34,42 @@ export function getEffectivePrice(
     if (!isNaN(club) && club > 0 && club < disp) return product.clubcardPrice;
   }
   return base;
+}
+
+/**
+ * Returns true when the product has an active BOGO Clubcard offer and the customer is logged in.
+ * BOGO = Buy 1 Get 1 Free: every 2nd unit is free for Clubcard members.
+ */
+export function isBogo(
+  product: { clubcardBogo?: boolean },
+  isLoggedIn: boolean,
+): boolean {
+  return isLoggedIn && product.clubcardBogo === true;
+}
+
+/**
+ * For a BOGO item, returns the number of units actually charged (ceil(qty/2)).
+ * For non-BOGO items, returns qty unchanged.
+ */
+export function getChargedQty(qty: number, bogo: boolean): number {
+  return bogo ? Math.ceil(qty / 2) : qty;
+}
+
+/**
+ * Returns the cart line total for a product, respecting BOGO and Clubcard pricing.
+ * - BOGO (logged-in): displayPrice * ceil(qty/2)
+ * - Clubcard price (logged-in, no BOGO): clubcardPrice * qty
+ * - Otherwise: displayPrice * qty
+ */
+export function getLineTotal(
+  product: { price: string; websitePrice?: string; clubcardPrice?: string; clubcardBogo?: boolean },
+  isLoggedIn: boolean,
+  qty: number,
+): number {
+  const bogo = isBogo(product, isLoggedIn);
+  const unitPrice = parseFloat(getEffectivePrice(product, isLoggedIn));
+  const chargedQty = getChargedQty(qty, bogo);
+  return unitPrice * chargedQty;
 }
 
 export function getStockQty(openingStock?: string): number {

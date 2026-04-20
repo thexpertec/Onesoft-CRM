@@ -4,7 +4,7 @@ import { ShoppingCart, Heart, Star, Eye, Smartphone, Monitor, Shield, Headphones
 import type { Product } from "@/types/product";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { cn, formatPrice, getStockQty, stockLabel } from "@/lib/utils";
+import { cn, formatPrice, getStockQty, stockLabel, isBogo } from "@/lib/utils";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 
 interface ProductCardProps {
@@ -74,13 +74,15 @@ export function ProductCard({ product, className }: ProductCardProps) {
     ? product.clubcardPrice
     : null;
   const clubSaving = clubPrice ? parseFloat(displayPrice) - parseFloat(clubPrice) : 0;
+  const bogoActive = isBogo(product, isLoggedIn);
 
   async function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (cartDisabled) return;
     setAdding(true);
-    addItem(product, 1);
+    // BOGO: Clubcard members get 2 items (buy 1 get 1 free)
+    addItem(product, bogoActive ? 2 : 1);
     setTimeout(() => setAdding(false), 800);
   }
 
@@ -149,7 +151,13 @@ export function ProductCard({ product, className }: ProductCardProps) {
               {product.brand}
             </span>
           )}
-          {product.clubcardPrice && parseFloat(product.clubcardPrice) > 0 && (
+          {product.clubcardBogo && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-600 text-white shadow-md">
+              <BadgeCheck size={9} />
+              B1G1
+            </span>
+          )}
+          {!product.clubcardBogo && product.clubcardPrice && parseFloat(product.clubcardPrice) > 0 && (
             <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-md">
               <CreditCard size={9} />
               Clubcard
@@ -205,8 +213,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
         {/* Price + Cart */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            {/* Logged-in Clubcard view: strike regular, show club price prominently */}
-            {clubPrice && isLoggedIn ? (
+            {/* Logged-in BOGO view */}
+            {bogoActive ? (
+              <>
+                <div className="text-base font-extrabold tabular-nums text-slate-900 dark:text-white">
+                  {formatPrice(displayPrice)}
+                </div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <BadgeCheck size={10} className="text-teal-600 shrink-0" />
+                  <span className="text-[11px] font-bold text-teal-700 dark:text-teal-400">
+                    + 1 FREE
+                  </span>
+                </div>
+              </>
+            ) : clubPrice && isLoggedIn ? (
+              /* Logged-in Clubcard price view: strike regular, show club price prominently */
               <>
                 <div className="text-xs tabular-nums text-slate-400 dark:text-slate-500 line-through">
                   {formatPrice(displayPrice)}
@@ -254,10 +275,24 @@ export function ProductCard({ product, className }: ProductCardProps) {
         </div>
       </div>
 
-      {/* Full-width Clubcard button — only when clubcard price is set */}
-      {clubPrice && (
-        <Link href={isLoggedIn ? `/product/${product.id}` : `/product/${product.id}`} className="block">
-          {isLoggedIn ? (
+      {/* Full-width Clubcard / BOGO strip */}
+      {(product.clubcardBogo || clubPrice) && (
+        <Link href={`/product/${product.id}`} className="block">
+          {product.clubcardBogo ? (
+            bogoActive ? (
+              /* Logged-in BOGO active */
+              <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg bg-teal-500 hover:bg-teal-600 px-3 py-2 text-[11.5px] font-semibold text-white transition-colors cursor-pointer shadow-sm shadow-teal-200 dark:shadow-teal-900/30">
+                <BadgeCheck size={12} className="shrink-0" />
+                <span>Buy 1 Get 1 Free · Clubcard Offer</span>
+              </div>
+            ) : (
+              /* Guest — BOGO teaser */
+              <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg border border-teal-400 dark:border-teal-500 px-3 py-2 text-[11.5px] font-semibold text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors cursor-pointer">
+                <BadgeCheck size={12} className="shrink-0" />
+                <span>Buy 1 Get 1 Free with Clubcard</span>
+              </div>
+            )
+          ) : isLoggedIn ? (
             <div className="mx-3 mb-3 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 px-3 py-2 text-[11.5px] font-semibold text-white transition-colors cursor-pointer shadow-sm shadow-emerald-200 dark:shadow-emerald-900/30">
               <BadgeCheck size={12} className="shrink-0" />
               <span>

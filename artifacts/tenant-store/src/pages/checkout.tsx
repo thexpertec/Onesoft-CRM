@@ -8,7 +8,7 @@ import {
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
 import { SESSION_KEY, type StoredSession } from "@/hooks/use-customer-session";
-import { cn, formatPrice, getDisplayPrice, getEffectivePrice } from "@/lib/utils";
+import { cn, formatPrice, getDisplayPrice, getEffectivePrice, isBogo, getLineTotal } from "@/lib/utils";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 interface CustomerForm {
@@ -331,18 +331,19 @@ export function CheckoutPage() {
     );
   }
 
-  /* Recalculate subtotal using effective (clubcard) prices when logged in */
+  /* Recalculate subtotal using effective (clubcard/BOGO) prices when logged in */
   const subtotal = items.reduce(
-    (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
+    (s, i) => s + getLineTotal(i.product, isLoggedIn, i.quantity),
     0,
   );
 
-  /* Total clubcard saving vs regular display price */
+  /* Total clubcard/BOGO saving vs regular display price */
   const clubSaving = isLoggedIn
     ? items.reduce((s, i) => {
-        const disp = parseFloat(getDisplayPrice(i.product));
-        const eff  = parseFloat(getEffectivePrice(i.product, isLoggedIn));
-        return s + (disp - eff) * i.quantity;
+        const disp    = parseFloat(getDisplayPrice(i.product));
+        const lineDisp = disp * i.quantity;
+        const lineEff  = getLineTotal(i.product, isLoggedIn, i.quantity);
+        return s + (lineDisp - lineEff);
       }, 0)
     : 0;
   const taxRate  = 0.20; // 20% VAT
@@ -389,7 +390,7 @@ export function CheckoutPage() {
         sku: i.product.sku,
         price: getEffectivePrice(i.product, isLoggedIn),
         quantity: i.quantity,
-        lineTotal: (parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity).toFixed(2),
+        lineTotal: getLineTotal(i.product, isLoggedIn, i.quantity).toFixed(2),
       })),
       shipping: { option: shipping.id, label: shipping.label, cost: shipping.price },
       payment: payment,
@@ -490,14 +491,13 @@ export function CheckoutPage() {
       ? `/customer-portal/?t=${encodeURIComponent(tenantId)}&tab=signup`
       : `/customer-portal/?tab=signup`;
 
-    /* Calculate total potential Clubcard saving across all cart items */
+    /* Calculate total potential Clubcard/BOGO saving across all cart items */
     const clubcardSaving = items.reduce((sum, { product, quantity }) => {
-      const display = parseFloat(getDisplayPrice(product));
-      const club    = parseFloat(product.clubcardPrice ?? "");
-      if (!isNaN(club) && club > 0 && club < display) {
-        return sum + (display - club) * quantity;
-      }
-      return sum;
+      const display  = parseFloat(getDisplayPrice(product));
+      const lineDisp = display * quantity;
+      const lineEff  = getLineTotal(product, true /* signed-in */, quantity);
+      const saved = lineDisp - lineEff;
+      return saved > 0 ? sum + saved : sum;
     }, 0);
 
     const accent = clubcardSaving > 0 ? "green" : "blue";
@@ -934,18 +934,26 @@ export function CheckoutPage() {
               </div>
               <div className="shrink-0 text-right">
                 {(() => {
-                  const eff  = parseFloat(getEffectivePrice(item.product, isLoggedIn));
-                  const disp = parseFloat(getDisplayPrice(item.product));
-                  const saved = disp - eff;
+                  const eff   = parseFloat(getEffectivePrice(item.product, isLoggedIn));
+                  const disp  = parseFloat(getDisplayPrice(item.product));
+                  const bogoOn = isBogo(item.product, isLoggedIn);
+                  const lineEff  = getLineTotal(item.product, isLoggedIn, item.quantity);
+                  const lineDisp = disp * item.quantity;
+                  const saved = lineDisp - lineEff;
                   return (
                     <>
-                      {saved > 0 && (
+                      {saved > 0.001 && (
                         <p className="text-[10px] text-slate-400 line-through leading-none mb-0.5">
-                          {formatPrice(disp * item.quantity)}
+                          {formatPrice(lineDisp)}
                         </p>
                       )}
-                      <span className={cn("text-xs font-bold", saved > 0 ? "text-green-600 dark:text-green-400" : "text-slate-900 dark:text-white")}>
-                        {formatPrice(eff * item.quantity)}
+                      {bogoOn && (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 block mb-0.5">
+                          B1G1
+                        </span>
+                      )}
+                      <span className={cn("text-xs font-bold", bogoOn ? "text-teal-600 dark:text-teal-400" : saved > 0.001 ? "text-green-600 dark:text-green-400" : "text-slate-900 dark:text-white")}>
+                        {formatPrice(lineEff)}
                       </span>
                     </>
                   );

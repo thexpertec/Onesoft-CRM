@@ -2,7 +2,7 @@ import { X, ShoppingCart, Minus, Plus, Trash2, ArrowRight, User } from "lucide-r
 import { Link } from "wouter";
 import { useCart } from "@/lib/cart";
 import { useStore } from "@/contexts/store-context";
-import { formatPrice, getDisplayPrice, getEffectivePrice } from "@/lib/utils";
+import { formatPrice, getDisplayPrice, getEffectivePrice, isBogo, getLineTotal } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 
@@ -18,9 +18,9 @@ export function CartDrawer() {
     return live ? { ...i, product: live } : i;
   });
 
-  /* Recalculate using effective (clubcard) prices */
+  /* Recalculate using effective (clubcard/BOGO) prices */
   const effectiveTotal = freshItems.reduce(
-    (s, i) => s + parseFloat(getEffectivePrice(i.product, isLoggedIn)) * i.quantity,
+    (s, i) => s + getLineTotal(i.product, isLoggedIn, i.quantity),
     0,
   );
 
@@ -131,13 +131,25 @@ export function CartDrawer() {
                     const eff = variantPrice ?? baseEff;
                     const disp = getDisplayPrice(item.product);
                     const saved = parseFloat(disp) - parseFloat(eff);
+                    const bogoOn = isBogo(item.product, isLoggedIn);
+                    const freeQty = bogoOn ? Math.floor(item.quantity / 2) : 0;
                     return (
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={cn("text-sm font-bold", saved > 0.001 ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400")}>
+                        <p className={cn("text-sm font-bold", bogoOn ? "text-teal-600 dark:text-teal-400" : saved > 0.001 ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400")}>
                           {formatPrice(eff)}
                         </p>
-                        {saved > 0.001 && (
+                        {saved > 0.001 && !bogoOn && (
                           <p className="text-xs text-slate-400 line-through">{formatPrice(disp)}</p>
+                        )}
+                        {bogoOn && freeQty > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300">
+                            {freeQty} FREE
+                          </span>
+                        )}
+                        {bogoOn && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/20 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800">
+                            B1G1
+                          </span>
                         )}
                       </div>
                     );

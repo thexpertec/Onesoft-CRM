@@ -84,6 +84,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const dp  = getSettingsDecimalPlaces();
 
   const [form, setForm] = useState<FormFields>(product ? toForm(product) : {} as FormFields);
+  const [clubcardBogo, setClubcardBogo] = useState<boolean>(product?.clubcardBogo ?? false);
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [pickerVariantId, setPickerVariantId] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   useEffect(() => {
     if (product) {
       setForm(toForm(product));
+      setClubcardBogo(product.clubcardBogo ?? false);
       resetLookup();
       setSelectedAttrName(product.productAttributes?.[0] ?? "");
       setVariants(product.variants ?? []);
@@ -225,6 +227,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
         price:             form.price,
         wholesalePrice:    form.wholesalePrice,
         clubcardPrice:     form.clubcardPrice || undefined,
+        clubcardBogo:      clubcardBogo || undefined,
         websitePrice:      form.websitePrice || undefined,
         websitePriceWas:   form.websitePriceWas || undefined,
         commissionPct:     form.commissionPct || undefined,
@@ -460,6 +463,26 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 onChange={e => patch("clubcardPrice", e.target.value)}
                 placeholder="0.00" className="h-9 text-sm tabular-nums" />
             </Field>
+            <div className="space-y-1 col-span-2">
+              <button
+                type="button"
+                onClick={() => setClubcardBogo(v => !v)}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-all w-full justify-between
+                  ${clubcardBogo
+                    ? "border-teal-400 bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300"
+                    : "border-input bg-background text-muted-foreground hover:border-teal-300 hover:text-teal-600"
+                  }`}>
+                <span>Buy 1 Get 1 Free <span className="text-[10px] font-bold uppercase tracking-wider opacity-60 ml-1">Clubcard Option 2</span></span>
+                <span className={`w-8 h-4 rounded-full relative inline-block transition-colors ${clubcardBogo ? "bg-teal-500" : "bg-muted"}`}>
+                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${clubcardBogo ? "left-4" : "left-0.5"}`} />
+                </span>
+              </button>
+              {clubcardBogo && (
+                <p className="text-[10px] text-teal-600 dark:text-teal-400 leading-tight">
+                  Clubcard members get every 2nd unit free (Buy 1 Get 1 Free). Shown on website and applied at POS.
+                </p>
+              )}
+            </div>
             <div className="space-y-1">
               <label className="text-[12px] font-semibold text-foreground">Commission</label>
               <div className="relative">
