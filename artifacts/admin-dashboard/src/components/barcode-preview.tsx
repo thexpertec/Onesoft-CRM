@@ -10,7 +10,7 @@ export function BarcodePreview({ value, className = "" }: BarcodePreviewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current || !value.trim()) return;
+    if (!svgRef.current || !value?.trim()) return;
     try {
       JsBarcode(svgRef.current, value.trim(), {
         format: "AUTO",
@@ -27,7 +27,7 @@ export function BarcodePreview({ value, className = "" }: BarcodePreviewProps) {
     }
   }, [value]);
 
-  if (!value.trim()) return null;
+  if (!value?.trim()) return null;
 
   return (
     <div className={`flex justify-center py-2 ${className}`}>

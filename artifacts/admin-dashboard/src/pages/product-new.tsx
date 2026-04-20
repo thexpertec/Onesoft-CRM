@@ -98,7 +98,7 @@ export default function ProductNewPage() {
   })();
 
   const handleBarcodeLookup = async (code?: string) => {
-    const barcode = (code ?? form.barcode).trim();
+    const barcode = (code ?? form.barcode ?? "").trim();
     if (!barcode) return;
     const res = await lookup(barcode);
     if (res) {
@@ -240,7 +240,7 @@ export default function ProductNewPage() {
                   <Camera size={14} />
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Lookup product info"
-                  onClick={() => handleBarcodeLookup()} disabled={!form.barcode.trim() || lookupLoading}>
+                  onClick={() => handleBarcodeLookup()} disabled={!(form.barcode ?? "").trim() || lookupLoading}>
                   {lookupLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Auto-generate EAN-13"
@@ -266,9 +266,9 @@ export default function ProductNewPage() {
                 </div>
               )}
               {/* Barcode preview */}
-              {form.barcode.trim() && (
+              {(form.barcode ?? "").trim() && (
                 <div className="rounded-md border border-border bg-muted/30 px-2 py-1">
-                  <BarcodePreview value={form.barcode} />
+                  <BarcodePreview value={form.barcode ?? ""} />
                 </div>
               )}
             </div>
