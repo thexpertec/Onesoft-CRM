@@ -282,14 +282,16 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           <Divider label="Identity" />
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Field label="SKU">
+          {/* SKU + Barcode — flex row: SKU fixed width, Barcode takes remaining space */}
+          <div className="flex gap-3 items-start">
+            <div className="w-36 shrink-0 space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">SKU</label>
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
                 placeholder="ODT-001" className="h-9 text-sm font-mono" />
-            </Field>
+            </div>
 
             {/* ── Barcode field with scan + lookup ── */}
-            <div className="col-span-2 space-y-1">
+            <div className="flex-1 min-w-0 space-y-1">
               <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
               <div className="flex gap-1.5">
                 <Input
@@ -297,7 +299,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                   onChange={e => { patch("barcode", e.target.value); resetLookup(); }}
                   onKeyDown={e => { if (e.key === "Enter") handleBarcodeLookup(); }}
                   placeholder="Scan, type, or generate…"
-                  className="h-9 text-sm font-mono flex-1"
+                  className="h-9 text-sm font-mono flex-1 min-w-0"
                 />
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with camera"
                   onClick={() => setScanOpen(true)}>
@@ -334,11 +336,10 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 </div>
               )}
             </div>
+          </div>
 
-            <Field label="Model">
-              <Input value={form.model} onChange={e => patch("model", e.target.value)}
-                placeholder="Model no." className="h-9 text-sm" />
-            </Field>
+          {/* Identity fields — 2-column grid gives each field ~50% of the form width */}
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Brand">
               {brandOptions.length > 0 ? (
                 <NativeSelect value={form.brand} onChange={v => patch("brand", v)}>
@@ -347,7 +348,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 </NativeSelect>
               ) : (
                 <Input value={form.brand} onChange={e => patch("brand", e.target.value)}
-                  placeholder="Brand" className="h-9 text-sm" />
+                  placeholder="Brand name" className="h-9 text-sm" />
               )}
             </Field>
             <Field label="Category">
@@ -382,6 +383,10 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 <Input value={form.department} onChange={e => patch("department", e.target.value)}
                   placeholder="e.g. Electronics" className="h-9 text-sm" />
               )}
+            </Field>
+            <Field label="Model" hint="Model number / reference">
+              <Input value={form.model} onChange={e => patch("model", e.target.value)}
+                placeholder="e.g. XPS-15-9530" className="h-9 text-sm" />
             </Field>
             <Field label="Unit">
               {unitOptions.length > 0 ? (
@@ -435,7 +440,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           <Divider label="Pricing" />
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Field label={`Purchase (${sym})`} hint="Supplier cost">
               <Input type="number" min="0" step="0.01" value={form.purchasePrice}
                 onChange={e => patch("purchasePrice", e.target.value)}
