@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, generateEan13 } from "@/lib/store";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Product, ProductVariant, Attribute, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
@@ -8,8 +8,28 @@ import BarcodeScanner from "@/components/barcode-scanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer } from "lucide-react";
+import { Save, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, Plus, Trash2 } from "lucide-react";
 import { printBarcodeLabels } from "@/lib/print-barcode";
+
+function buildCombosFixed(attrNames: string[], allAttrs: Attribute[]): Record<string, string>[] {
+  const lists: { name: string; vals: string[] }[] = [];
+  for (const name of attrNames) {
+    const a = allAttrs.find(x => x.name === name);
+    if (!a) continue;
+    const vals = a.values.split(",").map(v => v.trim()).filter(Boolean);
+    if (vals.length) lists.push({ name, vals });
+  }
+  if (!lists.length) return [];
+  let result: Record<string, string>[] = [{}];
+  for (const { name, vals } of lists) {
+    result = result.flatMap(combo => vals.map(v => ({ ...combo, [name]: v })));
+  }
+  return result;
+}
+
+function variantKey(attrs: Record<string, string>): string {
+  return Object.keys(attrs).sort().map(k => `${k}:${attrs[k]}`).join("|");
+}
 
 type FormFields = {
   name: string; localName: string; model: string; sku: string; barcode: string; brand: string;
@@ -85,11 +105,38 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
 
+  const allAttrs = useMemo(() => getAttributes().filter(a => a.type === "select" && a.values.trim()), []);
+  const [selectedAttrNames, setSelectedAttrNames] = useState<string[]>(product?.productAttributes ?? []);
+  const [variants, setVariants] = useState<ProductVariant[]>(product?.variants ?? []);
+
   const { loading: lookupLoading, found, result: lookupResult, lookup, reset: resetLookup } = useBarcodeLookup();
 
   useEffect(() => {
-    if (product) { setForm(toForm(product)); resetLookup(); }
+    if (product) {
+      setForm(toForm(product));
+      resetLookup();
+      setSelectedAttrNames(product.productAttributes ?? []);
+      setVariants(product.variants ?? []);
+    }
   }, [product?.id]);
+
+  const toggleAttr = useCallback((name: string) => {
+    setSelectedAttrNames(prev => {
+      const next = prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name];
+      const newCombos = buildCombosFixed(next, allAttrs);
+      setVariants(existing => {
+        const map = new Map(existing.map(v => [variantKey(v.attributes), v]));
+        return newCombos.map(attrs => {
+          const key = variantKey(attrs);
+          return map.get(key) ?? { id: crypto.randomUUID(), attributes: attrs, price: "" };
+        });
+      });
+      return next;
+    });
+  }, [allAttrs]);
+
+  const patchVariantPrice = (id: string, price: string) =>
+    setVariants(prev => prev.map(v => v.id === id ? { ...v, price } : v));
 
   const patch = (key: keyof FormFields, value: string) => setForm(p => ({ ...p, [key]: value }));
 
@@ -177,28 +224,30 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
     setSaving(true);
     try {
       editProduct(product.id, {
-        name:            form.name,
-        localName:       form.localName || undefined,
-        sku:             form.sku,
-        barcode:         form.barcode || undefined,
-        brand:           form.brand,
-        category:        form.category,
-        subcategory:     form.subcategory || undefined,
-        department:      form.department || undefined,
-        unit:            form.unit,
-        purchasePrice:   form.purchasePrice,
-        costPrice:       form.costPrice,
-        price:           form.price,
-        wholesalePrice:  form.wholesalePrice,
-        clubcardPrice:   form.clubcardPrice || undefined,
-        websitePrice:    form.websitePrice || undefined,
-        websitePriceWas: form.websitePriceWas || undefined,
-        commissionPct:   form.commissionPct || undefined,
-        openingStock:    form.openingStock || undefined,
-        stockAlertValue: form.stockAlertValue || undefined,
-        status:          (form.status as Product["status"]) || "Active",
-        condition:       (form.condition as Product["condition"]) || undefined,
-        description:     form.description,
+        name:              form.name,
+        localName:         form.localName || undefined,
+        sku:               form.sku,
+        barcode:           form.barcode || undefined,
+        brand:             form.brand,
+        category:          form.category,
+        subcategory:       form.subcategory || undefined,
+        department:        form.department || undefined,
+        unit:              form.unit,
+        purchasePrice:     form.purchasePrice,
+        costPrice:         form.costPrice,
+        price:             form.price,
+        wholesalePrice:    form.wholesalePrice,
+        clubcardPrice:     form.clubcardPrice || undefined,
+        websitePrice:      form.websitePrice || undefined,
+        websitePriceWas:   form.websitePriceWas || undefined,
+        commissionPct:     form.commissionPct || undefined,
+        openingStock:      form.openingStock || undefined,
+        stockAlertValue:   form.stockAlertValue || undefined,
+        status:            (form.status as Product["status"]) || "Active",
+        condition:         (form.condition as Product["condition"]) || undefined,
+        description:       form.description,
+        productAttributes: selectedAttrNames.length ? selectedAttrNames : undefined,
+        variants:          variants.length ? variants : undefined,
       });
       toast({ title: "Product updated", description: `"${form.name}" saved successfully.` });
       onClose();
@@ -452,6 +501,77 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 placeholder="0.00" className="h-9 text-sm tabular-nums" />
             </Field>
           </div>
+
+          <Divider label="Variants" />
+
+          {allAttrs.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-2">
+              No "select" type attributes yet — go to <strong>Attributes</strong> and add some with comma-separated values.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select Attributes for this Product</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {allAttrs.map(a => {
+                    const active = selectedAttrNames.includes(a.name);
+                    return (
+                      <button key={a.id} type="button" onClick={() => toggleAttr(a.name)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium border transition-all ${
+                          active
+                            ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20"
+                            : "bg-background border-border text-muted-foreground hover:border-blue-400 hover:text-blue-600"
+                        }`}>
+                        <Layers size={11} />
+                        {a.name}
+                        <span className="opacity-60 text-[10px]">({a.values.split(",").map(v=>v.trim()).filter(Boolean).length})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {variants.length > 0 && (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2">
+                    {selectedAttrNames.map(n => (
+                      <span key={n} className="flex-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">{n}</span>
+                    ))}
+                    <span className="w-[90px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right shrink-0">Price ({sym})</span>
+                  </div>
+                  <div className="divide-y divide-border max-h-64 overflow-y-auto">
+                    {variants.map(v => (
+                      <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors">
+                        {selectedAttrNames.map((n, i) => (
+                          <span key={n}
+                            className={`flex-1 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate ${
+                              i % 2 === 0
+                                ? "text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50"
+                                : "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/50"
+                            }`}>
+                            {v.attributes[n] ?? "—"}
+                          </span>
+                        ))}
+                        <Input
+                          type="number" min="0" step="0.01"
+                          value={v.price}
+                          onChange={e => patchVariantPrice(v.id, e.target.value)}
+                          placeholder={form.price || "0.00"}
+                          className="h-7 w-[90px] shrink-0 text-xs tabular-nums text-right px-2"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedAttrNames.length > 0 && variants.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-1">
+                  The selected attribute(s) have no values defined yet.
+                </p>
+              )}
+            </div>
+          )}
 
           <Divider label="Stock & Notes" />
 

@@ -1,5 +1,14 @@
 export type ProductStatus = "Active" | "Inactive" | "Draft";
 
+export interface ProductVariant {
+  id: string;
+  attributes: Record<string, string>;
+  price: string;
+  sku?: string;
+  barcode?: string;
+  stock?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -22,6 +31,8 @@ export interface Product {
   websitePrice?: string;
   websitePriceWas?: string;
   clubcardPrice?: string;
+  productAttributes?: string[];
+  variants?: ProductVariant[];
   createdAt: string;
   updatedAt: string;
 }
@@ -29,4 +40,5 @@ export interface Product {
 export interface CartItem {
   product: Product;
   quantity: number;
+  selectedVariant?: ProductVariant;
 }

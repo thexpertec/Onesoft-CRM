@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft, ShoppingCart, Heart, Share2, Star,
-  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight, CreditCard, BadgeCheck
+  Check, Truck, ShieldCheck, RotateCcw, Minus, Plus, ChevronRight, CreditCard, BadgeCheck, AlertCircle
 } from "lucide-react";
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
 import { ProductCard, getProductTheme } from "@/components/product-card";
 import { formatPrice, getStockQty, stockLabel, cn } from "@/lib/utils";
 import { useCustomerSession } from "@/hooks/use-customer-session";
+import type { ProductVariant } from "@/types/product";
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,12 +19,41 @@ export function ProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [wishlist, setWishlist] = useState(false);
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
 
   const product = useMemo(() => products.find(p => p.id === id), [products, id]);
   const related = useMemo(() =>
     products.filter(p => p.id !== id && p.category === product?.category).slice(0, 4),
     [products, id, product]
   );
+
+  const hasVariants = Boolean(product?.productAttributes?.length && product?.variants?.length);
+
+  const attrValueMap = useMemo<Record<string, string[]>>(() => {
+    if (!product?.productAttributes || !product?.variants) return {};
+    const map: Record<string, string[]> = {};
+    for (const name of product.productAttributes) {
+      const vals = [...new Set(product.variants.map(v => v.attributes[name]).filter(Boolean))];
+      if (vals.length) map[name] = vals;
+    }
+    return map;
+  }, [product]);
+
+  const allAttrsSelected = useMemo(() => {
+    if (!hasVariants) return true;
+    return Object.keys(attrValueMap).every(name => Boolean(selectedAttrs[name]));
+  }, [hasVariants, attrValueMap, selectedAttrs]);
+
+  const selectedVariant = useMemo<ProductVariant | undefined>(() => {
+    if (!allAttrsSelected || !product?.variants) return undefined;
+    return product.variants.find(v =>
+      Object.entries(selectedAttrs).every(([k, val]) => v.attributes[k] === val)
+    );
+  }, [allAttrsSelected, product?.variants, selectedAttrs]);
+
+  const selectAttrValue = (attrName: string, value: string) => {
+    setSelectedAttrs(prev => ({ ...prev, [attrName]: prev[attrName] === value ? "" : value }));
+  };
 
   if (!product) {
     return (
@@ -52,8 +82,9 @@ export function ProductDetailPage() {
   const hasImage = Boolean(product.thumbnail);
 
   function handleAdd() {
-    if (cartDisabled) return;
-    addItem(product, qty);
+    if (!product || cartDisabled) return;
+    if (hasVariants && !allAttrsSelected) return;
+    addItem(product, qty, selectedVariant);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   }
@@ -164,10 +195,13 @@ export function ProductDetailPage() {
           </div>
 
           {(() => {
-            const displayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
+            const baseDisplayPrice = product.websitePrice && parseFloat(product.websitePrice) > 0
               ? product.websitePrice
               : product.price;
-            const wasPrice = product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
+            const variantOverride = selectedVariant?.price && parseFloat(selectedVariant.price) > 0
+              ? selectedVariant.price : null;
+            const displayPrice = variantOverride ?? baseDisplayPrice;
+            const wasPrice = !variantOverride && product.websitePriceWas && parseFloat(product.websitePriceWas) > 0
               ? product.websitePriceWas
               : null;
             const clubPrice = product.clubcardPrice && parseFloat(product.clubcardPrice) > 0
@@ -264,6 +298,75 @@ export function ProductDetailPage() {
             </div>
           )}
 
+          {/* ── Variant attribute capsule selectors ── */}
+          {hasVariants && Object.keys(attrValueMap).length > 0 && (
+            <div className="mb-6 space-y-4">
+              {Object.entries(attrValueMap).map(([attrName, values]) => (
+                <div key={attrName}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{attrName}</span>
+                    {selectedAttrs[attrName] && (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">{selectedAttrs[attrName]}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {values.map(value => {
+                      const isSelected = selectedAttrs[attrName] === value;
+                      const isAvailable = product.variants?.some(v =>
+                        v.attributes[attrName] === value &&
+                        Object.entries(selectedAttrs)
+                          .filter(([k]) => k !== attrName)
+                          .every(([k, sv]) => !sv || v.attributes[k] === sv)
+                      ) ?? true;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => selectAttrValue(attrName, value)}
+                          disabled={!isAvailable}
+                          className={cn(
+                            "px-4 py-1.5 rounded-full text-sm font-medium border-2 transition-all duration-150",
+                            isSelected
+                              ? "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                              : isAvailable
+                                ? "border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-800"
+                                : "border-gray-100 dark:border-slate-700 text-slate-300 dark:text-slate-600 bg-gray-50 dark:bg-slate-800/50 cursor-not-allowed line-through"
+                          )}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Variant price & selection status */}
+              {allAttrsSelected && selectedVariant ? (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900">
+                  <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                  <div className="flex-1">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      {Object.entries(selectedAttrs).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                    </span>
+                  </div>
+                  {selectedVariant.price && parseFloat(selectedVariant.price) > 0 && (
+                    <span className="text-base font-bold text-blue-700 dark:text-blue-300 tabular-nums">
+                      {formatPrice(selectedVariant.price)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900">
+                  <AlertCircle size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                    Please select {Object.keys(attrValueMap).filter(n => !selectedAttrs[n]).join(" and ")} to continue
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {(product.sku || product.barcode) && (
             <div className="flex items-center gap-4 text-xs text-slate-400 mb-6">
               {product.sku && <span>SKU: <span className="font-mono text-slate-600 dark:text-slate-300">{product.sku}</span></span>}
@@ -306,10 +409,10 @@ export function ProductDetailPage() {
 
             <button
               onClick={handleAdd}
-              disabled={cartDisabled}
+              disabled={cartDisabled || (hasVariants && !allAttrsSelected)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all",
-                cartDisabled
+                cartDisabled || (hasVariants && !allAttrsSelected)
                   ? "bg-gray-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
                   : added
                     ? "bg-green-500 text-white"
@@ -317,7 +420,13 @@ export function ProductDetailPage() {
               )}
             >
               {added ? <Check size={16} /> : <ShoppingCart size={16} />}
-              {added ? "Added to Cart!" : cartDisabled ? "Out of Stock" : "Add to Cart"}
+              {added
+                ? "Added to Cart!"
+                : cartDisabled
+                  ? "Out of Stock"
+                  : hasVariants && !allAttrsSelected
+                    ? "Select Options"
+                    : "Add to Cart"}
             </button>
 
             <button

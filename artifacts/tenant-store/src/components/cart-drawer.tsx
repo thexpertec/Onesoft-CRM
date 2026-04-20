@@ -86,8 +86,15 @@ export function CartDrawer() {
               </Link>
             </div>
           ) : (
-            freshItems.map(item => (
-              <div key={item.product.id} className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800 hover:border-gray-200 dark:hover:border-slate-700 transition-colors">
+            freshItems.map(item => {
+              const variantId = item.selectedVariant?.id;
+              const variantAttrs = item.selectedVariant
+                ? Object.entries(item.selectedVariant.attributes)
+                : [];
+              const variantPrice = item.selectedVariant?.price && parseFloat(item.selectedVariant.price) > 0
+                ? item.selectedVariant.price : null;
+              return (
+              <div key={`${item.product.id}::${variantId ?? ""}`} className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800 hover:border-gray-200 dark:hover:border-slate-700 transition-colors">
                 {/* Image */}
                 <div className="w-16 h-16 rounded-lg bg-gray-50 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
                   {item.product.thumbnail ? (
@@ -104,11 +111,24 @@ export function CartDrawer() {
 
                 {/* Details */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-2 leading-snug mb-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white line-clamp-2 leading-snug mb-0.5">
                     {item.product.name}
                   </p>
+
+                  {/* Variant attribute chips */}
+                  {variantAttrs.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {variantAttrs.map(([k, v]) => (
+                        <span key={k} className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                          <span className="opacity-60">{k}:</span> {v}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {(() => {
-                    const eff  = getEffectivePrice(item.product, isLoggedIn);
+                    const baseEff = getEffectivePrice(item.product, isLoggedIn);
+                    const eff = variantPrice ?? baseEff;
                     const disp = getDisplayPrice(item.product);
                     const saved = parseFloat(disp) - parseFloat(eff);
                     return (
@@ -127,7 +147,7 @@ export function CartDrawer() {
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex items-center border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
                       <button
-                        onClick={() => updateQty(item.product.id, item.quantity - 1)}
+                        onClick={() => updateQty(item.product.id, item.quantity - 1, variantId)}
                         className="px-2 py-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
                       >
                         <Minus size={12} />
@@ -136,14 +156,14 @@ export function CartDrawer() {
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQty(item.product.id, item.quantity + 1)}
+                        onClick={() => updateQty(item.product.id, item.quantity + 1, variantId)}
                         className="px-2 py-1 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
                       >
                         <Plus size={12} />
                       </button>
                     </div>
                     <button
-                      onClick={() => removeItem(item.product.id)}
+                      onClick={() => removeItem(item.product.id, variantId)}
                       className="p-1 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors"
                     >
                       <Trash2 size={13} />
@@ -151,7 +171,8 @@ export function CartDrawer() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 

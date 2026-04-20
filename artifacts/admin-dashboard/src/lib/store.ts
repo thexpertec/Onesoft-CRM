@@ -1180,6 +1180,15 @@ export const getTeamMembers = (): string[] => {
 export type ProductStatus    = "Active" | "Inactive" | "Draft";
 export type ProductCondition = "New" | "Used" | "Fresh" | "Refurbished" | "Damaged";
 
+export type ProductVariant = {
+  id: string;
+  attributes: Record<string, string>; // e.g. { "Color": "Red", "Size": "M" }
+  price: string;
+  sku?: string;
+  barcode?: string;
+  stock?: string;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -1208,6 +1217,8 @@ export type Product = {
   websitePrice?: string;     // Current/sale price shown on the website
   websitePriceWas?: string;  // Original "was" price shown crossed out on the website
   clubcardPrice?: string;    // Exclusive Clubcard member price
+  productAttributes?: string[];  // attribute names assigned to this product
+  variants?: ProductVariant[];   // per-variant price/stock combinations
   createdAt: string;
   updatedAt: string;
 };
