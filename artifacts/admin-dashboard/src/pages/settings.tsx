@@ -789,8 +789,12 @@ export default function SettingsPage() {
                   </Field>
                 </div>
 
-                <SectionHeader title="Hull Office (UK)" />
+                <SectionHeader title="Office / Branch 1" desc="Primary office or branch contact details." />
                 <div className="grid grid-cols-2 gap-4">
+                  <Field label="Office Name" className="col-span-2">
+                    <Input value={form.officeName1} onChange={e => set("officeName1", e.target.value)}
+                      className="h-9 text-[13px]" placeholder="e.g. Head Office, London Branch" />
+                  </Field>
                   <Field label="Phone">
                     <div className="relative">
                       <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -802,39 +806,43 @@ export default function SettingsPage() {
                     <div className="relative">
                       <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <Input value={form.emailHull} onChange={e => set("emailHull", e.target.value)}
-                        className="h-9 text-[13px] pl-8" placeholder="info@onesoft.co.uk" />
+                        className="h-9 text-[13px] pl-8" placeholder="office@yourcompany.com" />
                     </div>
                   </Field>
-                  <Field label="Address" >
+                  <Field label="Address">
                     <div className="relative">
                       <MapPin size={13} className="absolute left-3 top-3 text-gray-400" />
                       <Textarea value={form.addressHull} onChange={e => set("addressHull", e.target.value)}
-                        className="text-[13px] pl-8 resize-none" rows={2} placeholder="Street, City, Postcode, UK" />
+                        className="text-[13px] pl-8 resize-none" rows={2} placeholder="Street, City, Postcode, Country" />
                     </div>
                   </Field>
                 </div>
 
-                <SectionHeader title="Islamabad Office (Pakistan)" />
+                <SectionHeader title="Office / Branch 2" desc="Secondary office or branch contact details (optional)." />
                 <div className="grid grid-cols-2 gap-4">
+                  <Field label="Office Name" className="col-span-2">
+                    <Input value={form.officeName2} onChange={e => set("officeName2", e.target.value)}
+                      className="h-9 text-[13px]" placeholder="e.g. Regional Office, Overseas Branch" />
+                  </Field>
                   <Field label="Phone">
                     <div className="relative">
                       <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <Input value={form.phoneIslamabad} onChange={e => set("phoneIslamabad", e.target.value)}
-                        className="h-9 text-[13px] pl-8" placeholder="+92 51 1234567" />
+                        className="h-9 text-[13px] pl-8" placeholder="+1 234 567 8900" />
                     </div>
                   </Field>
                   <Field label="Email">
                     <div className="relative">
                       <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <Input value={form.emailIslamabad} onChange={e => set("emailIslamabad", e.target.value)}
-                        className="h-9 text-[13px] pl-8" placeholder="pk@onesoft.co.uk" />
+                        className="h-9 text-[13px] pl-8" placeholder="branch@yourcompany.com" />
                     </div>
                   </Field>
                   <Field label="Address">
                     <div className="relative">
                       <MapPin size={13} className="absolute left-3 top-3 text-gray-400" />
                       <Textarea value={form.addressIslamabad} onChange={e => set("addressIslamabad", e.target.value)}
-                        className="text-[13px] pl-8 resize-none" rows={2} placeholder="Street, Sector, Islamabad, Pakistan" />
+                        className="text-[13px] pl-8 resize-none" rows={2} placeholder="Street, City, Postcode, Country" />
                     </div>
                   </Field>
                 </div>
@@ -1743,8 +1751,8 @@ export default function SettingsPage() {
                           {form.printFooterShowContact !== false && (
                             <div className="mt-2 space-y-0.5">
                               {[
-                                ["Address (Hull)",      form.addressHull],
-                                ["Address (Islamabad)", form.addressIslamabad],
+                                [form.officeName1 || "Office 1 — Address", form.addressHull],
+                                [form.officeName2 || "Office 2 — Address", form.addressIslamabad],
                                 ["Phone",              form.phoneHull],
                                 ["Email",              form.emailHull],
                                 ["Website",            form.website],

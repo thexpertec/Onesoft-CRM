@@ -3452,11 +3452,13 @@ export type AppSettings = {
   companyName:          string;
   companyTagline:       string;
   logoBase64:           string;
+  officeName1:          string;
   emailHull:            string;
   emailIslamabad:       string;
   phoneHull:            string;
   phoneIslamabad:       string;
   addressHull:          string;
+  officeName2:          string;
   addressIslamabad:     string;
   website:              string;
   currency:             string;
@@ -3639,12 +3641,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   companyName:          "Onesoft",
   companyTagline:       "Software & IT Solutions",
   logoBase64:           "",
+  officeName1:          "",
   emailHull:            "",
   emailIslamabad:       "",
   phoneHull:            "",
   phoneIslamabad:       "",
-  addressHull:          "Hull, UK",
-  addressIslamabad:     "Islamabad, Pakistan",
+  addressHull:          "",
+  officeName2:          "",
+  addressIslamabad:     "",
   website:              "",
   currency:             "GBP",
   vatRate:              "20",
