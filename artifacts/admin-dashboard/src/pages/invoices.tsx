@@ -6,7 +6,7 @@ import {
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
   BankAccount,
-  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts,
+  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
   createJournalEntry, updateInvoice,
@@ -497,6 +497,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice?.id, defaultType]);
 
+  const { toast } = useToast();
   const products    = useMemo(() => getProducts(), []);
   const customers   = useMemo(() => getCustomers(), []);
   const settings    = useMemo(() => getSettings(), []);
@@ -531,7 +532,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       salesOfficer: c?.company || f.salesOfficer,
       buyerPhone:   c?.phone   || f.buyerPhone,
       buyerEmail:   c?.email   || f.buyerEmail,
-      buyerAddress: c?.address  || f.buyerAddress,
+      buyerAddress: f.buyerAddress,
       buyerTown:    c?.city    || f.buyerTown,
     }));
   }, [customers]);
@@ -1142,14 +1143,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
           {/* ── Status Actions ───────────────────────────────────────────────── */}
           {!isNew && (
-            (invoiceType === "purchase" && s !== "Cancelled") ||
+            (invoiceType === "purchase" && s !== ("Cancelled" as InvoiceStatus)) ||
             (s === "Draft" && invoiceType !== "purchase") ||
             s === "Paid" || s === "Partial"
           ) && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
               <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
               <div className="grid grid-cols-2 gap-2">
-                {invoiceType === "purchase" && !isNew && s !== "Cancelled" && (
+                {invoiceType === "purchase" && !isNew && s !== ("Cancelled" as InvoiceStatus) && (
                   <button onClick={() => {
                     if (stockReceiveInProgress.current || stockJustReceived) return;
                     stockReceiveInProgress.current = true;
@@ -1365,7 +1366,7 @@ export function InvoiceFormPage() {
         inv.shippingFee, inv.handlingFee,
       );
       const allProducts = getProducts();
-      const costTotal = inv.items.reduce((sum, item) => {
+      const costTotal = inv.items.reduce((sum: number, item: SaleItem) => {
         const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
         return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
       }, 0);
@@ -1421,7 +1422,7 @@ export function InvoiceFormPage() {
         inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee,
       );
       const allProds = getProducts();
-      const costTotal = inv.items.reduce((sum, item) => {
+      const costTotal = inv.items.reduce((sum: number, item: SaleItem) => {
         const prod = allProds.find(p => p.sku === item.sku || p.name === item.productName);
         return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
       }, 0);
@@ -1449,10 +1450,13 @@ export function InvoiceFormPage() {
             date:        record.date || new Date().toISOString().slice(0, 10),
             reference:   inv.invoiceNumber,
             description: `Payment receipt — ${inv.customer || "Customer"} (${record.method})${record.note ? ` · ${record.note}` : ""}`,
-            status:      "Posted",
+            status:      "posted",
+            totalDebit:  amt,
+            totalCredit: amt,
+            isBalanced:  true,
             lines: [
-              { id: crypto.randomUUID(), ledgerId: cashAcc,    ledgerName: cashName,            dr: amt,  cr: 0,   description: `Receipt from ${inv.customer || "Customer"}` },
-              { id: crypto.randomUUID(), ledgerId: "sys-1101", ledgerName: "Accounts Receivable", dr: 0,   cr: amt, description: `Settlement of ${inv.invoiceNumber}` },
+              { id: crypto.randomUUID(), ledgerId: cashAcc,    narration: `[${cashName}] Receipt from ${inv.customer || "Customer"}`, debit: amt,  credit: 0   },
+              { id: crypto.randomUUID(), ledgerId: "sys-1101", narration: `Settlement of ${inv.invoiceNumber}`,                       debit: 0,    credit: amt },
             ],
           });
         } catch { /* JE posting is non-critical */ }
