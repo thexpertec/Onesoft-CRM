@@ -34,6 +34,20 @@ function buildTrail(accounts: Account[], acc: Account): string {
   return chain.join(" › ");
 }
 
+/**
+ * Returns true when `acc` or any of its ancestors is a "Cash & Bank" group.
+ * Matches by name (case-insensitive) so it works regardless of COA code scheme.
+ */
+function isUnderCashBank(accounts: Account[], acc: Account): boolean {
+  let cur: Account | undefined = acc;
+  while (cur) {
+    const n = (cur.name || "").toLowerCase();
+    if (n.includes("cash") && n.includes("bank")) return true;
+    cur = cur.parentId ? accounts.find(a => a.id === cur!.parentId) : undefined;
+  }
+  return false;
+}
+
 // ─── Account Dropdown (portal-based to avoid clipping) ───────────────────────
 
 // ─── Invoice Search Dropdown ──────────────────────────────────────────────────
@@ -183,10 +197,11 @@ interface AccDropdownProps {
   placeholder?: string;
   filterCashBank?: boolean;
   filterCurrentAssets?: boolean;
+  filterCashBankOnly?: boolean;
   excludeIds?: string[];
 }
 
-function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false, filterCurrentAssets = false, excludeIds = [] }: AccDropdownProps) {
+function AccDropdown({ accounts, value, onChange, placeholder = "Select account…", filterCashBank = false, filterCurrentAssets = false, filterCashBankOnly = false, excludeIds = [] }: AccDropdownProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ]       = useState("");
   const trigRef         = useRef<HTMLButtonElement>(null);
@@ -195,13 +210,12 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
 
   const ledgers = useMemo(() => {
     let base = accounts.filter(a => a.accountType === "Ledger" && a.isActive !== false);
-    if (filterCashBank) {
-      base = base.filter(a => {
-        const code = a.code || "";
-        return code.startsWith("12") || a.head === "Assets";
-      });
-    }
-    if (filterCurrentAssets) {
+    if (filterCashBankOnly) {
+      // Restrict to ledgers whose parent chain includes a "Cash & Bank" group account.
+      base = base.filter(a => isUnderCashBank(accounts, a));
+    } else if (filterCashBank) {
+      base = base.filter(a => isUnderCashBank(accounts, a));
+    } else if (filterCurrentAssets) {
       base = base.filter(a =>
         a.head === "Assets" && !a.subType?.toLowerCase().includes("fixed")
       );
@@ -216,7 +230,7 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
       (a.code || "").toLowerCase().includes(sq)
     );
     return base;
-  }, [accounts, q, filterCashBank, filterCurrentAssets, excludeIds, value]);
+  }, [accounts, q, filterCashBank, filterCashBankOnly, filterCurrentAssets, excludeIds, value]);
 
   const selected = accounts.find(a => a.id === value);
 
@@ -560,7 +574,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                 {vtype === "receipt" ? "Collection Account Lines" : "Expense / Account Lines"}
-                {vtype === "receipt" && <span className="ml-1 text-[10px] normal-case font-normal opacity-60">— Current Assets only</span>}
+                <span className="ml-1 text-[10px] normal-case font-normal opacity-60">— Cash &amp; Bank only</span>
               </label>
               {!isPosted && (
                 <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
@@ -592,7 +606,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                               value={l.accountId}
                               onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })}
                               placeholder="Account…"
-                              filterCurrentAssets={vtype === "receipt"}
+                              filterCashBankOnly
                               excludeIds={lines.filter(r => r.id !== l.id && r.accountId).map(r => r.accountId)}
                             />}
                       </td>
