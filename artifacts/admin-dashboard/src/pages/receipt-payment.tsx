@@ -56,9 +56,10 @@ interface InvoiceSearchDropdownProps {
   value: string | null;
   onChange: (inv: Invoice) => void;
   disabled?: boolean;
+  invoiceTypeFilter?: "sale" | "purchase";
 }
 
-function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropdownProps) {
+function InvoiceSearchDropdown({ value, onChange, disabled, invoiceTypeFilter = "sale" }: InvoiceSearchDropdownProps) {
   const [open, setOpen]   = useState(false);
   const [q, setQ]         = useState("");
   const trigRef           = useRef<HTMLButtonElement>(null);
@@ -66,11 +67,11 @@ function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropd
   const [pos, setPos]     = useState({ top: 0, left: 0, width: 0 });
 
   const invoices = useMemo(() => {
-    const all = getInvoices().filter(inv =>
-      inv.invoiceType !== "purchase" &&
-      inv.status !== "paid" &&
-      inv.status !== "cancelled"
-    );
+    const all = getInvoices().filter(inv => {
+      const isPurchase = inv.invoiceType === "purchase";
+      if (invoiceTypeFilter === "purchase" ? !isPurchase : isPurchase) return false;
+      return inv.status !== "paid" && inv.status !== "cancelled";
+    });
     const sq = q.toLowerCase().trim();
     if (!sq) return all;
     return all.filter(inv =>
@@ -78,7 +79,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropd
       inv.customer.toLowerCase().includes(sq) ||
       (inv.salesOfficer || "").toLowerCase().includes(sq)
     );
-  }, [q]);
+  }, [q, invoiceTypeFilter]);
 
   const selected = value ? getInvoices().find(i => i.id === value) : null;
 
@@ -114,7 +115,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropd
         className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <span className={selected ? "text-foreground" : "text-muted-foreground"}>
-          {selected ? `${selected.invoiceNumber} — ${selected.customer}` : "Search invoice by number…"}
+          {selected ? `${selected.invoiceNumber} — ${selected.customer}` : invoiceTypeFilter === "purchase" ? "Search purchase invoice by number…" : "Search invoice by number…"}
         </span>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
           {value && !disabled && (
@@ -147,7 +148,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled }: InvoiceSearchDropd
           <div className="max-h-64 overflow-y-auto">
             {invoices.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
-                {q ? "No invoices match" : "No receivable invoices found"}
+                {q ? "No invoices match" : invoiceTypeFilter === "purchase" ? "No purchase invoices found" : "No receivable invoices found"}
               </div>
             ) : invoices.map(inv => {
               const outstanding = (() => {
@@ -394,10 +395,9 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const validate = (): string | null => {
     if (!date) return "Date is required.";
-    if (vtype === "payment" && !cbId) return "Cash / Bank account is required.";
     const validLines = lines.filter(l => l.accountId && parseFloat(l.amount) > 0);
     if (validLines.length === 0) return "At least one line with an account and amount is required.";
-    if (vtype === "receipt" && overBalance)
+    if (overBalance)
       return `Total (${fmtAmt(total, sym)}) exceeds invoice balance (${fmtAmt(invBalance!, sym)}).`;
     return null;
   };
@@ -456,59 +456,66 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             </div>
           )}
 
-          {/* ── Invoice Link (Receipt only) ── */}
-          {vtype === "receipt" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                  Link to Invoice <span className="text-[10px] normal-case font-normal opacity-70">(receivable invoices only)</span>
-                </label>
-                <InvoiceSearchDropdown
-                  value={linkedInvId}
-                  disabled={isPosted}
-                  onChange={inv => {
-                    if (!inv?.id) { setLinkedInvId(null); return; }
-                    setLinkedInvId(inv.id);
-                    if (inv.customer && !party) setParty(inv.customer);
-                  }}
-                />
-              </div>
-              {linkedInv && (
-                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2">
-                  <div className="flex items-center gap-2">
-                    <Hash className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</p>
-                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.invoiceNumber}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Payer Name</p>
-                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.customer || "—"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
-                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.buyerPhone || "—"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Company</p>
-                      <p className="text-[13px] font-semibold text-foreground">{linkedInv.salesOfficer || "—"}</p>
-                    </div>
+          {/* ── Invoice Link (Receipt = sale invoices, Payment = purchase invoices) ── */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                {vtype === "receipt"
+                  ? <>Link to Invoice <span className="text-[10px] normal-case font-normal opacity-70">(receivable invoices only)</span></>
+                  : <>Link to Invoice (Purchase) <span className="text-[10px] normal-case font-normal opacity-70">(purchase / supplier invoices)</span></>}
+              </label>
+              <InvoiceSearchDropdown
+                value={linkedInvId}
+                disabled={isPosted}
+                invoiceTypeFilter={vtype === "payment" ? "purchase" : "sale"}
+                onChange={inv => {
+                  if (!inv?.id) { setLinkedInvId(null); return; }
+                  setLinkedInvId(inv.id);
+                  if (inv.customer && !party) setParty(inv.customer);
+                }}
+              />
+            </div>
+            {linkedInv && (
+              <div className={`rounded-lg border px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 ${
+                vtype === "payment"
+                  ? "border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/20"
+                  : "border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <Hash className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</p>
+                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.invoiceNumber}</p>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Supplier" : "Payer Name"}</p>
+                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.customer || "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
+                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.buyerPhone || "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Due Date" : "Company"}</p>
+                    <p className="text-[13px] font-semibold text-foreground">
+                      {vtype === "payment" ? (linkedInv.dueDate || "—") : (linkedInv.salesOfficer || "—")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-          {/* Core fields */}
+          {/* Core fields — Date + Balance Due / Due Payable */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
@@ -518,10 +525,10 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               />
             </div>
-            {vtype === "receipt" && invBalance !== null && (
+            {invBalance !== null && (
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                  Invoice Balance Due
+                  {vtype === "payment" ? "Due Payable" : "Invoice Balance Due"}
                 </label>
                 <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                   overBalance
@@ -533,47 +540,13 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 </div>
               </div>
             )}
-            {vtype === "payment" && (
-              <div>
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                  Party Name
-                </label>
-                <input
-                  type="text" value={party} onChange={e => setParty(e.target.value)}
-                  placeholder="Supplier / payee…"
-                  disabled={isPosted}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-                />
-              </div>
-            )}
-            {vtype === "payment" && (
-              <div>
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                  Paid From (Cash/Bank) *
-                </label>
-                {isPosted
-                  ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{cbName || "—"}</div>
-                  : <AccDropdown accounts={accounts} value={cbId} filterCashBank onChange={(id, name) => { setCbId(id); setCbName(name); }} placeholder="Select Cash / Bank account…" />}
-              </div>
-            )}
-            {vtype === "payment" && (
-              <div>
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Reference / Cheque #</label>
-                <input
-                  type="text" value={ref} onChange={e => setRef(e.target.value)}
-                  placeholder="CHQ-001, TXN-REF…"
-                  disabled={isPosted}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-                />
-              </div>
-            )}
           </div>
 
           {/* Lines */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                {vtype === "receipt" ? "Collection Account Lines" : "Expense / Account Lines"}
+                {vtype === "receipt" ? "Collection Account Lines" : "Payment Account Lines"}
                 <span className="ml-1 text-[10px] normal-case font-normal opacity-60">— Cash &amp; Bank only</span>
               </label>
               {!isPosted && (

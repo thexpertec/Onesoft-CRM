@@ -4212,7 +4212,7 @@ export function seedDefaultCoaAccounts(): void {
   // If the customer/contact no longer exists, remove the orphaned ledger.
   const allCustomers = getStored<{ ledgerAccountId?: string }>(CUSTOMERS_KEY);
   const contactLedgerIds = new Set(allCustomers.map(c => c.ledgerAccountId).filter(Boolean) as string[]);
-  const CONTACT_PARENT_IDS = new Set([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
+  const CONTACT_PARENT_IDS = new Set<string>([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
   const beforeContactClean = workingAccounts.length;
   workingAccounts = workingAccounts.filter(a => {
     if (a.accountType !== "Ledger") return true;
@@ -4936,7 +4936,8 @@ export function postRPVoucherJE(id: string): JournalEntry {
         debit: 0, credit: l.amount,
       });
     }
-  } else {
+  } else if (v.cashBankAccountId) {
+    // ── Legacy payment style (separate "Paid From" account was selected) ──────
     for (const l of v.lines) {
       lines.push({
         id: crypto.randomUUID(), ledgerId: l.accountId,
@@ -4949,6 +4950,22 @@ export function postRPVoucherJE(id: string): JournalEntry {
       narration: `Payment — ${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`,
       debit: 0, credit: total,
     });
+  } else {
+    // ── New-style payment: lines = Cash/Bank accounts (money going out) ───────
+    // DR Trade Payables (AP) — reduces the liability
+    // CR each Cash/Bank line — reduces cash/bank asset
+    lines.push({
+      id: crypto.randomUUID(), ledgerId: SYS_ACCS.AP_TRADE,
+      narration: `Payment — ${v.partyName || "Supplier"}${v.reference ? " | " + v.reference : ""}`,
+      debit: total, credit: 0,
+    });
+    for (const l of v.lines) {
+      lines.push({
+        id: crypto.randomUUID(), ledgerId: l.accountId,
+        narration: l.description || v.narration || v.voucherNumber,
+        debit: 0, credit: l.amount,
+      });
+    }
   }
 
   const je = createJournalEntry({
@@ -4964,12 +4981,11 @@ export function postRPVoucherJE(id: string): JournalEntry {
 
   updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: total });
 
-  // ── Update linked invoice balance ──────────────────────────────────────────
-  if (v.voucherType === "receipt" && v.linkedInvoiceId) {
+  // ── Update linked invoice balance (Receipt = sale invoice, Payment = purchase invoice) ──
+  if (v.linkedInvoiceId) {
     const inv = getInvoices().find(i => i.id === v.linkedInvoiceId);
     if (inv) {
       const newPaid = (parseFloat(inv.amountPaid) || 0) + total;
-      // Compute invoice grand total to determine if fully paid
       const subtotal = (inv.items || []).reduce((s, it) => {
         const qty   = parseFloat(it.qty) || 0;
         const price = parseFloat(it.unitPrice) || 0;
@@ -4987,7 +5003,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
         id:     crypto.randomUUID(),
         date:   v.date,
         amount: String(total),
-        method: "Receipt Voucher",
+        method: v.voucherType === "receipt" ? "Receipt Voucher" : "Payment Voucher",
         note:   `${v.voucherNumber}${v.narration ? " — " + v.narration : ""}`,
       };
       updateInvoice(inv.id, {
