@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getStock, getStockLedger, getSettings,
@@ -274,9 +274,10 @@ function printLedger(
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function StockLedgerPage() {
   const [, navigate]  = useLocation();
+  const rawSearch     = useSearch();
   const { toast }     = useToast();
 
-  const [search,    setSearch]    = useState("");
+  const [search,    setSearch]    = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [productId, setProductId] = useState<string>("__all__");
   const [fromDate,  setFromDate]  = useState(monthStart());
   const [toDate,    setToDate]    = useState(today());

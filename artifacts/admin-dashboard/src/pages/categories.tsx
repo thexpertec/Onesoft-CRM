@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useProductCategories } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { ProductCategory } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown, CornerDownRight, Save, X } from "lucide-react";
+import { Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown, CornerDownRight, Save, X, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -66,6 +67,7 @@ export default function CategoriesPage() {
   const { categories, addCategory, editCategory, removeCategory } = useProductCategories();
   const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const [search,       setSearch]       = useState("");
   const [expandedIds,  setExpandedIds]  = useState<Set<string>>(new Set());
@@ -432,6 +434,13 @@ export default function CategoriesPage() {
                     {/* Actions */}
                     <td style={{ height: CELL_H, width: COL.actions }}>
                       <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                          title="View products in this category"
+                          onClick={() => navigate(`/products?category=${encodeURIComponent(parent.name)}`)}
+                        >
+                          <Package size={13} />
+                        </button>
                         {can("Add Categories") && (
                           <button
                             className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
@@ -485,6 +494,13 @@ export default function CategoriesPage() {
                           {/* Actions */}
                           <td style={{ height: CELL_H, width: COL.actions }}>
                             <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                                title="View products in this sub-category"
+                                onClick={() => navigate(`/products?category=${encodeURIComponent(sub.name)}`)}
+                              >
+                                <Package size={13} />
+                              </button>
                               {can("Delete Categories") && (
                                 <button
                                   className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"

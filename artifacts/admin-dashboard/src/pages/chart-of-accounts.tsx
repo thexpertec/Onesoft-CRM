@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries, getProducts, getStock } from "@/lib/store";
 import { useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
@@ -402,6 +403,7 @@ function downloadCoATemplate() {
 export default function ChartOfAccountsPage() {
   const { accounts, addAccount, editAccount, removeAccount } = useAccounts();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const [activeHead,    setActiveHead]    = useState<"All" | AccountHead>("All");
   const [search,        setSearch]        = useState("");
@@ -890,6 +892,15 @@ export default function ChartOfAccountsPage() {
 
         {/* Actions (hover) */}
         <div className="w-20 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3 opacity-0 group-hover:opacity-100 transition-opacity">
+          {acc.accountType === "Ledger" && (
+            <button
+              onClick={e => { e.stopPropagation(); navigate(`/ledger-report?account=${encodeURIComponent(acc.id)}`); }}
+              className="p-1.5 rounded-md text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30"
+              title="View ledger report for this account"
+            >
+              <BookOpen size={13} />
+            </button>
+          )}
           <button
             onClick={e => { e.stopPropagation(); openEdit(acc); }}
             className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30"
@@ -1282,6 +1293,9 @@ export default function ChartOfAccountsPage() {
                         </button>
                       </div>
                       <div className="w-20 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3 opacity-0 group-hover:opacity-100">
+                        {acc.accountType === "Ledger" && (
+                          <button onClick={e => { e.stopPropagation(); navigate(`/ledger-report?account=${encodeURIComponent(acc.id)}`); }} className="p-1.5 rounded-md text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30" title="View ledger"><BookOpen size={13} /></button>
+                        )}
                         <button onClick={e => { e.stopPropagation(); openEdit(acc); }} className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50"><Pencil size={13} /></button>
                         {isSystemAccount(acc.id) ? (
                           <span className="p-1.5 w-8 inline-flex items-center justify-center" title="System account — protected">

@@ -702,7 +702,16 @@ export default function ReceiptPaymentPage() {
     const customer      = p.get("customer");
     const amount        = p.get("amount");
     const type          = (p.get("type") === "payment" ? "payment" : "receipt") as "receipt" | "payment";
-    if (!invoiceId || !invoiceNumber) return;
+    // Customer-only deep link — open blank receipt pre-filled with customer name
+    if (!invoiceId || !invoiceNumber) {
+      if (customer) {
+        setNewType(type);
+        setEditVoucher(null);
+        setPrefillData({ voucherType: type, partyName: customer });
+        setFormOpen(true);
+      }
+      return;
+    }
     const prefill: Partial<RPVoucher> = {
       voucherType:        type,
       partyName:          customer ?? "",

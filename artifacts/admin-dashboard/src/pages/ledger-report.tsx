@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from "react";
+import { useSearch } from "wouter";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -148,7 +149,8 @@ export default function LedgerReportPage() {
   const { toast } = useToast();
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
 
-  const [accountId, setAccountId] = useState("");
+  const rawSearch = useSearch();
+  const [accountId, setAccountId] = useState(() => new URLSearchParams(rawSearch).get("account") || "");
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(today());
   const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "draft">("posted");

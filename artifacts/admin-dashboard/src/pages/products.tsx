@@ -12,7 +12,7 @@ import { printBarcodeLabels } from "@/lib/print-barcode";
 import { getSettingsCurrencySymbol as _getCurrSym } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -213,12 +213,13 @@ export default function ProductsPage() {
 
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const rawSearch = useSearch();
 
   const [search,         setSearch]         = useState("");
   const [statusFilter,   setStatusFilter]   = useState<string>("All");
-  const [filterCategory,    setFilterCategory]    = useState("");
+  const [filterCategory,    setFilterCategory]    = useState(() => new URLSearchParams(rawSearch).get("category") || "");
   const [filterSubcategory, setFilterSubcategory] = useState("");
-  const [filterBrand,       setFilterBrand]       = useState("");
+  const [filterBrand,       setFilterBrand]       = useState(() => new URLSearchParams(rawSearch).get("brand") || "");
   const [filterCondition,   setFilterCondition]   = useState("");
   const [scannerOpen,    setScannerOpen]    = useState(false);
   const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
@@ -1822,6 +1823,18 @@ export default function ProductsPage() {
                       <button className="p-1 rounded text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors" title="View product details & ledger"
                         onClick={e => { e.stopPropagation(); setViewProdId(prod.id); }}>
                         <Eye size={13} />
+                      </button>
+                      <button className="p-1 rounded text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors" title="Stock ledger history"
+                        onClick={e => { e.stopPropagation(); navigate(`/stock-ledger?q=${encodeURIComponent(prod.name)}`); }}>
+                        <Boxes size={13} />
+                      </button>
+                      <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Sale invoices for this product"
+                        onClick={e => { e.stopPropagation(); navigate(`/invoices?type=sale&q=${encodeURIComponent(prod.name)}`); }}>
+                        <ReceiptText size={13} />
+                      </button>
+                      <button className="p-1 rounded text-zinc-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors" title="Purchase invoices for this product"
+                        onClick={e => { e.stopPropagation(); navigate(`/invoices?type=purchase&q=${encodeURIComponent(prod.name)}`); }}>
+                        <ShoppingCart size={13} />
                       </button>
                       {can("Edit Products") && (
                         <button className="p-1 rounded text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="Edit product"

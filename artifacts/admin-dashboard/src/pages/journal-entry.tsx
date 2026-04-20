@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useSearch } from "wouter";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown,
@@ -220,7 +221,9 @@ export default function JournalEntryPage() {
   }, []);
 
   // ── Saved entries panel ───────────────────────────────────────────────────
+  const rawSearch = useSearch();
   const [showSaved, setShowSaved] = useState(true);
+  const [listSearch, setListSearch] = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [viewEntry, setViewEntry] = useState<string | null>(null);
   const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
 
@@ -596,10 +599,20 @@ export default function JournalEntryPage() {
         {/* ── Saved Entries ────────────────────────────────────────────────── */}
         {showSaved && (
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/40">
-              <h2 className="text-[12px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/40">
+              <h2 className="text-[12px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider shrink-0">
                 Saved Entries <span className="font-normal text-gray-400 normal-case">({entries.length})</span>
               </h2>
+              <div className="relative flex-1 max-w-xs">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  value={listSearch}
+                  onChange={e => setListSearch(e.target.value)}
+                  placeholder="Search ref, description…"
+                  className="w-full pl-7 pr-7 py-1.5 text-[12px] border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                {listSearch && <button onClick={() => setListSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><span className="text-[10px]">✕</span></button>}
+              </div>
             </div>
 
             {entries.length === 0 ? (
@@ -624,7 +637,7 @@ export default function JournalEntryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...entries].reverse().map((e, ei) => (
+                    {[...entries].reverse().filter(e => !listSearch || [e.reference, e.description].some(v => v?.toLowerCase().includes(listSearch.toLowerCase()))).map((e, ei) => (
                       <React.Fragment key={e.id}>
                         <tr
                           className={`border-b border-gray-100 dark:border-zinc-800 group cursor-pointer transition-colors ${

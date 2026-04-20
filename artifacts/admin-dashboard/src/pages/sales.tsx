@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useSales, useCustomers, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -2264,9 +2264,10 @@ export default function SalesPage() {
   const agentOpts         = useMemo(() => getSalesAgents().filter(a => a.status === "Active").map(a => ({ id: a.id, code: a.agentCode, name: a.name })), []);
   const sym               = useMemo(() => getSettingsCurrencySymbol(), []);
 
+  const rawSearch = useSearch();
   // ── List state ──
   const [statusFilter,   setStatusFilter]   = useState<string>("All");
-  const [search,         setSearch]         = useState("");
+  const [search,         setSearch]         = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
   const [newRow,         setNewRow]         = useState<Record<string, string> | null>(null);
   const [newRowActive,   setNewRowActive]   = useState<number | null>(null);

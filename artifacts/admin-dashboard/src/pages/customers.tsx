@@ -6,7 +6,7 @@ import { Customer, CustomerStatus, Lead, convertLeadToCustomer } from "@/lib/sto
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight, Upload, FileDown } from "lucide-react";
+import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight, Upload, FileDown, FileText, Receipt, DollarSign } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -591,7 +591,10 @@ export default function CustomersPage() {
                     })}
                     <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }} onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="View" onClick={() => setViewCust(cust)}><Eye size={13} /></button>
+                        <button className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="View customer" onClick={() => setViewCust(cust)}><Eye size={13} /></button>
+                        <button className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="New sale invoice" onClick={() => nav(`/invoices/new?q=${encodeURIComponent(cust.name)}`)}><FileText size={13} /></button>
+                        <button className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors" title="View invoices" onClick={() => nav(`/invoices?q=${encodeURIComponent(cust.name)}`)}><Receipt size={13} /></button>
+                        <button className="p-1 rounded text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors" title="Collect payment" onClick={() => nav(`/receipt-payment?customer=${encodeURIComponent(cust.name)}`)}><DollarSign size={13} /></button>
                         <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete" onClick={() => setDeleteId(cust.id)}><Trash2 size={13} /></button>
                       </div>
                     </td>

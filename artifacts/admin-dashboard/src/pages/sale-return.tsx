@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from "react";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getSales, getSaleReturns, createSaleReturn, updateSaleReturn, deleteSaleReturn,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import {
   Undo2, Plus, Search, Trash2, Eye, Printer, CheckCircle2,
-  ShoppingBag, ChevronRight, AlertCircle, Package, X,
+  ShoppingBag, ChevronRight, AlertCircle, Package, X, ExternalLink,
 } from "lucide-react";
 
 const dp = getSettingsDecimalPlaces();
@@ -493,6 +494,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
 
 export default function SaleReturnPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const dp  = getSettingsDecimalPlaces();
   const [returns, setReturns]       = useState<SaleReturn[]>(() => getSaleReturns());
   const [search, setSearch]         = useState("");
@@ -609,10 +611,19 @@ export default function SaleReturnPage() {
                         <button
                           onClick={() => setViewSR(sr)}
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                          title="View / Print"
+                          title="View / Print return"
                         >
                           <Eye size={13} />
                         </button>
+                        {sr.originalSaleId && (
+                          <button
+                            onClick={() => navigate(`/sales?q=${encodeURIComponent(sr.originalSaleNumber)}`)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                            title={`View original sale ${sr.originalSaleNumber}`}
+                          >
+                            <ExternalLink size={13} />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteId(sr.id)}
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"

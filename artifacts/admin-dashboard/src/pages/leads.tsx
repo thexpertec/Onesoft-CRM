@@ -1,6 +1,7 @@
 import React, {
   useState, useMemo, useRef, useEffect, useCallback, useLayoutEffect,
 } from "react";
+import { useLocation } from "wouter";
 import { useLeads, useCustomers, useSalesAgents } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -986,9 +987,11 @@ export default function Leads() {
     setDeleteId(null);
   };
 
+  const [, navigate] = useLocation();
   const handleConvert = (lead: Lead) => {
     convertLeadToCustomer(lead); refreshCustomers();
-    toast({ title: "Lead converted", description: `${lead.name} added as a customer.` });
+    toast({ title: "Lead converted", description: `${lead.name} added as a customer. Navigating to Customers…` });
+    navigate("/customers");
   };
 
   const handleSaveLead = (id: string, updates: Partial<Lead>) => {

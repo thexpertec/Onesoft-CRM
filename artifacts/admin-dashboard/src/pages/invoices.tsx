@@ -1090,10 +1090,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Payments</span>
                 </div>
                 {jeId && (
-                  <a href="#" onClick={e => e.preventDefault()}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[11px] font-bold text-violet-700 dark:text-violet-400">
-                    <BookOpen size={11}/> JE Posted
-                  </a>
+                  <button
+                    onClick={() => navigate(`/journal-entry?q=${encodeURIComponent(invoice?.invoiceNumber || "")}`)}
+                    title="View journal entry"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[11px] font-bold text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+                    <BookOpen size={11}/> JE Posted ↗
+                  </button>
                 )}
               </div>
               <div className="px-5 py-4">
@@ -1520,7 +1522,7 @@ export default function InvoicesPage() {
     new URLSearchParams(rawSearch).get("type") === "purchase" ? "purchase" : "sale";
 
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
-  const [search,       setSearch]       = useState("");
+  const [search,       setSearch]       = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [wrapText,     setWrapText]     = useState<boolean>(() => {
     try { return localStorage.getItem("invoices-wrap-text") === "true"; } catch { return false; }
   });
