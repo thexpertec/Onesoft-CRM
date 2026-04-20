@@ -554,9 +554,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const pickProduct = (id: string, name: string) => {
     const p = products.find(pr => pr.name === name);
     if (!p) return updateItem(id, "productName", name);
+    const autoPrice = invoiceType === "purchase"
+      ? (p.purchasePrice && p.purchasePrice !== "" ? p.purchasePrice : p.price)
+      : p.price;
     setItems(prev => prev.map(i =>
       i.id === id
-        ? { ...i, productName: p.name, sku: p.sku, unit: p.unit, unitPrice: p.price }
+        ? { ...i, productName: p.name, sku: p.sku, unit: p.unit, unitPrice: autoPrice }
         : i
     ));
   };
