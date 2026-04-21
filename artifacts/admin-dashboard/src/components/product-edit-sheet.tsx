@@ -15,7 +15,7 @@ import { MediaPickerDialog } from "@/components/media-picker-dialog";
 
 type FormFields = {
   name: string; localName: string; model: string; sku: string; barcode: string; brand: string;
-  category: string; subcategory: string; department: string; unit: string;
+  category: string; subcategory: string; subSubcategory: string; department: string; unit: string;
   purchasePrice: string; costPrice: string; price: string; wholesalePrice: string;
   clubcardPrice: string; websitePrice: string; websitePriceWas: string;
   commissionPct: string; openingStock: string; stockAlertValue: string;
@@ -31,6 +31,7 @@ const toForm = (p: Product): FormFields => ({
   brand:           p.brand ?? "",
   category:        p.category ?? "",
   subcategory:     p.subcategory ?? "",
+  subSubcategory:  p.subSubcategory ?? "",
   department:      p.department ?? "",
   unit:            p.unit ?? "",
   purchasePrice:   p.purchasePrice ?? "",
@@ -226,6 +227,13 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
     const parent  = allCats.find(c => !c.parentId && c.name === form.category);
     return parent ? allCats.filter(c => c.parentId === parent.id).map(c => c.name) : [];
   }, [form.category]);
+  const subSubCatOptions  = useMemo(() => {
+    const allCats = getProductCategories();
+    const parent  = allCats.find(c => !c.parentId && c.name === form.category);
+    if (!parent) return [];
+    const sub = allCats.find(c => c.parentId === parent.id && c.name === form.subcategory);
+    return sub ? allCats.filter(c => c.parentId === sub.id).map(c => c.name) : [];
+  }, [form.category, form.subcategory]);
 
   const retailProfit = (() => {
     const cost = parseFloat(form.costPrice); const retail = parseFloat(form.price);
@@ -269,6 +277,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
         brand:             form.brand,
         category:          form.category,
         subcategory:       form.subcategory || undefined,
+        subSubcategory:    form.subSubcategory || undefined,
         department:        form.department || undefined,
         unit:              form.unit,
         purchasePrice:     form.purchasePrice,
@@ -402,24 +411,35 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             </Field>
             <Field label="Category">
               {categoryOptions.length > 0 ? (
-                <NativeSelect value={form.category} onChange={v => { patch("category", v); patch("subcategory", ""); }}>
+                <NativeSelect value={form.category} onChange={v => { patch("category", v); patch("subcategory", ""); patch("subSubcategory", ""); }}>
                   <option value="">— select —</option>
                   {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
                 </NativeSelect>
               ) : (
-                <Input value={form.category} onChange={e => { patch("category", e.target.value); patch("subcategory", ""); }}
+                <Input value={form.category} onChange={e => { patch("category", e.target.value); patch("subcategory", ""); patch("subSubcategory", ""); }}
                   placeholder="Category" className="h-9 text-sm" />
               )}
             </Field>
             <Field label="Subcategory">
               {subCatOptions.length > 0 ? (
-                <NativeSelect value={form.subcategory} onChange={v => patch("subcategory", v)}>
+                <NativeSelect value={form.subcategory} onChange={v => { patch("subcategory", v); patch("subSubcategory", ""); }}>
                   <option value="">— select —</option>
                   {subCatOptions.map(o => <option key={o} value={o}>{o}</option>)}
                 </NativeSelect>
               ) : (
-                <Input value={form.subcategory} onChange={e => patch("subcategory", e.target.value)}
+                <Input value={form.subcategory} onChange={e => { patch("subcategory", e.target.value); patch("subSubcategory", ""); }}
                   placeholder="Subcategory" className="h-9 text-sm" />
+              )}
+            </Field>
+            <Field label="Sub-sub-category">
+              {subSubCatOptions.length > 0 ? (
+                <NativeSelect value={form.subSubcategory} onChange={v => patch("subSubcategory", v)}>
+                  <option value="">— select —</option>
+                  {subSubCatOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </NativeSelect>
+              ) : (
+                <Input value={form.subSubcategory} onChange={e => patch("subSubcategory", e.target.value)}
+                  placeholder="Sub-sub-category" className="h-9 text-sm" />
               )}
             </Field>
             <Field label="Department">

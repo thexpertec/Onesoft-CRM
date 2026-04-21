@@ -1272,6 +1272,7 @@ export type Product = {
   brand: string;
   category: string;
   subcategory?: string;      // Subcategory within the product category
+  subSubcategory?: string;   // Sub-sub-category (3rd level under subcategory)
   department?: string;       // Department this product belongs to (optional)
   unit: string;
   purchasePrice?: string;    // Purchase price (from supplier)
