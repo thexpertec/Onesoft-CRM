@@ -259,7 +259,7 @@ export default function ProductNewPage() {
 
           <Divider label="Identity" />
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Field label="SKU">
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
                 placeholder="ODT-001" className="h-9 text-sm font-mono" />

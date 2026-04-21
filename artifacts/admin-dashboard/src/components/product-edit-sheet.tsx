@@ -396,8 +396,8 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             </div>
           </div>
 
-          {/* Identity fields — 2-column grid gives each field ~50% of the form width */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Identity fields — up to 4 fields per row, full-width fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Field label="Brand">
               {brandOptions.length > 0 ? (
                 <NativeSelect value={form.brand} onChange={v => patch("brand", v)}>
