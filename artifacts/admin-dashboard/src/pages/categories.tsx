@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useProductCategories } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
@@ -7,10 +7,16 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown,
-  Save, X, Package, Pencil, GitBranch, FileText,
+  Save, X, Package, Pencil, GitBranch, FileText, FolderTree,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -20,12 +26,23 @@ import { PRESET_COLORS } from "@/components/editable-cell";
 const MAX_DEPTH = 3;          // Categories → Sub → Sub-sub
 const INDENT_W  = 22;
 const ROW_H     = 40;
+const BLANK_RE  = /[\s\u00A0\u200B-\u200F\u2028-\u202F\uFEFF]+/g;
 
-type EditableField = "color" | "name" | "description";
 type FlatRow = ProductCategory & { depth: number; hasChildren: boolean };
 
-const BLANK = (parentId?: string): Record<EditableField, string> & { parentId?: string } =>
-  ({ color: "#3b82f6", name: "", description: "", parentId });
+// Draft rows used inside the dialog
+type DraftRow = {
+  uid: string;          // local-only stable key (existing id OR `new-N`)
+  id?: string;          // present if persisted
+  name: string;
+  description: string;
+  color: string;
+  _deleted?: boolean;
+};
+
+function isBlankName(s: string): boolean {
+  return s.replace(BLANK_RE, "").length === 0;
+}
 
 // ── Build a flat depth-tagged list from the recursive tree ─────────────────────
 function buildFlatRows(
@@ -48,56 +65,21 @@ function buildFlatRows(
   return out;
 }
 
-// ── Inline editable cell ───────────────────────────────────────────────────────
-function InlineCell({
-  value, field, active, placeholder, onActivate, onChange, onKeyDown, canEdit,
-}: {
-  value: string; field: EditableField; active: boolean; placeholder?: string;
-  onActivate: () => void; onChange: (v: string) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void; canEdit: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (active) inputRef.current?.focus(); }, [active]);
+function getDepth(cats: ProductCategory[], id: string): number {
+  let d = 0; let cur = cats.find(c => c.id === id);
+  while (cur?.parentId) { d++; cur = cats.find(c => c.id === cur!.parentId); if (d > 10) break; }
+  return d;
+}
 
-  if (field === "color") {
-    return (
-      <div className="w-full h-full flex items-center" onClick={canEdit ? onActivate : undefined}>
-        {active ? (
-          <div className="flex items-center gap-1 flex-wrap" onKeyDown={onKeyDown} tabIndex={-1}>
-            {PRESET_COLORS.map(pc => (
-              <button key={pc.hex} type="button" title={pc.label}
-                onClick={() => onChange(pc.hex)}
-                className={`w-4 h-4 rounded-full border-2 transition-all flex-shrink-0 ${value === pc.hex ? "border-gray-700 dark:border-gray-300 scale-110" : "border-transparent hover:border-gray-400"}`}
-                style={{ backgroundColor: pc.hex }} />
-            ))}
-          </div>
-        ) : (
-          <span className="flex items-center gap-2 cursor-pointer">
-            <span className="w-3 h-3 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: value || "#3b82f6" }} />
-          </span>
-        )}
-      </div>
-    );
+function getPath(cats: ProductCategory[], id: string | null): string {
+  if (!id) return "Top level";
+  const parts: string[] = [];
+  let cur = cats.find(c => c.id === id);
+  while (cur) {
+    parts.unshift(cur.name || "(unnamed)");
+    cur = cur.parentId ? cats.find(c => c.id === cur!.parentId) : undefined;
   }
-  return (
-    <div className="relative w-full h-full flex items-center" onClick={!active && canEdit ? onActivate : undefined}>
-      {active ? (
-        <input ref={inputRef} type="text" value={value} placeholder={placeholder}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-zinc-900 text-foreground border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm placeholder:text-gray-300" />
-      ) : (() => {
-          const cleaned = value.replace(/[\s\u00A0\u200B-\u200F\u2028-\u202F\uFEFF]+/g, "");
-          const isBlank = cleaned.length === 0;
-          return (
-            <span className={`px-2 block w-full truncate text-[13px] ${!isBlank ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
-              {!isBlank ? value : (field === "name" ? "(unnamed — click to set)" : placeholder)}
-            </span>
-          );
-        })()
-      }
-    </div>
-  );
+  return parts.join(" › ");
 }
 
 export default function CategoriesPage() {
@@ -108,42 +90,25 @@ export default function CategoriesPage() {
 
   const [search,        setSearch]        = useState("");
   const [collapsedIds,  setCollapsedIds]  = useState<Set<string>>(new Set());
-  const [deleteId,      setDeleteId]      = useState<string | null>(null);
-  const [deleteName,    setDeleteName]    = useState("");
-  const [deleteDescCount, setDeleteDescCount] = useState(0);
 
-  // Inline new row
-  type NewRow = Record<EditableField, string> & { parentId?: string };
-  const [newRow,      setNewRow]      = useState<NewRow | null>(null);
-  const [newRowField, setNewRowField] = useState<EditableField>("name");
+  // ── Dialog state ────────────────────────────────────────────────────────────
+  const [dlgOpen,         setDlgOpen]         = useState(false);
+  const [dlgParentId,     setDlgParentId]     = useState<string | null>(null);
+  const [dlgRows,         setDlgRows]         = useState<DraftRow[]>([]);
+  const [colorPickerUid,  setColorPickerUid]  = useState<string | null>(null);
 
-  // Inline edit for existing cells
-  const [editCell, setEditCell] = useState<{ id: string; field: EditableField } | null>(null);
-  const [editVal,  setEditVal]  = useState("");
+  // Delete-from-tree confirmation
+  const [deleteId,         setDeleteId]         = useState<string | null>(null);
+  const [deleteName,       setDeleteName]       = useState("");
+  const [deleteDescCount,  setDeleteDescCount]  = useState(0);
 
-  const tableRef   = useRef<HTMLDivElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      const node = e.target as Node;
-      const inTable   = tableRef.current?.contains(node);
-      const inToolbar = toolbarRef.current?.contains(node);
-      if (!inTable && !inToolbar) {
-        setEditCell(null);
-        setNewRow(null);
-      }
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
   const getAllDescendantIds = useCallback((id: string): string[] => {
     const direct = categories.filter(c => c.parentId === id);
     return direct.flatMap(d => [d.id, ...getAllDescendantIds(d.id)]);
   }, [categories]);
 
-  // ── Filter (search) ──────────────────────────────────────────────────────────
+  // ── Search filter w/ ancestor preservation ─────────────────────────────────
   const q = search.trim().toLowerCase();
   const matchedIds = useMemo(() => {
     if (!q) return null;
@@ -152,7 +117,6 @@ export default function CategoriesPage() {
         .filter(c => c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q))
         .map(c => c.id),
     );
-    // Include all ancestors of matched ones so they remain visible in the tree
     const out = new Set(direct);
     direct.forEach(id => {
       let cur = categories.find(c => c.id === id);
@@ -164,7 +128,6 @@ export default function CategoriesPage() {
     return out;
   }, [q, categories]);
 
-  // Auto-expand ancestors of matches when searching
   useEffect(() => {
     if (!matchedIds) return;
     setCollapsedIds(prev => {
@@ -174,132 +137,192 @@ export default function CategoriesPage() {
     });
   }, [matchedIds]);
 
-  // ── Flat tree rows ───────────────────────────────────────────────────────────
   const flatRows = useMemo(() => {
     const all = buildFlatRows(categories, null, 0, collapsedIds);
-    if (!matchedIds) return all;
-    return all.filter(r => matchedIds.has(r.id));
+    return matchedIds ? all.filter(r => matchedIds.has(r.id)) : all;
   }, [categories, collapsedIds, matchedIds]);
 
-  // ── Edit existing cell ───────────────────────────────────────────────────────
-  const activateEdit = (id: string, field: EditableField) => {
-    if (!can("Edit Categories")) return;
-    const cat = categories.find(c => c.id === id);
-    if (!cat) return;
-    // If a new-row is in flight with content, auto-save it instead of silently dropping
-    if (newRow) {
-      if (newRow.name.trim()) {
-        addCategory({
-          name: newRow.name.trim(),
-          description: newRow.description,
-          color: newRow.color || "#3b82f6",
-          parentId: newRow.parentId || null,
+  // ── Open the dialog at a particular target ─────────────────────────────────
+  // Rules:
+  //   • clicked row at level 1 (depth 0) or 2 (depth 1) → show ITS children
+  //   • clicked row at level 3 (depth 2) → show its SIBLINGS (other sub-subs of same parent)
+  //   • opening at "root" → show top-level categories
+  //   • opening with `addEmpty=true` → also append a fresh blank row at the end
+  const openDialog = useCallback(
+    (targetId: string | null, addEmpty = false) => {
+      let parentId: string | null = targetId;
+      if (targetId) {
+        const cat = categories.find(c => c.id === targetId);
+        if (cat) {
+          const d = getDepth(categories, cat.id);
+          // If the user clicked the deepest level, edit its siblings (under its parent)
+          parentId = d >= MAX_DEPTH - 1 ? (cat.parentId ?? null) : cat.id;
+        }
+      }
+      const children = categories
+        .filter(c => (c.parentId ?? null) === parentId)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const rows: DraftRow[] = children.map(c => ({
+        uid: c.id, id: c.id,
+        name: c.name, description: c.description || "", color: c.color || "#3b82f6",
+      }));
+      if (addEmpty || rows.length === 0) {
+        rows.push({ uid: `new-${Date.now()}`, name: "", description: "", color: "#3b82f6" });
+      }
+      setDlgParentId(parentId);
+      setDlgRows(rows);
+      setColorPickerUid(null);
+      setDlgOpen(true);
+    },
+    [categories],
+  );
+
+  // ── Available parent options for the parent selector ──────────────────────
+  // Children of the selected parent live at depth = parentDepth + 1.
+  // We must NOT allow choosing a parent that would force children to depth >= MAX_DEPTH.
+  // Therefore parents allowed: depth 0 (children at 1) and depth 1 (children at 2). Depth 2 not allowed.
+  const parentOptions = useMemo(() => {
+    type Opt = { id: string | null; label: string; depth: number };
+    const opts: Opt[] = [{ id: null, label: "— Top level (no parent) —", depth: -1 }];
+    function walk(pid: string | null, d: number) {
+      categories
+        .filter(c => (c.parentId ?? null) === pid)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .forEach(c => {
+          if (d < MAX_DEPTH - 1) {
+            opts.push({ id: c.id, label: `${"  ".repeat(d)}${d > 0 ? "↳ " : ""}${c.name || "(unnamed)"}`, depth: d });
+          }
+          walk(c.id, d + 1);
         });
-        toast({ title: "Saved" });
-      }
-      setNewRow(null);
     }
-    setEditCell({ id, field });
-    setEditVal(String((cat as Record<string, unknown>)[field] ?? ""));
+    walk(null, 0);
+    return opts;
+  }, [categories]);
+
+  // ── Switching parent in dialog reloads draft rows for that parent ─────────
+  const handleParentChange = (newParentId: string | null) => {
+    if (newParentId === dlgParentId) return;
+    const dirty = dlgRows.some(r =>
+      (!r.id && r.name.trim()) ||
+      (r.id && (() => {
+        const orig = categories.find(c => c.id === r.id);
+        if (!orig) return false;
+        return r._deleted || orig.name !== r.name || (orig.description || "") !== r.description || (orig.color || "#3b82f6") !== r.color;
+      })()),
+    );
+    if (dirty && !confirm("Discard unsaved changes and switch to this parent?")) return;
+    const children = categories
+      .filter(c => (c.parentId ?? null) === newParentId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const rows: DraftRow[] = children.map(c => ({
+      uid: c.id, id: c.id, name: c.name, description: c.description || "", color: c.color || "#3b82f6",
+    }));
+    if (rows.length === 0) {
+      rows.push({ uid: `new-${Date.now()}`, name: "", description: "", color: "#3b82f6" });
+    }
+    setDlgParentId(newParentId);
+    setDlgRows(rows);
+    setColorPickerUid(null);
   };
 
-  const commitEdit = useCallback(() => {
-    if (!editCell) return;
-    const cat = categories.find(c => c.id === editCell.id);
-    if (!cat) { setEditCell(null); return; }
-    // Block empty name — leaves the cell in edit mode so user can fix it
-    if (editCell.field === "name" && !editVal.trim()) {
-      toast({ title: "Name cannot be empty", variant: "destructive" });
-      return;
-    }
-    const old = String((cat as Record<string, unknown>)[editCell.field] ?? "");
-    if (old !== editVal) {
-      const patch: Partial<ProductCategory> = editCell.field === "name"
-        ? { name: editVal.trim() }
-        : ({ [editCell.field]: editVal } as Partial<ProductCategory>);
-      editCategory(editCell.id, patch);
-      toast({ title: "Saved" });
-    }
-    setEditCell(null);
-  }, [editCell, editVal, categories, editCategory, toast]);
+  // ── Draft row mutators ─────────────────────────────────────────────────────
+  const updateRow = (uid: string, patch: Partial<DraftRow>) =>
+    setDlgRows(rs => rs.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
 
-  const editKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-    if (e.key === "Escape") { setEditCell(null); }
-    if (e.key === "Tab") { e.preventDefault(); commitEdit(); }
-  };
+  const addRow = () =>
+    setDlgRows(rs => [...rs, { uid: `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: "", description: "", color: "#3b82f6" }]);
 
-  // ── New row ──────────────────────────────────────────────────────────────────
-  const startNewRoot = () => {
-    setNewRow(BLANK());
-    setNewRowField("name");
-    setEditCell(null);
-  };
-
-  const startNewChild = (parentId: string) => {
-    setNewRow(BLANK(parentId));
-    setNewRowField("name");
-    setEditCell(null);
-    // Expand ancestor chain so the new inline row is visible
-    setCollapsedIds(prev => {
-      const next = new Set(prev);
-      next.delete(parentId);
-      let cur = categories.find(c => c.id === parentId);
-      while (cur?.parentId) {
-        next.delete(cur.parentId);
-        cur = categories.find(c => c.id === cur!.parentId);
-      }
-      return next;
+  const removeRow = (uid: string) =>
+    setDlgRows(rs => {
+      const r = rs.find(x => x.uid === uid);
+      if (!r) return rs;
+      // New rows: just drop. Existing rows: mark deleted (will cascade descendants on save).
+      if (!r.id) return rs.filter(x => x.uid !== uid);
+      return rs.map(x => (x.uid === uid ? { ...x, _deleted: !x._deleted } : x));
     });
-  };
 
-  const commitNewRow = () => {
-    if (!newRow?.name.trim()) {
-      toast({ title: "Name is required", variant: "destructive" });
-      setNewRowField("name");
-      return;
+  const childCountOfPersisted = (id: string) => categories.filter(c => c.parentId === id).length;
+
+  // ── Save: diff & commit all changes ────────────────────────────────────────
+  const saveDialog = () => {
+    let added = 0, edited = 0, deleted = 0, skippedBlank = 0;
+
+    for (const r of dlgRows) {
+      if (r.id) {
+        // Existing row
+        if (r._deleted) {
+          getAllDescendantIds(r.id).forEach(d => removeCategory(d));
+          removeCategory(r.id);
+          deleted++;
+          continue;
+        }
+        const orig = categories.find(c => c.id === r.id);
+        if (!orig) continue;
+        const trimmed = r.name.trim();
+        if (isBlankName(trimmed)) {
+          skippedBlank++;
+          continue; // Don't allow saving an empty name onto an existing row
+        }
+        const changes: Partial<ProductCategory> = {};
+        if (orig.name !== trimmed) changes.name = trimmed;
+        if ((orig.description || "") !== r.description) changes.description = r.description;
+        if ((orig.color || "#3b82f6") !== r.color) changes.color = r.color;
+        if ((orig.parentId ?? null) !== dlgParentId) changes.parentId = dlgParentId;
+        if (Object.keys(changes).length > 0) {
+          editCategory(r.id, changes);
+          edited++;
+        }
+      } else {
+        // New row — only add if it has a name
+        const trimmed = r.name.trim();
+        if (isBlankName(trimmed)) {
+          skippedBlank++;
+          continue;
+        }
+        addCategory({
+          name: trimmed,
+          description: r.description,
+          color: r.color || "#3b82f6",
+          parentId: dlgParentId,
+        });
+        added++;
+      }
     }
-    addCategory({
-      name: newRow.name,
-      description: newRow.description,
-      color: newRow.color || "#3b82f6",
-      parentId: newRow.parentId || null,
+
+    const parts: string[] = [];
+    if (added)        parts.push(`${added} added`);
+    if (edited)       parts.push(`${edited} updated`);
+    if (deleted)      parts.push(`${deleted} deleted`);
+    if (skippedBlank) parts.push(`${skippedBlank} blank skipped`);
+    toast({
+      title: parts.length ? "Changes saved" : "No changes",
+      description: parts.join(" · ") || "Nothing to save.",
+      variant: skippedBlank && !added && !edited && !deleted ? "destructive" : "default",
     });
-    let level = 1;
-    if (newRow.parentId) {
-      const p = categories.find(c => c.id === newRow.parentId);
-      level = p?.parentId ? 3 : 2;
-    }
-    const label = level === 1 ? "Category" : level === 2 ? "Sub-category" : "Sub-sub-category";
-    toast({ title: `${label} added`, description: `"${newRow.name}" created.` });
-    setNewRow(null);
-  };
-
-  const newRowKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") { e.preventDefault(); commitNewRow(); }
-    if (e.key === "Escape") { setNewRow(null); }
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const fields: EditableField[] = ["name", "description"];
-      const idx = fields.indexOf(newRowField);
-      if (idx < fields.length - 1) setNewRowField(fields[idx + 1]);
-      else commitNewRow();
+    if (added || edited || deleted) {
+      // Make sure the parent we just edited under is expanded so user sees the result
+      if (dlgParentId) {
+        setCollapsedIds(prev => {
+          const next = new Set(prev);
+          let cur = categories.find(c => c.id === dlgParentId);
+          while (cur) { next.delete(cur.id); cur = cur.parentId ? categories.find(c => c.id === cur!.parentId) : undefined; }
+          return next;
+        });
+      }
+      setDlgOpen(false);
     }
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────────
+  // ── Delete confirmation (from tree row trash icon) ─────────────────────────
   const requestDelete = (id: string) => {
     const cat = categories.find(c => c.id === id);
     setDeleteId(id);
-    setDeleteName(cat?.name || "");
+    setDeleteName(cat?.name || "(unnamed)");
     setDeleteDescCount(getAllDescendantIds(id).length);
   };
-
   const handleDelete = () => {
     if (!deleteId) return;
-    if (deleteDescCount > 0) {
-      getAllDescendantIds(deleteId).forEach(d => removeCategory(d));
-    }
+    if (deleteDescCount > 0) getAllDescendantIds(deleteId).forEach(d => removeCategory(d));
     removeCategory(deleteId);
     toast({ title: "Deleted", description: `"${deleteName}" removed.` });
     setDeleteId(null);
@@ -312,7 +335,7 @@ export default function CategoriesPage() {
       return next;
     });
 
-  // ── Counts ────────────────────────────────────────────────────────────────────
+  // ── Counts ────────────────────────────────────────────────────────────────
   const topLevelCount = categories.filter(c => !c.parentId).length;
   const subCount      = categories.filter(c => {
     const p = c.parentId ? categories.find(x => x.id === c.parentId) : null;
@@ -323,7 +346,7 @@ export default function CategoriesPage() {
     return p && p.parentId;
   }).length;
 
-  // ── Tree indent renderer (└ │ guides) ─────────────────────────────────────────
+  // ── Tree indent renderer (└ │ guides) ─────────────────────────────────────
   const renderIndent = (depth: number) => (
     <div className="flex items-center flex-shrink-0" style={{ width: depth * INDENT_W }}>
       {Array.from({ length: depth }).map((_, di) => (
@@ -338,20 +361,18 @@ export default function CategoriesPage() {
     </div>
   );
 
-  // ── Render a single tree row ─────────────────────────────────────────────────
+  // ── Render a tree row (read-only; click name to open dialog) ──────────────
   const renderRow = (row: FlatRow, ri: number) => {
-    const isRowActive = editCell?.id === row.id;
     const isCollapsed = collapsedIds.has(row.id);
-    const levelLabel  = row.depth === 0 ? "Category" : row.depth === 1 ? "Sub-category" : "Sub-sub-category";
     const canAddChild = row.depth < MAX_DEPTH - 1;
     const parent = row.parentId ? categories.find(c => c.id === row.parentId) : null;
+    const blank = isBlankName(row.name);
 
     return (
       <div
         key={row.id}
         data-testid={`row-category-${row.id}`}
         className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[${ROW_H}px] ${
-          isRowActive ? "bg-blue-50/40 dark:bg-blue-950/20" :
           ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/40 dark:bg-zinc-800/10"
         } hover:bg-blue-50/30 dark:hover:bg-blue-950/15`}
         style={{ minHeight: ROW_H }}
@@ -379,36 +400,23 @@ export default function CategoriesPage() {
         {/* Row # */}
         <div className="w-8 flex-shrink-0 text-[11px] text-gray-400 font-mono">{ri + 1}</div>
 
-        {/* Colour cell (inline-editable) */}
-        <div className={`w-12 flex-shrink-0 ${isRowActive && editCell?.field === "color" ? "ring-2 ring-inset ring-blue-500 rounded-sm" : ""}`} style={{ height: ROW_H }}>
-          <InlineCell
-            value={editCell?.id === row.id && editCell?.field === "color" ? editVal : row.color}
-            field="color"
-            active={editCell?.id === row.id && editCell?.field === "color"}
-            canEdit={can("Edit Categories")}
-            onActivate={() => activateEdit(row.id, "color")}
-            onChange={v => {
-              editCategory(row.id, { color: v });
-              setEditCell(null);
-            }}
-            onKeyDown={editKeyDown}
-          />
+        {/* Colour dot */}
+        <div className="w-12 flex-shrink-0 flex items-center pl-2">
+          <span className="w-3 h-3 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: row.color || "#3b82f6" }} />
         </div>
 
-        {/* Name cell + group/leaf badge */}
-        <div className="flex-1 min-w-0 flex items-center gap-2 pr-3" style={{ height: ROW_H }}>
-          <div className={`flex-1 min-w-0 ${editCell?.id === row.id && editCell?.field === "name" ? "" : ""}`}>
-            <InlineCell
-              value={editCell?.id === row.id && editCell?.field === "name" ? editVal : row.name}
-              field="name"
-              active={editCell?.id === row.id && editCell?.field === "name"}
-              placeholder={`${levelLabel} name`}
-              canEdit={can("Edit Categories")}
-              onActivate={() => activateEdit(row.id, "name")}
-              onChange={v => setEditVal(v)}
-              onKeyDown={editKeyDown}
-            />
-          </div>
+        {/* Name (clickable → opens dialog) */}
+        <button
+          type="button"
+          onClick={() => openDialog(row.id)}
+          className="flex-1 min-w-0 flex items-center gap-2 pr-3 text-left"
+          style={{ height: ROW_H }}
+          title="Click to manage this category"
+          data-testid={`btn-open-${row.id}`}
+        >
+          <span className={`px-2 truncate text-[13px] ${blank ? "text-red-500/80 italic font-medium" : "text-foreground hover:text-blue-600 dark:hover:text-blue-400"}`}>
+            {blank ? "(unnamed — click to edit)" : row.name}
+          </span>
           {row.hasChildren ? (
             <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900">
               <GitBranch size={8} /> Group
@@ -418,28 +426,19 @@ export default function CategoriesPage() {
               <FileText size={8} /> Leaf
             </span>
           )}
+        </button>
+
+        {/* Description (read-only) */}
+        <div className="w-72 flex-shrink-0 pr-2 text-[13px] text-muted-foreground truncate" style={{ height: ROW_H, lineHeight: `${ROW_H}px` }}>
+          {row.description ? <span className="px-2">{row.description}</span> : <span className="px-2 text-muted-foreground/40">—</span>}
         </div>
 
-        {/* Description cell */}
-        <div className="w-72 flex-shrink-0 pr-2" style={{ height: ROW_H }}>
-          <InlineCell
-            value={editCell?.id === row.id && editCell?.field === "description" ? editVal : (row.description || "")}
-            field="description"
-            active={editCell?.id === row.id && editCell?.field === "description"}
-            placeholder="Description (optional)"
-            canEdit={can("Edit Categories")}
-            onActivate={() => activateEdit(row.id, "description")}
-            onChange={v => setEditVal(v)}
-            onKeyDown={editKeyDown}
-          />
-        </div>
-
-        {/* Parent column */}
+        {/* Parent */}
         <div className="w-52 flex-shrink-0 pr-2">
           {parent ? (
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-2 h-2 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: parent.color || "#3b82f6" }} />
-              <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{parent.name}</span>
+              <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{parent.name || "(unnamed)"}</span>
             </div>
           ) : (
             <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
@@ -463,8 +462,8 @@ export default function CategoriesPage() {
           {canAddChild && can("Add Categories") && (
             <button
               className="p-1.5 rounded-md text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-              title={row.depth === 0 ? "Add sub-category" : "Add sub-sub-category"}
-              onClick={() => startNewChild(row.id)}
+              title={row.depth === 0 ? "Add sub-categories" : "Add sub-sub-categories"}
+              onClick={() => openDialog(row.id, /* addEmpty */ true)}
               data-testid={`btn-add-child-${row.id}`}
             >
               <Plus size={13} />
@@ -473,8 +472,8 @@ export default function CategoriesPage() {
           {can("Edit Categories") && (
             <button
               className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-              title="Edit name"
-              onClick={() => activateEdit(row.id, "name")}
+              title="Edit"
+              onClick={() => openDialog(row.id)}
             >
               <Pencil size={13} />
             </button>
@@ -494,132 +493,19 @@ export default function CategoriesPage() {
     );
   };
 
-  // ── Render the inline new-row (placed at correct depth in flat list) ─────────
-  const renderNewRow = () => {
-    if (!newRow) return null;
-    const depth   = newRow.parentId
-      ? (() => {
-          const p = categories.find(c => c.id === newRow.parentId);
-          return p?.parentId ? 2 : 1;
-        })()
-      : 0;
-    const levelLabel = depth === 0 ? "Category" : depth === 1 ? "Sub-category" : "Sub-sub-category";
-
-    return (
-      <div className="flex items-center border-b border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/20 group" style={{ minHeight: ROW_H }}>
-        {/* Indent + new-row marker */}
-        <div className="flex items-center flex-shrink-0 pl-3" style={{ width: 44 + depth * INDENT_W }}>
-          {depth > 0 && renderIndent(depth)}
-          <div className="w-5 flex-shrink-0 flex justify-center text-amber-500 font-bold text-[12px]">★</div>
-        </div>
-
-        {/* Row # placeholder */}
-        <div className="w-8 flex-shrink-0 text-[11px] text-amber-500 font-mono">new</div>
-
-        {/* Colour picker */}
-        <div className="w-12 flex-shrink-0 px-1" style={{ height: ROW_H }}>
-          <InlineCell
-            value={newRow.color}
-            field="color"
-            active={newRowField === "color"}
-            canEdit={true}
-            onActivate={() => setNewRowField("color")}
-            onChange={v => setNewRow(r => r ? { ...r, color: v } : r)}
-            onKeyDown={newRowKeyDown}
-          />
-        </div>
-
-        {/* Name */}
-        <div className="flex-1 min-w-0 pr-3" style={{ height: ROW_H }}>
-          <InlineCell
-            value={newRow.name}
-            field="name"
-            active={newRowField === "name"}
-            placeholder={`${levelLabel} name`}
-            canEdit={true}
-            onActivate={() => setNewRowField("name")}
-            onChange={v => setNewRow(r => r ? { ...r, name: v } : r)}
-            onKeyDown={newRowKeyDown}
-          />
-        </div>
-
-        {/* Description */}
-        <div className="w-72 flex-shrink-0 pr-2" style={{ height: ROW_H }}>
-          <InlineCell
-            value={newRow.description}
-            field="description"
-            active={newRowField === "description"}
-            placeholder="Description (optional)"
-            canEdit={true}
-            onActivate={() => setNewRowField("description")}
-            onChange={v => setNewRow(r => r ? { ...r, description: v } : r)}
-            onKeyDown={newRowKeyDown}
-          />
-        </div>
-
-        {/* Parent column */}
-        <div className="w-52 flex-shrink-0 pr-2">
-          {newRow.parentId ? (() => {
-            const p = categories.find(c => c.id === newRow.parentId);
-            return p ? (
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="w-2 h-2 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: p.color || "#3b82f6" }} />
-                <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{p.name}</span>
-              </div>
-            ) : null;
-          })() : (
-            <span className="text-[11px] text-gray-300 dark:text-zinc-600">— root —</span>
-          )}
-        </div>
-
-        {/* Created placeholder */}
-        <div className="w-24 flex-shrink-0 pr-2 text-[11px] text-muted-foreground">—</div>
-
-        {/* Save / cancel */}
-        <div className="w-32 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3">
-          <button onClick={commitNewRow} className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={14} /></button>
-          <button onClick={() => setNewRow(null)} className="p-1.5 rounded-md text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={14} /></button>
-        </div>
-      </div>
-    );
-  };
-
-  // ── Build the rendered list, splicing the new-row in at the right position ──
-  const renderedList = useMemo(() => {
-    const items: { kind: "row"; row: FlatRow } [] | { kind: "row"; row: FlatRow } | { kind: "new" } | unknown[] = [];
-    const out: ({ kind: "row"; row: FlatRow } | { kind: "new" })[] = [];
-    flatRows.forEach(r => {
-      out.push({ kind: "row", row: r });
-      // If the new-row is a child of THIS row, insert it directly after, after this row's existing children block in the flat list.
-      // Implementation: if newRow.parentId === r.id and r is the LAST row of its subtree section, insert here.
-    });
-    // Insert new-row at the correct logical spot:
-    if (newRow) {
-      if (!newRow.parentId) {
-        out.push({ kind: "new" });
-      } else {
-        // Find the index AFTER the last descendant of parentId in flatRows
-        const parentIdx = flatRows.findIndex(r => r.id === newRow.parentId);
-        if (parentIdx === -1) {
-          out.push({ kind: "new" });
-        } else {
-          // The descendant block continues while subsequent rows have depth > parent.depth
-          const parentDepth = flatRows[parentIdx].depth;
-          let insertAfter = parentIdx;
-          for (let i = parentIdx + 1; i < flatRows.length; i++) {
-            if (flatRows[i].depth > parentDepth) insertAfter = i;
-            else break;
-          }
-          // Insert in the `out` array at the matching position (out has same indexing as flatRows since we didn't insert anything else)
-          out.splice(insertAfter + 1, 0, { kind: "new" });
-        }
-      }
-    }
-    void items;
-    return out;
-  }, [flatRows, newRow]);
-
   void isAuthenticated;
+
+  // ── Dialog title context ──────────────────────────────────────────────────
+  const dlgPath = getPath(categories, dlgParentId);
+  const dlgChildLabel = dlgParentId === null
+    ? "top-level categories"
+    : (() => {
+        const d = getDepth(categories, dlgParentId);
+        return d === 0 ? "sub-categories" : "sub-sub-categories";
+      })();
+
+  // Orphan cleanup
+  const orphans = categories.filter(c => isBlankName(c.name));
 
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
@@ -628,12 +514,12 @@ export default function CategoriesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Product Categories</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Click any cell to edit · Three-level tree: Categories → Sub-categories → Sub-sub-categories
+            Click any category name to open its sub-categories · Three-level tree (Categories → Sub → Sub-sub)
           </p>
         </div>
         {can("Add Categories") && (
-          <Button size="sm" onClick={startNewRoot} className="gap-1.5" data-testid="btn-add-category">
-            <Plus size={14} /> Add Category
+          <Button size="sm" onClick={() => openDialog(null, true)} className="gap-1.5" data-testid="btn-add-category">
+            <Plus size={14} /> Add Categories
           </Button>
         )}
       </div>
@@ -656,84 +542,229 @@ export default function CategoriesPage() {
       </div>
 
       {/* Toolbar */}
-      <div ref={toolbarRef} className="flex gap-2 flex-wrap items-center">
+      <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search categories..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {can("Add Categories") && newRow && (
-          <div className="flex items-center gap-1.5 ml-auto">
-            <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
-            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => setNewRow(null)}><X size={12} /> Cancel</Button>
-            <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save</Button>
-          </div>
+        {orphans.length > 0 && can("Delete Categories") && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1 text-[12px] text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+            onClick={() => {
+              orphans.forEach(o => {
+                getAllDescendantIds(o.id).forEach(d => removeCategory(d));
+                removeCategory(o.id);
+              });
+              toast({ title: "Cleaned up", description: `Removed ${orphans.length} unnamed ${orphans.length === 1 ? "row" : "rows"}.` });
+            }}
+            data-testid="btn-cleanup-unnamed"
+          >
+            <Trash2 size={12} /> Cleanup {orphans.length} unnamed
+          </Button>
         )}
-        {(() => {
-          const blankRe = /[\s\u00A0\u200B-\u200F\u2028-\u202F\uFEFF]+/g;
-          const orphans = categories.filter(c => c.name.replace(blankRe, "").length === 0);
-          if (orphans.length === 0 || !can("Delete Categories")) return null;
-          return (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1 text-[12px] text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
-              onClick={() => {
-                orphans.forEach(o => {
-                  getAllDescendantIds(o.id).forEach(d => removeCategory(d));
-                  removeCategory(o.id);
-                });
-                toast({ title: "Cleaned up", description: `Removed ${orphans.length} unnamed ${orphans.length === 1 ? "row" : "rows"}.` });
-              }}
-              data-testid="btn-cleanup-unnamed"
-            >
-              <Trash2 size={12} /> Cleanup {orphans.length} unnamed
-            </Button>
-          );
-        })()}
         <div className="text-[12px] text-muted-foreground self-center ml-auto">
           {flatRows.length} of {categories.length}
         </div>
       </div>
 
       {/* Tree */}
-      <div ref={tableRef} className="rounded-md border border-border overflow-hidden bg-card">
+      <div className="rounded-md border border-border overflow-hidden bg-card">
         {/* Header row */}
         <div className="flex items-center bg-gray-50 dark:bg-muted/40 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" style={{ minHeight: 32 }}>
           <div className="flex-shrink-0 pl-3" style={{ width: 44 }}>Tree</div>
           <div className="w-8 flex-shrink-0">#</div>
-          <div className="w-12 flex-shrink-0">Col</div>
-          <div className="flex-1 min-w-0 pr-3">Category Name</div>
-          <div className="w-72 flex-shrink-0 pr-2">Description</div>
+          <div className="w-12 flex-shrink-0 pl-2">Col</div>
+          <div className="flex-1 min-w-0 pr-3 pl-2">Category Name</div>
+          <div className="w-72 flex-shrink-0 pr-2 pl-2">Description</div>
           <div className="w-52 flex-shrink-0 pr-2">Parent</div>
           <div className="w-24 flex-shrink-0 pr-2">Created</div>
           <div className="w-32 flex-shrink-0 text-right pr-3">Actions</div>
         </div>
 
         {/* Empty state */}
-        {flatRows.length === 0 && !newRow && (
+        {flatRows.length === 0 && (
           <div className="text-center py-16 text-muted-foreground text-sm">
-            {search ? "No categories match your search." : "No categories yet. Click Add Category to get started."}
+            {search ? "No categories match your search." : "No categories yet. Click Add Categories to get started."}
           </div>
         )}
 
         {/* Rows */}
-        {renderedList.map((item, idx) =>
-          item.kind === "row" ? renderRow(item.row, idx) : <div key={`new-${idx}`}>{renderNewRow()}</div>,
-        )}
+        {flatRows.map((row, idx) => renderRow(row, idx))}
 
         {/* Bottom add button */}
-        {can("Add Categories") && !newRow && categories.length > 0 && (
+        {can("Add Categories") && categories.length > 0 && (
           <button
-            onClick={startNewRoot}
+            onClick={() => openDialog(null, true)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors border-t border-border"
             data-testid="btn-add-row"
           >
-            <Plus size={13} /> Add category
+            <Plus size={13} /> Add categories
           </button>
         )}
       </div>
 
-      {/* Delete confirm */}
+      {/* ─── Bulk-edit dialog ───────────────────────────────────────────────── */}
+      <Dialog open={dlgOpen} onOpenChange={setDlgOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderTree size={18} className="text-primary" />
+              Manage {dlgChildLabel}
+            </DialogTitle>
+            <DialogDescription>
+              You're editing the {dlgChildLabel} of <span className="font-semibold text-foreground">{dlgPath}</span>. Add as many rows as you need, then save.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Parent selector */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Parent category</label>
+            <Select value={dlgParentId ?? "__root__"} onValueChange={v => handleParentChange(v === "__root__" ? null : v)}>
+              <SelectTrigger className="h-9 text-[13px]" data-testid="dlg-parent-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {parentOptions.map(o => (
+                  <SelectItem key={o.id ?? "__root__"} value={o.id ?? "__root__"}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Pick a parent (or "Top level") — all rows below will be saved as direct children of it.
+            </p>
+          </div>
+
+          {/* Rows */}
+          <div className="border border-border rounded-md overflow-hidden max-h-[55vh] overflow-y-auto">
+            <div className="flex items-center bg-gray-50 dark:bg-muted/40 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+              <div className="w-8 flex-shrink-0 text-center">#</div>
+              <div className="w-10 flex-shrink-0 text-center">Col</div>
+              <div className="flex-1 min-w-0 px-2">Name *</div>
+              <div className="flex-1 min-w-0 px-2">Description</div>
+              <div className="w-9 flex-shrink-0" />
+            </div>
+
+            {dlgRows.length === 0 && (
+              <div className="text-center py-6 text-[12px] text-muted-foreground">No rows. Click "+ Add row" to begin.</div>
+            )}
+
+            {dlgRows.map((r, ri) => {
+              const isExisting = !!r.id;
+              const childCount = isExisting ? childCountOfPersisted(r.id!) : 0;
+              const isPickerOpen = colorPickerUid === r.uid;
+              return (
+                <div
+                  key={r.uid}
+                  className={`flex items-start gap-1 px-2 py-1.5 border-b border-border last:border-0 ${
+                    r._deleted ? "bg-red-50/60 dark:bg-red-950/20 opacity-60" :
+                    !isExisting ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
+                  }`}
+                >
+                  <div className="w-8 flex-shrink-0 text-center text-[11px] text-muted-foreground font-mono pt-2">
+                    {isExisting ? ri + 1 : "new"}
+                  </div>
+
+                  {/* Colour swatch (popover) */}
+                  <div className="w-10 flex-shrink-0 pt-1.5 relative">
+                    <button
+                      type="button"
+                      onClick={() => setColorPickerUid(isPickerOpen ? null : r.uid)}
+                      className="w-6 h-6 rounded-full ring-2 ring-black/10 hover:ring-blue-400 transition-all mx-auto block"
+                      style={{ backgroundColor: r.color }}
+                      title="Change colour"
+                    />
+                    {isPickerOpen && (
+                      <div className="absolute z-50 left-0 top-9 bg-popover border border-border rounded-md shadow-lg p-2 flex gap-1 flex-wrap w-44">
+                        {PRESET_COLORS.map(pc => (
+                          <button
+                            key={pc.hex}
+                            type="button"
+                            title={pc.label}
+                            onClick={() => { updateRow(r.uid, { color: pc.hex }); setColorPickerUid(null); }}
+                            className={`w-5 h-5 rounded-full border-2 transition-all ${r.color === pc.hex ? "border-gray-700 dark:border-gray-300 scale-110" : "border-transparent hover:border-gray-400"}`}
+                            style={{ backgroundColor: pc.hex }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <div className="flex-1 min-w-0 px-1">
+                    <Input
+                      value={r.name}
+                      onChange={e => updateRow(r.uid, { name: e.target.value })}
+                      placeholder={isExisting ? "Name (required)" : "New category name"}
+                      className={`h-8 text-[13px] ${r._deleted ? "line-through" : ""}`}
+                      disabled={r._deleted}
+                      data-testid={`dlg-row-name-${ri}`}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          // Tab to next row's name OR add new row
+                          if (ri === dlgRows.length - 1) addRow();
+                          else (document.querySelector(`[data-testid='dlg-row-name-${ri + 1}']`) as HTMLInputElement | null)?.focus();
+                        }
+                      }}
+                    />
+                    {isExisting && childCount > 0 && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5 px-1">
+                        {childCount} sub-{childCount === 1 ? "category" : "categories"} {r._deleted && "will be deleted"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  <div className="flex-1 min-w-0 px-1">
+                    <Input
+                      value={r.description}
+                      onChange={e => updateRow(r.uid, { description: e.target.value })}
+                      placeholder="Description (optional)"
+                      className="h-8 text-[13px]"
+                      disabled={r._deleted}
+                    />
+                  </div>
+
+                  {/* Delete / undo */}
+                  <div className="w-9 flex-shrink-0 flex justify-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => removeRow(r.uid)}
+                      className={`p-1.5 rounded-md transition-colors ${
+                        r._deleted ? "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30" : "text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      }`}
+                      title={r._deleted ? "Restore" : "Delete row"}
+                    >
+                      {r._deleted ? <Save size={13} /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Add another row */}
+            <button
+              type="button"
+              onClick={addRow}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors border-t border-border"
+              data-testid="dlg-add-row"
+            >
+              <Plus size={13} /> Add another row
+            </button>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDlgOpen(false)} className="gap-1"><X size={14} /> Cancel</Button>
+            <Button onClick={saveDialog} className="gap-1" data-testid="dlg-save"><Save size={14} /> Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm (from tree row trash icon) */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
