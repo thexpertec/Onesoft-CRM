@@ -87,7 +87,9 @@ function InlineCell({
           onKeyDown={onKeyDown}
           className="absolute inset-0 w-full h-full px-2 text-[13px] bg-transparent border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm dark:text-foreground placeholder:text-gray-300" />
       ) : (
-        <span className={`px-2 truncate text-[13px] ${value ? "text-foreground" : "text-muted-foreground/40"}`}>{value || placeholder}</span>
+        <span className={`px-2 truncate text-[13px] ${value ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
+          {value || (field === "name" ? "(unnamed — click to set)" : placeholder)}
+        </span>
       )}
     </div>
   );
@@ -179,18 +181,38 @@ export default function CategoriesPage() {
     if (!can("Edit Categories")) return;
     const cat = categories.find(c => c.id === id);
     if (!cat) return;
+    // If a new-row is in flight with content, auto-save it instead of silently dropping
+    if (newRow) {
+      if (newRow.name.trim()) {
+        addCategory({
+          name: newRow.name.trim(),
+          description: newRow.description,
+          color: newRow.color || "#3b82f6",
+          parentId: newRow.parentId || null,
+        });
+        toast({ title: "Saved" });
+      }
+      setNewRow(null);
+    }
     setEditCell({ id, field });
     setEditVal(String((cat as Record<string, unknown>)[field] ?? ""));
-    setNewRow(null);
   };
 
   const commitEdit = useCallback(() => {
     if (!editCell) return;
     const cat = categories.find(c => c.id === editCell.id);
     if (!cat) { setEditCell(null); return; }
+    // Block empty name — leaves the cell in edit mode so user can fix it
+    if (editCell.field === "name" && !editVal.trim()) {
+      toast({ title: "Name cannot be empty", variant: "destructive" });
+      return;
+    }
     const old = String((cat as Record<string, unknown>)[editCell.field] ?? "");
     if (old !== editVal) {
-      editCategory(editCell.id, { [editCell.field]: editVal } as Partial<ProductCategory>);
+      const patch: Partial<ProductCategory> = editCell.field === "name"
+        ? { name: editVal.trim() }
+        : ({ [editCell.field]: editVal } as Partial<ProductCategory>);
+      editCategory(editCell.id, patch);
       toast({ title: "Saved" });
     }
     setEditCell(null);
