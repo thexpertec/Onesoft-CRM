@@ -89,15 +89,18 @@ type QuickCustomerValues = z.infer<typeof quickCustomerSchema>;
 
 // Gradient KPI card
 function KpiCard({
-  icon: Icon, label, value, sub, sub2, gradient, iconBg, delta, testId,
+  icon: Icon, label, value, sub, sub2, gradient, iconBg, delta, testId, href,
 }: {
   icon: React.ElementType; label: string; value: string | number;
   sub?: React.ReactNode; sub2?: string;
   gradient: string; iconBg: string; delta?: { val: number; label: string };
   testId?: string;
+  href?: string;
 }) {
-  return (
-    <Card className={`relative overflow-hidden border-0 shadow-sm ${gradient}`}>
+  const card = (
+    <Card
+      className={`relative overflow-hidden border-0 shadow-sm ${gradient} ${href ? "cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" : ""}`}
+    >
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -121,6 +124,7 @@ function KpiCard({
       </CardContent>
     </Card>
   );
+  return href ? <Link href={href}>{card}</Link> : card;
 }
 
 // Mini sparkline bar chart — last 7 days
@@ -514,6 +518,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-blue-600 to-blue-500"
           iconBg="bg-blue-400/40"
           testId="stat-revenue"
+          href="/sales"
         />
         <KpiCard
           icon={Receipt}
@@ -524,6 +529,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-emerald-600 to-emerald-500"
           iconBg="bg-emerald-400/40"
           testId="stat-week-revenue"
+          href="/sales"
         />
         <KpiCard
           icon={Users}
@@ -534,6 +540,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-violet-600 to-violet-500"
           iconBg="bg-violet-400/40"
           testId="stat-total-leads"
+          href="/leads"
         />
         <KpiCard
           icon={UserCheck}
@@ -543,6 +550,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-cyan-600 to-cyan-500"
           iconBg="bg-cyan-400/40"
           testId="stat-customers"
+          href="/customers"
         />
         <KpiCard
           icon={AlertTriangle}
@@ -553,6 +561,7 @@ export default function Dashboard() {
           gradient={lowStockItems.length > 0 ? "bg-gradient-to-br from-amber-500 to-orange-500" : "bg-gradient-to-br from-gray-500 to-gray-400"}
           iconBg="bg-white/20"
           testId="stat-low-stock"
+          href="/stock-ledger"
         />
         <KpiCard
           icon={ShoppingCart}
@@ -563,6 +572,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-rose-600 to-rose-500"
           iconBg="bg-rose-400/40"
           testId="stat-pending-pos"
+          href="/purchases"
         />
         <KpiCard
           icon={Package}
@@ -572,6 +582,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-indigo-600 to-indigo-500"
           iconBg="bg-indigo-400/40"
           testId="stat-products"
+          href="/products"
         />
         <KpiCard
           icon={Users2}
@@ -582,6 +593,7 @@ export default function Dashboard() {
           gradient="bg-gradient-to-br from-teal-600 to-teal-500"
           iconBg="bg-teal-400/40"
           testId="stat-staff"
+          href="/staff"
         />
       </div>
 
