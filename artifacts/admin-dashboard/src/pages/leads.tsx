@@ -598,7 +598,7 @@ function LeadDetailSheet({
             {/* Footer actions */}
             {canEdit && (
               <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                {lead.status === "Won" && !isConverted && (
+                {!isConverted && (
                   <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-[12px]"
                     onClick={() => { onConvert(lead); onClose(); }}>
                     <UserCheck size={12} /> Convert to Customer
@@ -1415,7 +1415,7 @@ export default function Leads() {
                         onClick={() => { setViewLead(lead); }}>
                         <Bell size={13}/>
                       </button>
-                      {can("Edit Leads") && lead.status==="Won" && !convertedLeadIds.has(lead.id) && (
+                      {can("Edit Leads") && !convertedLeadIds.has(lead.id) && (
                         <button className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors" title="Convert to customer" onClick={() => handleConvert(lead)}>
                           <UserCheck size={13}/>
                         </button>
