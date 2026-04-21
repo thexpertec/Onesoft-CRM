@@ -85,12 +85,17 @@ function InlineCell({
         <input ref={inputRef} type="text" value={value} placeholder={placeholder}
           onChange={e => onChange(e.target.value)}
           onKeyDown={onKeyDown}
-          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-transparent border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm dark:text-foreground placeholder:text-gray-300" />
-      ) : (
-        <span className={`px-2 block w-full truncate text-[13px] ${value.trim() ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
-          {value.trim() || (field === "name" ? "(unnamed — click to set)" : placeholder)}
-        </span>
-      )}
+          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-white dark:bg-zinc-900 text-foreground border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm placeholder:text-gray-300" />
+      ) : (() => {
+          const cleaned = value.replace(/[\s\u00A0\u200B-\u200F\u2028-\u202F\uFEFF]+/g, "");
+          const isBlank = cleaned.length === 0;
+          return (
+            <span className={`px-2 block w-full truncate text-[13px] ${!isBlank ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
+              {!isBlank ? value : (field === "name" ? "(unnamed — click to set)" : placeholder)}
+            </span>
+          );
+        })()
+      }
     </div>
   );
 }
@@ -663,6 +668,28 @@ export default function CategoriesPage() {
             <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save</Button>
           </div>
         )}
+        {(() => {
+          const blankRe = /[\s\u00A0\u200B-\u200F\u2028-\u202F\uFEFF]+/g;
+          const orphans = categories.filter(c => c.name.replace(blankRe, "").length === 0);
+          if (orphans.length === 0 || !can("Delete Categories")) return null;
+          return (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-[12px] text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+              onClick={() => {
+                orphans.forEach(o => {
+                  getAllDescendantIds(o.id).forEach(d => removeCategory(d));
+                  removeCategory(o.id);
+                });
+                toast({ title: "Cleaned up", description: `Removed ${orphans.length} unnamed ${orphans.length === 1 ? "row" : "rows"}.` });
+              }}
+              data-testid="btn-cleanup-unnamed"
+            >
+              <Trash2 size={12} /> Cleanup {orphans.length} unnamed
+            </Button>
+          );
+        })()}
         <div className="text-[12px] text-muted-foreground self-center ml-auto">
           {flatRows.length} of {categories.length}
         </div>
