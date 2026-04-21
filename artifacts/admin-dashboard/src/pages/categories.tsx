@@ -1,23 +1,54 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useProductCategories } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { ProductCategory } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown, CornerDownRight, Save, X, Package } from "lucide-react";
+import {
+  Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown,
+  Save, X, Package, Pencil, GitBranch, FileText,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PRESET_COLORS } from "@/components/editable-cell";
 
-const CELL_H = 36;
+const MAX_DEPTH = 3;          // Categories → Sub → Sub-sub
+const INDENT_W  = 22;
+const ROW_H     = 40;
 
 type EditableField = "color" | "name" | "description";
+type FlatRow = ProductCategory & { depth: number; hasChildren: boolean };
+
 const BLANK = (parentId?: string): Record<EditableField, string> & { parentId?: string } =>
   ({ color: "#3b82f6", name: "", description: "", parentId });
 
-// ─── Inline editable cell ──────────────────────────────────────────────────────
+// ── Build a flat depth-tagged list from the recursive tree ─────────────────────
+function buildFlatRows(
+  cats: ProductCategory[],
+  parentId: string | null,
+  depth: number,
+  collapsed: Set<string>,
+): FlatRow[] {
+  const children = cats
+    .filter(c => (c.parentId ?? null) === parentId)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const out: FlatRow[] = [];
+  for (const c of children) {
+    const hasChildren = cats.some(x => x.parentId === c.id);
+    out.push({ ...c, depth, hasChildren });
+    if (hasChildren && !collapsed.has(c.id)) {
+      out.push(...buildFlatRows(cats, c.id, depth + 1, collapsed));
+    }
+  }
+  return out;
+}
+
+// ── Inline editable cell ───────────────────────────────────────────────────────
 function InlineCell({
   value, field, active, placeholder, onActivate, onChange, onKeyDown, canEdit,
 }: {
@@ -30,7 +61,7 @@ function InlineCell({
 
   if (field === "color") {
     return (
-      <div className="w-full h-full flex items-center px-2" onClick={canEdit ? onActivate : undefined}>
+      <div className="w-full h-full flex items-center" onClick={canEdit ? onActivate : undefined}>
         {active ? (
           <div className="flex items-center gap-1 flex-wrap" onKeyDown={onKeyDown} tabIndex={-1}>
             {PRESET_COLORS.map(pc => (
@@ -42,8 +73,7 @@ function InlineCell({
           </div>
         ) : (
           <span className="flex items-center gap-2 cursor-pointer">
-            <span className="w-4 h-4 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: value || "#3b82f6" }} />
-            <span className="text-[11px] text-muted-foreground">{PRESET_COLORS.find(p => p.hex === value)?.label ?? value}</span>
+            <span className="w-3 h-3 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: value || "#3b82f6" }} />
           </span>
         )}
       </div>
@@ -55,9 +85,9 @@ function InlineCell({
         <input ref={inputRef} type="text" value={value} placeholder={placeholder}
           onChange={e => onChange(e.target.value)}
           onKeyDown={onKeyDown}
-          className="absolute inset-0 w-full h-full px-3 text-[12px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300" />
+          className="absolute inset-0 w-full h-full px-2 text-[13px] bg-transparent border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm dark:text-foreground placeholder:text-gray-300" />
       ) : (
-        <span className={`px-3 text-[12px] truncate ${value ? "text-foreground" : "text-muted-foreground/40"}`}>{value || placeholder}</span>
+        <span className={`px-2 truncate text-[13px] ${value ? "text-foreground" : "text-muted-foreground/40"}`}>{value || placeholder}</span>
       )}
     </div>
   );
@@ -69,17 +99,16 @@ export default function CategoriesPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
-  const [search,       setSearch]       = useState("");
-  const [expandedIds,    setExpandedIds]    = useState<Set<string>>(new Set());
-  const [expandedSubIds, setExpandedSubIds] = useState<Set<string>>(new Set());
-  const [deleteId,     setDeleteId]     = useState<string | null>(null);
-  const [deleteName,   setDeleteName]   = useState("");
-  const [deleteHasSubs, setDeleteHasSubs] = useState(false);
+  const [search,        setSearch]        = useState("");
+  const [collapsedIds,  setCollapsedIds]  = useState<Set<string>>(new Set());
+  const [deleteId,      setDeleteId]      = useState<string | null>(null);
+  const [deleteName,    setDeleteName]    = useState("");
+  const [deleteDescCount, setDeleteDescCount] = useState(0);
 
-  // Inline new row state — shared for parent & sub
+  // Inline new row
   type NewRow = Record<EditableField, string> & { parentId?: string };
-  const [newRow,       setNewRow]       = useState<NewRow | null>(null);
-  const [newRowField,  setNewRowField]  = useState<EditableField>("name");
+  const [newRow,      setNewRow]      = useState<NewRow | null>(null);
+  const [newRowField, setNewRowField] = useState<EditableField>("name");
 
   // Inline edit for existing cells
   const [editCell, setEditCell] = useState<{ id: string; field: EditableField } | null>(null);
@@ -101,53 +130,49 @@ export default function CategoriesPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
-  const parents = categories
-    .filter(c => !c.parentId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-  const getSubs = useCallback((parentId: string) =>
-    categories.filter(c => c.parentId === parentId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [categories]);
-
-  // Recursively collect all descendant ids (used for cascade delete on a 3-level tree)
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   const getAllDescendantIds = useCallback((id: string): string[] => {
     const direct = categories.filter(c => c.parentId === id);
     return direct.flatMap(d => [d.id, ...getAllDescendantIds(d.id)]);
   }, [categories]);
 
-  // Filter: show parent if it or any of its subs match, or if search is empty
-  const q = search.toLowerCase();
-  const filteredParents = parents.filter(p => {
-    if (!q) return true;
-    if (p.name.toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)) return true;
-    return getSubs(p.id).some(s => s.name.toLowerCase().includes(q) || (s.description || "").toLowerCase().includes(q));
-  });
-
-  // Auto-expand parents that have matching subs when searching
-  useEffect(() => {
-    if (!q) return;
-    const toExpand = new Set(expandedIds);
-    parents.forEach(p => {
-      const hasSub = getSubs(p.id).some(s => s.name.toLowerCase().includes(q) || (s.description || "").toLowerCase().includes(q));
-      if (hasSub) toExpand.add(p.id);
+  // ── Filter (search) ──────────────────────────────────────────────────────────
+  const q = search.trim().toLowerCase();
+  const matchedIds = useMemo(() => {
+    if (!q) return null;
+    const direct = new Set(
+      categories
+        .filter(c => c.name.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q))
+        .map(c => c.id),
+    );
+    // Include all ancestors of matched ones so they remain visible in the tree
+    const out = new Set(direct);
+    direct.forEach(id => {
+      let cur = categories.find(c => c.id === id);
+      while (cur?.parentId) {
+        out.add(cur.parentId);
+        cur = categories.find(c => c.id === cur!.parentId);
+      }
     });
-    setExpandedIds(toExpand);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+    return out;
+  }, [q, categories]);
 
-  const toggleExpand = (id: string) => setExpandedIds(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  // Auto-expand ancestors of matches when searching
+  useEffect(() => {
+    if (!matchedIds) return;
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      matchedIds.forEach(id => next.delete(id));
+      return next;
+    });
+  }, [matchedIds]);
 
-  const toggleExpandSub = (id: string) => setExpandedSubIds(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  // ── Flat tree rows ───────────────────────────────────────────────────────────
+  const flatRows = useMemo(() => {
+    const all = buildFlatRows(categories, null, 0, collapsedIds);
+    if (!matchedIds) return all;
+    return all.filter(r => matchedIds.has(r.id));
+  }, [categories, collapsedIds, matchedIds]);
 
   // ── Edit existing cell ───────────────────────────────────────────────────────
   const activateEdit = (id: string, field: EditableField) => {
@@ -171,35 +196,34 @@ export default function CategoriesPage() {
     setEditCell(null);
   }, [editCell, editVal, categories, editCategory, toast]);
 
-  const editKeyDown = (e: React.KeyboardEvent, id: string, field: EditableField) => {
+  const editKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
     if (e.key === "Escape") { setEditCell(null); }
     if (e.key === "Tab") { e.preventDefault(); commitEdit(); }
-    if (field === "color") return; // color changes immediately
   };
 
   // ── New row ──────────────────────────────────────────────────────────────────
-  const startNewParent = () => {
+  const startNewRoot = () => {
     setNewRow(BLANK());
     setNewRowField("name");
     setEditCell(null);
   };
 
-  const startNewSub = (parentId: string) => {
+  const startNewChild = (parentId: string) => {
     setNewRow(BLANK(parentId));
     setNewRowField("name");
     setEditCell(null);
-    // Walk up the chain so every ancestor is expanded and the new row is visible
-    const parent = categories.find(c => c.id === parentId);
-    if (parent?.parentId) {
-      // Adding under a sub-category (level 2) → new row will be a sub-sub
-      // Expand the sub itself, AND its top-level parent
-      setExpandedSubIds(prev => new Set([...prev, parentId]));
-      setExpandedIds(prev => new Set([...prev, parent.parentId as string]));
-    } else {
-      // Adding under a top-level category → new row will be a sub
-      setExpandedIds(prev => new Set([...prev, parentId]));
-    }
+    // Expand ancestor chain so the new inline row is visible
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      next.delete(parentId);
+      let cur = categories.find(c => c.id === parentId);
+      while (cur?.parentId) {
+        next.delete(cur.parentId);
+        cur = categories.find(c => c.id === cur!.parentId);
+      }
+      return next;
+    });
   };
 
   const commitNewRow = () => {
@@ -208,8 +232,12 @@ export default function CategoriesPage() {
       setNewRowField("name");
       return;
     }
-    addCategory({ name: newRow.name, description: newRow.description, color: newRow.color || "#3b82f6", parentId: newRow.parentId || null });
-    // Determine level for label: walk up parentId chain
+    addCategory({
+      name: newRow.name,
+      description: newRow.description,
+      color: newRow.color || "#3b82f6",
+      parentId: newRow.parentId || null,
+    });
     let level = 1;
     if (newRow.parentId) {
       const p = categories.find(c => c.id === newRow.parentId);
@@ -235,16 +263,14 @@ export default function CategoriesPage() {
   // ── Delete ────────────────────────────────────────────────────────────────────
   const requestDelete = (id: string) => {
     const cat = categories.find(c => c.id === id);
-    const hasDescendants = getAllDescendantIds(id).length > 0;
     setDeleteId(id);
     setDeleteName(cat?.name || "");
-    setDeleteHasSubs(hasDescendants);
+    setDeleteDescCount(getAllDescendantIds(id).length);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    // Cascade delete: remove all descendants first (handles 3-level depth)
-    if (deleteHasSubs) {
+    if (deleteDescCount > 0) {
       getAllDescendantIds(deleteId).forEach(d => removeCategory(d));
     }
     removeCategory(deleteId);
@@ -252,93 +278,334 @@ export default function CategoriesPage() {
     setDeleteId(null);
   };
 
-  // Build a quick lookup of category id → level (1=top, 2=sub, 3=sub-sub)
-  const levelOf = useCallback((cat: ProductCategory): 1 | 2 | 3 => {
-    if (!cat.parentId) return 1;
-    const parent = categories.find(c => c.id === cat.parentId);
-    return parent?.parentId ? 3 : 2;
-  }, [categories]);
-
-  const topLevelCount = parents.length;
-  const subCount      = categories.filter(c => !!c.parentId && levelOf(c) === 2).length;
-  const subSubCount   = categories.filter(c => !!c.parentId && levelOf(c) === 3).length;
-
-  // ── Column widths ─────────────────────────────────────────────────────────────
-  const COL = { idx: 40, color: 120, name: 210, desc: 340, subs: 100, created: 110, actions: 72 };
-  const totalW = Object.values(COL).reduce((a, b) => a + b, 0);
-
-  const thClass = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-r border-gray-100 dark:border-border whitespace-nowrap";
-  const tdBase  = "border-r border-gray-100 dark:border-border relative p-0";
-
-  // ── Render a single editable row (parent or sub) ──────────────────────────────
-  const renderCells = (cat: ProductCategory, isSubRow: boolean, rowIdx: string) => {
-    const fields: EditableField[] = ["color", "name", "description"];
-    return fields.map(field => {
-      const isA = editCell?.id === cat.id && editCell?.field === field;
-      const val = String((cat as Record<string, unknown>)[field] ?? "");
-      return (
-        <td key={field} className={`${tdBase} ${isA ? "ring-2 ring-inset ring-blue-500 z-10" : can("Edit Categories") ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer" : ""}`}
-          style={{ height: CELL_H, width: field === "color" ? COL.color : field === "name" ? COL.name : COL.desc, minWidth: field === "color" ? COL.color : field === "name" ? COL.name : COL.desc }}>
-          <InlineCell
-            value={isA ? editVal : val}
-            field={field}
-            active={isA}
-            placeholder={field === "name" ? (isSubRow ? "Sub-category name" : "Category name") : field === "description" ? "Description (optional)" : ""}
-            canEdit={can("Edit Categories")}
-            onActivate={() => activateEdit(cat.id, field)}
-            onChange={v => {
-              if (field === "color") {
-                // Color changes save immediately
-                editCategory(cat.id, { color: v });
-                setEditCell(null);
-              } else {
-                setEditVal(v);
-              }
-            }}
-            onKeyDown={e => editKeyDown(e, cat.id, field)}
-          />
-        </td>
-      );
+  const toggleCollapse = (id: string) =>
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
+
+  // ── Counts ────────────────────────────────────────────────────────────────────
+  const topLevelCount = categories.filter(c => !c.parentId).length;
+  const subCount      = categories.filter(c => {
+    const p = c.parentId ? categories.find(x => x.id === c.parentId) : null;
+    return p && !p.parentId;
+  }).length;
+  const subSubCount   = categories.filter(c => {
+    const p = c.parentId ? categories.find(x => x.id === c.parentId) : null;
+    return p && p.parentId;
+  }).length;
+
+  // ── Tree indent renderer (└ │ guides) ─────────────────────────────────────────
+  const renderIndent = (depth: number) => (
+    <div className="flex items-center flex-shrink-0" style={{ width: depth * INDENT_W }}>
+      {Array.from({ length: depth }).map((_, di) => (
+        <span
+          key={di}
+          className={`flex-shrink-0 font-mono ${di === depth - 1 ? "text-gray-400 dark:text-zinc-500" : "text-transparent"}`}
+          style={{ width: INDENT_W, fontSize: 13, lineHeight: 1 }}
+        >
+          {di === depth - 1 ? "└" : "│"}
+        </span>
+      ))}
+    </div>
+  );
+
+  // ── Render a single tree row ─────────────────────────────────────────────────
+  const renderRow = (row: FlatRow, ri: number) => {
+    const isRowActive = editCell?.id === row.id;
+    const isCollapsed = collapsedIds.has(row.id);
+    const levelLabel  = row.depth === 0 ? "Category" : row.depth === 1 ? "Sub-category" : "Sub-sub-category";
+    const canAddChild = row.depth < MAX_DEPTH - 1;
+    const parent = row.parentId ? categories.find(c => c.id === row.parentId) : null;
+
+    return (
+      <div
+        key={row.id}
+        data-testid={`row-category-${row.id}`}
+        className={`flex items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 group transition-colors min-h-[${ROW_H}px] ${
+          isRowActive ? "bg-blue-50/40 dark:bg-blue-950/20" :
+          ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/40 dark:bg-zinc-800/10"
+        } hover:bg-blue-50/30 dark:hover:bg-blue-950/15`}
+        style={{ minHeight: ROW_H }}
+      >
+        {/* Tree indent + chevron toggle */}
+        <div className="flex items-center flex-shrink-0 pl-3" style={{ width: 44 + row.depth * INDENT_W }}>
+          {row.depth > 0 && renderIndent(row.depth)}
+          <div className="w-5 flex-shrink-0 flex justify-center">
+            {row.hasChildren ? (
+              <button
+                onClick={() => toggleCollapse(row.id)}
+                className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+                title={isCollapsed ? "Expand" : "Collapse"}
+              >
+                {isCollapsed
+                  ? <ChevronRight size={12} className="text-gray-500" />
+                  : <ChevronDown  size={12} className="text-gray-500" />}
+              </button>
+            ) : (
+              <span className="text-gray-300 dark:text-zinc-600 text-[14px] select-none">·</span>
+            )}
+          </div>
+        </div>
+
+        {/* Row # */}
+        <div className="w-8 flex-shrink-0 text-[11px] text-gray-400 font-mono">{ri + 1}</div>
+
+        {/* Colour cell (inline-editable) */}
+        <div className={`w-12 flex-shrink-0 ${isRowActive && editCell?.field === "color" ? "ring-2 ring-inset ring-blue-500 rounded-sm" : ""}`} style={{ height: ROW_H }}>
+          <InlineCell
+            value={editCell?.id === row.id && editCell?.field === "color" ? editVal : row.color}
+            field="color"
+            active={editCell?.id === row.id && editCell?.field === "color"}
+            canEdit={can("Edit Categories")}
+            onActivate={() => activateEdit(row.id, "color")}
+            onChange={v => {
+              editCategory(row.id, { color: v });
+              setEditCell(null);
+            }}
+            onKeyDown={editKeyDown}
+          />
+        </div>
+
+        {/* Name cell + group/leaf badge */}
+        <div className="flex-1 min-w-0 flex items-center gap-2 pr-3" style={{ height: ROW_H }}>
+          <div className={`flex-1 min-w-0 ${editCell?.id === row.id && editCell?.field === "name" ? "" : ""}`}>
+            <InlineCell
+              value={editCell?.id === row.id && editCell?.field === "name" ? editVal : row.name}
+              field="name"
+              active={editCell?.id === row.id && editCell?.field === "name"}
+              placeholder={`${levelLabel} name`}
+              canEdit={can("Edit Categories")}
+              onActivate={() => activateEdit(row.id, "name")}
+              onChange={v => setEditVal(v)}
+              onKeyDown={editKeyDown}
+            />
+          </div>
+          {row.hasChildren ? (
+            <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900">
+              <GitBranch size={8} /> Group
+            </span>
+          ) : (
+            <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-500 border border-gray-200 dark:border-zinc-700">
+              <FileText size={8} /> Leaf
+            </span>
+          )}
+        </div>
+
+        {/* Description cell */}
+        <div className="w-72 flex-shrink-0 pr-2" style={{ height: ROW_H }}>
+          <InlineCell
+            value={editCell?.id === row.id && editCell?.field === "description" ? editVal : (row.description || "")}
+            field="description"
+            active={editCell?.id === row.id && editCell?.field === "description"}
+            placeholder="Description (optional)"
+            canEdit={can("Edit Categories")}
+            onActivate={() => activateEdit(row.id, "description")}
+            onChange={v => setEditVal(v)}
+            onKeyDown={editKeyDown}
+          />
+        </div>
+
+        {/* Parent column */}
+        <div className="w-52 flex-shrink-0 pr-2">
+          {parent ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: parent.color || "#3b82f6" }} />
+              <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{parent.name}</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-gray-300 dark:text-zinc-600">—</span>
+          )}
+        </div>
+
+        {/* Created */}
+        <div className="w-24 flex-shrink-0 pr-2 text-[11px] text-muted-foreground">
+          {format(new Date(row.createdAt), "d MMM yyyy")}
+        </div>
+
+        {/* Actions (hover) */}
+        <div className="w-32 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+            title="View products in this category"
+            onClick={() => navigate(`/products?category=${encodeURIComponent(row.name)}`)}
+          >
+            <Package size={13} />
+          </button>
+          {canAddChild && can("Add Categories") && (
+            <button
+              className="p-1.5 rounded-md text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+              title={row.depth === 0 ? "Add sub-category" : "Add sub-sub-category"}
+              onClick={() => startNewChild(row.id)}
+              data-testid={`btn-add-child-${row.id}`}
+            >
+              <Plus size={13} />
+            </button>
+          )}
+          {can("Edit Categories") && (
+            <button
+              className="p-1.5 rounded-md text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+              title="Edit name"
+              onClick={() => activateEdit(row.id, "name")}
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          {can("Delete Categories") && (
+            <button
+              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              title="Delete"
+              onClick={() => requestDelete(row.id)}
+              data-testid={`btn-delete-category-${row.id}`}
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
-  // ── Render inline new-row cells ───────────────────────────────────────────────
-  const renderNewRowCells = (isSubRow: boolean) => {
-    const fields: EditableField[] = ["color", "name", "description"];
-    return fields.map(field => {
-      const isA = newRowField === field;
-      const val = newRow ? newRow[field] : "";
-      const colW = field === "color" ? COL.color : field === "name" ? COL.name : COL.desc;
-      return (
-        <td key={field} className={`${tdBase} ${isA ? "ring-2 ring-inset ring-blue-500 z-10" : "hover:bg-amber-50/60 dark:hover:bg-amber-950/20"}`}
-          style={{ height: CELL_H, width: colW, minWidth: colW }}>
+  // ── Render the inline new-row (placed at correct depth in flat list) ─────────
+  const renderNewRow = () => {
+    if (!newRow) return null;
+    const depth   = newRow.parentId
+      ? (() => {
+          const p = categories.find(c => c.id === newRow.parentId);
+          return p?.parentId ? 2 : 1;
+        })()
+      : 0;
+    const levelLabel = depth === 0 ? "Category" : depth === 1 ? "Sub-category" : "Sub-sub-category";
+
+    return (
+      <div className="flex items-center border-b border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/20 group" style={{ minHeight: ROW_H }}>
+        {/* Indent + new-row marker */}
+        <div className="flex items-center flex-shrink-0 pl-3" style={{ width: 44 + depth * INDENT_W }}>
+          {depth > 0 && renderIndent(depth)}
+          <div className="w-5 flex-shrink-0 flex justify-center text-amber-500 font-bold text-[12px]">★</div>
+        </div>
+
+        {/* Row # placeholder */}
+        <div className="w-8 flex-shrink-0 text-[11px] text-amber-500 font-mono">new</div>
+
+        {/* Colour picker */}
+        <div className="w-12 flex-shrink-0 px-1" style={{ height: ROW_H }}>
           <InlineCell
-            value={val} field={field} active={isA}
-            placeholder={field === "name" ? (isSubRow ? "Sub-category name" : "Category name") : field === "description" ? "Description (optional)" : ""}
+            value={newRow.color}
+            field="color"
+            active={newRowField === "color"}
             canEdit={true}
-            onActivate={() => setNewRowField(field)}
-            onChange={v => {
-              if (field === "color") setNewRow(r => r ? { ...r, color: v } : r);
-              else setNewRow(r => r ? { ...r, [field]: v } : r);
-            }}
+            onActivate={() => setNewRowField("color")}
+            onChange={v => setNewRow(r => r ? { ...r, color: v } : r)}
             onKeyDown={newRowKeyDown}
           />
-        </td>
-      );
-    });
+        </div>
+
+        {/* Name */}
+        <div className="flex-1 min-w-0 pr-3" style={{ height: ROW_H }}>
+          <InlineCell
+            value={newRow.name}
+            field="name"
+            active={newRowField === "name"}
+            placeholder={`${levelLabel} name`}
+            canEdit={true}
+            onActivate={() => setNewRowField("name")}
+            onChange={v => setNewRow(r => r ? { ...r, name: v } : r)}
+            onKeyDown={newRowKeyDown}
+          />
+        </div>
+
+        {/* Description */}
+        <div className="w-72 flex-shrink-0 pr-2" style={{ height: ROW_H }}>
+          <InlineCell
+            value={newRow.description}
+            field="description"
+            active={newRowField === "description"}
+            placeholder="Description (optional)"
+            canEdit={true}
+            onActivate={() => setNewRowField("description")}
+            onChange={v => setNewRow(r => r ? { ...r, description: v } : r)}
+            onKeyDown={newRowKeyDown}
+          />
+        </div>
+
+        {/* Parent column */}
+        <div className="w-52 flex-shrink-0 pr-2">
+          {newRow.parentId ? (() => {
+            const p = categories.find(c => c.id === newRow.parentId);
+            return p ? (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="w-2 h-2 rounded-full ring-1 ring-black/10 flex-shrink-0" style={{ backgroundColor: p.color || "#3b82f6" }} />
+                <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{p.name}</span>
+              </div>
+            ) : null;
+          })() : (
+            <span className="text-[11px] text-gray-300 dark:text-zinc-600">— root —</span>
+          )}
+        </div>
+
+        {/* Created placeholder */}
+        <div className="w-24 flex-shrink-0 pr-2 text-[11px] text-muted-foreground">—</div>
+
+        {/* Save / cancel */}
+        <div className="w-32 flex-shrink-0 flex items-center justify-end gap-0.5 pr-3">
+          <button onClick={commitNewRow} className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={14} /></button>
+          <button onClick={() => setNewRow(null)} className="p-1.5 rounded-md text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={14} /></button>
+        </div>
+      </div>
+    );
   };
+
+  // ── Build the rendered list, splicing the new-row in at the right position ──
+  const renderedList = useMemo(() => {
+    const items: { kind: "row"; row: FlatRow } [] | { kind: "row"; row: FlatRow } | { kind: "new" } | unknown[] = [];
+    const out: ({ kind: "row"; row: FlatRow } | { kind: "new" })[] = [];
+    flatRows.forEach(r => {
+      out.push({ kind: "row", row: r });
+      // If the new-row is a child of THIS row, insert it directly after, after this row's existing children block in the flat list.
+      // Implementation: if newRow.parentId === r.id and r is the LAST row of its subtree section, insert here.
+    });
+    // Insert new-row at the correct logical spot:
+    if (newRow) {
+      if (!newRow.parentId) {
+        out.push({ kind: "new" });
+      } else {
+        // Find the index AFTER the last descendant of parentId in flatRows
+        const parentIdx = flatRows.findIndex(r => r.id === newRow.parentId);
+        if (parentIdx === -1) {
+          out.push({ kind: "new" });
+        } else {
+          // The descendant block continues while subsequent rows have depth > parent.depth
+          const parentDepth = flatRows[parentIdx].depth;
+          let insertAfter = parentIdx;
+          for (let i = parentIdx + 1; i < flatRows.length; i++) {
+            if (flatRows[i].depth > parentDepth) insertAfter = i;
+            else break;
+          }
+          // Insert in the `out` array at the matching position (out has same indexing as flatRows since we didn't insert anything else)
+          out.splice(insertAfter + 1, 0, { kind: "new" });
+        }
+      }
+    }
+    void items;
+    return out;
+  }, [flatRows, newRow]);
+
+  void isAuthenticated;
 
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
-
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Product Categories</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · Three-level hierarchy: Categories, Sub-categories &amp; Sub-sub-categories</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Click any cell to edit · Three-level tree: Categories → Sub-categories → Sub-sub-categories
+          </p>
         </div>
         {can("Add Categories") && (
-          <Button size="sm" onClick={startNewParent} className="gap-1.5" data-testid="btn-add-category">
+          <Button size="sm" onClick={startNewRoot} className="gap-1.5" data-testid="btn-add-category">
             <Plus size={14} /> Add Category
           </Button>
         )}
@@ -351,15 +618,14 @@ export default function CategoriesPage() {
           {topLevelCount} {topLevelCount === 1 ? "category" : "categories"}
         </span>
         <span className="flex items-center gap-1.5">
-          <CornerDownRight size={13} className="text-muted-foreground" />
+          <GitBranch size={13} className="text-muted-foreground" />
           {subCount} sub-{subCount === 1 ? "category" : "categories"}
         </span>
         <span className="flex items-center gap-1.5">
-          <CornerDownRight size={13} className="text-muted-foreground/70" />
-          <CornerDownRight size={13} className="text-muted-foreground/70 -ml-2" />
+          <GitBranch size={13} className="text-muted-foreground/70" />
           {subSubCount} sub-sub-{subSubCount === 1 ? "category" : "categories"}
         </span>
-        <span className="flex items-center gap-1.5"><Tag size={13} /> Organise products into three-level groups</span>
+        <span className="flex items-center gap-1.5"><Tag size={13} /> Organise products into a three-level tree</span>
       </div>
 
       {/* Toolbar */}
@@ -375,357 +641,47 @@ export default function CategoriesPage() {
             <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={commitNewRow}><Save size={12} /> Save</Button>
           </div>
         )}
-        <div className="text-[12px] text-muted-foreground self-center ml-auto">{filteredParents.length} of {topLevelCount}</div>
+        <div className="text-[12px] text-muted-foreground self-center ml-auto">
+          {flatRows.length} of {categories.length}
+        </div>
       </div>
 
-      {/* Table */}
-      <div ref={tableRef} className="rounded-md border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table style={{ minWidth: totalW, width: "100%", borderCollapse: "collapse" }}>
-            <thead className="bg-gray-50 dark:bg-muted/40 border-b border-border">
-              <tr>
-                <th className={thClass} style={{ width: COL.idx }}>  </th>
-                <th className={thClass} style={{ width: COL.color }}>Colour</th>
-                <th className={thClass} style={{ width: COL.name }}>Name</th>
-                <th className={thClass} style={{ width: COL.desc }}>Description</th>
-                <th className={thClass} style={{ width: COL.subs }}>Sub-cats</th>
-                <th className={thClass} style={{ width: COL.created }}>Created</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" style={{ width: COL.actions }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-
-              {/* New TOP-LEVEL row (no parentId) */}
-              {can("Add Categories") && newRow && !newRow.parentId && (
-                <tr className="border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20">
-                  <td className="text-center text-[11px] text-amber-400 font-bold border-r border-gray-100 dark:border-border" style={{ height: CELL_H, width: COL.idx }}>★</td>
-                  {renderNewRowCells(false)}
-                  <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                    <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                  </td>
-                  <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                    <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                  </td>
-                  <td style={{ height: CELL_H, width: COL.actions }}>
-                    <div className="flex items-center justify-end gap-0.5 px-2">
-                      <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={13} /></button>
-                      <button onClick={() => setNewRow(null)} className="p-1 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={13} /></button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-              {/* Empty state */}
-              {filteredParents.length === 0 && !newRow && (
-                <tr>
-                  <td colSpan={7} className="text-center py-16 text-muted-foreground text-sm">
-                    {search ? "No categories match your search." : "No categories yet. Click Add Category to get started."}
-                  </td>
-                </tr>
-              )}
-
-              {/* Parent rows */}
-              {filteredParents.map((parent, pi) => {
-                const subs = getSubs(parent.id);
-                const filteredSubs = q
-                  ? subs.filter(s => s.name.toLowerCase().includes(q) || (s.description || "").toLowerCase().includes(q))
-                  : subs;
-                const isExpanded = expandedIds.has(parent.id);
-                const isRowActive = editCell?.id === parent.id;
-
-                return [
-                  /* ── Parent row ── */
-                  <tr key={parent.id} data-testid={`row-category-${parent.id}`}
-                    className={`border-b border-gray-100 dark:border-border transition-colors group ${isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : pi % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/40 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
-
-                    {/* Row # + expand toggle */}
-                    <td className="border-r border-gray-100 dark:border-border text-center select-none" style={{ height: CELL_H, width: COL.idx }}>
-                      <button
-                        className={`inline-flex items-center gap-0.5 text-[11px] font-mono transition-colors ${subs.length > 0 ? "text-primary hover:text-primary/80 cursor-pointer" : "text-gray-300 dark:text-muted-foreground/40 cursor-default"}`}
-                        onClick={() => subs.length > 0 && toggleExpand(parent.id)}
-                        title={subs.length > 0 ? (isExpanded ? "Collapse sub-categories" : "Expand sub-categories") : undefined}
-                      >
-                        {subs.length > 0
-                          ? (isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />)
-                          : <span className="w-3" />}
-                        {pi + 1}
-                      </button>
-                    </td>
-
-                    {renderCells(parent, false, `p-${pi}`)}
-
-                    {/* Sub-cat count */}
-                    <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                      <div className="px-3">
-                        {subs.length > 0 ? (
-                          <button onClick={() => toggleExpand(parent.id)}
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold transition-colors ${isExpanded ? "bg-primary/15 text-primary" : "bg-gray-100 dark:bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"}`}>
-                            {subs.length} sub
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground/40">—</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Created */}
-                    <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                      <div className="px-3 text-[11px] text-muted-foreground">{format(new Date(parent.createdAt), "d MMM yyyy")}</div>
-                    </td>
-
-                    {/* Actions */}
-                    <td style={{ height: CELL_H, width: COL.actions }}>
-                      <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                          title="View products in this category"
-                          onClick={() => navigate(`/products?category=${encodeURIComponent(parent.name)}`)}
-                        >
-                          <Package size={13} />
-                        </button>
-                        {can("Add Categories") && (
-                          <button
-                            className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                            title="Add sub-category"
-                            onClick={() => startNewSub(parent.id)}
-                          >
-                            <Plus size={13} />
-                          </button>
-                        )}
-                        {can("Delete Categories") && (
-                          <button
-                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                            title="Delete category"
-                            onClick={() => requestDelete(parent.id)}
-                            data-testid={`btn-delete-category-${parent.id}`}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>,
-
-                  /* ── Sub-category rows (when expanded) ── */
-                  ...(isExpanded ? [
-                    ...filteredSubs.flatMap((sub, si) => {
-                      const isSubActive = editCell?.id === sub.id;
-                      const subSubs = getSubs(sub.id);
-                      const filteredSubSubs = q
-                        ? subSubs.filter(s => s.name.toLowerCase().includes(q) || (s.description || "").toLowerCase().includes(q))
-                        : subSubs;
-                      const isSubExpanded = expandedSubIds.has(sub.id);
-
-                      return [
-                        <tr key={sub.id} data-testid={`row-subcategory-${sub.id}`}
-                          className={`border-b border-gray-100 dark:border-border transition-colors group ${isSubActive ? "bg-blue-50/30 dark:bg-blue-950/10" : "bg-blue-50/[0.04] dark:bg-blue-950/[0.06]"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
-
-                          {/* Indent indicator + expand toggle for sub-subs */}
-                          <td className="border-r border-gray-100 dark:border-border text-center select-none" style={{ height: CELL_H, width: COL.idx }}>
-                            <button
-                              className={`inline-flex items-center gap-0.5 text-muted-foreground/60 ${subSubs.length > 0 ? "hover:text-primary cursor-pointer" : "cursor-default"}`}
-                              onClick={() => subSubs.length > 0 && toggleExpandSub(sub.id)}
-                              title={subSubs.length > 0 ? (isSubExpanded ? "Collapse sub-sub-categories" : "Expand sub-sub-categories") : undefined}
-                            >
-                              <CornerDownRight size={11} />
-                              {subSubs.length > 0 && (isSubExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />)}
-                            </button>
-                          </td>
-
-                          {renderCells(sub, true, `s-${pi}-${si}`)}
-
-                          {/* Sub-sub count */}
-                          <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                            <div className="px-3">
-                              {subSubs.length > 0 ? (
-                                <button onClick={() => toggleExpandSub(sub.id)}
-                                  className={`text-[11px] px-2 py-0.5 rounded-full font-semibold transition-colors ${isSubExpanded ? "bg-primary/15 text-primary" : "bg-gray-100 dark:bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"}`}>
-                                  {subSubs.length} sub
-                                </button>
-                              ) : (
-                                <span className="text-[11px] text-muted-foreground/40">—</span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Created */}
-                          <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                            <div className="px-3 text-[11px] text-muted-foreground">{format(new Date(sub.createdAt), "d MMM yyyy")}</div>
-                          </td>
-
-                          {/* Actions */}
-                          <td style={{ height: CELL_H, width: COL.actions }}>
-                            <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                                title="View products in this sub-category"
-                                onClick={() => navigate(`/products?category=${encodeURIComponent(sub.name)}`)}
-                              >
-                                <Package size={13} />
-                              </button>
-                              {can("Add Categories") && (
-                                <button
-                                  className="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                                  title="Add sub-sub-category"
-                                  onClick={() => startNewSub(sub.id)}
-                                >
-                                  <Plus size={13} />
-                                </button>
-                              )}
-                              {can("Delete Categories") && (
-                                <button
-                                  className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                                  title="Delete sub-category"
-                                  onClick={() => requestDelete(sub.id)}
-                                  data-testid={`btn-delete-subcategory-${sub.id}`}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>,
-
-                        /* ── Sub-sub-category rows (when sub is expanded) ── */
-                        ...(isSubExpanded ? [
-                          ...filteredSubSubs.map((ss, ssi) => {
-                            const isSsActive = editCell?.id === ss.id;
-                            return (
-                              <tr key={ss.id} data-testid={`row-subsubcategory-${ss.id}`}
-                                className={`border-b border-gray-100 dark:border-border transition-colors group ${isSsActive ? "bg-blue-50/30 dark:bg-blue-950/10" : "bg-blue-50/[0.08] dark:bg-blue-950/[0.10]"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
-                                <td className="border-r border-gray-100 dark:border-border text-center select-none" style={{ height: CELL_H, width: COL.idx }}>
-                                  <span className="inline-flex items-center text-muted-foreground/40">
-                                    <CornerDownRight size={10} className="opacity-50" />
-                                    <CornerDownRight size={10} className="-ml-1" />
-                                  </span>
-                                </td>
-                                {renderCells(ss, true, `ss-${pi}-${si}-${ssi}`)}
-                                <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                                  <div className="px-3 text-[11px] text-muted-foreground/40">—</div>
-                                </td>
-                                <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                                  <div className="px-3 text-[11px] text-muted-foreground">{format(new Date(ss.createdAt), "d MMM yyyy")}</div>
-                                </td>
-                                <td style={{ height: CELL_H, width: COL.actions }}>
-                                  <div className="flex items-center justify-end gap-0.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                                      title="View products in this sub-sub-category"
-                                      onClick={() => navigate(`/products?category=${encodeURIComponent(ss.name)}`)}
-                                    >
-                                      <Package size={13} />
-                                    </button>
-                                    {can("Delete Categories") && (
-                                      <button
-                                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                                        title="Delete sub-sub-category"
-                                        onClick={() => requestDelete(ss.id)}
-                                        data-testid={`btn-delete-subsubcategory-${ss.id}`}
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          }),
-
-                          /* Inline new sub-sub-category row */
-                          ...(can("Add Categories") && newRow?.parentId === sub.id ? [
-                            <tr key={`new-subsub-${sub.id}`} className="border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20">
-                              <td className="text-center text-[11px] text-amber-400 font-bold border-r border-gray-100 dark:border-border" style={{ height: CELL_H, width: COL.idx }}>
-                                <span className="inline-flex items-center text-amber-400">
-                                  <CornerDownRight size={10} className="opacity-50" />
-                                  <CornerDownRight size={10} className="-ml-1" />
-                                </span>
-                              </td>
-                              {renderNewRowCells(true)}
-                              <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                                <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                              </td>
-                              <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                                <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                              </td>
-                              <td style={{ height: CELL_H, width: COL.actions }}>
-                                <div className="flex items-center justify-end gap-0.5 px-2">
-                                  <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={13} /></button>
-                                  <button onClick={() => setNewRow(null)} className="p-1 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={13} /></button>
-                                </div>
-                              </td>
-                            </tr>,
-                          ] : []),
-
-                          /* "Add sub-sub-category" inline prompt */
-                          ...(can("Add Categories") && (!newRow || newRow.parentId !== sub.id) ? [
-                            <tr key={`add-subsub-btn-${sub.id}`}>
-                              <td colSpan={7}>
-                                <button onClick={() => startNewSub(sub.id)}
-                                  className="w-full flex items-center gap-2 pl-16 pr-4 py-1.5 text-[11px] text-muted-foreground/60 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
-                                  <CornerDownRight size={10} />
-                                  <Plus size={10} /> Add sub-sub-category under <span className="font-semibold ml-1">{sub.name}</span>
-                                </button>
-                              </td>
-                            </tr>,
-                          ] : []),
-                        ] : []),
-                      ];
-                    }),
-
-                    /* Inline new sub-category row (when adding under THIS parent) */
-                    ...(can("Add Categories") && newRow?.parentId === parent.id ? [
-                      <tr key={`new-sub-${parent.id}`} className="border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-950/20">
-                        <td className="text-center text-[11px] text-amber-400 font-bold border-r border-gray-100 dark:border-border" style={{ height: CELL_H, width: COL.idx }}>
-                          <CornerDownRight size={11} className="mx-auto text-amber-400" />
-                        </td>
-                        {renderNewRowCells(true)}
-                        <td className={tdBase} style={{ height: CELL_H, width: COL.subs }}>
-                          <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                        </td>
-                        <td className={tdBase} style={{ height: CELL_H, width: COL.created }}>
-                          <div className="px-3 text-[11px] text-muted-foreground">—</div>
-                        </td>
-                        <td style={{ height: CELL_H, width: COL.actions }}>
-                          <div className="flex items-center justify-end gap-0.5 px-2">
-                            <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Save"><Save size={13} /></button>
-                            <button onClick={() => setNewRow(null)} className="p-1 rounded text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" title="Cancel"><X size={13} /></button>
-                          </div>
-                        </td>
-                      </tr>,
-                    ] : []),
-
-                    /* "Add sub-category" inline prompt when expanded and no active new row */
-                    ...(can("Add Categories") && (!newRow || newRow.parentId !== parent.id) && isExpanded ? [
-                      <tr key={`add-sub-btn-${parent.id}`}>
-                        <td colSpan={7}>
-                          <button onClick={() => startNewSub(parent.id)}
-                            className="w-full flex items-center gap-2 pl-10 pr-4 py-1.5 text-[11px] text-muted-foreground/60 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
-                            <CornerDownRight size={11} />
-                            <Plus size={10} /> Add sub-category under <span className="font-semibold ml-1">{parent.name}</span>
-                          </button>
-                        </td>
-                      </tr>,
-                    ] : []),
-                  ] : []),
-                ];
-              })}
-
-              {/* Bottom add row */}
-              {can("Add Categories") && !newRow && (
-                <tr>
-                  <td colSpan={7}>
-                    <button onClick={startNewParent}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
-                      data-testid="btn-add-row">
-                      <Plus size={13} /> Add category
-                    </button>
-                  </td>
-                </tr>
-              )}
-
-            </tbody>
-          </table>
+      {/* Tree */}
+      <div ref={tableRef} className="rounded-md border border-border overflow-hidden bg-card">
+        {/* Header row */}
+        <div className="flex items-center bg-gray-50 dark:bg-muted/40 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" style={{ minHeight: 32 }}>
+          <div className="flex-shrink-0 pl-3" style={{ width: 44 }}>Tree</div>
+          <div className="w-8 flex-shrink-0">#</div>
+          <div className="w-12 flex-shrink-0">Col</div>
+          <div className="flex-1 min-w-0 pr-3">Category Name</div>
+          <div className="w-72 flex-shrink-0 pr-2">Description</div>
+          <div className="w-52 flex-shrink-0 pr-2">Parent</div>
+          <div className="w-24 flex-shrink-0 pr-2">Created</div>
+          <div className="w-32 flex-shrink-0 text-right pr-3">Actions</div>
         </div>
+
+        {/* Empty state */}
+        {flatRows.length === 0 && !newRow && (
+          <div className="text-center py-16 text-muted-foreground text-sm">
+            {search ? "No categories match your search." : "No categories yet. Click Add Category to get started."}
+          </div>
+        )}
+
+        {/* Rows */}
+        {renderedList.map((item, idx) =>
+          item.kind === "row" ? renderRow(item.row, idx) : <div key={`new-${idx}`}>{renderNewRow()}</div>,
+        )}
+
+        {/* Bottom add button */}
+        {can("Add Categories") && !newRow && categories.length > 0 && (
+          <button
+            onClick={startNewRoot}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors border-t border-border"
+            data-testid="btn-add-row"
+          >
+            <Plus size={13} /> Add category
+          </button>
+        )}
       </div>
 
       {/* Delete confirm */}
@@ -734,15 +690,15 @@ export default function CategoriesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deleteName}"?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteHasSubs
-                ? `This will permanently delete "${deleteName}" and all its sub-categories. This cannot be undone.`
+              {deleteDescCount > 0
+                ? `This will permanently delete "${deleteName}" and ${deleteDescCount} descendant ${deleteDescCount === 1 ? "category" : "categories"}. This cannot be undone.`
                 : `This will permanently remove "${deleteName}". This cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="btn-confirm-delete-category">
-              {deleteHasSubs ? "Delete All" : "Delete"}
+              {deleteDescCount > 0 ? `Delete All (${deleteDescCount + 1})` : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
