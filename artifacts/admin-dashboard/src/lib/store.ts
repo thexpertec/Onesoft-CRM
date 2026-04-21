@@ -494,6 +494,32 @@ export const deletePaymentAccount = (id: string): void => {
 // ─── Customers API ────────────────────────────────────────────────────────────
 export type CustomerStatus = "Active" | "Inactive" | "Churned";
 
+/** Structured postal address used for billing / shipping. Every field is
+ *  optional so partial data is allowed. Use {@link formatAddress} to render. */
+export type Address = {
+  country?: string;
+  state?: string;       // state / province
+  city?: string;
+  area?: string;        // area / region / suburb
+  line?: string;        // complete street address (building, street, etc.)
+  postalCode?: string;  // postal code / ZIP
+};
+
+/** Returns true if every field is empty / undefined. */
+export function isAddressEmpty(a?: Address): boolean {
+  if (!a) return true;
+  return !(a.country || a.state || a.city || a.area || a.line || a.postalCode);
+}
+
+/** Joins an Address into a single human-readable line for legacy display. */
+export function formatAddress(a?: Address): string {
+  if (!a) return "";
+  return [a.line, a.area, a.city, a.state, a.postalCode, a.country]
+    .map(s => s?.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 export type Customer = {
   id: string;
   name: string;
@@ -503,8 +529,10 @@ export type Customer = {
   industry: string;
   city: string;
   area?: string;   // managed area/region
-  billingAddress?: string;   // full billing address (street + city + postcode etc.)
-  shippingAddress?: string;  // full shipping address; may equal billingAddress
+  billingAddress?: string;   // legacy joined display string (auto-derived from billingAddressDetails)
+  shippingAddress?: string;  // legacy joined display string (auto-derived from shippingAddressDetails)
+  billingAddressDetails?:  Address;  // structured billing address
+  shippingAddressDetails?: Address;  // structured shipping address (may equal billing)
   status: CustomerStatus;
   source: "from_lead" | "direct";
   customerType?: "POS Customer" | "Regular Customer";
@@ -571,10 +599,12 @@ export const deleteCustomer = (id: string): void => {
 
 export const convertLeadToCustomer = (
   lead: Lead,
-  extras?: { billingAddress?: string; shippingAddress?: string },
+  extras?: { billingAddress?: Address; shippingAddress?: Address },
 ): Customer => {
-  const billing  = extras?.billingAddress?.trim()  || undefined;
-  const shipping = extras?.shippingAddress?.trim() || billing;
+  const billingDetails  = isAddressEmpty(extras?.billingAddress)  ? undefined : extras!.billingAddress;
+  const shippingDetails = isAddressEmpty(extras?.shippingAddress) ? billingDetails : extras!.shippingAddress;
+  const billingStr  = formatAddress(billingDetails)  || undefined;
+  const shippingStr = formatAddress(shippingDetails) || billingStr;
   const customer = createCustomer({
     name: lead.name,
     company: lead.company,
@@ -582,8 +612,10 @@ export const convertLeadToCustomer = (
     phone: lead.phone,
     industry: lead.industry,
     city: lead.city,
-    billingAddress:  billing,
-    shippingAddress: shipping,
+    billingAddress:         billingStr,
+    shippingAddress:        shippingStr,
+    billingAddressDetails:  billingDetails,
+    shippingAddressDetails: shippingDetails,
     status: "Active",
     source: "from_lead",
     leadId: lead.id,

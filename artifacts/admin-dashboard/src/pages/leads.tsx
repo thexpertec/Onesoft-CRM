@@ -7,7 +7,9 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Lead, LeadStatus, CallLog, CallOutcome,
   convertLeadToCustomer, getCustomers,
+  Address, isAddressEmpty,
 } from "@/lib/store";
+import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { useToast } from "@/hooks/use-toast";
 import { format, isPast, isToday, isTomorrow, differenceInDays } from "date-fns";
 import {
@@ -989,20 +991,26 @@ export default function Leads() {
 
   const [, navigate] = useLocation();
   const [convertLead, setConvertLead] = useState<Lead | null>(null);
-  const [convBilling,  setConvBilling]  = useState("");
-  const [convShipping, setConvShipping] = useState("");
+  const [convBilling,  setConvBilling]  = useState<Address>({ ...EMPTY_ADDRESS });
+  const [convShipping, setConvShipping] = useState<Address>({ ...EMPTY_ADDRESS });
   const [convSameAddr, setConvSameAddr] = useState(true);
 
   const handleConvert = (lead: Lead) => {
-    setConvBilling(""); setConvShipping(""); setConvSameAddr(true);
+    setConvBilling({ ...EMPTY_ADDRESS });
+    setConvShipping({ ...EMPTY_ADDRESS });
+    setConvSameAddr(true);
     setConvertLead(lead);
   };
 
   const confirmConvert = () => {
     if (!convertLead) return;
+    const billing  = isAddressEmpty(convBilling)  ? undefined : convBilling;
+    const shipping = convSameAddr
+      ? billing
+      : (isAddressEmpty(convShipping) ? undefined : convShipping);
     convertLeadToCustomer(convertLead, {
-      billingAddress: convBilling,
-      shippingAddress: convSameAddr ? convBilling : convShipping,
+      billingAddress:  billing,
+      shippingAddress: shipping,
     });
     refreshCustomers();
     toast({ title: "Lead converted", description: `${convertLead.name} added as a customer. Navigating to Customers…` });
@@ -1595,7 +1603,7 @@ export default function Leads() {
 
       {/* ── Convert-to-Customer Confirm Dialog ────────────────────────────────── */}
       <Dialog open={!!convertLead} onOpenChange={o => !o && setConvertLead(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[16px]">
               <UserCheck size={18} className="text-emerald-600" /> Convert Lead to Customer
@@ -1612,15 +1620,13 @@ export default function Leads() {
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                   Billing Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
-                </label>
-                <Textarea
+                </div>
+                <AddressFields
                   value={convBilling}
-                  onChange={e => setConvBilling(e.target.value)}
-                  placeholder="Street, city, postal code, country…"
-                  rows={3}
-                  className="mt-1 text-sm"
+                  onChange={setConvBilling}
+                  idPrefix="lead-conv-billing"
                 />
               </div>
 
@@ -1636,15 +1642,13 @@ export default function Leads() {
 
               {!convSameAddr && (
                 <div>
-                  <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                     Shipping Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
-                  </label>
-                  <Textarea
+                  </div>
+                  <AddressFields
                     value={convShipping}
-                    onChange={e => setConvShipping(e.target.value)}
-                    placeholder="Street, city, postal code, country…"
-                    rows={3}
-                    className="mt-1 text-sm"
+                    onChange={setConvShipping}
+                    idPrefix="lead-conv-shipping"
                   />
                 </div>
               )}
