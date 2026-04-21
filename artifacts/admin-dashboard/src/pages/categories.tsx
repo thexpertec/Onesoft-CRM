@@ -87,8 +87,8 @@ function InlineCell({
           onKeyDown={onKeyDown}
           className="absolute inset-0 w-full h-full px-2 text-[13px] bg-transparent border-0 outline-none ring-2 ring-inset ring-blue-500 rounded-sm dark:text-foreground placeholder:text-gray-300" />
       ) : (
-        <span className={`px-2 truncate text-[13px] ${value ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
-          {value || (field === "name" ? "(unnamed — click to set)" : placeholder)}
+        <span className={`px-2 block w-full truncate text-[13px] ${value.trim() ? "text-foreground" : (field === "name" ? "text-red-500/80 italic font-medium" : "text-muted-foreground/40")}`}>
+          {value.trim() || (field === "name" ? "(unnamed — click to set)" : placeholder)}
         </span>
       )}
     </div>
