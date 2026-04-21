@@ -24,7 +24,7 @@ import { getStock, getPurchaseOrders, getInvoices } from "@/lib/store";
 
 const dp = getSettingsDecimalPlaces();
 
-type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "department" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas" | "clubcardPrice";
+type EditableField = "name" | "localName" | "model" | "sku" | "barcode" | "brand" | "category" | "subcategory" | "subSubcategory" | "department" | "unit" | "purchasePrice" | "costPrice" | "price" | "wholesalePrice" | "retailProfit" | "wholesaleProfit" | "commissionPct" | "openingStock" | "stockAlertValue" | "status" | "condition" | "description" | "websitePrice" | "websitePriceWas" | "clubcardPrice";
 
 const STATUS_COLORS: Record<string, string> = {
   Active:   "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
@@ -42,7 +42,7 @@ const CONDITION_COLORS: Record<string, string> = {
 
 const BLANK = (): Record<EditableField, string> => ({
   name: "", localName: "", model: "", sku: "", barcode: "", brand: "", category: "", subcategory: "",
-  department: "", unit: "",
+  subSubcategory: "", department: "", unit: "",
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
   retailProfit: "", wholesaleProfit: "", commissionPct: "",
   openingStock: "", stockAlertValue: "",
@@ -53,7 +53,7 @@ const BLANK = (): Record<EditableField, string> => ({
 // Canonical field order for both template download and import parsing
 const CSV_HEADERS: EditableField[] = [
   "name", "localName", "model", "sku", "barcode", "brand",
-  "category", "subcategory", "department", "unit",
+  "category", "subcategory", "subSubcategory", "department", "unit",
   "purchasePrice", "costPrice", "price", "wholesalePrice",
   "openingStock", "stockAlertValue", "commissionPct",
   "status", "condition", "description",
@@ -62,7 +62,7 @@ const CSV_HEADERS: EditableField[] = [
 // Human-readable header labels (same order as CSV_HEADERS)
 const CSV_HEADER_LABELS: string[] = [
   "name", "localName", "model", "sku", "barcode", "brand",
-  "category", "subcategory", "department", "unit",
+  "category", "subcategory", "subSubcategory", "department", "unit",
   "purchasePrice", "costPrice", "retailPrice", "wholesalePrice",
   "openingStock", "stockAlertQty", "commissionPct",
   "status", "condition", "description",
@@ -78,6 +78,7 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
   brand:           ["brand", "brandname", "manufacturer", "make"],
   category:        ["category", "categoryname", "cat", "group", "productgroup"],
   subcategory:     ["subcategory", "subcat", "subcategoryname", "sub", "subc", "subgroup"],
+  subSubcategory:  ["subsubcategory", "subsubcat", "subsubcategoryname", "subsub", "ssc", "subsubgroup", "thirdlevelcategory"],
   department:      ["department", "dept", "departmentname", "div", "division", "section"],
   unit:            ["unit", "uom", "unitofmeasure", "unitofmeasurement", "measure"],
   purchasePrice:   ["purchaseprice", "buyprice", "costofpurchase", "pp"],
@@ -107,6 +108,7 @@ function downloadTemplate() {
     "Onesoft",               // brand
     "Software",              // category
     "CRM",                   // subcategory
+    "",                       // subSubcategory
     "",                       // department
     "Licence",               // unit
     "600.00",                // purchasePrice
@@ -509,6 +511,7 @@ export default function ProductsPage() {
           const payload: RowPayload = {
             name: r.name, sku: r.sku, brand: r.brand, category: r.category,
             subcategory: r.subcategory,
+            subSubcategory: r.subSubcategory,
             unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
             price: r.price, wholesalePrice: r.wholesalePrice,
             barcode: r.barcode, localName: r.localName,
@@ -2341,7 +2344,8 @@ export default function ProductsPage() {
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Details</h3>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                     {[
-                      { label: "Category",  value: prod.category },
+                      { label: "Category",  value: [prod.category, prod.subcategory, prod.subSubcategory].filter(Boolean).join(" › ") },
+                      { label: "Department", value: prod.department },
                       { label: "Unit",      value: prod.unit },
                       { label: "Brand",     value: prod.brand },
                       { label: "Condition", value: prod.condition },

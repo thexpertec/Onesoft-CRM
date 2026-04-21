@@ -189,7 +189,17 @@ export default function CategoriesPage() {
     setNewRow(BLANK(parentId));
     setNewRowField("name");
     setEditCell(null);
-    setExpandedIds(prev => new Set([...prev, parentId]));
+    // Walk up the chain so every ancestor is expanded and the new row is visible
+    const parent = categories.find(c => c.id === parentId);
+    if (parent?.parentId) {
+      // Adding under a sub-category (level 2) → new row will be a sub-sub
+      // Expand the sub itself, AND its top-level parent
+      setExpandedSubIds(prev => new Set([...prev, parentId]));
+      setExpandedIds(prev => new Set([...prev, parent.parentId as string]));
+    } else {
+      // Adding under a top-level category → new row will be a sub
+      setExpandedIds(prev => new Set([...prev, parentId]));
+    }
   };
 
   const commitNewRow = () => {
