@@ -511,3 +511,35 @@ input[type=number] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Prominent action buttons in table rows.
+   Targets the legacy "p-1 rounded text-gray-400 hover:text-..." pattern
+   used in Actions columns across every list page (sales, leads, customers,
+   products, invoices, etc.) and bumps them up to a comfortable, tappable,
+   visually-strong size — without needing to edit each page individually.
+   ────────────────────────────────────────────────────────────────────────── */
+button.p-1.rounded.text-gray-400 {
+  padding: 0.4rem !important;            /* ~6.4px → larger hit target */
+  border-radius: 0.5rem;                  /* slightly rounder corners   */
+  background-color: rgb(243 244 246);     /* light gray base background */
+  border: 1px solid rgb(229 231 235);     /* visible border             */
+  color: rgb(75 85 99);                   /* darker icon → more visible */
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.p-1.rounded.text-gray-400 > svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+button.p-1.rounded.text-gray-400:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+.dark button.p-1.rounded.text-gray-400 {
+  background-color: rgb(31 41 55);
+  border-color: rgb(55 65 81);
+  color: rgb(209 213 219);
+}
