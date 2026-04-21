@@ -176,10 +176,11 @@ const STATUS_COLORS: Record<string, string> = {
   Churned:  "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
 };
 
-type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "status" | "customerSince" | "totalValue" | "notes" | "customerType" | "customerRole";
+type EditableField = "name" | "company" | "email" | "phone" | "industry" | "city" | "area" | "billingAddress" | "shippingAddress" | "status" | "customerSince" | "totalValue" | "notes" | "customerType" | "customerRole";
 
 const BLANK = (): Record<EditableField, string> => ({
   name: "", company: "", email: "", phone: "", industry: "", city: "", area: "",
+  billingAddress: "", shippingAddress: "",
   status: "Active", customerSince: new Date().toISOString().split("T")[0], totalValue: "", notes: "",
   customerType: "Regular Customer",
   customerRole: "Buyer",
@@ -209,6 +210,8 @@ export default function CustomersPage() {
     { field: "industry",      label: "Industry",      minW: 120, type: "text"   },
     { field: "city",          label: "City",          minW: 120, type: cityOptions.length ? "select" : "text", options: cityOptions },
     { field: "area",          label: "Area / Region", minW: 130, type: areaOptions.length ? "select" : "text", options: areaOptions },
+    { field: "billingAddress",  label: "Billing Address",  minW: 200, type: "text" },
+    { field: "shippingAddress", label: "Shipping Address", minW: 200, type: "text" },
     { field: "status",        label: "Status",        minW: 130, type: "select", options: CUSTOMER_STATUSES, optionColors: STATUS_COLORS },
     { field: "customerType",  label: "Type",          minW: 140, type: "select", options: ["Regular Customer", "POS Customer"],
       optionColors: { "Regular Customer": "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300", "POS Customer": "bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300" } },
@@ -352,6 +355,8 @@ export default function CustomersPage() {
     addCustomer({
       name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
       industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
+      billingAddress: newRow.billingAddress || undefined,
+      shippingAddress: newRow.shippingAddress || newRow.billingAddress || undefined,
       status: newRow.status as CustomerStatus,
       customerType: (newRow.customerType as "POS Customer" | "Regular Customer") || "Regular Customer",
       customerRole: (newRow.customerRole as "Buyer" | "Supplier") || "Buyer",
@@ -686,6 +691,21 @@ export default function CustomersPage() {
                   </div>
                 ))}
               </div>
+              {(viewCust.billingAddress || viewCust.shippingAddress) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Billing Address</p>
+                    <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap min-h-[60px]">{viewCust.billingAddress || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Shipping Address</p>
+                    <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap min-h-[60px]">
+                      {viewCust.shippingAddress
+                        || (viewCust.billingAddress ? <span className="text-muted-foreground italic">Same as billing</span> : "—")}
+                    </p>
+                  </div>
+                </div>
+              )}
               {viewCust.tags?.length ? (
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Tags</p>

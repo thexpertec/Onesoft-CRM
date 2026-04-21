@@ -490,6 +490,8 @@ export type Customer = {
   industry: string;
   city: string;
   area?: string;   // managed area/region
+  billingAddress?: string;   // full billing address (street + city + postcode etc.)
+  shippingAddress?: string;  // full shipping address; may equal billingAddress
   status: CustomerStatus;
   source: "from_lead" | "direct";
   customerType?: "POS Customer" | "Regular Customer";
