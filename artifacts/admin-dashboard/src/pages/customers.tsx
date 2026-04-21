@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useCustomers, useLeads, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Customer, CustomerStatus, Lead, convertLeadToCustomer } from "@/lib/store";
+import { Customer, CustomerStatus, Lead, convertLeadToCustomer, Address, isAddressEmpty } from "@/lib/store";
+import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -380,20 +381,26 @@ export default function CustomersPage() {
   };
 
   const [convertLead, setConvertLead] = useState<Lead | null>(null);
-  const [convBilling,  setConvBilling]  = useState("");
-  const [convShipping, setConvShipping] = useState("");
+  const [convBilling,  setConvBilling]  = useState<Address>({ ...EMPTY_ADDRESS });
+  const [convShipping, setConvShipping] = useState<Address>({ ...EMPTY_ADDRESS });
   const [convSameAddr, setConvSameAddr] = useState(true);
 
   const handleConvert = (lead: Lead) => {
-    setConvBilling(""); setConvShipping(""); setConvSameAddr(true);
+    setConvBilling({ ...EMPTY_ADDRESS });
+    setConvShipping({ ...EMPTY_ADDRESS });
+    setConvSameAddr(true);
     setConvertLead(lead);
   };
 
   const confirmConvert = () => {
     if (!convertLead) return;
+    const billing  = isAddressEmpty(convBilling)  ? undefined : convBilling;
+    const shipping = convSameAddr
+      ? billing
+      : (isAddressEmpty(convShipping) ? undefined : convShipping);
     convertLeadToCustomer(convertLead, {
-      billingAddress: convBilling,
-      shippingAddress: convSameAddr ? convBilling : convShipping,
+      billingAddress:  billing,
+      shippingAddress: shipping,
     });
     refresh();
     toast({ title: "Lead converted", description: `${convertLead.name} added as customer.` });
@@ -764,7 +771,7 @@ export default function CustomersPage() {
 
       {/* ── Convert-to-Customer Confirm Dialog ────────────────────────────── */}
       <Dialog open={!!convertLead} onOpenChange={o => !o && setConvertLead(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[16px]">
               <UserCheck size={18} className="text-emerald-600" /> Convert Lead to Customer
@@ -781,15 +788,13 @@ export default function CustomersPage() {
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                   Billing Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
-                </label>
-                <Textarea
+                </div>
+                <AddressFields
                   value={convBilling}
-                  onChange={e => setConvBilling(e.target.value)}
-                  placeholder="Street, city, postal code, country…"
-                  rows={3}
-                  className="mt-1 text-sm"
+                  onChange={setConvBilling}
+                  idPrefix="cust-conv-billing"
                 />
               </div>
 
@@ -805,15 +810,13 @@ export default function CustomersPage() {
 
               {!convSameAddr && (
                 <div>
-                  <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                     Shipping Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
-                  </label>
-                  <Textarea
+                  </div>
+                  <AddressFields
                     value={convShipping}
-                    onChange={e => setConvShipping(e.target.value)}
-                    placeholder="Street, city, postal code, country…"
-                    rows={3}
-                    className="mt-1 text-sm"
+                    onChange={setConvShipping}
+                    idPrefix="cust-conv-shipping"
                   />
                 </div>
               )}
