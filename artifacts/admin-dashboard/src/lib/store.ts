@@ -182,8 +182,12 @@ function _lsRemove(storageKey: string): void {
 /**
  * Fire-and-forget write to the PostgreSQL KV store via the API server.
  * storageKey may include "t:{id}:" tenant prefix.
+ *
+ * Returns a Promise so callers that need durable confirmation (e.g. tenant
+ * delete) can `await` it; legacy callers that don't await retain the original
+ * fire-and-forget behaviour because errors are still caught here.
  */
-function _apiWrite(storageKey: string, value: unknown): void {
+function _apiWrite(storageKey: string, value: unknown): Promise<void> {
   let ns: string;
   let key: string;
   const tenantMatch = storageKey.match(/^t:([^:]+):(.+)$/);
@@ -194,8 +198,10 @@ function _apiWrite(storageKey: string, value: unknown): void {
     ns = "global";
     key = storageKey;
   }
-  kvPut(ns, key, value).catch((err) => {
+  return kvPut(ns, key, value).catch((err) => {
     console.error(`[kv] server write FAILED for ${ns}/${key}:`, err instanceof Error ? err.message : err);
+    // Re-throw so awaiting callers can react to failure
+    throw err;
   });
 }
 
@@ -235,7 +241,14 @@ function getGlobal<T>(key: string): T[] {
 /** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
   _lsCache(key, data);  // write to _memRaw + localStorage immediately (warm-start cache)
-  _apiWrite(key, data);
+  // Fire-and-forget; awaitable variant available via setGlobalAsync below
+  _apiWrite(key, data).catch(() => { /* error already logged */ });
+}
+
+/** Awaitable platform-level write. Resolves only after the server confirms. */
+async function setGlobalAsync<T>(key: string, data: T[]): Promise<void> {
+  _lsCache(key, data);
+  await _apiWrite(key, data);
 }
 
 // ─── Leads API ────────────────────────────────────────────────────────────────
@@ -1036,6 +1049,18 @@ export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt"
   return tenant;
 };
 
+/** Awaitable variant: resolves only after the server has stored the new list.
+ *  Use this from UI flows where the user must see a confirmation/error toast. */
+export const createTenantAsync = async (
+  data: Omit<Tenant, "id" | "createdAt" | "updatedAt">,
+): Promise<Tenant> => {
+  const now = new Date().toISOString();
+  const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+  await setGlobalAsync(TENANTS_KEY, [...getTenants(), tenant]);
+  try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
+  return tenant;
+};
+
 export const updateTenant = (id: string, updates: Partial<Omit<Tenant, "id" | "createdAt">>): Tenant => {
   const tenants = getTenants();
   const idx = tenants.findIndex(t => t.id === id);
@@ -1045,8 +1070,26 @@ export const updateTenant = (id: string, updates: Partial<Omit<Tenant, "id" | "c
   return tenants[idx];
 };
 
+export const updateTenantAsync = async (
+  id: string,
+  updates: Partial<Omit<Tenant, "id" | "createdAt">>,
+): Promise<Tenant> => {
+  const tenants = getTenants();
+  const idx = tenants.findIndex(t => t.id === id);
+  if (idx === -1) throw new Error("Tenant not found");
+  tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
+  await setGlobalAsync(TENANTS_KEY, tenants);
+  return tenants[idx];
+};
+
 export const deleteTenant = (id: string): void => {
   setGlobal(TENANTS_KEY, getTenants().filter(t => t.id !== id));
+};
+
+/** Awaitable variant of deleteTenant. Resolves only after the server confirms
+ *  the new list is persisted. Throws on failure so the UI can show an error. */
+export const deleteTenantAsync = async (id: string): Promise<void> => {
+  await setGlobalAsync(TENANTS_KEY, getTenants().filter(t => t.id !== id));
 };
 
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
@@ -5057,6 +5100,14 @@ function _dedupeByKey<T extends { createdAt?: string }>(
   return seen.size < items.length ? Array.from(seen.values()) : items;
 }
 
+/**
+ * Platform-level keys that MUST live on the server. If the sync response is
+ * missing one of these but the local cache has data for it, we treat that as
+ * an inconsistency and PUSH local → server to heal it.  This guarantees the
+ * tenant registry (and the like) eventually converges across every device.
+ */
+const SELF_HEAL_GLOBAL_KEYS = ["admin-tenants", "admin-users"] as const;
+
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
     // Always sync global data (users, tenants, module groups)
@@ -5068,6 +5119,25 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           // warm-start from localStorage without needing to wait for the server.
           _lsCache(key, value);
         }
+      }
+
+      // ── Self-heal: if the server is missing a critical platform key but
+      //    we hold local data for it, push local → server. This fixes the
+      //    legacy state where tenant writes were fire-and-forget and may
+      //    never have reached the DB.  After one sync the server becomes
+      //    the single source of truth and deletes/creations propagate
+      //    correctly across devices.
+      for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
+        if (platKey in globalData) continue;          // server has it — nothing to heal
+        const raw = _memRaw.get(platKey) ?? (() => { try { return localStorage.getItem(platKey); } catch { return null; } })();
+        if (!raw) continue;                            // nothing local either
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.info(`[sync] Self-heal: pushing local "${platKey}" (${parsed.length} items) up to server`);
+            kvPut("global", platKey, parsed).catch(() => { /* error already surfaced via console */ });
+          }
+        } catch { /* malformed local — ignore */ }
       }
     }
 

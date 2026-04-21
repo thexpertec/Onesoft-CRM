@@ -10,7 +10,8 @@ import {
 } from "@/lib/demo-seed";
 import {
   Tenant, TenantStatus, TenantPlan,
-  getTenants, createTenant, updateTenant, deleteTenant,
+  getTenants,
+  createTenantAsync, updateTenantAsync, deleteTenantAsync,
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
@@ -459,7 +460,10 @@ export default function TenantsPage() {
     setTimeout(() => {
       try {
         seedDataIntoTenant(tenant.id, tenant.name);
-        updateTenant(tenant.id, { demoLastReset: new Date().toISOString() });
+        // Fire-and-forget metadata update — server will eventually persist;
+        // failure here doesn't affect the demo seed itself.
+        updateTenantAsync(tenant.id, { demoLastReset: new Date().toISOString() })
+          .catch(err => console.warn("[tenants] demoLastReset persist failed:", err));
         reload();
         toast({
           title: "Demo data loaded!",
@@ -501,31 +505,49 @@ export default function TenantsPage() {
     setStatsCache(s => ({ ...s, [tenantId]: stats }));
   }
 
-  function handleSave(data: Omit<Tenant, "id" | "createdAt" | "updatedAt">) {
-    if (editing) {
-      const updates = { ...data };
-      if (!updates.adminPassword) delete (updates as Partial<typeof updates>).adminPassword;
-      updateTenant(editing.id, updates);
-      toast({ title: `"${data.name}" updated` });
-    } else {
-      const t = createTenant(data);
-      const coaCount = getChartOfAccountsForTenant(t.id).length;
+  async function handleSave(data: Omit<Tenant, "id" | "createdAt" | "updatedAt">) {
+    try {
+      if (editing) {
+        const updates = { ...data };
+        if (!updates.adminPassword) delete (updates as Partial<typeof updates>).adminPassword;
+        await updateTenantAsync(editing.id, updates);
+        toast({ title: `"${data.name}" updated` });
+      } else {
+        const t = await createTenantAsync(data);
+        const coaCount = getChartOfAccountsForTenant(t.id).length;
+        toast({
+          title: `Tenant "${data.name}" created`,
+          description: `Login: ${data.adminUsername}${coaCount > 0 ? ` · ${coaCount} COA accounts seeded` : ""}`,
+        });
+      }
+      reload();
+      setModalOpen(false);
+      setEditing(null);
+    } catch (err) {
       toast({
-        title: `Tenant "${data.name}" created`,
-        description: `Login: ${data.adminUsername}${coaCount > 0 ? ` · ${coaCount} COA accounts seeded` : ""}`,
+        title: "Save failed",
+        description: `Could not persist tenant to the server. ${err instanceof Error ? err.message : ""}`,
+        variant: "destructive",
       });
     }
-    reload();
-    setModalOpen(false);
-    setEditing(null);
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     const t = tenants.find(x => x.id === id);
-    deleteTenant(id);
-    reload();
-    setDeleteId(null);
-    toast({ title: `"${t?.name}" deleted`, variant: "destructive" });
+    try {
+      await deleteTenantAsync(id);
+      reload();
+      setDeleteId(null);
+      toast({ title: `"${t?.name}" deleted`, variant: "destructive" });
+    } catch (err) {
+      // Persistence failed — surface the error so the user knows the deletion
+      // didn't reach the server (and would likely come back on next sync).
+      toast({
+        title: "Delete failed",
+        description: `Could not persist deletion to the server. Please retry. ${err instanceof Error ? err.message : ""}`,
+        variant: "destructive",
+      });
+    }
   }
 
   function handleSwitch(tenant: Tenant) {
