@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { UserCheck } from "lucide-react";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
 
@@ -376,10 +379,25 @@ export default function CustomersPage() {
     setDeleteId(null);
   };
 
+  const [convertLead, setConvertLead] = useState<Lead | null>(null);
+  const [convBilling,  setConvBilling]  = useState("");
+  const [convShipping, setConvShipping] = useState("");
+  const [convSameAddr, setConvSameAddr] = useState(true);
+
   const handleConvert = (lead: Lead) => {
-    convertLeadToCustomer(lead);
+    setConvBilling(""); setConvShipping(""); setConvSameAddr(true);
+    setConvertLead(lead);
+  };
+
+  const confirmConvert = () => {
+    if (!convertLead) return;
+    convertLeadToCustomer(convertLead, {
+      billingAddress: convBilling,
+      shippingAddress: convSameAddr ? convBilling : convShipping,
+    });
     refresh();
-    toast({ title: "Lead converted", description: `${lead.name} added as customer.` });
+    toast({ title: "Lead converted", description: `${convertLead.name} added as customer.` });
+    setConvertLead(null);
     setActiveTab("All Customers");
   };
 
@@ -743,6 +761,72 @@ export default function CustomersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Convert-to-Customer Confirm Dialog ────────────────────────────── */}
+      <Dialog open={!!convertLead} onOpenChange={o => !o && setConvertLead(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[16px]">
+              <UserCheck size={18} className="text-emerald-600" /> Convert Lead to Customer
+            </DialogTitle>
+          </DialogHeader>
+          {convertLead && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/40 rounded-md p-3 text-sm">
+                <div className="font-semibold">{convertLead.name}</div>
+                {convertLead.company && <div className="text-muted-foreground text-[13px]">{convertLead.company}</div>}
+                <div className="text-muted-foreground text-[12px] mt-1">
+                  {convertLead.email || "—"} · {convertLead.phone || "—"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Billing Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
+                </label>
+                <Textarea
+                  value={convBilling}
+                  onChange={e => setConvBilling(e.target.value)}
+                  placeholder="Street, city, postal code, country…"
+                  rows={3}
+                  className="mt-1 text-sm"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-[13px] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={convSameAddr}
+                  onChange={e => setConvSameAddr(e.target.checked)}
+                  className="h-4 w-4 accent-emerald-600"
+                />
+                Shipping address same as billing
+              </label>
+
+              {!convSameAddr && (
+                <div>
+                  <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Shipping Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <Textarea
+                    value={convShipping}
+                    onChange={e => setConvShipping(e.target.value)}
+                    placeholder="Street, city, postal code, country…"
+                    rows={3}
+                    className="mt-1 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertLead(null)}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" onClick={confirmConvert}>
+              <UserCheck size={14} /> Convert to Customer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CustomerImportModal
         open={showImport}

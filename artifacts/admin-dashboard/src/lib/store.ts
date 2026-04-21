@@ -556,7 +556,12 @@ export const deleteCustomer = (id: string): void => {
   addActivity({ action: "deleted", entity: "Customer", entityName: customer?.name || id });
 };
 
-export const convertLeadToCustomer = (lead: Lead): Customer => {
+export const convertLeadToCustomer = (
+  lead: Lead,
+  extras?: { billingAddress?: string; shippingAddress?: string },
+): Customer => {
+  const billing  = extras?.billingAddress?.trim()  || undefined;
+  const shipping = extras?.shippingAddress?.trim() || billing;
   const customer = createCustomer({
     name: lead.name,
     company: lead.company,
@@ -564,6 +569,8 @@ export const convertLeadToCustomer = (lead: Lead): Customer => {
     phone: lead.phone,
     industry: lead.industry,
     city: lead.city,
+    billingAddress:  billing,
+    shippingAddress: shipping,
     status: "Active",
     source: "from_lead",
     leadId: lead.id,

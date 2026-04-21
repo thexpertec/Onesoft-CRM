@@ -988,9 +988,25 @@ export default function Leads() {
   };
 
   const [, navigate] = useLocation();
+  const [convertLead, setConvertLead] = useState<Lead | null>(null);
+  const [convBilling,  setConvBilling]  = useState("");
+  const [convShipping, setConvShipping] = useState("");
+  const [convSameAddr, setConvSameAddr] = useState(true);
+
   const handleConvert = (lead: Lead) => {
-    convertLeadToCustomer(lead); refreshCustomers();
-    toast({ title: "Lead converted", description: `${lead.name} added as a customer. Navigating to Customers…` });
+    setConvBilling(""); setConvShipping(""); setConvSameAddr(true);
+    setConvertLead(lead);
+  };
+
+  const confirmConvert = () => {
+    if (!convertLead) return;
+    convertLeadToCustomer(convertLead, {
+      billingAddress: convBilling,
+      shippingAddress: convSameAddr ? convBilling : convShipping,
+    });
+    refreshCustomers();
+    toast({ title: "Lead converted", description: `${convertLead.name} added as a customer. Navigating to Customers…` });
+    setConvertLead(null);
     navigate("/customers");
   };
 
@@ -1576,6 +1592,72 @@ export default function Leads() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Convert-to-Customer Confirm Dialog ────────────────────────────────── */}
+      <Dialog open={!!convertLead} onOpenChange={o => !o && setConvertLead(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[16px]">
+              <UserCheck size={18} className="text-emerald-600" /> Convert Lead to Customer
+            </DialogTitle>
+          </DialogHeader>
+          {convertLead && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/40 rounded-md p-3 text-sm">
+                <div className="font-semibold">{convertLead.name}</div>
+                {convertLead.company && <div className="text-muted-foreground text-[13px]">{convertLead.company}</div>}
+                <div className="text-muted-foreground text-[12px] mt-1">
+                  {convertLead.email || "—"} · {convertLead.phone || "—"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Billing Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
+                </label>
+                <Textarea
+                  value={convBilling}
+                  onChange={e => setConvBilling(e.target.value)}
+                  placeholder="Street, city, postal code, country…"
+                  rows={3}
+                  className="mt-1 text-sm"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-[13px] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={convSameAddr}
+                  onChange={e => setConvSameAddr(e.target.checked)}
+                  className="h-4 w-4 accent-emerald-600"
+                />
+                Shipping address same as billing
+              </label>
+
+              {!convSameAddr && (
+                <div>
+                  <label className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Shipping Address <span className="normal-case font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <Textarea
+                    value={convShipping}
+                    onChange={e => setConvShipping(e.target.value)}
+                    placeholder="Street, city, postal code, country…"
+                    rows={3}
+                    className="mt-1 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertLead(null)}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" onClick={confirmConvert}>
+              <UserCheck size={14} /> Convert to Customer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Import CSV Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={importOpen} onOpenChange={o => { if(!o) { setImportOpen(false); setImportRows([]); }}}>
