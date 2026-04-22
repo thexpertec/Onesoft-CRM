@@ -1250,17 +1250,41 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             </button>
           )}
 
-          {/* Save / Create — always visible */}
-          <button
-            onClick={handleSave}
-            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-colors ${
-              invoiceType === "purchase"
-                ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
-                : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none"
-            }`}
-          >
-            <Save size={14}/> {isNew ? "Create Invoice" : "Save"}
-          </button>
+          {/* New invoice: Draft + Create split */}
+          {isNew ? (
+            <>
+              {/* Draft */}
+              <button
+                onClick={() => handleSave("Draft")}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 dark:border-zinc-600 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors shadow-sm"
+              >
+                <FileText size={14}/> Save as Draft
+              </button>
+              {/* Create (activate immediately) */}
+              <button
+                onClick={() => handleSave(createStatus)}
+                className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-colors ${
+                  invoiceType === "purchase"
+                    ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
+                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none"
+                }`}
+              >
+                <CheckCircle size={14}/> Create Invoice
+              </button>
+            </>
+          ) : (
+            /* Existing invoice: single Save button preserving current status */
+            <button
+              onClick={() => handleSave()}
+              className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold text-white shadow-md transition-colors ${
+                invoiceType === "purchase"
+                  ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
+                  : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none"
+              }`}
+            >
+              <Save size={14}/> Save
+            </button>
+          )}
         </div>
       </div>
 
