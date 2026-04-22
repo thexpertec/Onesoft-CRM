@@ -38,6 +38,7 @@ import {
 import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
+import { LoginAsDialog } from "@/components/login-as-dialog";
 
 // ─── Activity Log helpers ─────────────────────────────────────────────────────
 const LAST_SEEN_KEY = "onesoft-activity-last-seen";
@@ -339,11 +340,12 @@ const QUICK_ADD: SubItem[] = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin, isManager, assignedTenants, isStaff, isSalesAgent, currentAgentId, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
+  const { isSuperAdmin, isManager, assignedTenants, isStaff, isSalesAgent, currentAgentId, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant, exitImpersonation, isImpersonating } = useAuth();
   useDemoReset();
 
   const [mobileOpen,   setMobileOpen]   = useState(false);
   const [searchOpen,   setSearchOpen]   = useState(false);
+  const [laOpen,       setLaOpen]       = useState(false);
   const [searchQuery,  setSearchQuery]  = useState("");
   const [cpOpen,       setCpOpen]       = useState(false);
   const [openMega,     setOpenMega]     = useState<string | null>(null);
@@ -740,6 +742,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <ActivityLogPanel onClose={() => setActivityOpen(false)} />
               </PopoverContent>
             </Popover>
+
+            {/* Login as Business — manager only */}
+            {isManager && !isImpersonating && (
+              <button
+                onClick={() => setLaOpen(true)}
+                className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-[12px] font-semibold transition-colors shadow-sm"
+              >
+                <Building2 size={14} />
+                Login as Business
+              </button>
+            )}
+
+            {/* Exit impersonation — shown when manager is inside a business */}
+            {isImpersonating && (
+              <button
+                onClick={exitImpersonation}
+                className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[12px] font-semibold transition-colors shadow-sm"
+              >
+                <ArrowLeftRight size={14} />
+                Exit to Manager
+              </button>
+            )}
 
             {/* Quick Add */}
             <DropdownMenu>
@@ -1379,7 +1403,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* ═══ CENTER CONTENT ════════════════════════════════════════════════ */}
         <div className="flex flex-col flex-1 min-w-0 overflow-y-auto bg-gray-50 dark:bg-background">
 
-          {/* Active-tenant banner */}
+          {/* Active-tenant banner (superadmin) */}
           {isSuperAdmin && currentTenantId && currentTenant && (
             <div className="bg-amber-500 text-white px-5 py-2 flex items-center gap-3 shadow-sm flex-shrink-0">
               <Globe size={14} className="flex-shrink-0" />
@@ -1394,6 +1418,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
               >
                 <X size={12} /> Exit Tenant View
+              </button>
+            </div>
+          )}
+
+          {/* Impersonation banner (manager logged in as a business) */}
+          {isImpersonating && currentTenant && (
+            <div className="bg-indigo-600 text-white px-5 py-2 flex items-center gap-3 shadow-sm flex-shrink-0">
+              <Building2 size={14} className="flex-shrink-0" />
+              <span className="text-[13px] font-semibold flex-1">
+                Logged in as: <span className="font-bold">{currentTenant.name}</span>
+                <span className="ml-2 text-indigo-200 font-normal text-[11px]">
+                  — {currentUser?.role === "admin" ? "Admin" : currentUser?.role === "staff" ? "Staff" : "Sales Agent"} view
+                </span>
+              </span>
+              <button
+                onClick={exitImpersonation}
+                className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
+              >
+                <ArrowLeftRight size={12} /> Exit to Manager
               </button>
             </div>
           )}
@@ -1466,6 +1509,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Change Password Dialog */}
       <ChangePasswordDialog open={cpOpen} onClose={() => setCpOpen(false)} />
+
+      {/* Login as Business Dialog (manager only) */}
+      <LoginAsDialog open={laOpen} onClose={() => setLaOpen(false)} />
     </div>
   );
 }

@@ -18,11 +18,15 @@ import {
   syncAllFromServer,
   setActivityUser,
   seedDefaultCoaAccounts,
+  Tenant,
 } from "@/lib/store";
 
-const AUTH_KEY     = "onesoft-admin-auth";
-const AUTH_USER_ID = "onesoft-admin-user-id";
-const TENANT_KEY   = "onesoft-tenant-id";
+const AUTH_KEY        = "onesoft-admin-auth";
+const AUTH_USER_ID    = "onesoft-admin-user-id";
+const TENANT_KEY      = "onesoft-tenant-id";
+const IMPERSONATE_KEY = "onesoft-impersonate-from"; // stores manager's original userId
+
+export type ImpersonateAs = "admin" | "staff" | "sales_agent";
 
 type AuthContextType = {
   isAuthenticated:   boolean;
@@ -37,9 +41,12 @@ type AuthContextType = {
   currentTenantId:   string | null;
   currentTenant:     Tenant | null;
   isSyncing:         boolean;
+  isImpersonating:   boolean;          // manager is currently logged-in as a business
   /** Check if the current user has a specific permission (e.g. "Add Leads", "Edit Products"). Superadmin/tenant-admin always return true. */
   can:               (permission: string) => boolean;
   login:             (username: string, password: string) => Promise<boolean>;
+  loginAs:           (tenantId: string, as: ImpersonateAs, memberId?: string) => Promise<boolean>;
+  exitImpersonation: () => void;
   logout:            () => void;
   refreshCurrentUser: () => void;
   switchTenant:      (tenantId: string | null) => void;
@@ -58,8 +65,11 @@ const AuthContext = createContext<AuthContextType>({
   currentTenantId:    null,
   currentTenant:      null,
   isSyncing:          false,
+  isImpersonating:    false,
   can:                () => false,
   login:              async () => false,
+  loginAs:            async () => false,
+  exitImpersonation:  () => {},
   logout:             () => {},
   refreshCurrentUser: () => {},
   switchTenant:       () => {},
@@ -97,6 +107,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // True while we're fetching latest data from the database after login/refresh
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // True while manager is impersonating a business user
+  const [isImpersonating, setIsImpersonating] = useState<boolean>(
+    () => sessionStorage.getItem(IMPERSONATE_KEY) !== null
+  );
 
   const isAuthenticated  = currentUser !== null;
   const isSuperAdmin     = currentUser?.role === "superadmin";
@@ -264,6 +279,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
+  // ── Login As (manager impersonation) ───────────────────────────────────────
+  const loginAs = async (
+    tenantId: string,
+    as: ImpersonateAs,
+    memberId?: string
+  ): Promise<boolean> => {
+    const tenant = getTenantById(tenantId);
+    if (!tenant || tenant.status === "suspended") return false;
+
+    // Save manager's original user ID so we can restore
+    const origUserId = sessionStorage.getItem(AUTH_USER_ID) ?? "";
+    sessionStorage.setItem(IMPERSONATE_KEY, origUserId);
+
+    // Sync tenant-specific data
+    setIsSyncing(true);
+    try {
+      await syncAllFromServer(tenantId);
+      seedDefaultCoaAccounts();
+    } finally {
+      setIsSyncing(false);
+    }
+
+    if (as === "admin") {
+      const tenantUser = tenantToAdminUser(tenant);
+      setActiveTenant(tenantId);
+      setActivityUser(tenantUser.fullName || tenantUser.username);
+      sessionStorage.setItem(AUTH_USER_ID, `tenant:${tenantId}`);
+      sessionStorage.setItem(TENANT_KEY, tenantId);
+      setCurrentUser(tenantUser);
+      setCurrentTenantId(tenantId);
+      setIsImpersonating(true);
+      return true;
+    }
+
+    if (as === "staff" && memberId) {
+      const staffMember = getStaff().find(s => s.id === memberId);
+      if (!staffMember) return false;
+      const staffUser = staffToAdminUser(staffMember);
+      setActiveTenant(tenantId);
+      setActivityUser(staffUser.fullName || staffUser.username);
+      sessionStorage.setItem(AUTH_USER_ID, `staff:${memberId}`);
+      sessionStorage.setItem(TENANT_KEY, tenantId);
+      setCurrentUser(staffUser);
+      setCurrentTenantId(tenantId);
+      setIsImpersonating(true);
+      return true;
+    }
+
+    if (as === "sales_agent" && memberId) {
+      const agent = getSalesAgents().find(a => a.id === memberId);
+      if (!agent) return false;
+      const agentUser = agentToAdminUser(agent);
+      setActiveTenant(tenantId);
+      setActivityUser(agentUser.fullName || agentUser.username);
+      sessionStorage.setItem(AUTH_USER_ID, `agent:${memberId}`);
+      sessionStorage.setItem(TENANT_KEY, tenantId);
+      setCurrentUser(agentUser);
+      setCurrentTenantId(tenantId);
+      setIsImpersonating(true);
+      return true;
+    }
+
+    // Cleanup if something went wrong
+    sessionStorage.removeItem(IMPERSONATE_KEY);
+    return false;
+  };
+
+  // ── Exit Impersonation ─────────────────────────────────────────────────────
+  const exitImpersonation = () => {
+    const origUserId = sessionStorage.getItem(IMPERSONATE_KEY);
+    if (!origUserId) return;
+
+    sessionStorage.removeItem(IMPERSONATE_KEY);
+    setActiveTenant(null);
+    sessionStorage.setItem(AUTH_USER_ID, origUserId);
+    sessionStorage.setItem(TENANT_KEY, "");
+
+    const managerUser = getAdminUserById(origUserId);
+    setActivityUser(managerUser?.fullName || managerUser?.username || "Manager");
+    setCurrentUser(managerUser ?? null);
+    setCurrentTenantId(null);
+    setIsImpersonating(false);
+  };
+
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = () => {
     setActiveTenant(null);
@@ -303,8 +402,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isManager, assignedTenants,
       isStaff, isSalesAgent, currentAgentId, staffPermissions,
       currentTenantId, currentTenant,
-      isSyncing, can,
-      login, logout, refreshCurrentUser, switchTenant,
+      isSyncing, isImpersonating, can,
+      login, loginAs, exitImpersonation,
+      logout, refreshCurrentUser, switchTenant,
     }}>
       {children}
     </AuthContext.Provider>
