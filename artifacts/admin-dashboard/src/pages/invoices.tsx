@@ -9,7 +9,7 @@ import {
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
-  createJournalEntry, updateInvoice, getInvoiceProductName,
+  createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -22,6 +22,7 @@ import {
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
   DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
+  Calculator, Upload, RefreshCw, Tag,
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -462,6 +463,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     () => invoice?.bankAccountIds ?? []
   );
   const availableBankAccounts = useMemo(() => getBankAccounts(), []);
+
+  // ── Cost rate calculator (purchase invoices only) ───────────────────────
+  const [costCalcOpen, setCostCalcOpen] = useState(false);
+  // per-item overrides: { suggestedCost, salePrice }
+  const [costOverrides, setCostOverrides] = useState<Record<string, { suggestedCost: string; salePrice: string }>>({});
 
   // ── Pricing mode (sale invoices only) — default wholesale ──────────────
   const [pricingMode, setPricingMode] = useState<"wholesale" | "retail">(
@@ -1147,6 +1153,205 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               </div>
             )}
           </div>{/* /section 5 */}
+
+          {/* ── Cost Rate Calculator (purchase invoices only) ─────────────────── */}
+          {invoiceType === "purchase" && items.some(it => it.productId || it.description) && (() => {
+            const totalPieces = items.reduce((s, it) => s + (parseFloat(it.quantity) || 0), 0);
+            const totalCharges = (parseFloat(form.shippingFee) || 0) + (parseFloat(form.handlingFee) || 0);
+            const extraPerPiece = totalPieces > 0 ? totalCharges / totalPieces : 0;
+
+            const initOverrides = () => {
+              const next: Record<string, { suggestedCost: string; salePrice: string }> = {};
+              items.forEach(it => {
+                const existing = costOverrides[it.id];
+                const qty  = parseFloat(it.quantity) || 0;
+                const uPrc = parseFloat(it.unitPrice) || 0;
+                const suggested = (uPrc + extraPerPiece * (qty > 0 ? 1 : 0)).toFixed(dp);
+                const prod = products.find(p =>
+                  p.id === it.productId ||
+                  p.name.toLowerCase() === (it.description || "").toLowerCase()
+                );
+                next[it.id] = {
+                  suggestedCost: existing?.suggestedCost ?? suggested,
+                  salePrice:     existing?.salePrice     ?? (prod?.price ?? ""),
+                };
+              });
+              setCostOverrides(next);
+            };
+
+            const handlePush = () => {
+              let pushed = 0;
+              items.forEach(it => {
+                const prod = products.find(p =>
+                  p.id === it.productId ||
+                  p.name.toLowerCase() === (it.description || "").toLowerCase()
+                );
+                if (!prod) return;
+                const ov = costOverrides[it.id];
+                if (!ov) return;
+                const updates: Partial<{ purchasePrice: string; costPrice: string; price: string }> = {};
+                if (ov.suggestedCost) {
+                  updates.purchasePrice = ov.suggestedCost;
+                  updates.costPrice     = ov.suggestedCost;
+                }
+                if (ov.salePrice) updates.price = ov.salePrice;
+                if (Object.keys(updates).length) { updateProduct(prod.id, updates); pushed++; }
+              });
+              toast({ title: `Cost rates updated`, description: `${pushed} product(s) updated in catalogue.` });
+            };
+
+            return (
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+                {/* Header / toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!costCalcOpen) initOverrides();
+                    setCostCalcOpen(o => !o);
+                  }}
+                  className="w-full flex items-center justify-between px-5 py-3 bg-gray-800 dark:bg-zinc-950 hover:bg-gray-700 dark:hover:bg-zinc-900 border-b border-gray-700 dark:border-zinc-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ChevronRight size={14} className={`text-gray-300 transition-transform ${costCalcOpen ? "rotate-90" : ""}`}/>
+                    <Calculator size={14} className="text-amber-400"/>
+                    <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Cost Rate Calculator</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400">Landed cost distribution → push to product catalogue</span>
+                </button>
+
+                {costCalcOpen && (
+                  <div className="p-5 space-y-5">
+                    {/* ── Summary bar ──────────────────────────────────────── */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-center">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total Pieces</p>
+                        <p className="text-2xl font-black text-gray-800 dark:text-gray-100">{totalPieces.toFixed(0)}</p>
+                      </div>
+                      <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl px-4 py-3 text-center">
+                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Total Charges</p>
+                        <p className="text-2xl font-black text-amber-700 dark:text-amber-300">{sym}{totalCharges.toFixed(dp)}</p>
+                        <p className="text-[10px] text-amber-500 mt-0.5">Delivery + Other</p>
+                      </div>
+                      <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl px-4 py-3 text-center">
+                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">Extra Cost / Piece</p>
+                        <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300">
+                          {totalPieces > 0 ? `${sym}${extraPerPiece.toFixed(dp)}` : "—"}
+                        </p>
+                        <p className="text-[10px] text-indigo-400 mt-0.5">÷ {totalPieces} pcs</p>
+                      </div>
+                    </div>
+
+                    {/* ── Re-calculate button ───────────────────────────── */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={initOverrides}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-zinc-700 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-600 transition-colors"
+                      >
+                        <RefreshCw size={12}/> Recalculate
+                      </button>
+                    </div>
+
+                    {/* ── Per-item table ────────────────────────────────── */}
+                    <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+                      {/* Table head */}
+                      <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px] gap-0 px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
+                        {["Product", "Qty", "Supplier Price", "Extra Cost/Unit", "Suggested Cost", "Sale Price"].map(h => (
+                          <span key={h} className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center first:text-left">{h}</span>
+                        ))}
+                      </div>
+
+                      {/* Table rows */}
+                      {items.filter(it => it.description || it.productId).map(it => {
+                        const qty      = parseFloat(it.quantity) || 0;
+                        const uPrc     = parseFloat(it.unitPrice) || 0;
+                        const extra    = extraPerPiece;
+                        const ov       = costOverrides[it.id] ?? {
+                          suggestedCost: (uPrc + extra).toFixed(dp),
+                          salePrice:     (() => {
+                            const p = products.find(p => p.id === it.productId || p.name.toLowerCase() === (it.description || "").toLowerCase());
+                            return p?.price ?? "";
+                          })(),
+                        };
+
+                        const setOv = (field: "suggestedCost" | "salePrice", val: string) =>
+                          setCostOverrides(prev => ({
+                            ...prev,
+                            [it.id]: { ...(prev[it.id] ?? { suggestedCost: "", salePrice: "" }), [field]: val },
+                          }));
+
+                        const hasProd = products.some(p =>
+                          p.id === it.productId ||
+                          p.name.toLowerCase() === (it.description || "").toLowerCase()
+                        );
+
+                        return (
+                          <div key={it.id}
+                            className={`grid grid-cols-[1fr_60px_100px_110px_120px_120px] gap-0 px-4 py-3 items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 ${
+                              hasProd ? "" : "opacity-50"
+                            }`}
+                          >
+                            {/* Product name */}
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{it.description || "—"}</p>
+                              {!hasProd && <p className="text-[10px] text-red-400 mt-0.5">Not found in catalogue</p>}
+                            </div>
+                            {/* Qty */}
+                            <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{qty}</div>
+                            {/* Supplier price */}
+                            <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{sym}{uPrc.toFixed(dp)}</div>
+                            {/* Extra cost/unit */}
+                            <div className="text-center text-sm font-mono text-indigo-600 dark:text-indigo-400">
+                              {qty > 0 ? `+${sym}${extra.toFixed(dp)}` : "—"}
+                            </div>
+                            {/* Suggested cost (editable) */}
+                            <div className="px-2">
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{sym}</span>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={ov.suggestedCost}
+                                  onChange={e => setOv("suggestedCost", e.target.value)}
+                                  className="w-full pl-6 pr-2 py-1.5 text-sm font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-right"
+                                />
+                              </div>
+                            </div>
+                            {/* Sale price (editable) */}
+                            <div className="px-2">
+                              <div className="relative">
+                                <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={ov.salePrice}
+                                  onChange={e => setOv("salePrice", e.target.value)}
+                                  placeholder="—"
+                                  className="w-full pl-6 pr-2 py-1.5 text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-right"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── Push button ───────────────────────────────────── */}
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[11px] text-gray-400">
+                        Amber = new purchase/cost price · Green = sale price · Greyed rows have no catalogue match.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handlePush}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow transition-colors"
+                      >
+                        <Upload size={14}/> Push to Products
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Payments Card (existing invoices only) ───────────────────────── */}
           {!isNew && (
