@@ -34,7 +34,7 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen]               = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
   const listRef      = useRef<HTMLUListElement>(null);
@@ -55,11 +55,20 @@ export function Combobox({
 
   useEffect(() => {
     if (!open || !listRef.current) return;
-    const el = listRef.current.children[highlighted] as HTMLLIElement | undefined;
-    el?.scrollIntoView({ block: "nearest" });
+    const li = listRef.current.children[highlighted] as HTMLLIElement | undefined;
+    if (!li) return;
+    // Scroll only within the dropdown list — never trigger a page scroll
+    const ul = listRef.current;
+    const liTop    = li.offsetTop;
+    const liBottom = liTop + li.offsetHeight;
+    if (liTop < ul.scrollTop) {
+      ul.scrollTop = liTop;
+    } else if (liBottom > ul.scrollTop + ul.clientHeight) {
+      ul.scrollTop = liBottom - ul.clientHeight;
+    }
   }, [highlighted, open]);
 
-  // Reposition dropdown when open
+  // Reposition dropdown when open — runs after render so the portal exists
   useEffect(() => {
     if (!open || !inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
@@ -67,13 +76,19 @@ export function Combobox({
     const dropH = Math.min(224, filtered.length * 44);
     const above = spaceBelow < dropH + 8 && rect.top > dropH + 8;
     setDropdownStyle({
-      position: "fixed",
-      top:    above ? rect.top - dropH - 4 : rect.bottom + 4,
-      left:   rect.left,
-      width:  Math.max(rect.width, minDropdownWidth),
-      zIndex: 9999,
+      position:   "fixed",
+      top:        above ? rect.top - dropH - 4 : rect.bottom + 4,
+      left:       rect.left,
+      width:      Math.max(rect.width, minDropdownWidth),
+      zIndex:     9999,
+      visibility: "visible",   // reveal only after position is locked
     });
   }, [open, filtered.length]);
+
+  // Reset visibility whenever dropdown closes so the next open starts hidden
+  useEffect(() => {
+    if (!open) setDropdownStyle({ visibility: "hidden" });
+  }, [open]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
