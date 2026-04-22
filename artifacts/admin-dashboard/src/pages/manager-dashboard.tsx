@@ -411,9 +411,9 @@ export default function ManagerDashboard() {
         <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center">
           <Building2 size={28} className="text-indigo-400" />
         </div>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white">No tenants assigned yet</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">No businesses assigned yet</h2>
         <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">
-          Ask your superadmin to assign tenants to your account.
+          Ask your superadmin to assign businesses to your account.
         </p>
       </div>
     );
@@ -428,7 +428,7 @@ export default function ManagerDashboard() {
           <p className="text-[13px] text-gray-400 dark:text-gray-500">{greeting},</p>
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white leading-tight">{firstName}</h1>
           <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
-            <Globe size={11} /> Managing {myTenants.length} tenant{myTenants.length !== 1 ? "s" : ""}
+            <Globe size={11} /> Managing {myTenants.length} business{myTenants.length !== 1 ? "es" : ""}
           </p>
         </div>
         <button
@@ -451,7 +451,7 @@ export default function ManagerDashboard() {
               ? "bg-indigo-600 text-white shadow-sm"
               : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
           }`}
-        >All Tenants</button>
+        >All Businesses</button>
         {myTenants.map(t => (
           <button
             key={t.id}
@@ -607,7 +607,7 @@ export default function ManagerDashboard() {
 
             {/* Revenue by tenant bar chart */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 p-5 shadow-sm">
-              <h2 className="text-[13px] font-bold text-gray-800 dark:text-white mb-1">Revenue by Tenant</h2>
+              <h2 className="text-[13px] font-bold text-gray-800 dark:text-white mb-1">Revenue by Business</h2>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Completed sales</p>
               <ResponsiveContainer width="100%" height={160}>
                 <ReBarChart data={tenantBarData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -631,7 +631,7 @@ export default function ManagerDashboard() {
             {/* Customers & Sales by tenant */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 p-5 shadow-sm">
               <h2 className="text-[13px] font-bold text-gray-800 dark:text-white mb-1">Customers vs Sales</h2>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Per tenant</p>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Per business</p>
               <ResponsiveContainer width="100%" height={160}>
                 <ReBarChart data={tenantBarData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" strokeOpacity={0.6} />
@@ -749,7 +749,7 @@ export default function ManagerDashboard() {
                     <th className="text-left px-5 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Ref</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Customer</th>
                     {selectedTenant === "all" && (
-                      <th className="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Tenant</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Business</th>
                     )}
                     <th className="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Status</th>
                     <th className="text-right px-4 py-2.5 font-semibold text-gray-500 dark:text-gray-400">Amount</th>
@@ -793,14 +793,14 @@ export default function ManagerDashboard() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <BarChart3 size={15} className="text-gray-400" />
-              <h2 className="text-[13px] font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">Per-Tenant Summary</h2>
+              <h2 className="text-[13px] font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">Per-Business Summary</h2>
             </div>
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800">
-                      <th className="text-left px-5 py-3 font-semibold text-gray-500 dark:text-gray-400 w-40">Tenant</th>
+                      <th className="text-left px-5 py-3 font-semibold text-gray-500 dark:text-gray-400 w-40">Business</th>
                       <th className="text-right px-4 py-3 font-semibold text-gray-500 dark:text-gray-400">Revenue</th>
                       <th className="text-right px-4 py-3 font-semibold text-gray-500 dark:text-gray-400">Sales</th>
                       <th className="text-right px-4 py-3 font-semibold text-gray-500 dark:text-gray-400">Customers</th>
