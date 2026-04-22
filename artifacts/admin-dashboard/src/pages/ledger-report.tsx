@@ -3,13 +3,17 @@ import { useSearch } from "wouter";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account, getSettings, reconcileAccountingData } from "@/lib/store";
+import { Account, getSettings, reconcileAccountingData, createJournalEntry } from "@/lib/store";
 import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
+  ArrowDownCircle, ArrowUpCircle, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +160,15 @@ export default function LedgerReportPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "draft">("posted");
   const [reconciling, setReconciling] = useState(false);
 
+  // ── Pay / Receive JV modal ─────────────────────────────────────────────────
+  const [jvModal, setJvModal]           = useState<null | "pay" | "receive">(null);
+  const [jvDate, setJvDate]             = useState(today());
+  const [jvAmount, setJvAmount]         = useState("");
+  const [jvDesc, setJvDesc]             = useState("");
+  const [jvNarration, setJvNarration]   = useState("");
+  const [jvCounterAccId, setJvCounterAccId] = useState("");
+  const [jvPosting, setJvPosting]       = useState(false);
+
   const printRef = useRef<HTMLDivElement>(null);
 
   function handleReconcile() {
@@ -176,9 +189,65 @@ export default function LedgerReportPage() {
     }
   }
 
+  // ── Journal Voucher modal helpers ──────────────────────────────────────────
+  function openJvModal(mode: "pay" | "receive") {
+    // closing balance at time of click is computed from rows — captured via closure
+    const amt = Math.abs(absBalance(closingBalance, debitNormal));
+    const label = mode === "pay" ? "Payment" : "Receipt";
+    setJvDate(today());
+    setJvAmount(amt > 0 ? amt.toFixed(2) : "");
+    setJvDesc(`${label} — ${account?.name ?? ""}`);
+    setJvNarration(`${label} for ${account?.name ?? ""} · Balance clearance`);
+    setJvCounterAccId("");
+    setJvModal(mode);
+  }
+
+  function jvPost() {
+    if (!accountId || !jvCounterAccId || !jvAmount) {
+      toast({ title: "Please fill all required fields", variant: "destructive" }); return;
+    }
+    const amt = parseFloat(jvAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast({ title: "Invalid amount", variant: "destructive" }); return;
+    }
+    setJvPosting(true);
+    try {
+      // Pay  → Dr this account (reduce payable), Cr counter (reduce bank/cash)
+      // Recv → Dr counter (increase bank/cash), Cr this account (reduce receivable)
+      const lines = jvModal === "pay" ? [
+        { ledgerId: accountId,      narration: jvNarration, debit: amt,  credit: 0   },
+        { ledgerId: jvCounterAccId, narration: jvNarration, debit: 0,    credit: amt },
+      ] : [
+        { ledgerId: jvCounterAccId, narration: jvNarration, debit: amt,  credit: 0   },
+        { ledgerId: accountId,      narration: jvNarration, debit: 0,    credit: amt },
+      ];
+      createJournalEntry({
+        date:        jvDate,
+        description: jvDesc,
+        reference:   "",
+        lines,
+        status:      "posted",
+      });
+      toast({ title: "Journal Voucher posted", description: jvDesc });
+      setJvModal(null);
+      refreshEntries();
+    } finally {
+      setJvPosting(false);
+    }
+  }
+
   // Selected account
   const account = useMemo(() => accounts.find(a => a.id === accountId) ?? null, [accounts, accountId]);
   const debitNormal = account ? isDebitNormal(account.head) : true;
+
+  // Payable / Receivable classification
+  const isPayable    = account ? (
+    (account.subType?.toLowerCase().includes("payable"))  ||
+    account.head === "Liabilities"
+  ) : false;
+  const isReceivable = account ? (
+    (account.subType?.toLowerCase().includes("receivable"))
+  ) : false;
 
   // All posted entries that touch this account, across all time
   const allRelevant = useMemo(() => {
@@ -673,8 +742,27 @@ export default function LedgerReportPage() {
                                 : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400"}`}
                 >{debitNormal ? "Debit Normal" : "Credit Normal"}</span>
               </div>
-              <div className="ml-auto text-[11px] text-muted-foreground">
-                {from} → {to} &nbsp;·&nbsp; {rows.length} transactions
+              <div className="ml-auto flex items-center gap-3">
+                {/* Pay / Receive action button */}
+                {closingBalance !== 0 && isPayable && (
+                  <button
+                    onClick={() => openJvModal("pay")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
+                  >
+                    <ArrowDownCircle size={13}/> Pay
+                  </button>
+                )}
+                {closingBalance !== 0 && isReceivable && (
+                  <button
+                    onClick={() => openJvModal("receive")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
+                  >
+                    <ArrowUpCircle size={13}/> Receive
+                  </button>
+                )}
+                <span className="text-[11px] text-muted-foreground">
+                  {from} → {to} &nbsp;·&nbsp; {rows.length} transactions
+                </span>
               </div>
             </div>
 
@@ -809,6 +897,124 @@ export default function LedgerReportPage() {
           </div>
         </div>
       )}
+
+      {/* ── Journal Voucher Modal ──────────────────────────────────────────── */}
+      <Dialog open={!!jvModal} onOpenChange={o => { if (!o) setJvModal(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {jvModal === "pay"
+                ? <><ArrowDownCircle size={18} className="text-rose-500"/> Pay — {account?.name}</>
+                : <><ArrowUpCircle  size={18} className="text-emerald-500"/> Receive — {account?.name}</>
+              }
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Pre-fill summary */}
+          <div className="rounded-xl bg-muted/30 border border-border p-3 text-xs space-y-1">
+            {jvModal === "pay" ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Dr (Debit)</span>
+                  <span className="font-semibold text-foreground">{account?.name} — reduces payable</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cr (Credit)</span>
+                  <span className="font-semibold text-foreground">Bank / Cash account (select below)</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Dr (Debit)</span>
+                  <span className="font-semibold text-foreground">Bank / Cash account (select below)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cr (Credit)</span>
+                  <span className="font-semibold text-foreground">{account?.name} — reduces receivable</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Form fields */}
+          <div className="space-y-3 pt-1">
+            {/* Date */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Date</label>
+              <Input type="date" value={jvDate} onChange={e => setJvDate(e.target.value)} className="mt-1 h-8 text-sm" />
+            </div>
+
+            {/* Counter account */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                {jvModal === "pay" ? "Pay Via (Bank / Cash)" : "Receive Into (Bank / Cash)"}
+              </label>
+              <select
+                value={jvCounterAccId}
+                onChange={e => setJvCounterAccId(e.target.value)}
+                className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">— Select account —</option>
+                {accounts
+                  .filter(a => a.accountType === "Ledger" && a.isActive && a.id !== accountId)
+                  .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+                  .map(a => (
+                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
+                  ))
+                }
+              </select>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Amount</label>
+              <div className="relative mt-1">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">{sym}</span>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={jvAmount}
+                  onChange={e => setJvAmount(e.target.value)}
+                  className="pl-7 h-8 text-sm font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Description</label>
+              <Input value={jvDesc} onChange={e => setJvDesc(e.target.value)} className="mt-1 h-8 text-sm" />
+            </div>
+
+            {/* Narration */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Narration</label>
+              <Input value={jvNarration} onChange={e => setJvNarration(e.target.value)} className="mt-1 h-8 text-sm" />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => setJvModal(null)}>
+              <X size={13} className="mr-1"/> Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={jvPost}
+              disabled={jvPosting || !jvCounterAccId || !jvAmount}
+              className={jvModal === "pay"
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+              }
+            >
+              {jvModal === "pay"
+                ? <><ArrowDownCircle size={13} className="mr-1.5"/> {jvPosting ? "Posting…" : "Post Payment JV"}</>
+                : <><ArrowUpCircle  size={13} className="mr-1.5"/> {jvPosting ? "Posting…" : "Post Receipt JV"}</>
+              }
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
