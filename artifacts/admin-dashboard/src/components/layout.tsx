@@ -742,7 +742,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/* Quick Add */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-[12px] font-semibold transition-colors shadow-sm">
+                <button className={`${isManager ? "hidden" : "hidden sm:flex"} items-center gap-1.5 h-9 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-[12px] font-semibold transition-colors shadow-sm`}>
                   <Plus size={14} />
                   Quick Add
                   <ChevronDown size={11} className="opacity-70" />
@@ -825,19 +825,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Mobile hamburger */}
-            <button
-              className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-muted transition-colors"
-              onClick={() => setMobileOpen(v => !v)}>
-              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
+            {/* Mobile hamburger — hidden for manager (no sidebar) */}
+            {!isManager && (
+              <button
+                className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-muted transition-colors"
+                onClick={() => setMobileOpen(v => !v)}>
+                {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            )}
           </div>
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════
             ROW 2 — Navigation with mega menu (desktop)
         ═══════════════════════════════════════════════════════════════ */}
-        <div className="hidden md:block border-t border-gray-100 dark:border-border bg-white dark:bg-card">
+        {!isManager && (<div className="hidden md:block border-t border-gray-100 dark:border-border bg-white dark:bg-card">
           <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-stretch h-[38px] gap-0">
 
             {navItems.map(item => {
@@ -991,7 +993,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               );
             })}
           </div>
-        </div>
+        </div>)}
 
       </div>
 
@@ -1316,6 +1318,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ═══ LEFT SIDEBAR — people & products (tenant-configurable) ══════════ */}
         {(() => {
+          if (isManager) return null;
           const leftCfg = getSettings().quickActionsLeft ?? DEFAULT_LEFT_QUICK_ACTIONS;
           const leftVisible = leftCfg
             .filter(item => item.visible)
@@ -1392,6 +1395,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ═══ RIGHT SIDEBAR — quick-add shortcuts (tenant-configurable) ══════ */}
         {(() => {
+          if (isManager) return null;
           const cfg = getSettings().quickActionsRight ?? DEFAULT_QUICK_ACTIONS;
           const visible = cfg
             .filter(item => item.visible)
