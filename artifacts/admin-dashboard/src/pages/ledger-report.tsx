@@ -3,7 +3,7 @@ import { useSearch } from "wouter";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account, getSettings, reconcileAccountingData, createJournalEntry } from "@/lib/store";
+import { Account, getSettings, reconcileAccountingData, createJournalEntry, SYS_ACCS } from "@/lib/store";
 import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
@@ -743,19 +743,21 @@ export default function LedgerReportPage() {
                 >{debitNormal ? "Debit Normal" : "Credit Normal"}</span>
               </div>
               <div className="ml-auto flex items-center gap-3">
-                {/* Pay / Receive action button */}
-                {closingBalance !== 0 && isPayable && (
+                {/* Pay / Receive action buttons — always visible for AP/AR accounts */}
+                {isPayable && (
                   <button
                     onClick={() => openJvModal("pay")}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
+                    title={closingBalance === 0 ? "Enter a payment amount manually" : `Pay outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
                   >
                     <ArrowDownCircle size={13}/> Pay
                   </button>
                 )}
-                {closingBalance !== 0 && isReceivable && (
+                {isReceivable && (
                   <button
                     onClick={() => openJvModal("receive")}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
+                    title={closingBalance === 0 ? "Enter a receipt amount manually" : `Receive outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
                   >
                     <ArrowUpCircle size={13}/> Receive
                   </button>
@@ -955,9 +957,15 @@ export default function LedgerReportPage() {
                 onChange={e => setJvCounterAccId(e.target.value)}
                 className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="">— Select account —</option>
+                <option value="">— Select Bank / Cash account —</option>
                 {accounts
-                  .filter(a => a.accountType === "Ledger" && a.isActive && a.id !== accountId)
+                  .filter(a =>
+                    a.accountType === "Ledger" && a.isActive && a.id !== accountId &&
+                    (a.parentId === SYS_ACCS.CB_GROUP ||
+                     a.subType === "Cash" || a.subType === "Bank" || a.subType === "Wallet" ||
+                     (a.name.toLowerCase().includes("cash") && a.head === "Assets") ||
+                     (a.name.toLowerCase().includes("bank") && a.head === "Assets"))
+                  )
                   .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
                   .map(a => (
                     <option key={a.id} value={a.id}>{a.code} — {a.name}</option>

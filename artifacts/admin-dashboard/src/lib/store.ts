@@ -4833,6 +4833,32 @@ export function deleteJournalEntry(id: string): void {
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
 }
 
+// ─── Sub-ledger lookup ────────────────────────────────────────────────────────
+
+/**
+ * Searches the Chart of Accounts for a per-party (customer / supplier) sub-ledger
+ * that is a direct child of the given parent group and whose name contains the
+ * party name (case-insensitive, partial match).
+ *
+ * This is used so that individual AR/AP ledgers (e.g. "1130-004 — Karen Bhatt")
+ * are used in JEs instead of the blanket group account, keeping subsidiary
+ * ledgers correctly populated.
+ *
+ * Returns the ledger account id, or null when no specific ledger is found.
+ */
+export function findSubLedgerForParty(partyName: string, parentGroupId: string): string | null {
+  if (!partyName) return null;
+  const lower = partyName.toLowerCase();
+  const all = getAccounts();
+  const match = all.find(
+    a => a.accountType === "Ledger"
+      && a.isActive
+      && a.parentId === parentGroupId
+      && a.name.toLowerCase().includes(lower),
+  );
+  return match?.id ?? null;
+}
+
 // ─── Auto-journal for Sales, Invoices & Purchases ─────────────────────────────
 
 /**
@@ -4869,7 +4895,9 @@ export function autoPostSaleJE(params: {
   let debitAccId: string;
   if (isCredit) {
     if (!s.accReceivable) return null;
-    debitAccId = s.accReceivable;
+    // Prefer per-customer AR sub-ledger so individual customer ledgers are populated.
+    // Falls back to the group AR account when no specific ledger exists.
+    debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP) || s.accReceivable;
   } else if (isCash) {
     if (!s.accCash) return null;
     debitAccId = s.accCash;

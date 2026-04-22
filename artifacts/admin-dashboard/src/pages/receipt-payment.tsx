@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, findSubLedgerForParty } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -473,9 +473,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   if (!inv?.id) { setLinkedInvId(null); return; }
                   setLinkedInvId(inv.id);
                   if (inv.customer && !party) setParty(inv.customer);
-                  // Auto-populate the first line with the correct AR / AP account
+                  // Auto-populate the first line with the correct AR / AP account.
+                  // For receipts, prefer the per-customer AR sub-ledger so that
+                  // individual customer ledgers are correctly populated.
                   const settings = getSettings();
-                  const arAccId  = settings.accReceivable  || SYS_ACCS.AR_GROUP;
+                  const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
+                  const arAccId   = (vtype === "receipt" && inv.customer)
+                    ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AR_GROUP) || groupArId)
+                    : groupArId;
                   const apAccId  = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
                   const targetId = vtype === "receipt" ? arAccId : apAccId;
                   if (targetId) {
