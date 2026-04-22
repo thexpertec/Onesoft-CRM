@@ -610,9 +610,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     });
   }, []);
 
-  const handleSave = () => {
+  const handleSave = (overrideStatus?: InvoiceStatus) => {
     onSave({
       ...form,
+      ...(overrideStatus ? { status: overrideStatus } : {}),
       items,
       paymentHistory:  payHistory,
       amountPaid:      payInput,
@@ -624,6 +625,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       agreement:       "",
     }, invoice?.id);
   };
+
+  // Status to use when clicking "Create" on a new invoice
+  const createStatus: InvoiceStatus = invoiceType === "purchase" ? "Sent" : "Sent";
 
   const inv = invoice;
   const s   = inv?.status;
