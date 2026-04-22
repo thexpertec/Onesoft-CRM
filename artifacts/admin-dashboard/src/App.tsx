@@ -28,6 +28,7 @@ import HrmOrgPage from "@/pages/hrm-org";
 import RecruitmentPage from "@/pages/recruitment";
 import CustomersPage from "@/pages/customers";
 import CustomerNewPage from "@/pages/customer-new";
+import CustomerEditPage from "@/pages/customer-edit";
 import ProductsPage from "@/pages/products";
 import ProductNewPage from "@/pages/product-new";
 import CategoriesPage from "@/pages/categories";
@@ -135,6 +136,7 @@ function Router() {
               <Route path="/documents/edit/:id" component={NewDocument} />
               <Route path="/documents/:id" component={DocumentDetail} />
               <Route path="/customers/new" component={CustomerNewPage} />
+              <Route path="/customers/:id/edit" component={CustomerEditPage} />
               <Route path="/customers" component={CustomersPage} />
               <Route path="/products/new" component={ProductNewPage} />
               <Route path="/products" component={ProductsPage} />
