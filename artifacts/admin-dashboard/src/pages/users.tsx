@@ -361,12 +361,12 @@ export default function UsersPage() {
 
               {/* Tenant assignment — only shown for manager role */}
               {watchedRole === "manager" && (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-1.5">
+                <div className="space-y-2">
+                  <p className="flex items-center gap-1.5 text-[13px] font-medium leading-none">
                     <Building2 size={13} className="text-indigo-500" />
                     Assigned Tenants
                     <span className="text-muted-foreground font-normal text-[11px] ml-1">(select 1–5)</span>
-                  </FormLabel>
+                  </p>
                   {tenants.length === 0 ? (
                     <p className="text-[12px] text-muted-foreground py-2">No tenants found. Create tenants first.</p>
                   ) : (
@@ -392,7 +392,7 @@ export default function UsersPage() {
                       })}
                     </div>
                   )}
-                </FormItem>
+                </div>
               )}
 
               <div className="grid grid-cols-2 gap-3">
