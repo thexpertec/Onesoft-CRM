@@ -1155,22 +1155,25 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           </div>{/* /section 5 */}
 
           {/* ── Cost Rate Calculator (purchase invoices only) ─────────────────── */}
-          {invoiceType === "purchase" && items.some(it => it.productId || it.description) && (() => {
-            const totalPieces = items.reduce((s, it) => s + (parseFloat(it.quantity) || 0), 0);
+          {invoiceType === "purchase" && items.some(it => it.productName) && (() => {
+            const totalPieces  = items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
             const totalCharges = (parseFloat(form.shippingFee) || 0) + (parseFloat(form.handlingFee) || 0);
             const extraPerPiece = totalPieces > 0 ? totalCharges / totalPieces : 0;
+
+            const findProd = (it: SaleItem) =>
+              products.find(p =>
+                (it.sku && p.sku === it.sku) ||
+                p.name.toLowerCase() === it.productName.toLowerCase()
+              );
 
             const initOverrides = () => {
               const next: Record<string, { suggestedCost: string; salePrice: string }> = {};
               items.forEach(it => {
                 const existing = costOverrides[it.id];
-                const qty  = parseFloat(it.quantity) || 0;
+                const qty  = parseFloat(it.qty) || 0;
                 const uPrc = parseFloat(it.unitPrice) || 0;
-                const suggested = (uPrc + extraPerPiece * (qty > 0 ? 1 : 0)).toFixed(dp);
-                const prod = products.find(p =>
-                  p.id === it.productId ||
-                  p.name.toLowerCase() === (it.description || "").toLowerCase()
-                );
+                const suggested = (uPrc + (qty > 0 ? extraPerPiece : 0)).toFixed(dp);
+                const prod = findProd(it);
                 next[it.id] = {
                   suggestedCost: existing?.suggestedCost ?? suggested,
                   salePrice:     existing?.salePrice     ?? (prod?.price ?? ""),
@@ -1182,10 +1185,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             const handlePush = () => {
               let pushed = 0;
               items.forEach(it => {
-                const prod = products.find(p =>
-                  p.id === it.productId ||
-                  p.name.toLowerCase() === (it.description || "").toLowerCase()
-                );
+                const prod = findProd(it);
                 if (!prod) return;
                 const ov = costOverrides[it.id];
                 if (!ov) return;
@@ -1262,16 +1262,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </div>
 
                       {/* Table rows */}
-                      {items.filter(it => it.description || it.productId).map(it => {
-                        const qty      = parseFloat(it.quantity) || 0;
+                      {items.filter(it => it.productName).map(it => {
+                        const qty      = parseFloat(it.qty) || 0;
                         const uPrc     = parseFloat(it.unitPrice) || 0;
                         const extra    = extraPerPiece;
+                        const prod     = findProd(it);
                         const ov       = costOverrides[it.id] ?? {
                           suggestedCost: (uPrc + extra).toFixed(dp),
-                          salePrice:     (() => {
-                            const p = products.find(p => p.id === it.productId || p.name.toLowerCase() === (it.description || "").toLowerCase());
-                            return p?.price ?? "";
-                          })(),
+                          salePrice:     prod?.price ?? "",
                         };
 
                         const setOv = (field: "suggestedCost" | "salePrice", val: string) =>
@@ -1280,10 +1278,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             [it.id]: { ...(prev[it.id] ?? { suggestedCost: "", salePrice: "" }), [field]: val },
                           }));
 
-                        const hasProd = products.some(p =>
-                          p.id === it.productId ||
-                          p.name.toLowerCase() === (it.description || "").toLowerCase()
-                        );
+                        const hasProd = !!prod;
 
                         return (
                           <div key={it.id}
@@ -1293,7 +1288,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           >
                             {/* Product name */}
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{it.description || "—"}</p>
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{it.productName || "—"}</p>
                               {!hasProd && <p className="text-[10px] text-red-400 mt-0.5">Not found in catalogue</p>}
                             </div>
                             {/* Qty */}
