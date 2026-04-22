@@ -37,6 +37,7 @@ import {
 } from "@/lib/quick-actions";
 import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 
 // ─── Activity Log helpers ─────────────────────────────────────────────────────
 const LAST_SEEN_KEY = "onesoft-activity-last-seen";
@@ -344,6 +345,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen,   setMobileOpen]   = useState(false);
   const [searchOpen,   setSearchOpen]   = useState(false);
   const [searchQuery,  setSearchQuery]  = useState("");
+  const [cpOpen,       setCpOpen]       = useState(false);
   const [openMega,     setOpenMega]     = useState<string | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [unreadCount,  setUnreadCount]  = useState(0);
@@ -813,6 +815,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     {theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}
                     {theme === "dark" ? "Light Mode" : "Dark Mode"}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setCpOpen(true)} className="gap-2 cursor-pointer text-[13px]">
+                    <KeyRound size={13} />
+                    Change Password
+                  </DropdownMenuItem>
                 </div>
                 <DropdownMenuSeparator />
                 <div className="py-1">
@@ -1164,6 +1170,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {theme === "dark" ? "Light Mode" : "Dark Mode"}
           </button>
           <button
+            onClick={() => { setMobileOpen(false); setCpOpen(true); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <KeyRound size={16} className="shrink-0" /> Change Password
+          </button>
+          <button
             onClick={() => { setMobileOpen(false); logout(); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
           >
@@ -1451,6 +1463,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         })()}
 
       </div>
+
+      {/* Change Password Dialog */}
+      <ChangePasswordDialog open={cpOpen} onClose={() => setCpOpen(false)} />
     </div>
   );
 }

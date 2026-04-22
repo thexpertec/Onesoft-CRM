@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X, Coins, Store } from "lucide-react";
+import { ShoppingBag, LayoutDashboard, User, LogOut, Menu, X, Coins, Store, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 
 const NAV = [
   { label: "Dashboard", href: "/",         icon: LayoutDashboard },
@@ -15,6 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { session, settings, logout } = useAuth();
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cpOpen,   setCpOpen]   = useState(false);
 
   const storeName = settings.storeName || "Customer Portal";
   const initials = session?.customer.name
@@ -74,6 +76,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </span>
             </div>
             <button
+              onClick={() => setCpOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-blue-700 px-2 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+            >
+              <KeyRound size={14} />
+              Change Password
+            </button>
+            <button
               onClick={logout}
               className="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-800 px-2 py-1.5 rounded-md hover:bg-gray-100 transition-colors"
             >
@@ -120,6 +129,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </a>
             )}
             <button
+              onClick={() => { setMenuOpen(false); setCpOpen(true); }}
+              className="flex items-center gap-2 px-3 py-2 text-[14px] text-gray-600 hover:text-blue-700 w-full rounded-md hover:bg-blue-50"
+            >
+              <KeyRound size={15} />
+              Change Password
+            </button>
+            <button
               onClick={logout}
               className="flex items-center gap-2 px-3 py-2 text-[14px] text-gray-500 hover:text-gray-800 w-full rounded-md hover:bg-gray-50"
             >
@@ -129,6 +145,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </header>
+
+      <ChangePasswordDialog open={cpOpen} onClose={() => setCpOpen(false)} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
         {children}
