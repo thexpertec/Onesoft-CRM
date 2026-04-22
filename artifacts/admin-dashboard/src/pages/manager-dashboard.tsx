@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TrendingUp, ShoppingCart, Users, Package, Layers, ClipboardList,
-  Building2, BarChart3, RefreshCw, Globe,
+  Building2, BarChart3, RefreshCw, Globe, Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -13,6 +13,7 @@ import {
   getStock,
   getPurchaseOrders,
   getSettings,
+  syncAllFromServer,
 } from "@/lib/store";
 
 // ─── helper: read any store data while temporarily pointing to a given tenant ──
@@ -123,18 +124,28 @@ export default function ManagerDashboard() {
   const { currentUser, assignedTenants } = useAuth();
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [syncing, setSyncing] = useState(true);
 
   // Load tenant metadata
-  const allTenants = useMemo(() => getTenants(), [refreshKey]);
+  const allTenants = useMemo(() => getTenants(), [refreshKey, syncing]);
   const myTenants  = useMemo(
     () => allTenants.filter(t => assignedTenants.includes(t.id)),
     [allTenants, assignedTenants],
   );
 
-  // Compute stats for each assigned tenant
+  // ── Fetch each assigned tenant's data from the server into memory ──────────
+  useEffect(() => {
+    if (assignedTenants.length === 0) { setSyncing(false); return; }
+    setSyncing(true);
+    Promise.all(assignedTenants.map(id => syncAllFromServer(id)))
+      .catch(() => { /* errors already logged by syncAllFromServer */ })
+      .finally(() => setSyncing(false));
+  }, [assignedTenants.join(","), refreshKey]);
+
+  // Compute stats for each assigned tenant — runs AFTER sync completes
   const allStats: TenantStats[] = useMemo(
-    () => myTenants.map(t => computeStats(t.id, t.name)),
-    [myTenants, refreshKey],
+    () => syncing ? [] : myTenants.map(t => computeStats(t.id, t.name)),
+    [myTenants, refreshKey, syncing],
   );
 
   // Aggregate or single-tenant stats
@@ -191,9 +202,12 @@ export default function ManagerDashboard() {
         </div>
         <button
           onClick={() => setRefreshKey(k => k + 1)}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+          disabled={syncing}
+          className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <RefreshCw size={13} /> Refresh
+          {syncing
+            ? <><Loader2 size={13} className="animate-spin" /> Loading…</>
+            : <><RefreshCw size={13} /> Refresh</>}
         </button>
       </div>
 
@@ -225,8 +239,24 @@ export default function ManagerDashboard() {
         ))}
       </div>
 
+      {/* ── Loading skeleton while fetching tenant data ── */}
+      {syncing && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 p-5 flex items-start gap-4 shadow-sm">
+              <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-zinc-800 animate-pulse shrink-0" />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-2.5 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse w-3/4" />
+                <div className="h-6 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse w-1/2" />
+                <div className="h-2 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Metric cards ── */}
-      {displayed && (
+      {!syncing && displayed && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 gap-4">
             <MetricCard
