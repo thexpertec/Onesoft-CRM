@@ -194,11 +194,12 @@ const SALES_COLUMNS: MegaColumn[] = [
     ],
   },
   {
-    label: "Sale Returns", href: "/sale-return", icon: Undo2,
+    label: "Returns", href: "/sale-return", icon: Undo2,
     color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/40",
-    desc: "Refunds & credit notes",
+    desc: "Sale & purchase returns",
     links: [
-      { label: "Sale Returns", href: "/sale-return", icon: Undo2, desc: "Refunds & credit notes" },
+      { label: "Sale Returns",     href: "/sale-return",     icon: Undo2,        desc: "Refunds & credit notes" },
+      { label: "Purchase Returns", href: "/purchase-return", icon: ShoppingCart,  desc: "Debit notes & supplier returns" },
     ],
   },
 ];
@@ -322,7 +323,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
-const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-return"];
+const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/sale-return", "/purchase-return"];
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
@@ -555,6 +556,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "sales":             "sales",
     "new-sale":          "sales",
     "sale-return":       "sale_return",
+    "purchase-return":   "purchases",
     "invoices":          "invoices",
     "calc-invoice":      "calc_invoice",
     "expense":           "accounting_journal",
@@ -1107,6 +1109,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </>}
                   <NavLink href="/invoices"               icon={FileText}     label="Sales Invoices" />
                   <NavLink href="/invoices?type=purchase" icon={ShoppingCart} label="Purchase Invoices" />
+                  <NavLink href="/purchase-return"        icon={Undo2}        label="Purchase Returns" />
                   <NavLink href="/calc-invoice"           icon={Calculator}   label="Calc Invoice" />
                 </>}
 

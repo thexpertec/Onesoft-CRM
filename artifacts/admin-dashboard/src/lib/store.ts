@@ -2215,6 +2215,89 @@ export const deleteSaleReturn = (id: string): void => {
   addActivity({ action: "deleted", entity: "Sale Return", entityName: sr?.returnNumber || id });
 };
 
+// ─── Purchase Returns ─────────────────────────────────────────────────────────
+
+export type PurchaseReturnItem = {
+  id:          string;
+  productName: string;
+  sku:         string;
+  unit:        string;
+  qty:         string;
+  unitPrice:   string;
+  discount:    string;
+};
+
+export type PurchaseReturnStatus = "draft" | "posted";
+
+export type PurchaseReturn = {
+  id:                    string;
+  returnNumber:          string;
+  originalInvoiceNumber: string;
+  originalInvoiceId:     string;
+  date:                  string;
+  supplier:              string;
+  refundMethod:          string;
+  items:                 PurchaseReturnItem[];
+  subtotal:              number;
+  taxAmount:             number;
+  grandTotal:            number;
+  reason:                string;
+  notes:                 string;
+  status:                PurchaseReturnStatus;
+  jeId?:                 string;
+  createdAt:             string;
+  updatedAt:             string;
+};
+
+const PR_KEY = "admin-purchase-returns";
+
+const nextPurchaseReturnNumber = (): string => {
+  const existing = getStored<PurchaseReturn>(PR_KEY);
+  const d = new Date();
+  const base = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const prefix = `PR-${base}`;
+  const max = existing
+    .filter(r => r.returnNumber.startsWith(prefix))
+    .map(r => parseInt(r.returnNumber.split("-").pop() ?? "0") || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+};
+
+export const getPurchaseReturns = (): PurchaseReturn[] => getStored<PurchaseReturn>(PR_KEY);
+
+export const createPurchaseReturn = (
+  data: Omit<PurchaseReturn, "id" | "returnNumber" | "createdAt" | "updatedAt">
+): PurchaseReturn => {
+  const pr: PurchaseReturn = {
+    ...data,
+    id:           crypto.randomUUID(),
+    returnNumber: nextPurchaseReturnNumber(),
+    createdAt:    new Date().toISOString(),
+    updatedAt:    new Date().toISOString(),
+  };
+  setStored(PR_KEY, [...getPurchaseReturns(), pr]);
+  addActivity({ action: "created", entity: "Purchase Return", entityName: pr.returnNumber });
+  return pr;
+};
+
+export const updatePurchaseReturn = (
+  id: string,
+  updates: Partial<Omit<PurchaseReturn, "id" | "returnNumber" | "createdAt">>
+): PurchaseReturn => {
+  const all = getPurchaseReturns();
+  const i = all.findIndex(r => r.id === id);
+  if (i === -1) throw new Error("Purchase Return not found");
+  all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(PR_KEY, all);
+  return all[i];
+};
+
+export const deletePurchaseReturn = (id: string): void => {
+  const pr = getPurchaseReturns().find(r => r.id === id);
+  setStored(PR_KEY, getPurchaseReturns().filter(r => r.id !== id));
+  addActivity({ action: "deleted", entity: "Purchase Return", entityName: pr?.returnNumber || id });
+};
+
 /**
  * Auto-posts a reversal journal entry for a Sale Return.
  *   DR  Sales Revenue           = grandTotal  (reverses the revenue)
