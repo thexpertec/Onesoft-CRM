@@ -208,7 +208,8 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
     const q = saleSearch.toLowerCase();
     return sales.filter(s =>
       s.saleNumber.toLowerCase().includes(q) ||
-      (s.customer || "").toLowerCase().includes(q)
+      (s.customer || "").toLowerCase().includes(q) ||
+      s.items.some(it => (it.productName || "").toLowerCase().includes(q))
     );
   }, [sales, saleSearch]);
 
@@ -326,7 +327,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
               autoFocus
               value={saleSearch}
               onChange={e => setSaleSearch(e.target.value)}
-              placeholder="Sale number or customer…"
+              placeholder="Sale number, customer or item name…"
               className="pl-9"
             />
           </div>
