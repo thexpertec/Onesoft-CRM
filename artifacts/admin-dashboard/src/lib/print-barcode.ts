@@ -168,6 +168,29 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
     ${labels.join("\n")}
   </div>
   <script>
+    function renderBarcode(svg, val) {
+      // Try formats in order: CODE128 handles any printable string reliably.
+      // EAN13 / EAN8 / UPC are tried if CODE128 fails (unlikely).
+      var formats = ["CODE128", "EAN13", "EAN8", "UPCA", "CODE39"];
+      for (var i = 0; i < formats.length; i++) {
+        try {
+          JsBarcode(svg, val, {
+            format: formats[i],
+            width: 2.2,
+            height: 60,
+            displayValue: false,
+            margin: 4,
+            background: "#ffffff",
+            lineColor: "#000000"
+          });
+          return true; // success
+        } catch (e) {
+          // try next format
+        }
+      }
+      return false; // all formats failed
+    }
+
     function renderAndPrint() {
       if (typeof JsBarcode === "undefined") {
         // CDN not loaded yet — retry in 200 ms
@@ -177,18 +200,15 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
       document.querySelectorAll("svg.barcode-svg[data-barcode]").forEach(function(svg) {
         var val = svg.getAttribute("data-barcode");
         if (!val) return;
-        try {
-          JsBarcode(svg, val, {
-            format: "AUTO",
-            width: 2.2,
-            height: 60,
-            displayValue: false,
-            margin: 4,
-            background: "#ffffff",
-            lineColor: "#000000"
-          });
-        } catch (err) {
-          svg.outerHTML = '<div class="barcode-missing">&#9888; Invalid barcode</div>';
+        var ok = renderBarcode(svg, val);
+        if (!ok) {
+          var wrap = svg.parentElement;
+          if (wrap) {
+            var err = document.createElement("div");
+            err.className = "barcode-missing";
+            err.textContent = "\u26A0 Cannot encode: " + val;
+            wrap.replaceChild(err, svg);
+          }
         }
       });
       setTimeout(function() { window.print(); }, 250);
