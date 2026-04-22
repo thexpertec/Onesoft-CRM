@@ -9,6 +9,7 @@ import {
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
+  autoPostPurchaseJE,
   createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -467,7 +468,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   // ── Cost rate calculator (purchase invoices only) ───────────────────────
   const [costCalcOpen, setCostCalcOpen] = useState(false);
   // per-item overrides: { suggestedCost, salePrice }
-  const [costOverrides, setCostOverrides] = useState<Record<string, { suggestedCost: string; salePrice: string }>>({});
+  const [costOverrides, setCostOverrides] = useState<Record<string, { suggestedCost: string; retailPrice: string; wholesalePrice: string }>>({});
 
   // ── Pricing mode (sale invoices only) — default wholesale ──────────────
   const [pricingMode, setPricingMode] = useState<"wholesale" | "retail">(
@@ -1156,8 +1157,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
           {/* ── Cost Rate Calculator (purchase invoices only) ─────────────────── */}
           {invoiceType === "purchase" && items.some(it => it.productName) && (() => {
-            const totalPieces  = items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
-            const totalCharges = (parseFloat(form.shippingFee) || 0) + (parseFloat(form.handlingFee) || 0);
+            const totalPieces   = items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+            const totalCharges  = (parseFloat(form.shippingFee) || 0) + (parseFloat(form.handlingFee) || 0);
             const extraPerPiece = totalPieces > 0 ? totalCharges / totalPieces : 0;
 
             const findProd = (it: SaleItem) =>
@@ -1167,7 +1168,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               );
 
             const initOverrides = () => {
-              const next: Record<string, { suggestedCost: string; salePrice: string }> = {};
+              const next: Record<string, { suggestedCost: string; retailPrice: string; wholesalePrice: string }> = {};
               items.forEach(it => {
                 const existing = costOverrides[it.id];
                 const qty  = parseFloat(it.qty) || 0;
@@ -1176,12 +1177,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 const prod = findProd(it);
                 next[it.id] = {
                   suggestedCost: existing?.suggestedCost ?? suggested,
-                  salePrice:     existing?.salePrice     ?? (prod?.price ?? ""),
+                  retailPrice:   existing?.retailPrice   ?? (prod?.price ?? ""),
+                  wholesalePrice:existing?.wholesalePrice?? (prod?.wholesalePrice ?? ""),
                 };
               });
               setCostOverrides(next);
             };
 
+            // Push cost + retail + wholesale prices to product catalogue
             const handlePush = () => {
               let pushed = 0;
               items.forEach(it => {
@@ -1189,15 +1192,30 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 if (!prod) return;
                 const ov = costOverrides[it.id];
                 if (!ov) return;
-                const updates: Partial<{ purchasePrice: string; costPrice: string; price: string }> = {};
+                const updates: Partial<{ purchasePrice: string; costPrice: string; price: string; wholesalePrice: string }> = {};
                 if (ov.suggestedCost) {
                   updates.purchasePrice = ov.suggestedCost;
                   updates.costPrice     = ov.suggestedCost;
                 }
-                if (ov.salePrice) updates.price = ov.salePrice;
+                if (ov.retailPrice)    updates.price          = ov.retailPrice;
+                if (ov.wholesalePrice) updates.wholesalePrice = ov.wholesalePrice;
                 if (Object.keys(updates).length) { updateProduct(prod.id, updates); pushed++; }
               });
-              toast({ title: `Cost rates updated`, description: `${pushed} product(s) updated in catalogue.` });
+              toast({ title: `Prices updated`, description: `${pushed} product(s) updated in catalogue.` });
+            };
+
+            // Push only the raw supplier/purchase price from the invoice
+            const handlePushPurchasePrice = () => {
+              let pushed = 0;
+              items.forEach(it => {
+                const prod = findProd(it);
+                if (!prod) return;
+                const uPrc = it.unitPrice;
+                if (!uPrc) return;
+                updateProduct(prod.id, { purchasePrice: uPrc });
+                pushed++;
+              });
+              toast({ title: `Purchase price updated`, description: `${pushed} product(s) updated with supplier price from this invoice.` });
             };
 
             return (
@@ -1255,73 +1273,107 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     {/* ── Per-item table ────────────────────────────────── */}
                     <div className="rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
                       {/* Table head */}
-                      <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px] gap-0 px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
-                        {["Product", "Qty", "Supplier Price", "Extra Cost/Unit", "Suggested Cost", "Sale Price"].map(h => (
+                      <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
+                        {["Product", "Qty", "Supplier Price", "Extra Cost/Unit", "Cost Price", "Retail Price", "Wholesale Price"].map(h => (
                           <span key={h} className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center first:text-left">{h}</span>
                         ))}
                       </div>
 
-                      {/* Table rows */}
+                      {/* Table rows — two rows per item */}
                       {items.filter(it => it.productName).map(it => {
-                        const qty      = parseFloat(it.qty) || 0;
-                        const uPrc     = parseFloat(it.unitPrice) || 0;
-                        const extra    = extraPerPiece;
-                        const prod     = findProd(it);
-                        const ov       = costOverrides[it.id] ?? {
+                        const qty   = parseFloat(it.qty) || 0;
+                        const uPrc  = parseFloat(it.unitPrice) || 0;
+                        const extra = extraPerPiece;
+                        const prod  = findProd(it);
+                        const ov    = costOverrides[it.id] ?? {
                           suggestedCost: (uPrc + extra).toFixed(dp),
-                          salePrice:     prod?.price ?? "",
+                          retailPrice:   prod?.price ?? "",
+                          wholesalePrice:prod?.wholesalePrice ?? "",
                         };
 
-                        const setOv = (field: "suggestedCost" | "salePrice", val: string) =>
+                        const setOv = (field: "suggestedCost" | "retailPrice" | "wholesalePrice", val: string) =>
                           setCostOverrides(prev => ({
                             ...prev,
-                            [it.id]: { ...(prev[it.id] ?? { suggestedCost: "", salePrice: "" }), [field]: val },
+                            [it.id]: { ...(prev[it.id] ?? { suggestedCost: "", retailPrice: "", wholesalePrice: "" }), [field]: val },
                           }));
 
                         const hasProd = !!prod;
 
                         return (
-                          <div key={it.id}
-                            className={`grid grid-cols-[1fr_60px_100px_110px_120px_120px] gap-0 px-4 py-3 items-center border-b border-gray-100 dark:border-zinc-800 last:border-0 ${
-                              hasProd ? "" : "opacity-50"
-                            }`}
-                          >
-                            {/* Product name */}
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{it.productName || "—"}</p>
-                              {!hasProd && <p className="text-[10px] text-red-400 mt-0.5">Not found in catalogue</p>}
-                            </div>
-                            {/* Qty */}
-                            <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{qty}</div>
-                            {/* Supplier price */}
-                            <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{sym}{uPrc.toFixed(dp)}</div>
-                            {/* Extra cost/unit */}
-                            <div className="text-center text-sm font-mono text-indigo-600 dark:text-indigo-400">
-                              {qty > 0 ? `+${sym}${extra.toFixed(dp)}` : "—"}
-                            </div>
-                            {/* Suggested cost (editable) */}
-                            <div className="px-2">
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">{sym}</span>
-                                <input
-                                  type="number" min="0" step="0.01"
-                                  value={ov.suggestedCost}
-                                  onChange={e => setOv("suggestedCost", e.target.value)}
-                                  className="w-full pl-6 pr-2 py-1.5 text-sm font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-right"
-                                />
+                          <div key={it.id} className={`border-b border-gray-100 dark:border-zinc-800 last:border-0 ${hasProd ? "" : "opacity-50"}`}>
+                            {/* ── Row 1: editable inputs ── */}
+                            <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 py-2 items-center">
+                              {/* Product name */}
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{it.productName || "—"}</p>
+                                {!hasProd && <p className="text-[10px] text-red-400 mt-0.5">Not in catalogue</p>}
+                              </div>
+                              {/* Qty */}
+                              <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{qty}</div>
+                              {/* Supplier price */}
+                              <div className="text-center text-sm font-mono text-gray-600 dark:text-gray-400">{sym}{uPrc.toFixed(dp)}</div>
+                              {/* Extra cost/unit */}
+                              <div className="text-center text-sm font-mono text-indigo-600 dark:text-indigo-400">
+                                {qty > 0 ? `+${sym}${extra.toFixed(dp)}` : "—"}
+                              </div>
+                              {/* Cost Price (suggestedCost) — editable */}
+                              <div className="px-1.5">
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <input type="number" min="0" step="0.01" value={ov.suggestedCost}
+                                    onChange={e => setOv("suggestedCost", e.target.value)}
+                                    className="w-full pl-5 pr-1 py-1.5 text-sm font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-right"
+                                  />
+                                </div>
+                              </div>
+                              {/* Retail Price — editable */}
+                              <div className="px-1.5">
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <input type="number" min="0" step="0.01" value={ov.retailPrice}
+                                    onChange={e => setOv("retailPrice", e.target.value)}
+                                    placeholder="—"
+                                    className="w-full pl-5 pr-1 py-1.5 text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-right"
+                                  />
+                                </div>
+                              </div>
+                              {/* Wholesale Price — editable */}
+                              <div className="px-1.5">
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <input type="number" min="0" step="0.01" value={ov.wholesalePrice}
+                                    onChange={e => setOv("wholesalePrice", e.target.value)}
+                                    placeholder="—"
+                                    className="w-full pl-5 pr-1 py-1.5 text-sm font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-right"
+                                  />
+                                </div>
                               </div>
                             </div>
-                            {/* Sale price (editable) */}
-                            <div className="px-2">
-                              <div className="relative">
-                                <Tag size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
-                                <input
-                                  type="number" min="0" step="0.01"
-                                  value={ov.salePrice}
-                                  onChange={e => setOv("salePrice", e.target.value)}
-                                  placeholder="—"
-                                  className="w-full pl-6 pr-2 py-1.5 text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-right"
-                                />
+
+                            {/* ── Row 2: current catalogue prices (read-only) ── */}
+                            <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 pb-2 items-center bg-gray-50/60 dark:bg-zinc-800/30">
+                              <div className="text-[10px] text-gray-400 italic">Current in catalogue</div>
+                              <div/><div/><div/>
+                              {/* Current Cost Price */}
+                              <div className="px-1.5 text-center">
+                                <span className="text-[11px] font-mono text-amber-600 dark:text-amber-400">
+                                  {prod?.costPrice ? `${sym}${parseFloat(prod.costPrice).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                </span>
+                                <p className="text-[9px] text-gray-400 leading-tight">Cost</p>
+                              </div>
+                              {/* Current Retail Price */}
+                              <div className="px-1.5 text-center">
+                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                  {prod?.price ? `${sym}${parseFloat(prod.price).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                </span>
+                                <p className="text-[9px] text-gray-400 leading-tight">Retail</p>
+                              </div>
+                              {/* Current Wholesale Price */}
+                              <div className="px-1.5 text-center">
+                                <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">
+                                  {prod?.wholesalePrice ? `${sym}${parseFloat(prod.wholesalePrice).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                </span>
+                                <p className="text-[9px] text-gray-400 leading-tight">Wholesale</p>
                               </div>
                             </div>
                           </div>
@@ -1329,18 +1381,27 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       })}
                     </div>
 
-                    {/* ── Push button ───────────────────────────────────── */}
-                    <div className="flex items-center justify-between pt-1">
+                    {/* ── Footer: legend + action buttons ─────────────────── */}
+                    <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
                       <p className="text-[11px] text-gray-400">
-                        Amber = new purchase/cost price · Green = sale price · Greyed rows have no catalogue match.
+                        Amber = Cost Price · Green = Retail · Blue = Wholesale · Greyed = no catalogue match
                       </p>
-                      <button
-                        type="button"
-                        onClick={handlePush}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow transition-colors"
-                      >
-                        <Upload size={14}/> Push to Products
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handlePushPurchasePrice}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-600 hover:bg-gray-500 text-white text-sm font-bold shadow transition-colors"
+                        >
+                          <Upload size={13}/> Push Purchase Price
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePush}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow transition-colors"
+                        >
+                          <Upload size={13}/> Push All Prices
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1426,8 +1487,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     stockReceiveInProgress.current = true;
                     setStockJustReceived(true);
                     receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber, "Purchase");
+                    // Post inventory JE: DR Inventory, CR AP
+                    const _invTotal = invoice!.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+                      + (parseFloat(invoice!.shippingFee)||0) + (parseFloat(invoice!.handlingFee)||0);
+                    autoPostPurchaseJE({ poNumber: invoice!.invoiceNumber, supplier: invoice!.customer, date: new Date().toISOString().slice(0,10), total: _invTotal });
                     updateInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
-                    toast({ title: "Stock Updated", description: `Items from ${invoice!.invoiceNumber} added to stock.` });
+                    toast({ title: "Stock Received & Inventory Posted", description: `Items from ${invoice!.invoiceNumber} added to stock and inventory ledger updated.` });
                   }}
                     disabled={stockJustReceived}
                     className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${stockJustReceived ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed" : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"}`}>
@@ -1646,6 +1711,10 @@ export function InvoiceFormPage() {
     if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
+        // Post inventory JE: DR Inventory, CR AP
+        const _pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+          + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
+        autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal });
         updates.stockReceived = true;   // keep in sync so the button shows ✓
       } else {
         deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
@@ -1712,6 +1781,10 @@ export function InvoiceFormPage() {
     if (!inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
+        // Post inventory JE: DR Inventory, CR AP
+        const _pTotal2 = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+          + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
+        autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal2 });
         updates.stockReceived = true;   // keep in sync with the "Receive to Stock" button
       } else {
         deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
