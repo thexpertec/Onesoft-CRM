@@ -4,7 +4,9 @@ import {
   Phone, User, CalendarDays, Tag, Loader2, Search, ChevronDown,
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
   Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
+  BarChart3, AlertTriangle, TrendingUp,
 } from "lucide-react";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -246,10 +248,15 @@ export default function RepairPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 text-xs">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </Button>
+          <Link href="/repair-report">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/30">
+              <BarChart3 size={13} /> View Report
+            </Button>
+          </Link>
           {can("Add Repairs") && (
             <Button size="sm" onClick={() => setAddOpen(true)} className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
               <Plus size={13} /> Add Request
@@ -257,6 +264,55 @@ export default function RepairPage() {
           )}
         </div>
       </div>
+
+      {/* Summary KPI cards */}
+      {!loading && bookings.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { label: "Total Jobs",   value: bookings.length,  icon: Wrench,        color: "bg-blue-600",    sub: "All time" },
+            { label: "Open",         value: openCount,        icon: AlertCircle,   color: "bg-violet-500",  sub: "New · Diagnosing · Quoted" },
+            { label: "Active",       value: activeCount,      icon: Settings2,     color: "bg-amber-500",   sub: "In-work" },
+            { label: "Done",         value: doneCount,        icon: CheckCircle2,  color: "bg-emerald-500", sub: "Ready & Completed" },
+            { label: "Online",       value: onlineCount,      icon: Globe,         color: "bg-sky-500",     sub: "Web bookings" },
+            { label: "Walk-in",      value: walkInCount,      icon: Store,         color: "bg-indigo-500",  sub: "Shop visitors" },
+          ].map(({ label, value, icon: Icon, color, sub }) => (
+            <div key={label} className="bg-white dark:bg-card rounded-xl border border-border p-3.5 flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
+                <Icon size={16} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight truncate">{label}</p>
+                <p className="text-xl font-bold text-foreground leading-tight">{value}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Priority summary row */}
+      {!loading && bookings.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mr-1">Priority:</span>
+          {(["Urgent", "High", "Normal", "Low"] as const).map(p => {
+            const count = bookings.filter(b => (b.priority ?? "Normal") === p).length;
+            const cls = { Urgent:"bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800", High:"bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400", Normal:"bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400", Low:"bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400" }[p];
+            return (
+              <span key={p} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${cls}`}>
+                <Flag size={9} /> {p}: <strong>{count}</strong>
+              </span>
+            );
+          })}
+          {(() => {
+            const completionPct = bookings.length > 0 ? Math.round((bookings.filter(b => b.status === "Completed").length / bookings.length) * 100) : 0;
+            return (
+              <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                <TrendingUp size={10} /> Completion rate: {completionPct}%
+              </span>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Pipeline stages */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">

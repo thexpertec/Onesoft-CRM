@@ -313,7 +313,8 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "repair", label: "Repair", icon: Wrench,
     items: [
-      { label: "Repair Bookings", href: "/repair", icon: Wrench, desc: "Service queries from the store" },
+      { label: "Repair Bookings", href: "/repair",        icon: Wrench,   desc: "Service queries from the store"          },
+      { label: "Repair Report",   href: "/repair-report", icon: BarChart3, desc: "Analytics & full detail report"          },
     ],
   },
   { key: "settings", href: "/settings", label: "Settings", icon: Settings, items: null },
@@ -326,6 +327,7 @@ const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/expense-report", "/income-report", "/payment-accounts"];
+const REPAIR_ROUTES        = ["/repair", "/repair-report"];
 
 const QUICK_ADD: SubItem[] = [
   { label: "New Lead",         href: "/leads",                  icon: UserPlus     },
@@ -633,6 +635,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isManufacturingActive = MANUFACTURING_ROUTES.some(r => location === r || location.startsWith(r));
   const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r   => location === r || location.startsWith(r));
   const isAccountsActive      = ACCOUNTS_ROUTES.some(r      => location === r || location.startsWith(r));
+  const isRepairActive        = REPAIR_ROUTES.some(r        => location === r || location.startsWith(r));
 
   // Mega menu column configs keyed by nav item key
   const MEGA_CONFIGS: Record<string, { columns: MegaColumn[]; footerText: string; footerHref: string; footerLabel: string }> = {
@@ -881,6 +884,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "manufacturing" ? isManufacturingActive :
                 item.key === "investments"   ? isInvestmentsActive :
                 item.key === "accounts"      ? isAccountsActive :
+                item.key === "repair"        ? isRepairActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const isThisMegaOpen = openMega === item.key;
