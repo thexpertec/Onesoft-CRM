@@ -6,7 +6,8 @@ import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil, Printer } from "lucide-react";
+import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil, Printer, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { downloadExcel } from "@/lib/export-excel";
 import { printBarcodeLabels } from "@/lib/print-barcode";
 import { getSettingsCurrencySymbol as _getCurrSym } from "@/lib/currencies";
@@ -1612,10 +1613,10 @@ export default function ProductsPage() {
                   </td>
                 );
               })}
-              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }}>
-                <div className="flex items-center justify-center gap-1">
-                  <button onClick={commitNewRow} className="p-1 rounded text-emerald-600 hover:bg-emerald-50" title="Save"><Save size={13} /></button>
-                  <button onClick={() => { setNewRow(null); setNewRowActive(null); }} className="p-1 rounded text-red-400 hover:bg-red-50" title="Cancel"><X size={13} /></button>
+              <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{ height: `${CELL_H}px`, width: 160 }}>
+                <div className="flex items-center justify-center gap-1.5 px-2">
+                  <button onClick={commitNewRow} className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold transition-colors" title="Save row"><Save size={13} /> Save</button>
+                  <button onClick={() => { setNewRow(null); setNewRowActive(null); }} className="flex items-center gap-1.5 h-7 px-2 rounded-md border border-gray-200 dark:border-zinc-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-700 text-[12px] font-semibold transition-colors" title="Cancel"><X size={13} /></button>
                 </div>
               </td>
             </tr>
@@ -1812,53 +1813,71 @@ export default function ProductsPage() {
                     </td>
                   );
                 })}
-                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={wrapText ? { minHeight: `${CELL_H}px`, width: 70 } : { height: `${CELL_H}px`, width: 70 }} onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center justify-center gap-0.5 h-full px-1">
-                    {/* Thumbnail indicator — always visible */}
-                    {prod.thumbnail ? (
-                      <img src={prod.thumbnail} alt="" title="Has thumbnail"
-                        className="w-5 h-5 rounded object-cover border border-zinc-200 dark:border-zinc-600 flex-shrink-0 cursor-pointer hover:opacity-80"
-                        onClick={() => can("Edit Products") && setImagesDialogId(prod.id)} />
-                    ) : (prod.images?.length ?? 0) > 0 ? (
-                      <span className="text-[9px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 rounded px-1 flex-shrink-0 leading-4">{prod.images!.length}img</span>
-                    ) : null}
-                    {/* Action buttons — visible on row hover */}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1 rounded text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors" title="View product details & ledger"
-                        onClick={e => { e.stopPropagation(); setViewProdId(prod.id); }}>
-                        <Eye size={13} />
+                <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border" style={wrapText ? { minHeight: `${CELL_H}px`, width: 160 } : { height: `${CELL_H}px`, width: 160 }} onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-center gap-1.5 h-full px-2">
+                    {/* View */}
+                    <button
+                      className="flex items-center gap-1 h-7 px-2.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/70 text-[12px] font-semibold transition-colors flex-shrink-0"
+                      title="View product details"
+                      onClick={e => { e.stopPropagation(); setViewProdId(prod.id); }}
+                    >
+                      <Eye size={13} /> View
+                    </button>
+                    {/* Edit */}
+                    {can("Edit Products") && (
+                      <button
+                        className="flex items-center gap-1 h-7 px-2.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-[12px] font-semibold transition-colors flex-shrink-0"
+                        title="Edit product"
+                        onClick={e => { e.stopPropagation(); setEditProdId(prod.id); }}
+                        data-testid={`btn-edit-product-${prod.id}`}
+                      >
+                        <Pencil size={13} /> Edit
                       </button>
-                      <button className="p-1 rounded text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors" title="Stock ledger history"
-                        onClick={e => { e.stopPropagation(); navigate(`/stock-ledger?q=${encodeURIComponent(prod.name)}`); }}>
-                        <Boxes size={13} />
-                      </button>
-                      <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Sale invoices for this product"
-                        onClick={e => { e.stopPropagation(); navigate(`/invoices?type=sale&q=${encodeURIComponent(prod.name)}`); }}>
-                        <ReceiptText size={13} />
-                      </button>
-                      <button className="p-1 rounded text-zinc-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors" title="Purchase invoices for this product"
-                        onClick={e => { e.stopPropagation(); navigate(`/invoices?type=purchase&q=${encodeURIComponent(prod.name)}`); }}>
-                        <ShoppingCart size={13} />
-                      </button>
-                      {can("Edit Products") && (
-                        <button className="p-1 rounded text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="Edit product"
-                          onClick={e => { e.stopPropagation(); setEditProdId(prod.id); }}>
-                          <Pencil size={13} />
+                    )}
+                    {/* More dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="flex items-center justify-center h-7 w-7 rounded-md border border-gray-200 dark:border-zinc-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex-shrink-0"
+                          title="More actions"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <MoreHorizontal size={14} />
                         </button>
-                      )}
-                      {can("Edit Products") && (
-                        <button className="p-1 rounded text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Manage images"
-                          onClick={() => setImagesDialogId(prod.id)}>
-                          <Camera size={13} />
-                        </button>
-                      )}
-                      {can("Delete Products") && (
-                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete"
-                          onClick={() => setDeleteId(prod.id)} data-testid={`btn-delete-product-${prod.id}`}>
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52 text-[13px]">
+                        <DropdownMenuItem onClick={() => navigate(`/stock-ledger?q=${encodeURIComponent(prod.name)}`)}>
+                          <Boxes size={14} className="mr-2 text-teal-500" /> Stock Ledger
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/invoices?type=sale&q=${encodeURIComponent(prod.name)}`)}>
+                          <ReceiptText size={14} className="mr-2 text-blue-500" /> Sale Invoices
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/invoices?type=purchase&q=${encodeURIComponent(prod.name)}`)}>
+                          <ShoppingCart size={14} className="mr-2 text-purple-500" /> Purchase Invoices
+                        </DropdownMenuItem>
+                        {can("Edit Products") && (
+                          <DropdownMenuItem onClick={() => setImagesDialogId(prod.id)}>
+                            <Camera size={14} className="mr-2 text-orange-500" />
+                            {prod.thumbnail ? "Manage Images" : "Add Images"}
+                            {(prod.images?.length ?? 0) > 0 && (
+                              <span className="ml-auto text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 px-1.5 rounded-full font-bold">{prod.images!.length}</span>
+                            )}
+                          </DropdownMenuItem>
+                        )}
+                        {can("Delete Products") && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteId(prod.id)}
+                              className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/30"
+                              data-testid={`btn-delete-product-${prod.id}`}
+                            >
+                              <Trash2 size={14} className="mr-2" /> Delete Product
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </td>
               </tr>
