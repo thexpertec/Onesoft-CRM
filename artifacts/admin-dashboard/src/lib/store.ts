@@ -2875,6 +2875,7 @@ export type Invoice = {
   // Items & pricing
   items:             SaleItem[];
   taxRate:           string;    // percentage string e.g. "20"
+  pricingMode?:      "wholesale" | "retail";  // sale invoice pricing tier
   shippingFee:       string;
   handlingFee:       string;
   shippingMethod:    string;

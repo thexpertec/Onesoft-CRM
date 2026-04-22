@@ -463,6 +463,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   );
   const availableBankAccounts = useMemo(() => getBankAccounts(), []);
 
+  // ── Pricing mode (sale invoices only) — default wholesale ──────────────
+  const [pricingMode, setPricingMode] = useState<"wholesale" | "retail">(
+    () => {
+      const stored = invoice?.pricingMode as "wholesale" | "retail" | undefined;
+      return stored ?? "wholesale";
+    }
+  );
+
   // ── Stock-receive guard: prevents double-clicks before React re-render ──
   const stockReceiveInProgress = useRef(false);
   const [stockJustReceived, setStockJustReceived] = useState(
@@ -495,6 +503,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     setPayHist(invoice?.paymentHistory ?? []);
     setPayInput(invoice?.amountPaid ?? "");
     setDocs(initDocs(invoice));
+    setPricingMode(invoice?.pricingMode ?? "wholesale");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice?.id, defaultType]);
 
@@ -559,18 +568,36 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const updateItem = (id: string, field: keyof SaleItem, value: string) =>
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
 
+  // Returns the right price for a product based on invoiceType + pricingMode
+  const getAutoPrice = useCallback((p: ReturnType<typeof getProducts>[number]) => {
+    if (invoiceType === "purchase") {
+      return p.purchasePrice && p.purchasePrice !== "" ? p.purchasePrice : p.price;
+    }
+    if (pricingMode === "retail") return p.price;
+    // wholesale — fall back to retail if no wholesale price set
+    return p.wholesalePrice && p.wholesalePrice !== "" ? p.wholesalePrice : p.price;
+  }, [invoiceType, pricingMode]);
+
   const pickProduct = (id: string, name: string) => {
     const p = products.find(pr => pr.name === name);
     if (!p) return updateItem(id, "productName", name);
-    const autoPrice = invoiceType === "purchase"
-      ? (p.purchasePrice && p.purchasePrice !== "" ? p.purchasePrice : p.price)
-      : p.price;
     setItems(prev => prev.map(i =>
       i.id === id
-        ? { ...i, productName: getInvoiceProductName(p), localName: p.localName || "", sku: p.sku, unit: p.unit, unitPrice: autoPrice }
+        ? { ...i, productName: getInvoiceProductName(p), localName: p.localName || "", sku: p.sku, unit: p.unit, unitPrice: getAutoPrice(p) }
         : i
     ));
   };
+
+  // Re-price all items whose product is found in the catalogue when mode changes
+  useEffect(() => {
+    if (invoiceType === "purchase") return;
+    setItems(prev => prev.map(item => {
+      const p = products.find(pr => getInvoiceProductName(pr) === item.productName || pr.name === item.productName);
+      if (!p) return item;
+      return { ...item, unitPrice: getAutoPrice(p) };
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricingMode]);
 
 
   const addItem    = () => setItems(p => [...p, blankItem()]);
@@ -614,6 +641,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     onSave({
       ...form,
       ...(overrideStatus ? { status: overrideStatus } : {}),
+      pricingMode:     invoiceType !== "purchase" ? pricingMode : undefined,
       items,
       paymentHistory:  payHistory,
       amountPaid:      payInput,
@@ -803,14 +831,44 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Section 2: Line Items (full width) ──────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">#</span>
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider pl-1">Product / Service</span>
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Unit Price</span>
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Qty</span>
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Discount</span>
-              <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Sub Total</span>
-              <span />
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
+              {/* Column labels */}
+              <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 flex-1 items-center">
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">#</span>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider pl-1">Product / Service</span>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Unit Price</span>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Qty</span>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Discount</span>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Sub Total</span>
+                <span />
+              </div>
+              {/* Pricing mode switcher — sale invoices only */}
+              {invoiceType !== "purchase" && (
+                <div className="flex items-center gap-0.5 ml-4 bg-gray-700 dark:bg-zinc-800 rounded-lg p-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPricingMode("wholesale")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      pricingMode === "wholesale"
+                        ? "bg-indigo-500 text-white shadow-sm"
+                        : "text-gray-300 hover:text-white"
+                    }`}
+                  >
+                    Wholesale
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPricingMode("retail")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      pricingMode === "retail"
+                        ? "bg-emerald-500 text-white shadow-sm"
+                        : "text-gray-300 hover:text-white"
+                    }`}
+                  >
+                    Retail
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Rows */}
