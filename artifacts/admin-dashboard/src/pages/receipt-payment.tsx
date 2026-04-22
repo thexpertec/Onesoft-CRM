@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, findSubLedgerForParty } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -743,7 +743,7 @@ export default function ReceiptPaymentPage() {
   const [newType,      setNewType]      = useState<"receipt" | "payment">("receipt");
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
 
-  // ── Auto-open form when arriving from an invoice's "Collect Payment" button ─
+  // ── Auto-open form when arriving from an invoice or ledger ──────────────────
   useLayoutEffect(() => {
     if (!searchStr) return;
     const p = new URLSearchParams(searchStr);
@@ -752,27 +752,92 @@ export default function ReceiptPaymentPage() {
     const customer      = p.get("customer");
     const amount        = p.get("amount");
     const type          = (p.get("type") === "payment" ? "payment" : "receipt") as "receipt" | "payment";
-    // Customer-only deep link — open blank receipt pre-filled with customer name
+    // Ledger deep-link — accountId + accountName passed directly (no invoice)
+    const srcAccountId   = p.get("accountId");
+    const srcAccountName = p.get("accountName");
+    const partyName      = p.get("partyName") || customer || "";
+
+    const allAccounts = getAccounts();
+    const settings    = getSettings();
+
+    // ── Helper: resolve the correct AR or AP ledger account ─────────────────
+    function resolveAccount(forParty: string, forType: "receipt" | "payment"): { id: string; name: string } {
+      if (forType === "receipt") {
+        const groupId = settings.accReceivable || SYS_ACCS.AR_GROUP;
+        const specId  = forParty ? findSubLedgerForParty(forParty, SYS_ACCS.AR_GROUP) : null;
+        const id      = specId ?? groupId;
+        return { id, name: allAccounts.find(a => a.id === id)?.name ?? "" };
+      } else {
+        const groupId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+        const specId  = forParty ? findSubLedgerForParty(forParty, SYS_ACCS.AP_TRADE) : null;
+        const id      = specId ?? groupId;
+        return { id, name: allAccounts.find(a => a.id === id)?.name ?? "" };
+      }
+    }
+
+    // ── Case 1: Ledger deep-link (accountId present, no invoiceId) ───────────
+    if (srcAccountId && !invoiceId) {
+      const acct = { id: srcAccountId, name: srcAccountName ?? allAccounts.find(a => a.id === srcAccountId)?.name ?? "" };
+      const prefill: Partial<RPVoucher> = {
+        voucherType: type,
+        partyName,
+        lines: [{
+          id: crypto.randomUUID(),
+          accountId:   acct.id,
+          accountName: acct.name,
+          description: partyName ? `${type === "receipt" ? "Receipt from" : "Payment to"} ${partyName}` : "",
+          amount:      parseFloat(amount ?? "0") || 0,
+        }],
+      };
+      setNewType(type);
+      setEditVoucher(null);
+      setPrefillData(prefill);
+      setFormOpen(true);
+      return;
+    }
+
+    // ── Case 2: Customer-only deep link (no invoice, no account) ────────────
     if (!invoiceId || !invoiceNumber) {
-      if (customer) {
+      if (partyName || customer) {
         setNewType(type);
         setEditVoucher(null);
-        setPrefillData({ voucherType: type, partyName: customer });
+        setPrefillData({ voucherType: type, partyName: partyName || customer || "" });
         setFormOpen(true);
       }
       return;
     }
+
+    // ── Case 3: Invoice deep-link — resolve account + outstanding balance ────
+    const acct = resolveAccount(customer ?? "", type);
+
+    // Compute outstanding balance directly from invoice data
+    const inv = getInvoices().find(i => i.id === invoiceId);
+    let outstanding = parseFloat(amount ?? "0") || 0;
+    if (inv) {
+      const sub = inv.items.reduce((s, it) => {
+        const qty   = parseFloat(it.qty) || 0;
+        const price = parseFloat(it.unitPrice) || 0;
+        const disc  = parseFloat(it.discount) || 0;
+        const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+        return s + line;
+      }, 0);
+      const tax   = sub * (parseFloat(inv.taxRate) || 0) / 100;
+      const grand = sub + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+      const paid  = parseFloat(inv.amountPaid) || 0;
+      outstanding = parseFloat(Math.max(0, grand - paid).toFixed(2));
+    }
+
     const prefill: Partial<RPVoucher> = {
-      voucherType:        type,
-      partyName:          customer ?? "",
-      linkedInvoiceId:    invoiceId,
-      narration:          `Payment for invoice ${invoiceNumber}`,
+      voucherType:     type,
+      partyName:       customer ?? "",
+      linkedInvoiceId: invoiceId,
+      narration:       `${type === "receipt" ? "Receipt for invoice" : "Payment for invoice"} ${invoiceNumber}`,
       lines: [{
         id:          crypto.randomUUID(),
-        accountId:   "",
-        accountName: "",
+        accountId:   acct.id,
+        accountName: acct.name,
         description: invoiceNumber,
-        amount:      parseFloat(amount ?? "0") || 0,
+        amount:      outstanding,
       }],
     };
     setNewType(type);
