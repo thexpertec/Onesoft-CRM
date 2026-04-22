@@ -481,7 +481,10 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   const arAccId   = (vtype === "receipt" && inv.customer)
                     ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AR_GROUP) || groupArId)
                     : groupArId;
-                  const apAccId  = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+                  const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+                  const apAccId   = (vtype === "payment" && inv.customer)
+                    ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AP_TRADE) || groupApId)
+                    : groupApId;
                   const targetId = vtype === "receipt" ? arAccId : apAccId;
                   if (targetId) {
                     const acct = accounts.find(a => a.id === targetId);
