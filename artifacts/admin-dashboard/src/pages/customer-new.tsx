@@ -1,13 +1,15 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useCustomers, useCities, useAreas } from "@/hooks/use-data";
-import { CustomerStatus } from "@/lib/store";
+import { CustomerStatus, Address, isAddressEmpty, formatAddress } from "@/lib/store";
+import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, UserPlus } from "lucide-react";
+import { Plus, ArrowLeft, UserPlus, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox, ComboOption } from "@/components/combobox";
 
 const CUSTOMER_STATUSES: CustomerStatus[] = ["Active", "Inactive", "Churned"];
@@ -51,6 +53,10 @@ export default function CustomerNewPage() {
   const [form, setForm] = useState(BLANK());
   const set = (key: string, value: string) => setForm(p => ({ ...p, [key]: value }));
 
+  const [billing,  setBilling]  = useState<Address>({ ...EMPTY_ADDRESS });
+  const [shipping, setShipping] = useState<Address>({ ...EMPTY_ADDRESS });
+  const [sameAddr, setSameAddr] = useState(true);
+
   const handleSubmit = () => {
     if (!form.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
     const emailLower = form.email?.toLowerCase();
@@ -61,6 +67,12 @@ export default function CustomerNewPage() {
     if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
       toast({ title: "Duplicate phone", description: `"${form.phone}" already exists.`, variant: "destructive" }); return;
     }
+
+    const billingDetails  = isAddressEmpty(billing)  ? undefined : billing;
+    const shippingDetails = sameAddr
+      ? billingDetails
+      : (isAddressEmpty(shipping) ? billingDetails : shipping);
+
     addCustomer({
       name: form.name.trim(), company: form.company.trim(),
       email: form.email.trim(), phone: form.phone.trim(),
@@ -74,6 +86,10 @@ export default function CustomerNewPage() {
       customerType: "Regular Customer",
       customerRole: form.customerRole,
       tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
+      billingAddressDetails:  billingDetails,
+      shippingAddressDetails: shippingDetails,
+      billingAddress:  formatAddress(billingDetails)  || undefined,
+      shippingAddress: formatAddress(shippingDetails) || undefined,
     });
     toast({ title: "Customer added", description: `${form.name.trim()} has been added.` });
     nav("/customers");
@@ -187,7 +203,7 @@ export default function CustomerNewPage() {
               <Select value={form.currency} onValueChange={v => set("currency", v)}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>)}
+                  {CURRENCIES.map(c => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -195,6 +211,44 @@ export default function CustomerNewPage() {
               <Input type="number" step="0.01" placeholder="0.00" value={form.openingBalance}
                 onChange={e => set("openingBalance", e.target.value)} className="h-9 text-sm tabular-nums" />
             </Field>
+          </div>
+
+          {/* ── Billing Address ────────────────────────────────────────── */}
+          <Divider label="Billing Address" />
+
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <AddressFields
+              value={billing}
+              onChange={setBilling}
+              idPrefix="new-cust-billing"
+            />
+          </div>
+
+          {/* ── Shipping Address ───────────────────────────────────────── */}
+          <Divider label="Shipping Address" />
+
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+              <Checkbox
+                checked={sameAddr}
+                onCheckedChange={v => setSameAddr(!!v)}
+                id="new-cust-same-addr"
+              />
+              <span className="text-[13px] text-muted-foreground flex items-center gap-1.5">
+                <Copy size={12} />
+                Shipping address same as billing
+              </span>
+            </label>
+
+            {!sameAddr && (
+              <div className="rounded-lg border border-border bg-muted/20 p-4">
+                <AddressFields
+                  value={shipping}
+                  onChange={setShipping}
+                  idPrefix="new-cust-shipping"
+                />
+              </div>
+            )}
           </div>
 
           <Divider label="Tags & Notes" />
