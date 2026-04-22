@@ -5093,14 +5093,19 @@ export function postRPVoucherJE(id: string): JournalEntry {
   const v = getRPVouchers().find(v => v.id === id);
   if (!v) throw new Error("Voucher not found");
   if (v.status === "posted") throw new Error("Already posted");
+  if (!v.cashBankAccountId) throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
 
   const total = v.lines.reduce((s, l) => s + l.amount, 0);
   const lines: JournalEntryLine[] = [];
+  const partyRef = `${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`;
 
   if (v.voucherType === "receipt") {
+    // ── Receipt ──────────────────────────────────────────────────────────────
+    // DR  Cash / Bank account (money coming in)
+    // CR  each line — typically AR, Revenue, or other income accounts
     lines.push({
       id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
-      narration: `Receipt — ${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`,
+      narration: `Receipt — ${partyRef}`,
       debit: total, credit: 0,
     });
     for (const l of v.lines) {
@@ -5110,8 +5115,10 @@ export function postRPVoucherJE(id: string): JournalEntry {
         debit: 0, credit: l.amount,
       });
     }
-  } else if (v.cashBankAccountId) {
-    // ── Legacy payment style (separate "Paid From" account was selected) ──────
+  } else {
+    // ── Payment ───────────────────────────────────────────────────────────────
+    // DR  each line — typically AP, Expense, or other accounts
+    // CR  Cash / Bank account (money going out)
     for (const l of v.lines) {
       lines.push({
         id: crypto.randomUUID(), ledgerId: l.accountId,
@@ -5121,25 +5128,9 @@ export function postRPVoucherJE(id: string): JournalEntry {
     }
     lines.push({
       id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
-      narration: `Payment — ${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`,
+      narration: `Payment — ${partyRef}`,
       debit: 0, credit: total,
     });
-  } else {
-    // ── New-style payment: lines = Cash/Bank accounts (money going out) ───────
-    // DR Trade Payables (AP) — reduces the liability
-    // CR each Cash/Bank line — reduces cash/bank asset
-    lines.push({
-      id: crypto.randomUUID(), ledgerId: SYS_ACCS.AP_TRADE,
-      narration: `Payment — ${v.partyName || "Supplier"}${v.reference ? " | " + v.reference : ""}`,
-      debit: total, credit: 0,
-    });
-    for (const l of v.lines) {
-      lines.push({
-        id: crypto.randomUUID(), ledgerId: l.accountId,
-        narration: l.description || v.narration || v.voucherNumber,
-        debit: 0, credit: l.amount,
-      });
-    }
   }
 
   const je = createJournalEntry({

@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -395,6 +395,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const validate = (): string | null => {
     if (!date) return "Date is required.";
+    if (!cbId) return `${vtype === "receipt" ? "Received Into" : "Paid From"} (Cash / Bank) account is required.`;
     const validLines = lines.filter(l => l.accountId && parseFloat(l.amount) > 0);
     if (validLines.length === 0) return "At least one line with an account and amount is required.";
     if (overBalance)
@@ -472,6 +473,35 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   if (!inv?.id) { setLinkedInvId(null); return; }
                   setLinkedInvId(inv.id);
                   if (inv.customer && !party) setParty(inv.customer);
+                  // Auto-populate the first line with the correct AR / AP account
+                  const settings = getSettings();
+                  const arAccId  = settings.accReceivable  || SYS_ACCS.AR_GROUP;
+                  const apAccId  = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+                  const targetId = vtype === "receipt" ? arAccId : apAccId;
+                  if (targetId) {
+                    const acct = accounts.find(a => a.id === targetId);
+                    if (acct) {
+                      // compute outstanding balance from invoice
+                      const sub = inv.items.reduce((s, it) => {
+                        const qty = parseFloat(it.qty) || 0;
+                        const price = parseFloat(it.unitPrice) || 0;
+                        const disc = parseFloat(it.discount) || 0;
+                        const line = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+                        return s + line;
+                      }, 0);
+                      const tax   = sub * (parseFloat(inv.taxRate) || 0) / 100;
+                      const grand = sub + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+                      const paid  = parseFloat(inv.amountPaid) || 0;
+                      const outstanding = Math.max(0, grand - paid);
+                      setLines([{
+                        id:          crypto.randomUUID(),
+                        accountId:   acct.id,
+                        accountName: acct.name,
+                        description: inv.invoiceNumber,
+                        amount:      outstanding > 0 ? String(outstanding.toFixed(2)) : "",
+                      }]);
+                    }
+                  }
                 }}
               />
             </div>
@@ -515,7 +545,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             )}
           </div>
 
-          {/* Core fields — Date + Balance Due / Due Payable */}
+          {/* Core fields — Date + Cash/Bank + Balance Due / Due Payable */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
@@ -542,12 +572,28 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             )}
           </div>
 
+          {/* ── Cash / Bank Account selector ── */}
+          <div>
+            <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+              {vtype === "receipt" ? "Received Into (Cash / Bank Account) *" : "Paid From (Cash / Bank Account) *"}
+            </label>
+            {isPosted
+              ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">{cbName || "—"}</div>
+              : <AccDropdown
+                  accounts={accounts}
+                  value={cbId}
+                  onChange={(id, name) => { setCbId(id); setCbName(name); }}
+                  placeholder="Select Cash / Bank account…"
+                  filterCashBank
+                />
+            }
+          </div>
+
           {/* Lines */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                {vtype === "receipt" ? "Collection Account Lines" : "Payment Account Lines"}
-                <span className="ml-1 text-[10px] normal-case font-normal opacity-60">— Cash &amp; Bank only</span>
+                {vtype === "receipt" ? "Received Against (AR / Revenue Accounts)" : "Paid For (AP / Expense Accounts)"}
               </label>
               {!isPosted && (
                 <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
@@ -578,8 +624,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                               accounts={accounts}
                               value={l.accountId}
                               onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })}
-                              placeholder="Account…"
-                              filterCashBankOnly
+                              placeholder={vtype === "receipt" ? "AR / Revenue account…" : "AP / Expense account…"}
                               excludeIds={lines.filter(r => r.id !== l.id && r.accountId).map(r => r.accountId)}
                             />}
                       </td>
