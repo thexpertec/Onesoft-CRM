@@ -28,6 +28,8 @@ type AuthContextType = {
   isAuthenticated:   boolean;
   currentUser:       AdminUser | null;
   isSuperAdmin:      boolean;
+  isManager:         boolean;         // multi-tenant manager role
+  assignedTenants:   string[];        // tenant IDs assigned to the manager
   isStaff:           boolean;
   isSalesAgent:      boolean;
   currentAgentId:    string | null;  // the raw SalesAgent.id when logged in as agent
@@ -47,6 +49,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated:    false,
   currentUser:        null,
   isSuperAdmin:       false,
+  isManager:          false,
+  assignedTenants:    [],
   isStaff:            false,
   isSalesAgent:       false,
   currentAgentId:     null,
@@ -94,11 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // True while we're fetching latest data from the database after login/refresh
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const isAuthenticated = currentUser !== null;
-  const isSuperAdmin    = currentUser?.role === "superadmin";
-  const isStaff         = currentUser?.role === "staff";
-  const isSalesAgent    = currentUser?.role === "sales_agent";
-  const currentTenant   = currentTenantId ? (getTenantById(currentTenantId) ?? null) : null;
+  const isAuthenticated  = currentUser !== null;
+  const isSuperAdmin     = currentUser?.role === "superadmin";
+  const isManager        = currentUser?.role === "manager";
+  const assignedTenants  = currentUser?.assignedTenants ?? [];
+  const isStaff          = currentUser?.role === "staff";
+  const isSalesAgent     = currentUser?.role === "sales_agent";
+  const currentTenant    = currentTenantId ? (getTenantById(currentTenantId) ?? null) : null;
 
   /** Raw SalesAgent.id when a sales agent is logged in, null otherwise. */
   const currentAgentId: string | null = (() => {
@@ -139,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const can = (permission: string): boolean => {
     if (!isAuthenticated) return false;
-    // Superadmin (no tenant context) and tenant admins have full access
+    // Superadmin, managers (no tenant context) and tenant admins have full access
     if (!isStaff && !isSalesAgent) return true;
     // Exact match
     if (staffPermissions.has(permission)) return true;
@@ -294,6 +300,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       isAuthenticated, currentUser, isSuperAdmin,
+      isManager, assignedTenants,
       isStaff, isSalesAgent, currentAgentId, staffPermissions,
       currentTenantId, currentTenant,
       isSyncing, can,

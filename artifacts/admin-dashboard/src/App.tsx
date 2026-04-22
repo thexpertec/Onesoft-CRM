@@ -11,6 +11,7 @@ import { Layout } from "@/components/layout";
 import Login from "@/pages/login";
 
 import Dashboard from "@/pages/dashboard";
+import ManagerDashboard from "@/pages/manager-dashboard";
 import Leads from "@/pages/leads";
 import Documents from "@/pages/documents";
 import DocumentDetail from "@/pages/document-detail";
@@ -119,6 +120,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeRoute() {
+  const { isManager } = useAuth();
+  if (isManager) return <ManagerDashboard />;
+  return <Dashboard />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -129,7 +136,8 @@ function Router() {
           <Layout>
             <PageErrorBoundary>
             <Switch>
-              <Route path="/" component={Dashboard} />
+              <Route path="/" component={HomeRoute} />
+              <Route path="/manager-dashboard" component={ManagerDashboard} />
               <Route path="/leads" component={Leads} />
               <Route path="/documents" component={Documents} />
               <Route path="/documents/new" component={NewDocument} />

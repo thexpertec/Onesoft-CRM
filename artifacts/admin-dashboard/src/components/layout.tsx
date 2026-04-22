@@ -338,7 +338,7 @@ const QUICK_ADD: SubItem[] = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin, isStaff, isSalesAgent, currentAgentId, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
+  const { isSuperAdmin, isManager, assignedTenants, isStaff, isSalesAgent, currentAgentId, staffPermissions, currentUser, logout, currentTenant, currentTenantId, switchTenant } = useAuth();
   useDemoReset();
 
   const [mobileOpen,   setMobileOpen]   = useState(false);
@@ -764,7 +764,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-muted transition-colors ml-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isManager ? "bg-indigo-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
                     {userInitials}
                   </div>
                   <div className="hidden sm:block text-left min-w-0">
@@ -772,7 +772,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       {currentUser?.fullName || currentUser?.username}
                     </p>
                     <p className="text-[10px] text-gray-400 dark:text-muted-foreground leading-tight">
-                      {isSuperAdmin ? "Super Admin" : isStaff ? "Staff Member" : isSalesAgent ? "Sales Agent" : "Admin"}
+                      {isSuperAdmin ? "Super Admin" : isManager ? "Manager" : isStaff ? "Staff Member" : isSalesAgent ? "Sales Agent" : "Admin"}
                     </p>
                   </div>
                   <ChevronDown size={11} className="text-gray-400 hidden sm:block" />
@@ -780,7 +780,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-3 py-3 border-b border-border flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0 ${isSuperAdmin ? "bg-purple-500" : isManager ? "bg-indigo-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
                     {userInitials}
                   </div>
                   <div className="min-w-0">
@@ -791,13 +791,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span className={`inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                       isSuperAdmin
                         ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                        : isManager
+                        ? "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300"
                         : isStaff
                         ? "bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300"
                         : isSalesAgent
                         ? "bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300"
                         : "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
                     }`}>
-                      {isSuperAdmin ? "Super Admin" : isStaff ? "Staff" : isSalesAgent ? "Sales Agent" : "Admin"}
+                      {isSuperAdmin ? "Super Admin" : isManager ? "Manager" : isStaff ? "Staff" : isSalesAgent ? "Sales Agent" : "Admin"}
                     </span>
                     {(isStaff || isSalesAgent) && staffPermissions.size > 0 && (
                       <p className="text-[9px] text-muted-foreground truncate mt-0.5">
@@ -1016,12 +1018,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* User pill */}
         <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-800 shrink-0">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0 ${isSuperAdmin ? "bg-purple-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0 ${isSuperAdmin ? "bg-purple-500" : isManager ? "bg-indigo-500" : isStaff ? "bg-teal-500" : isSalesAgent ? "bg-violet-500" : "bg-blue-500"}`}>
             {userInitials}
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate">{currentUser?.fullName || currentUser?.username}</p>
-            <p className="text-[11px] text-gray-400 dark:text-gray-500">{isSuperAdmin ? "Super Admin" : isStaff ? "Staff Member" : isSalesAgent ? "Sales Agent" : "Admin"}</p>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">{isSuperAdmin ? "Super Admin" : isManager ? "Manager" : isStaff ? "Staff Member" : isSalesAgent ? "Sales Agent" : "Admin"}</p>
           </div>
         </div>
 

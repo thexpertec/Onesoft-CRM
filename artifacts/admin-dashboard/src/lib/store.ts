@@ -1142,7 +1142,7 @@ export const getTenantStats = (tenantId: string): Record<string, number> => {
 };
 
 // ─── Admin Users API ──────────────────────────────────────────────────────────
-export type UserRole = "superadmin" | "admin" | "staff" | "sales_agent";
+export type UserRole = "superadmin" | "admin" | "manager" | "staff" | "sales_agent";
 
 export type AdminUser = {
   id: string;
@@ -1151,6 +1151,7 @@ export type AdminUser = {
   email: string;
   role: UserRole;
   password: string;
+  assignedTenants?: string[];   // for "manager" role: tenant IDs this user can view
   createdAt: string;
   updatedAt: string;
 };

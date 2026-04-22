@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { Shield, UserPlus, KeyRound, Trash2, ShieldCheck, ShieldAlert, Eye, EyeOff, X, Save } from "lucide-react";
+import { Shield, UserPlus, KeyRound, Trash2, ShieldCheck, ShieldAlert, Eye, EyeOff, X, Save, Building2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,19 +13,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { AdminUser, UserRole, getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from "@/lib/store";
+import { AdminUser, UserRole, getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getTenants, Tenant } from "@/lib/store";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 const ROLE_COLORS: Record<string, string> = {
   superadmin: "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300",
   admin:      "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
+  manager:    "bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300",
 };
 const COLS: ColDef[] = [
   { field: "fullName",  label: "Full Name",  minW: 160, type: "text"     },
   { field: "username",  label: "Username",   minW: 140, type: "text"     },
   { field: "email",     label: "Email",      minW: 200, type: "email"    },
-  { field: "role",      label: "Role",       minW: 140, type: "select", options: ["admin", "superadmin"], optionColors: ROLE_COLORS },
+  { field: "role",      label: "Role",       minW: 140, type: "select", options: ["admin", "manager", "superadmin"], optionColors: ROLE_COLORS },
   { field: "createdAt", label: "Created",    minW: 110, type: "readonly" },
 ];
 const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
@@ -34,12 +35,13 @@ type EditableField = "fullName" | "username" | "email" | "role";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 const addUserSchema = z.object({
-  username:    z.string().min(3, "Username must be at least 3 characters"),
-  fullName:    z.string().min(2, "Full name is required"),
-  email:       z.union([z.string().email("Invalid email"), z.literal("")]),
-  role:        z.enum(["superadmin", "admin"]),
-  password:    z.string().min(6, "Password must be at least 6 characters"),
-  confirmPass: z.string(),
+  username:       z.string().min(3, "Username must be at least 3 characters"),
+  fullName:       z.string().min(2, "Full name is required"),
+  email:          z.union([z.string().email("Invalid email"), z.literal("")]),
+  role:           z.enum(["superadmin", "admin", "manager"]),
+  password:       z.string().min(6, "Password must be at least 6 characters"),
+  confirmPass:    z.string(),
+  assignedTenants: z.array(z.string()).optional(),
 }).refine(d => d.password === d.confirmPass, { message: "Passwords do not match", path: ["confirmPass"] });
 
 const resetPassSchema = z.object({
@@ -62,6 +64,13 @@ function PasswordInput({ field }: { field: React.InputHTMLAttributes<HTMLInputEl
   );
 }
 
+// ─── Role avatar colour helper ────────────────────────────────────────────────
+function avatarColor(role: UserRole) {
+  if (role === "superadmin") return "bg-purple-500";
+  if (role === "manager")    return "bg-indigo-500";
+  return "bg-blue-500";
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const [, navigate]  = useLocation();
@@ -69,13 +78,17 @@ export default function UsersPage() {
   const { toast } = useToast();
 
   const [users,      setUsers]      = useState<AdminUser[]>([]);
-  const [roleFilter, setRoleFilter] = useState<"All" | "superadmin" | "admin">("All");
+  const [tenants,    setTenants]    = useState<Tenant[]>([]);
+  const [roleFilter, setRoleFilter] = useState<"All" | "superadmin" | "admin" | "manager">("All");
   const [addOpen,    setAddOpen]    = useState(false);
   const [resetUser,  setResetUser]  = useState<AdminUser | null>(null);
   const [deleteId,   setDeleteId]   = useState<string | null>(null);
   const [activeCell, setActiveCell] = useState<{ id: string; col: number } | null>(null);
 
-  const reload = () => setUsers(getAdminUsers());
+  const reload = () => {
+    setUsers(getAdminUsers());
+    setTenants(getTenants());
+  };
   useEffect(() => { reload(); }, []);
 
   const filteredUsers = roleFilter === "All" ? users : users.filter(u => u.role === roleFilter);
@@ -99,7 +112,6 @@ export default function UsersPage() {
     if (!u) { setActiveCell(null); return; }
     if ((u as Record<string, string>)[field] === value) { setActiveCell(null); return; }
 
-    // Username uniqueness check
     if (field === "username" && users.some(x => x.id !== id && x.username.toLowerCase() === value.toLowerCase())) {
       toast({ title: "Username taken", description: "Another user already has this username.", variant: "destructive" });
       setActiveCell(null);
@@ -143,16 +155,35 @@ export default function UsersPage() {
   // ── Add User dialog ──────────────────────────────────────────────────────
   const addForm = useForm<AddUserValues>({
     resolver: zodResolver(addUserSchema),
-    defaultValues: { username: "", fullName: "", email: "", role: "admin", password: "", confirmPass: "" },
+    defaultValues: { username: "", fullName: "", email: "", role: "admin", password: "", confirmPass: "", assignedTenants: [] },
   });
+  const watchedRole = addForm.watch("role");
+
   const handleAdd = (data: AddUserValues) => {
     const existing = getAdminUsers();
     if (existing.some(u => u.username.toLowerCase() === data.username.toLowerCase())) {
       addForm.setError("username", { message: "Username already taken" }); return;
     }
-    createAdminUser({ username: data.username, fullName: data.fullName, email: data.email, role: data.role, password: data.password });
+    createAdminUser({
+      username: data.username,
+      fullName: data.fullName,
+      email: data.email,
+      role: data.role,
+      password: data.password,
+      ...(data.role === "manager" ? { assignedTenants: data.assignedTenants ?? [] } : {}),
+    });
     toast({ title: "User created", description: `${data.fullName} (@${data.username}) added.` });
     addForm.reset(); setAddOpen(false); reload();
+  };
+
+  // Toggle tenant selection for manager
+  const toggleTenant = (tenantId: string) => {
+    const current = addForm.getValues("assignedTenants") ?? [];
+    if (current.includes(tenantId)) {
+      addForm.setValue("assignedTenants", current.filter(id => id !== tenantId));
+    } else {
+      addForm.setValue("assignedTenants", [...current, tenantId]);
+    }
   };
 
   // ── Reset Password dialog ────────────────────────────────────────────────
@@ -193,9 +224,10 @@ export default function UsersPage() {
       {/* KPI filter pills */}
       <div className="flex flex-wrap gap-2">
         {([
-          { label: "Total",       value: users.length,                                      filter: "All"        as const, color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",           activeRing: "ring-gray-400 dark:ring-gray-500"       },
-          { label: "Super Admin", value: users.filter(u => u.role === "superadmin").length, filter: "superadmin" as const, color: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400",         activeRing: "ring-purple-500 dark:ring-purple-400"   },
-          { label: "Admin",       value: users.filter(u => u.role === "admin").length,      filter: "admin"      as const, color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                 activeRing: "ring-blue-500 dark:ring-blue-400"       },
+          { label: "Total",       value: users.length,                                        filter: "All"        as const, color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",           activeRing: "ring-gray-400 dark:ring-gray-500"       },
+          { label: "Super Admin", value: users.filter(u => u.role === "superadmin").length,   filter: "superadmin" as const, color: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400",         activeRing: "ring-purple-500 dark:ring-purple-400"   },
+          { label: "Admin",       value: users.filter(u => u.role === "admin").length,        filter: "admin"      as const, color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                 activeRing: "ring-blue-500 dark:ring-blue-400"       },
+          { label: "Manager",     value: users.filter(u => u.role === "manager").length,      filter: "manager"    as const, color: "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400",         activeRing: "ring-indigo-500 dark:ring-indigo-400"   },
         ] as const).map(k => {
           const isActive = roleFilter === k.filter;
           return (
@@ -223,7 +255,7 @@ export default function UsersPage() {
         <ExcelGridShell cols={COLS} totalMinW={TOTAL_W}>
           {filteredUsers.length === 0 ? (
             <tr><td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
-              {roleFilter !== "All" ? `No ${roleFilter === "superadmin" ? "Super Admin" : "Admin"} users found.` : "No users found."}
+              {roleFilter !== "All" ? `No ${roleFilter === "superadmin" ? "Super Admin" : roleFilter === "manager" ? "Manager" : "Admin"} users found.` : "No users found."}
             </td></tr>
           ) : filteredUsers.map((u, ri) => {
             const isMe = u.id === currentUser?.id;
@@ -243,13 +275,17 @@ export default function UsersPage() {
                       style={{ height: `${CELL_H}px` }}
                       onClick={() => !isA && canEditCol && setActiveCell({ id: u.id, col: ci })}>
                       {c.field === "fullName" && !isA ? (
-                        // Custom display for fullName with avatar + "You" badge
                         <div className="w-full h-full flex items-center px-3 gap-2 cursor-text" onClick={() => setActiveCell({ id: u.id, col: ci })}>
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${u.role === "superadmin" ? "bg-purple-500" : "bg-blue-500"}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${avatarColor(u.role)}`}>
                             {u.fullName.charAt(0).toUpperCase()}
                           </div>
                           <span className="text-[13px] font-medium text-gray-700 dark:text-foreground truncate">{u.fullName}</span>
                           {isMe && <span className="text-[9px] font-bold bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full flex-shrink-0">You</span>}
+                          {u.role === "manager" && (u.assignedTenants?.length ?? 0) > 0 && (
+                            <span className="text-[9px] font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-500 px-1.5 py-0.5 rounded-full flex-shrink-0 flex items-center gap-0.5">
+                              <Building2 size={8} /> {u.assignedTenants?.length}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <EditableCell
@@ -309,16 +345,56 @@ export default function UsersPage() {
               <FormField control={addForm.control} name="role" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Role *</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={v => { field.onChange(v); if (v !== "manager") addForm.setValue("assignedTenants", []); }}>
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="manager">
+                        <span className="flex items-center gap-1.5"><Building2 size={13} className="text-indigo-500" /> Manager (Multi-Tenant)</span>
+                      </SelectItem>
                       <SelectItem value="superadmin">Super Admin</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )} />
+
+              {/* Tenant assignment — only shown for manager role */}
+              {watchedRole === "manager" && (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1.5">
+                    <Building2 size={13} className="text-indigo-500" />
+                    Assigned Tenants
+                    <span className="text-muted-foreground font-normal text-[11px] ml-1">(select 1–5)</span>
+                  </FormLabel>
+                  {tenants.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground py-2">No tenants found. Create tenants first.</p>
+                  ) : (
+                    <div className="max-h-44 overflow-y-auto border rounded-lg divide-y dark:border-zinc-700 dark:divide-zinc-700">
+                      {tenants.map(t => {
+                        const selected = (addForm.watch("assignedTenants") ?? []).includes(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => toggleTenant(t.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors ${selected ? "bg-indigo-50 dark:bg-indigo-950/20" : ""}`}
+                          >
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? "bg-indigo-600 border-indigo-600" : "border-gray-300 dark:border-zinc-600"}`}>
+                              {selected && <Check size={11} className="text-white" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate">{t.name}</p>
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500">{t.slug} · {t.plan}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </FormItem>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={addForm.control} name="password" render={({ field }) => (
                   <FormItem><FormLabel>Password *</FormLabel><FormControl><PasswordInput field={field} /></FormControl><FormMessage /></FormItem>
