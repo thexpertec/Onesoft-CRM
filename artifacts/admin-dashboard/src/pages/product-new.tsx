@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
 import { BarcodePreview } from "@/components/barcode-preview";
 import BarcodeScanner from "@/components/barcode-scanner";
-import { Plus, ArrowLeft, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon } from "lucide-react";
+import { Plus, ArrowLeft, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon, ScanLine } from "lucide-react";
+import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { printBarcodeLabels } from "@/lib/print-barcode";
@@ -160,6 +161,10 @@ export default function ProductNewPage() {
     handleBarcodeLookup(code);
   };
 
+  // Wire USB / Bluetooth barcode scanners (keyboard-emulation mode).
+  // captureFromInputs: true so it fires even when the barcode field is focused.
+  useKeyboardScanner({ onScan: handleScan, enabled: true, captureFromInputs: true });
+
   const handleGenerateBarcode = () => {
     const code = generateEan13();
     patch("barcode", code);
@@ -267,17 +272,24 @@ export default function ProductNewPage() {
 
             {/* ── Barcode field with scan + lookup ── */}
             <div className="col-span-2 space-y-1">
-              <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
+              <div className="flex items-center justify-between">
+                <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <ScanLine size={11} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                  USB · BT Scanner Ready
+                </span>
+              </div>
               <div className="flex gap-1.5">
                 <Input
                   ref={barcodeInputRef}
                   value={form.barcode}
                   onChange={e => { patch("barcode", e.target.value); resetLookup(); }}
                   onKeyDown={e => { if (e.key === "Enter") handleBarcodeLookup(); }}
-                  placeholder="Scan, type, or generate…"
+                  placeholder="Point scanner here, or type / generate…"
                   className="h-9 text-sm font-mono flex-1"
                 />
-                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with camera"
+                <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with device camera (webcam)"
                   onClick={() => setScanOpen(true)}>
                   <Camera size={14} />
                 </Button>
