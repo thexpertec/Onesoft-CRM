@@ -1,19 +1,20 @@
 /**
  * Barcode label printer
  *
- * Renders barcodes as inline SVG (serialised from a detached SVG element) —
- * the same technique used by BarcodePreview, which is known-good. The old
- * canvas → PNG approach silently failed when JsBarcode threw on certain
- * barcode strings.
+ * Architecture: the popup window renders its own barcodes.
+ * SVG placeholder elements carry `data-barcode` attributes; an inline script
+ * in the popup calls JsBarcode (loaded from CDN) on each SVG after load.
+ * This is far more reliable than pre-serialising SVG in the host window
+ * (cross-window SVG namespace issues) or using canvas (browser security
+ * restrictions on cross-origin data URLs in popups).
  *
- * Label layout (5 lines, matches reference):
+ * Label layout — 5 lines matching reference:
  *   1. Product name
  *   2. Local name (if any, RTL-aware)
- *   3. Barcode bars (SVG)
+ *   3. Barcode bars
  *   4. Barcode number
  *   5. Price
  */
-import JsBarcode from "jsbarcode";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -30,46 +31,13 @@ export type BarcodePrintItem = {
   qty?: number;
 };
 
-/**
- * Render barcode as an inline SVG string.
- *
- * JsBarcode requires the target element to be inserted in the live DOM so it
- * can resolve SVG namespace and append child <rect> / <text> nodes correctly.
- * We mount the SVG off-screen, render, serialise, then immediately remove it.
- */
-function makeBarcodeSvg(code: string): string {
-  if (!code?.trim()) return "";
-  const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  // Mount off-screen so JsBarcode has a live DOM node.
-  svgEl.style.cssText = "position:absolute;left:-9999px;top:-9999px;visibility:hidden;";
-  document.body.appendChild(svgEl);
-  try {
-    JsBarcode(svgEl, code.trim(), {
-      format: "AUTO",
-      width: 2.2,
-      height: 60,
-      displayValue: false,
-      margin: 4,
-      background: "#ffffff",
-      lineColor: "#000000",
-    });
-    return new XMLSerializer().serializeToString(svgEl);
-  } catch {
-    return "";
-  } finally {
-    document.body.removeChild(svgEl);
-  }
-}
-
 export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, currencySymbol = "") {
   const labels: string[] = [];
 
   for (const item of items) {
     const qty = Math.max(1, item.qty ?? 1);
-    const barcodeSvg = makeBarcodeSvg(item.barcode);
     const sym = esc(currencySymbol);
 
-    // Price: was / now
     const hasNow = item.price && item.price !== "" && parseFloat(item.price) > 0;
     const hasWas = item.priceWas && item.priceWas !== "" && parseFloat(item.priceWas) > 0;
     let priceHtml = "";
@@ -89,9 +57,11 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
           <div class="prod-name">${esc(item.name)}</div>
           ${item.localName?.trim() ? `<div class="local-name">${esc(item.localName)}</div>` : ""}
           <div class="barcode-wrap">
-            ${barcodeSvg || `<div class="barcode-missing">⚠ No barcode</div>`}
+            ${item.barcode?.trim()
+              ? `<svg class="barcode-svg" data-barcode="${esc(item.barcode.trim())}"></svg>`
+              : `<div class="barcode-missing">No barcode</div>`}
           </div>
-          <div class="barcode-num">${esc(item.barcode)}</div>
+          <div class="barcode-num">${esc(item.barcode ?? "")}</div>
           ${priceHtml}
         </div>`);
     }
@@ -104,6 +74,13 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
 <head>
   <meta charset="utf-8" />
   <title>Barcode Labels</title>
+  <!--
+    JsBarcode is loaded from CDN so the popup can render barcodes in its own
+    document context — avoiding cross-window SVG namespace issues entirely.
+    Primary: jsDelivr (fast, global CDN). Fallback: unpkg.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"
+          onerror="var s=document.createElement('script');s.src='https://unpkg.com/jsbarcode@3.12.3/dist/JsBarcode.all.min.js';document.head.appendChild(s);"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; background: #fff; }
@@ -130,7 +107,7 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
       text-transform: uppercase;
     }
 
-    /* Line 2 – local name (RTL if needed) */
+    /* Line 2 – local name */
     .local-name {
       font-size: 8pt;
       color: #444;
@@ -146,8 +123,9 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
       justify-content: center;
       align-items: center;
       margin: 2pt 0 0;
+      min-height: 20pt;
     }
-    .barcode-wrap svg {
+    .barcode-svg {
       max-width: 100%;
       height: auto;
       display: block;
@@ -190,9 +168,33 @@ export function printBarcodeLabels(items: BarcodePrintItem[], labelsPerRow = 3, 
     ${labels.join("\n")}
   </div>
   <script>
-    window.addEventListener("load", function () {
-      setTimeout(function () { window.print(); }, 250);
-    });
+    function renderAndPrint() {
+      if (typeof JsBarcode === "undefined") {
+        // CDN not loaded yet — retry in 200 ms
+        setTimeout(renderAndPrint, 200);
+        return;
+      }
+      document.querySelectorAll("svg.barcode-svg[data-barcode]").forEach(function(svg) {
+        var val = svg.getAttribute("data-barcode");
+        if (!val) return;
+        try {
+          JsBarcode(svg, val, {
+            format: "AUTO",
+            width: 2.2,
+            height: 60,
+            displayValue: false,
+            margin: 4,
+            background: "#ffffff",
+            lineColor: "#000000"
+          });
+        } catch (err) {
+          svg.outerHTML = '<div class="barcode-missing">&#9888; Invalid barcode</div>';
+        }
+      });
+      setTimeout(function() { window.print(); }, 250);
+    }
+
+    window.addEventListener("load", renderAndPrint);
   <\/script>
 </body>
 </html>`;
