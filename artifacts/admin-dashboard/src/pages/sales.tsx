@@ -18,7 +18,7 @@ import {
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
   LayoutGrid, List, RefreshCw, Globe,
-  CheckCircle2, Circle, Clock, XCircle, Truck,
+  CheckCircle2, Circle, Clock, XCircle, Truck, DollarSign,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -705,6 +705,7 @@ interface POSViewProps {
   onPriceModeChange: (mode: "retail" | "wholesale" | "clubcard") => void;
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
+  onAcceptOrder?: () => void;
   onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
   tenantId: string | null;
 }
@@ -1566,6 +1567,12 @@ function POSView({
               </div>
 
               {/* Received / Balance (for completed/credit sales) */}
+              {(isCompleted || isOnCredit) && parseFloat(sale.amountPaid || "0") === 0 && grandTotal > 0.005 && (
+                <div className="flex justify-between text-[12px] text-orange-600 dark:text-orange-400 font-semibold">
+                  <span>Payment</span>
+                  <span className="flex items-center gap-1"><Clock size={11} /> Not yet collected</span>
+                </div>
+              )}
               {(isCompleted || isOnCredit) && parseFloat(sale.amountPaid || "0") > 0 && (() => {
                 const paid = parseFloat(sale.amountPaid) || 0;
                 const change = Math.max(0, paid - grandTotal);
@@ -1653,12 +1660,22 @@ function POSView({
                       Online order awaiting processing — accept to begin fulfilment.
                     </span>
                   </div>
+                  {/* Accept & collect payment now (pre-paid / card on delivery) */}
                   <button
                     onClick={() => setPayModalOpen(true)}
                     className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
                   >
-                    <Check size={16} /> Confirm &amp; Pay
+                    <Check size={16} /> Accept &amp; Collect Payment
                   </button>
+                  {/* Accept without payment now (COD — driver collects on delivery) */}
+                  {onAcceptOrder && (
+                    <button
+                      onClick={onAcceptOrder}
+                      className="w-full h-10 rounded-xl border-2 border-emerald-200 dark:border-emerald-800/60 text-[13px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Truck size={14} /> Accept Order (Pay on Delivery)
+                    </button>
+                  )}
                   <button
                     onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
                     className="w-full h-10 rounded-xl border-2 border-blue-200 dark:border-blue-800 text-[13px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 flex items-center justify-center gap-2 transition-colors"
@@ -1711,9 +1728,26 @@ function POSView({
               )}
               {isCompleted && (
                 <div className="space-y-2">
+                  {/* Collect payment if not yet received */}
+                  {parseFloat(sale.amountPaid || "0") < grandTotal - 0.005 && (
+                    <>
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+                        <DollarSign size={13} className="text-orange-500 shrink-0" />
+                        <span className="text-[11px] text-orange-700 dark:text-orange-300 font-medium">
+                          Payment not yet collected — record it now.
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setPayModalOpen(true)}
+                        className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-200 dark:shadow-none"
+                      >
+                        <DollarSign size={16} /> Collect Payment
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => { try { printSaleInvoice(sale, getSettings()); } catch { /* blocked */ } }}
-                    className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-200 dark:shadow-none"
+                    className={`w-full rounded-xl text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.99] ${parseFloat(sale.amountPaid || "0") >= grandTotal - 0.005 ? "h-11 bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none" : "h-10 bg-blue-500 hover:bg-blue-600 shadow-blue-200 dark:shadow-none"}`}
                   >
                     <Printer size={16} /> Print Invoice
                   </button>
@@ -2723,6 +2757,30 @@ export default function SalesPage() {
     }
   };
 
+  // Accept online order without collecting payment now (COD — paid on delivery)
+  const handleAcceptOrder = () => {
+    if (!detailId || !localMeta) return;
+    try {
+      // Deduct stock if not already done
+      if (!(detailSale?.stockDeducted ?? false)) {
+        deductStockForSale(localItems, detailSale?.saleNumber || "", "POS");
+      }
+      editSale(detailId, {
+        ...localMeta,
+        status: "Completed",
+        items: localItems,
+        amountPaid: "0",
+        stockDeducted: true,
+        paidAt: "",
+      });
+      toast({ title: "Order accepted", description: "Order confirmed. Collect payment on delivery." });
+      freshSaleIdRef.current = null;
+      closePOS();
+    } catch (err) {
+      toast({ title: "Error accepting order", description: String(err), variant: "destructive" });
+    }
+  };
+
   // ── List filtering ──
   const filtered = useMemo(() => {
     let rows = [...sales];
@@ -2887,6 +2945,7 @@ export default function SalesPage() {
           onPriceModeChange={mode => { setPriceMode(mode); setLocalMeta(m => m ? { ...m, saleMode: mode === "retail" ? "Retail" : mode === "wholesale" ? "Wholesale" : "Clubcard" } : m); }}
           onSetStatus={setStatus}
           onComplete={handleComplete}
+          onAcceptOrder={handleAcceptOrder}
           onAddCustomer={(name, phone, email, company) => {
             addCustomer({
               name, phone, email,
