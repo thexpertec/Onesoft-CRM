@@ -32,12 +32,17 @@ export type BarcodePrintItem = {
 
 /**
  * Render barcode as an inline SVG string.
- * Uses a detached SVG element in the current document so JsBarcode has a real
- * DOM node to write into — same pattern as BarcodePreview.tsx.
+ *
+ * JsBarcode requires the target element to be inserted in the live DOM so it
+ * can resolve SVG namespace and append child <rect> / <text> nodes correctly.
+ * We mount the SVG off-screen, render, serialise, then immediately remove it.
  */
 function makeBarcodeSvg(code: string): string {
   if (!code?.trim()) return "";
   const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  // Mount off-screen so JsBarcode has a live DOM node.
+  svgEl.style.cssText = "position:absolute;left:-9999px;top:-9999px;visibility:hidden;";
+  document.body.appendChild(svgEl);
   try {
     JsBarcode(svgEl, code.trim(), {
       format: "AUTO",
@@ -51,6 +56,8 @@ function makeBarcodeSvg(code: string): string {
     return new XMLSerializer().serializeToString(svgEl);
   } catch {
     return "";
+  } finally {
+    document.body.removeChild(svgEl);
   }
 }
 
