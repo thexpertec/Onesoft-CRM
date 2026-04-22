@@ -3,13 +3,14 @@ import { format, subDays, isSameDay, parseISO, isValid } from "date-fns";
 import {
   TrendingUp, ShoppingCart, Users, Package, Layers, ClipboardList,
   Building2, BarChart3, RefreshCw, Globe, Loader2, AlertTriangle,
-  ArrowUpRight, ArrowDownRight, Minus, Clock, Receipt, Star,
+  ArrowUpRight, ArrowDownRight, Minus, Clock, Receipt, Star, Wrench,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart as ReBarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip,
   ResponsiveContainer, Cell, Legend,
 } from "recharts";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import {
   getActiveTenantId, setActiveTenant,
@@ -399,6 +400,7 @@ export default function ManagerDashboard() {
     [allStats],
   );
 
+  const [, navigate] = useLocation();
   const firstName = (currentUser?.fullName || currentUser?.username || "Manager").split(" ")[0];
   const hour      = new Date().getHours();
   const greeting  = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -431,15 +433,26 @@ export default function ManagerDashboard() {
             <Globe size={11} /> Managing {myTenants.length} business{myTenants.length !== 1 ? "es" : ""}
           </p>
         </div>
-        <button
-          onClick={() => setRefreshKey(k => k + 1)}
-          disabled={syncing}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {syncing
-            ? <><Loader2 size={13} className="animate-spin" /> Loading…</>
-            : <><RefreshCw size={13} /> Refresh</>}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              const param = selectedTenant !== "all" ? `?biz=${selectedTenant}` : "";
+              navigate(`/repair-report${param}`);
+            }}
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 dark:text-blue-400 px-3 py-2 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+          >
+            <Wrench size={13} /> Repair Report
+          </button>
+          <button
+            onClick={() => setRefreshKey(k => k + 1)}
+            disabled={syncing}
+            className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {syncing
+              ? <><Loader2 size={13} className="animate-spin" /> Loading…</>
+              : <><RefreshCw size={13} /> Refresh</>}
+          </button>
+        </div>
       </div>
 
       {/* ── Tenant selector tabs ── */}

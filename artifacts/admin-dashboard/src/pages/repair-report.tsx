@@ -9,7 +9,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Legend,
 } from "recharts";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { getTenants } from "@/lib/store";
@@ -143,13 +143,20 @@ function ChartTip({ active, payload, label }: {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RepairReportPage() {
   const [, navigate]  = useLocation();
+  const searchStr     = useSearch();
   const { isManager, assignedTenants, isSuperAdmin } = useAuth();
+
+  // Pre-select business from ?biz= query param (set by manager dashboard)
+  const initialBiz = useMemo(() => {
+    const p = new URLSearchParams(searchStr);
+    return p.get("biz") ?? "all";
+  }, []);
 
   const [bookings, setBookings] = useState<RepairBooking[]>([]);
   const [loading, setLoading]   = useState(true);
   const [dateFrom, setDateFrom] = useState(monthStart());
   const [dateTo,   setDateTo]   = useState(today());
-  const [selectedBiz, setSelectedBiz] = useState<string>("all");
+  const [selectedBiz, setSelectedBiz] = useState<string>(initialBiz);
   const [sortCol,  setSortCol]  = useState<keyof RepairBooking>("createdAt");
   const [sortDir,  setSortDir]  = useState<"asc"|"desc">("desc");
 
