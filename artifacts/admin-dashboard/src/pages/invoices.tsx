@@ -542,8 +542,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const setF = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
+  const effectiveTaxRate = invoiceType === "purchase" ? "0" : form.taxRate;
   const { subtotal, discountAmt, tax, shipping, handling, total, paid, balance } =
-    computeTotals(items, form.taxRate, payInput || "0", form.shippingFee, form.handlingFee);
+    computeTotals(items, effectiveTaxRate, payInput || "0", form.shippingFee, form.handlingFee);
 
   // ── Payment history helpers ──
   const blankPayRec = (): PaymentRecord => ({
@@ -763,21 +764,23 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </div>
                   );
                 })()}
-                {/* Payment Method + Tax */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Payment Method</label>
-                    <select value={form.paymentMethod} onChange={e => setF("paymentMethod", e.target.value as SalePayment)}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
-                      {SALE_PAYMENTS.map(p => <option key={p}>{p}</option>)}
-                    </select>
+                {/* Payment Method + Tax — sale invoices only */}
+                {invoiceType !== "purchase" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Payment Method</label>
+                      <select value={form.paymentMethod} onChange={e => setF("paymentMethod", e.target.value as SalePayment)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
+                        {SALE_PAYMENTS.map(p => <option key={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">VAT / Tax %</label>
+                      <input type="number" min="0" max="100" value={form.taxRate} onChange={e => setF("taxRate", e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">VAT / Tax %</label>
-                    <input type="number" min="0" max="100" value={form.taxRate} onChange={e => setF("taxRate", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                  </div>
-                </div>
+                )}
                 {/* Sale/Purchase Status */}
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
@@ -961,10 +964,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(dp)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                  <span>VAT / Tax ({form.taxRate || 0}%)</span>
-                  <span className="font-mono font-semibold">{sym}{tax.toFixed(dp)}</span>
-                </div>
+                {invoiceType !== "purchase" && (
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>VAT / Tax ({form.taxRate || 0}%)</span>
+                    <span className="font-mono font-semibold">{sym}{tax.toFixed(dp)}</span>
+                  </div>
+                )}
                 {shipping > 0 && (
                   <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                     <span>Delivery Charges</span>
