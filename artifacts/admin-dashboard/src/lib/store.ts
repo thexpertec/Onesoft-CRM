@@ -1261,6 +1261,9 @@ export type ProductVariant = {
   sku?: string;
   barcode?: string;
   stock?: string;
+  condition?: string;
+  clubcardPrice?: string;
+  showOnWeb?: boolean;
 };
 
 export type Product = {

@@ -1972,21 +1972,48 @@ export default function ProductsPage() {
                         </div>
                       )}
                     </td>
-                    {/* Data spanning all visible cols + actions */}
-                    <td colSpan={visibleCols.length + 1} className="px-3 align-middle" style={{ height: "36px" }}>
-                      <div className="flex items-center gap-3 text-[12px]">
-                        <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-medium">
-                          {attrLabel || `Variant ${vi + 1}`}
-                        </span>
-                        {v.sku && <span className="font-mono text-[11px] text-muted-foreground">SKU: <span className="text-foreground font-semibold">{v.sku}</span></span>}
-                        {v.price && <span className="text-[12px] font-semibold text-foreground">{sym}{parseFloat(v.price).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}</span>}
-                        {(v.stock !== undefined && v.stock !== null) && (
-                          <span className={`text-[11px] font-medium ${Number(v.stock) <= 0 ? "text-red-500" : Number(v.stock) <= 5 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            Stock: {v.stock}
+                    {/* Per-column cells aligned with parent row headers */}
+                    {visibleCols.map(c => {
+                      const TD = (content: React.ReactNode) => (
+                        <td key={c.field} className="border-r border-blue-100 dark:border-blue-900/30 px-2 align-middle" style={{ height: "36px" }}>
+                          {content}
+                        </td>
+                      );
+                      const fmt = (n: string) => parseFloat(n).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+                      const dash = <span className="text-[11px] text-muted-foreground/30">—</span>;
+
+                      if (c.field === "name" || c.field === "localName") {
+                        return TD(
+                          c.field === "name" ? (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-medium whitespace-nowrap">
+                              {attrLabel || `Variant ${vi + 1}`}
+                            </span>
+                          ) : dash
+                        );
+                      }
+                      if (c.field === "sku")           return TD(v.sku     ? <span className="font-mono text-[11px] text-foreground font-semibold">{v.sku}</span>     : dash);
+                      if (c.field === "barcode")        return TD(v.barcode ? <span className="font-mono text-[11px] text-muted-foreground">{v.barcode}</span>          : dash);
+                      if (c.field === "price")          return TD(v.price && !isNaN(parseFloat(v.price)) ? <span className="text-[12px] font-bold text-foreground">{sym}{fmt(v.price)}</span> : dash);
+                      if (c.field === "stock")          return TD(
+                        (v.stock !== undefined && v.stock !== null) ? (
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full tabular-nums ${Number(v.stock) <= 0 ? "bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400" : Number(v.stock) <= 5 ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"}`}>
+                            {Number(v.stock) <= 0 ? "0 — Out" : Number(v.stock) <= 5 ? `⚠ ${v.stock}` : v.stock}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                        ) : dash
+                      );
+                      if (c.field === "condition")      return TD(v.condition ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${CONDITION_COLORS[v.condition] || "bg-gray-100 text-gray-600"}`}>{v.condition}</span> : dash);
+                      if (c.field === "clubcardPrice")  return TD(v.clubcardPrice && !isNaN(parseFloat(v.clubcardPrice)) ? <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400">{sym}{fmt(v.clubcardPrice)}</span> : dash);
+                      if (c.field === "showOnWeb")      return TD(
+                        v.showOnWeb !== undefined ? (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${v.showOnWeb ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"}`}>
+                            {v.showOnWeb ? "Show" : "Hide"}
+                          </span>
+                        ) : dash
+                      );
+                      return TD(dash);
+                    })}
+                    {/* Actions col placeholder */}
+                    <td className="sticky right-0 bg-blue-50/40 dark:bg-blue-950/10 border-l border-blue-100 dark:border-blue-900/30" style={{ height: "36px", width: 160 }} />
                   </tr>
                 );
               })}
