@@ -232,6 +232,8 @@ export default function ProductsPage() {
   const [imagesDialogId, setImagesDialogId] = useState<string | null>(null);
   const [viewProdId,    setViewProdId]    = useState<string | null>(null);
   const [editProdId,    setEditProdId]    = useState<string | null>(null);
+  const [expandedIds,   setExpandedIds]   = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => setExpandedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const [showHelp,      setShowHelp]      = useState(false);
 
@@ -1633,8 +1635,11 @@ export default function ProductsPage() {
             const isRowActive = activeCell?.id === prod.id;
             const isDragging  = dragId === prod.id;
             const isDragOver  = dragOverId === prod.id;
+            const hasVariants = (prod.variants?.length ?? 0) > 0;
+            const isExpanded  = expandedIds.has(prod.id);
             return (
-              <tr key={prod.id} data-testid={`row-product-${prod.id}`}
+              <Fragment key={prod.id}>
+              <tr data-testid={`row-product-${prod.id}`}
                 draggable={!isFiltered && can("Edit Products") && selectedIds.size === 0}
                 onDragStart={() => handleDragStart(prod.id)}
                 onDragOver={e => handleDragOver(e, prod.id)}
@@ -1669,7 +1674,17 @@ export default function ProductsPage() {
                   ) : null}
                 </td>
 
-                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>{ri + 1}</td>
+                <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                  {hasVariants ? (
+                    <button type="button" onClick={() => toggleExpand(prod.id)}
+                      className="flex items-center justify-center gap-0.5 w-full h-full text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                      title={`${prod.variants!.length} variant${prod.variants!.length !== 1 ? "s" : ""} — click to ${isExpanded ? "collapse" : "expand"}`}
+                    >
+                      <ChevronDown size={11} className={`transition-transform duration-150 ${isExpanded ? "" : "-rotate-90"}`} />
+                      <span className="text-[10px] font-bold">{prod.variants!.length}</span>
+                    </button>
+                  ) : ri + 1}
+                </td>
 
                 {/* Product image thumbnail */}
                 <td className="border-r border-gray-100 dark:border-border text-center select-none align-middle p-1"
@@ -1881,6 +1896,48 @@ export default function ProductsPage() {
                   </div>
                 </td>
               </tr>
+
+              {/* ── Variant sub-rows ─────────────────────────────── */}
+              {isExpanded && hasVariants && prod.variants!.map((v, vi) => {
+                const attrLabel = Object.entries(v.attributes).map(([k, val]) => `${k}: ${val}`).join(" · ");
+                return (
+                  <tr key={v.id} className="border-b border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/10">
+                    {/* checkbox col */}
+                    <td className="border-r border-blue-100 dark:border-blue-900/30 w-8" />
+                    {/* # col — indent indicator */}
+                    <td className="border-r border-blue-100 dark:border-blue-900/30 text-center align-middle" style={{ height: "36px" }}>
+                      <span className="text-[10px] text-blue-400 dark:text-blue-600 font-mono select-none">↳{vi + 1}</span>
+                    </td>
+                    {/* IMG col */}
+                    <td className="border-r border-blue-100 dark:border-blue-900/30 text-center align-middle p-1" style={{ height: "36px" }}>
+                      {v.image ? (
+                        <img src={v.image} alt={attrLabel} className="w-8 h-8 object-cover rounded mx-auto border border-blue-200 dark:border-blue-800" />
+                      ) : (
+                        <div className="w-8 h-8 rounded mx-auto bg-blue-100/60 dark:bg-blue-900/20 border border-dashed border-blue-200 dark:border-blue-800 flex items-center justify-center">
+                          <Package size={10} className="text-blue-300 dark:text-blue-700" />
+                        </div>
+                      )}
+                    </td>
+                    {/* Data spanning all visible cols + actions */}
+                    <td colSpan={visibleCols.length + 1} className="px-3 align-middle" style={{ height: "36px" }}>
+                      <div className="flex items-center gap-3 text-[12px]">
+                        <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-medium">
+                          {attrLabel || `Variant ${vi + 1}`}
+                        </span>
+                        {v.sku && <span className="font-mono text-[11px] text-muted-foreground">SKU: <span className="text-foreground font-semibold">{v.sku}</span></span>}
+                        {v.price && <span className="text-[12px] font-semibold text-foreground">{sym}{parseFloat(v.price).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}</span>}
+                        {(v.stock !== undefined && v.stock !== null) && (
+                          <span className={`text-[11px] font-medium ${Number(v.stock) <= 0 ? "text-red-500" : Number(v.stock) <= 5 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            Stock: {v.stock}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              </Fragment>
             );
           })}
 
