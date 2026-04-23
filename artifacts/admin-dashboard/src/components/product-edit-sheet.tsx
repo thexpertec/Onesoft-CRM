@@ -578,7 +578,8 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           {variants.length === 0 && <Divider label="Pricing" />}
 
-          {variants.length === 0 && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {variants.length === 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Field label={`Purchase (${sym})`} hint="Supplier cost">
               <Input type="number" min="0" step="0.01" value={form.purchasePrice}
                 onChange={e => patch("purchasePrice", e.target.value)}
@@ -638,9 +639,11 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 ? <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium leading-tight">{sym}{commissionAmt}/sale</p>
                 : <p className="text-[10px] text-muted-foreground leading-tight">Agent's cut</p>}
             </div>
-          </div>}
+          </div>
+          )}
 
-          {variants.length === 0 && <>
+          {variants.length === 0 && (
+          <>
             <Divider label="Website Pricing" />
             <div className="grid grid-cols-2 gap-3">
               <Field label={`Website Price (${sym})`} hint="Online selling price">
@@ -654,7 +657,8 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                   placeholder="0.00" className="h-9 text-sm tabular-nums" />
               </Field>
             </div>
-          </>}
+          </>
+          )}
 
           <Divider label="Variants" />
 

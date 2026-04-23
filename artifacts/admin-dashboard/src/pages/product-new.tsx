@@ -532,7 +532,8 @@ export default function ProductNewPage() {
 
           {variants.length === 0 && <Divider label="Pricing" />}
 
-          {variants.length === 0 && <div className="grid grid-cols-3 md:grid-cols-7 gap-4">
+          {variants.length === 0 && (
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-4">
             <Field label={`Purchase (${sym})`} hint="Supplier cost">
               <Input type="number" min="0" step="0.01" value={form.purchasePrice}
                 onChange={e => patch("purchasePrice", e.target.value)}
@@ -592,7 +593,8 @@ export default function ProductNewPage() {
                 ? <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium leading-tight">{sym}{commissionAmt}/sale</p>
                 : <p className="text-[10px] text-muted-foreground leading-tight">Agent's cut</p>}
             </div>
-          </div>}
+          </div>
+          )}
 
           <Divider label="Variants" />
 
