@@ -4175,6 +4175,7 @@ export const SYS_ACCS = {
   CURRENT_LIAB:       "sys-2000",   // Current Liabilities group (2100) — child of LIAB_ROOT
   AP_GROUP:           "sys-2100",   // Accounts Payable GROUP (2110)
   AP_TRADE:           "sys-2101",   // Trade Payables GROUP (2111) — parent for per-supplier ledgers
+  AP_GENERAL:         "sys-2102",   // General Accounts Payable LEDGER (2112) — fallback for JE posting
   VAT_PAYABLE:        "sys-2200",   // VAT / Tax Payable (2120)
   ACCRUED_EXP:        "sys-2130",   // Accrued Expenses (2130)
   NON_CURRENT_LIAB:   "sys-2200g",  // Non-Current Liabilities group (2200) — child of LIAB_ROOT
@@ -4213,6 +4214,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
   { id: SYS_ACCS.CASH,               code: "1111", name: "Cash",                       head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Default cash account — physical cash on premises" },
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
+  { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "Aggregate receivable for credit customers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value — subsidiary ledgers per product/category" },
   // Non-Current Assets
   { id: SYS_ACCS.NON_CURRENT_ASSETS, code: "1200", name: "Non-Current Assets",         head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Non-Current Asset", description: "Assets held for long-term use (over 12 months)" },
@@ -4225,6 +4227,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CURRENT_LIAB,       code: "2100", name: "Current Liabilities",        head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Current Liability", description: "Obligations due within 12 months" },
   { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
   { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Trade payables — subsidiary ledgers per supplier" },
+  { id: SYS_ACCS.AP_GENERAL,         code: "2112", name: "General Accounts Payable",   head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Aggregate payable for suppliers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
   // Non-Current Liabilities
@@ -4338,7 +4341,6 @@ export function seedDefaultCoaAccounts(): void {
     SYS_ACCS.BANK,        // "Bank Account"        — user adds via Payment Accounts
     SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
     SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
-    SYS_ACCS.AR_TRADE,    // "Trade Receivables"   — removed; AR_GROUP used directly
     SYS_ACCS.LT_LOANS,   // "Long-term Loans"          — tenant-created as needed
     SYS_ACCS.OFFICE_EXP, // "Office & Admin Expenses"  — tenant-created as needed
     SYS_ACCS.UTILITIES,  // "Utility Bills"            — tenant-created as needed
@@ -4956,6 +4958,24 @@ export function deleteJournalEntry(id: string): void {
  *
  * Returns the ledger account id, or null when no specific ledger is found.
  */
+/**
+ * Resolves a COA account ID to a postable Ledger account.
+ * If the account is already a Ledger, returns its ID unchanged.
+ * If it's a Group, returns the first active direct-child Ledger.
+ * Returns null when no postable Ledger can be found.
+ */
+export function resolveToLedger(accountId: string | undefined): string | null {
+  if (!accountId) return null;
+  const accounts = getAccounts();
+  const acc = accounts.find(a => a.id === accountId);
+  if (!acc) return null;
+  if (acc.accountType === "Ledger") return acc.id;
+  const child = accounts.find(
+    a => a.parentId === accountId && a.accountType === "Ledger" && (a.isActive !== false),
+  );
+  return child?.id ?? null;
+}
+
 export function findSubLedgerForParty(partyName: string, parentGroupId: string): string | null {
   if (!partyName) return null;
   const lower = partyName.toLowerCase();
@@ -4993,84 +5013,98 @@ export function autoPostSaleJE(params: {
   taxAmount:     number;    // VAT / tax collected
   grandTotal:    number;    // subtotal + taxAmount
   costTotal?:    number;    // total cost of goods sold (for COGS/Inventory entry)
+  /** Per-category breakdown — drives per-category Revenue and Inventory JE lines */
+  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
 }): JournalEntry | null {
   const s = getSettings();
 
-  // Must have a revenue account at minimum
-  if (!s.accSalesRevenue) return null;
-
-  // Determine the debit-side account
+  // ── Debit side: AR / Cash / Bank ─────────────────────────────────────────
   const isCredit = params.paymentMethod === "Credit";
   const isCash   = params.paymentMethod === "Cash";
-  let debitAccId: string;
+  let debitAccId: string | null;
   if (isCredit) {
-    if (!s.accReceivable) return null;
-    // Prefer per-customer AR sub-ledger so individual customer ledgers are populated.
-    // Falls back to the group AR account when no specific ledger exists.
-    debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP) || s.accReceivable;
+    // Prefer per-customer AR sub-ledger; fall back to Trade Receivables ledger
+    debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+              || resolveToLedger(s.accReceivable)
+              || SYS_ACCS.AR_TRADE;
   } else if (isCash) {
-    if (!s.accCash) return null;
-    debitAccId = s.accCash;
+    debitAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
   } else {
-    // Card, Bank Transfer, Cheque
-    if (!s.accBank) return null;
-    debitAccId = s.accBank;
+    // Card / Bank Transfer / Cheque — use configured bank or fall back to Cash
+    debitAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
   }
+  if (!debitAccId) return null;
 
   const narration = `${params.source} – ${params.reference} – ${params.customer}`;
 
-  // ── Revenue / Cash side ──────────────────────────────────────────────────
   const lines: JournalEntryLine[] = [
-    {
-      id: crypto.randomUUID(),
-      ledgerId:  debitAccId,
-      narration,
-      debit:  params.grandTotal,
-      credit: 0,
-    },
-    {
-      id: crypto.randomUUID(),
-      ledgerId:  s.accSalesRevenue,
-      narration: `Revenue – ${params.reference}`,
-      debit:  0,
-      credit: params.subtotal,
-    },
+    { id: crypto.randomUUID(), ledgerId: debitAccId, narration, debit: params.grandTotal, credit: 0 },
   ];
 
-  // VAT line (only when a VAT payable account is configured and tax > 0)
+  // ── Revenue lines — per-category ledgers where possible ──────────────────
+  const catLines = params.categoryLines ?? [];
+  const allAccounts = getAccounts();
+
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.subtotal <= 0) continue;
+      const slug      = (cl.category || "uncategorised").trim().toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catRevId  = `sr-cat-${slug}`;
+      const revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
+                          ? catRevId
+                          : (resolveToLedger(s.accSalesRevenue) ?? s.accSalesRevenue ?? null);
+      if (!revLedger) continue;
+      lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
+        narration: `Revenue – ${params.reference} – ${cl.category}`, debit: 0, credit: cl.subtotal });
+    }
+  } else {
+    // No breakdown — post total to first postable Revenue ledger
+    const revLedger = resolveToLedger(s.accSalesRevenue) ?? s.accSalesRevenue ?? null;
+    if (!revLedger) return null;
+    lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
+      narration: `Revenue – ${params.reference}`, debit: 0, credit: params.subtotal });
+  }
+
+  // VAT
   if (params.taxAmount > 0 && s.accVatPayable) {
-    lines.push({
-      id: crypto.randomUUID(),
-      ledgerId:  s.accVatPayable,
-      narration: `VAT – ${params.reference}`,
-      debit:  0,
-      credit: params.taxAmount,
-    });
+    lines.push({ id: crypto.randomUUID(), ledgerId: s.accVatPayable,
+      narration: `VAT – ${params.reference}`, debit: 0, credit: params.taxAmount });
   }
 
-  // ── COGS / Inventory side ────────────────────────────────────────────────
-  // DR Cost of Goods Sold / CR Inventory — only when both accounts are
-  // configured and there is a non-zero cost to recognise.
-  const costTotal = params.costTotal ?? 0;
-  if (costTotal > 0 && s.accCogs && s.accInventory) {
-    lines.push({
-      id: crypto.randomUUID(),
-      ledgerId:  s.accCogs,
-      narration: `COGS – ${params.reference}`,
-      debit:  costTotal,
-      credit: 0,
-    });
-    lines.push({
-      id: crypto.randomUUID(),
-      ledgerId:  s.accInventory,
-      narration: `Inventory reduction – ${params.reference}`,
-      debit:  0,
-      credit: costTotal,
-    });
+  // ── COGS / Inventory — per-category ledgers where possible ───────────────
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.costTotal <= 0) continue;
+      const slug      = (cl.category || "uncategorised").trim().toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catInvId  = `inv-cat-${slug}`;
+      const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                          ? catInvId
+                          : (resolveToLedger(s.accInventory) ?? null);
+      const cogsId    = resolveToLedger(s.accCogs) ?? s.accCogs ?? SYS_ACCS.COGS;
+      if (!invLedger || !cogsId) continue;
+      lines.push({ id: crypto.randomUUID(), ledgerId: cogsId,
+        narration: `COGS – ${params.reference} – ${cl.category}`, debit: cl.costTotal, credit: 0 });
+      lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+        narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: cl.costTotal });
+    }
+  } else {
+    const costTotal = params.costTotal ?? 0;
+    if (costTotal > 0) {
+      const cogsId    = resolveToLedger(s.accCogs) ?? s.accCogs ?? SYS_ACCS.COGS;
+      const invLedger = resolveToLedger(s.accInventory);
+      if (cogsId && invLedger) {
+        lines.push({ id: crypto.randomUUID(), ledgerId: cogsId,
+          narration: `COGS – ${params.reference}`, debit: costTotal, credit: 0 });
+        lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+          narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: costTotal });
+      }
+    }
   }
 
-  const totalDebit  = parseFloat((params.grandTotal + costTotal).toFixed(2));
-  const totalCredit = parseFloat((params.grandTotal + costTotal).toFixed(2));
+  const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
+  const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
 
   return createJournalEntry({
     date:        params.date,
@@ -5080,6 +5114,52 @@ export function autoPostSaleJE(params: {
     status:      "posted",
     totalDebit,
     totalCredit,
+    isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
+  });
+}
+
+/**
+ * Posts a cash/bank receipt JE when a credit-sale invoice is subsequently paid.
+ *   DR  Cash / Bank              = amount received
+ *   CR  Accounts Receivable      = amount received  (reverses the accrual)
+ */
+export function autoPostCashReceiptJE(params: {
+  reference:     string;
+  customer:      string;
+  date:          string;
+  amount:        number;
+  paymentMethod: SalePayment;
+}): JournalEntry | null {
+  if (params.amount <= 0) return null;
+  const s = getSettings();
+
+  // Cash/bank debit account
+  const isCash  = params.paymentMethod === "Cash";
+  const cashId  = isCash
+    ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
+    : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH);
+
+  // AR credit account — same ledger the accrual JE debited
+  const arId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+            || resolveToLedger(s.accReceivable)
+            || SYS_ACCS.AR_TRADE;
+
+  if (!cashId || !arId) return null;
+
+  const narration = `Receipt – ${params.reference} – ${params.customer}`;
+  const lines: JournalEntryLine[] = [
+    { id: crypto.randomUUID(), ledgerId: cashId, narration, debit: params.amount,  credit: 0 },
+    { id: crypto.randomUUID(), ledgerId: arId,   narration, debit: 0, credit: params.amount },
+  ];
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `RCPT-${params.reference}`,
+    description: `Cash Receipt: ${params.reference} – ${params.customer}`,
+    lines,
+    status:      "posted",
+    totalDebit:  params.amount,
+    totalCredit: params.amount,
     isBalanced:  true,
   });
 }
@@ -5091,35 +5171,61 @@ export function autoPostSaleJE(params: {
  * Returns null if required COA accounts are not yet configured in Settings.
  */
 export function autoPostPurchaseJE(params: {
-  poNumber:         string;
-  supplier:         string;
-  date:             string;   // YYYY-MM-DD
-  total:            number;
-  supplierLedgerId?: string;  // specific supplier's subsidiary ledger (preferred)
+  poNumber:          string;
+  supplier:          string;
+  date:              string;   // YYYY-MM-DD
+  total:             number;
+  supplierLedgerId?: string;   // specific supplier's subsidiary ledger (preferred)
+  /** Per-category breakdown — drives per-category Inventory JE lines */
+  categoryLines?: Array<{ category: string; total: number }>;
 }): JournalEntry | null {
   if (params.total <= 0) return null;
   const s = getSettings();
-  // Use supplier-specific ledger first, then fall back to the general payable setting
-  const creditLedgerId = params.supplierLedgerId || s.accPurchasePayable;
-  if (!s.accInventory || !creditLedgerId) return null;
 
-  const narration = `Purchase Receipt – ${params.poNumber} – ${params.supplier}`;
-  const lines: JournalEntryLine[] = [
-    {
-      id:        crypto.randomUUID(),
-      ledgerId:  s.accInventory,
-      narration: `Stock received – ${params.poNumber}`,
-      debit:     params.total,
-      credit:    0,
-    },
-    {
-      id:        crypto.randomUUID(),
-      ledgerId:  creditLedgerId,
-      narration,
-      debit:     0,
-      credit:    params.total,
-    },
-  ];
+  // ── Credit side: AP ───────────────────────────────────────────────────────
+  // Prefer supplier-specific ledger, then find sub-ledger by name, then AP_TRADE
+  const apId = params.supplierLedgerId
+    || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
+    || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
+    || resolveToLedger(s.accPurchasePayable)
+    || resolveToLedger(SYS_ACCS.AP_TRADE)
+    || SYS_ACCS.AP_GENERAL;
+  if (!apId) return null;
+
+  const allAccounts = getAccounts();
+  const catLines    = params.categoryLines ?? [];
+
+  const lines: JournalEntryLine[] = [];
+
+  // ── Debit side: Inventory — per-category ledgers where possible ───────────
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.total <= 0) continue;
+      const slug      = (cl.category || "uncategorised").trim().toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catInvId  = `inv-cat-${slug}`;
+      const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                          ? catInvId
+                          : (resolveToLedger(s.accInventory) ?? null);
+      if (!invLedger) continue;
+      lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+        narration: `Stock received – ${params.poNumber} – ${cl.category}`,
+        debit: cl.total, credit: 0 });
+    }
+  } else {
+    const invLedger = resolveToLedger(s.accInventory);
+    if (!invLedger) return null;
+    lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+      narration: `Stock received – ${params.poNumber}`, debit: params.total, credit: 0 });
+  }
+
+  // AP credit line
+  lines.push({ id: crypto.randomUUID(), ledgerId: apId,
+    narration: `Purchase Receipt – ${params.poNumber} – ${params.supplier}`,
+    debit: 0, credit: params.total });
+
+  const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
+  const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
 
   return createJournalEntry({
     date:        params.date,
@@ -5127,9 +5233,9 @@ export function autoPostPurchaseJE(params: {
     description: `Purchase Receipt: ${params.poNumber} – ${params.supplier}`,
     lines,
     status:      "posted",
-    totalDebit:  params.total,
-    totalCredit: params.total,
-    isBalanced:  true,
+    totalDebit,
+    totalCredit,
+    isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
 }
 

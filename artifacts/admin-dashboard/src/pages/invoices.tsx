@@ -7,7 +7,7 @@ import {
   PaymentRecord, LegalDocument, InvoiceDoc,
   BankAccount, ProductVariant,
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
-  deductStockForSale, restoreStockForSale, autoPostSaleJE,
+  deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
   autoPostPurchaseJE,
   createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
@@ -1672,10 +1672,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     stockReceiveInProgress.current = true;
                     setStockJustReceived(true);
                     receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber, "Purchase");
-                    // Post inventory JE: DR Inventory, CR AP
                     const _invTotal = invoice!.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
                       + (parseFloat(invoice!.shippingFee)||0) + (parseFloat(invoice!.handlingFee)||0);
-                    autoPostPurchaseJE({ poNumber: invoice!.invoiceNumber, supplier: invoice!.customer, date: new Date().toISOString().slice(0,10), total: _invTotal });
+                    const _allProds = getProducts();
+                    const _catMap   = new Map<string, number>();
+                    for (const it of invoice!.items) {
+                      const p   = _allProds.find(p => p.sku === it.sku || p.name === it.productName);
+                      const cat = p?.category?.trim() || "Uncategorised";
+                      _catMap.set(cat, (_catMap.get(cat) || 0) + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0));
+                    }
+                    autoPostPurchaseJE({
+                      poNumber: invoice!.invoiceNumber, supplier: invoice!.customer,
+                      date: new Date().toISOString().slice(0, 10), total: _invTotal,
+                      categoryLines: Array.from(_catMap.entries()).map(([category, total]) => ({ category, total })),
+                    });
                     updateInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
                     toast({ title: "Stock Received & Inventory Posted", description: `Items from ${invoice!.invoiceNumber} added to stock and inventory ledger updated.` });
                   }}
@@ -1893,57 +1903,115 @@ export function InvoiceFormPage() {
     if (status === "Paid" || status === "Partial") {
       if (!inv.paidAt) updates.paidAt = new Date().toISOString();
     }
-    // Purchase invoices: receive stock only when payment is confirmed
+
+    // ── Build per-category breakdown for accurate ledger posting ─────────────
+    const allProducts = getProducts();
+    const buildCategoryLines = (items: SaleItem[]) => {
+      const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
+      for (const item of items) {
+        const prod   = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
+        const cat    = prod?.category?.trim() || "Uncategorised";
+        const qty    = parseFloat(item.qty) || 0;
+        const price  = parseFloat(item.unitPrice) || 0;
+        const disc   = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
+        const lineNet = qty * price * (1 - disc);
+        const lineCost = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+        const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: qty * price };
+        entry.subtotal      += lineNet;
+        entry.costTotal     += lineCost;
+        entry.purchaseTotal  = (entry.purchaseTotal || 0) + qty * price;
+        catMap.set(cat, entry);
+      }
+      return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
+    };
+    const catLines = buildCategoryLines(inv.items);
+
+    // ── Purchase invoices ─────────────────────────────────────────────────────
     if (inv.invoiceType === "purchase" && (status === "Paid" || status === "Partial") && !inv.stockDeducted) {
       receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
-      // Post inventory JE: DR Inventory, CR AP
-      const _pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+      const pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
         + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
-      autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal });
-      updates.stockReceived = true;   // keep in sync so the button shows ✓
+      autoPostPurchaseJE({
+        poNumber: inv.invoiceNumber, supplier: inv.customer,
+        date: new Date().toISOString().slice(0, 10), total: pTotal,
+        categoryLines: catLines.map(c => ({ category: c.category, total: c.purchaseTotal })),
+      });
+      updates.stockReceived = true;
       updates.stockDeducted = true;
     }
-    // Sale invoices: deduct stock when goods are dispatched — i.e. any active status (Sent / Overdue / Paid / Partial)
+
+    // ── Sale invoices: deduct stock when dispatched ───────────────────────────
     if (inv.invoiceType !== "purchase" &&
         (status === "Sent" || status === "Overdue" || status === "Paid" || status === "Partial") &&
         !inv.stockDeducted) {
       deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       updates.stockDeducted = true;
     }
+
+    // ── Reverse stock when voided ─────────────────────────────────────────────
     if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         reverseStockForPurchase(inv.items, inv.invoiceNumber);
-        updates.stockReceived = false;  // reset so button is usable again if re-activated
+        updates.stockReceived = false;
       } else {
         restoreStockForSale(inv.items, inv.invoiceNumber);
       }
       updates.stockDeducted = false;
       updates.paidAt = "";
     }
-    // Auto-post journal entry when invoice is first paid (only once)
-    if ((status === "Paid" || status === "Partial") && !inv.jeId) {
+
+    // ── Journal entries (sale invoices only) ─────────────────────────────────
+    if (inv.invoiceType !== "purchase") {
+      const today = new Date().toISOString().slice(0, 10);
+      const invDate = inv.invoiceDate || today;
       const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
         inv.items, inv.taxRate, amountPaid ?? inv.amountPaid ?? "0",
         inv.shippingFee, inv.handlingFee,
       );
-      const allProducts = getProducts();
-      const costTotal = inv.items.reduce((sum: number, item: SaleItem) => {
-        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
-        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
-      }, 0);
-      const je = autoPostSaleJE({
-        source:        "Invoice",
-        reference:     inv.invoiceNumber,
-        customer:      inv.customer || "Customer",
-        date:          inv.invoiceDate || new Date().toISOString().slice(0, 10),
-        paymentMethod: inv.paymentMethod,
-        subtotal,
-        taxAmount,
-        grandTotal,
-        costTotal:     parseFloat(costTotal.toFixed(2)),
-      });
-      if (je) updates.jeId = je.id;
+
+      const isCredit = inv.paymentMethod === "Credit";
+
+      // 1) Accrual JE when invoice is issued (Sent / Overdue for credit; or when Sent for any type)
+      if ((status === "Sent" || status === "Overdue") && !inv.jeId) {
+        const je = autoPostSaleJE({
+          source: "Invoice", reference: inv.invoiceNumber,
+          customer: inv.customer || "Customer",
+          date: invDate, paymentMethod: inv.paymentMethod,
+          subtotal, taxAmount, grandTotal,
+          costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
+          categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+        });
+        if (je) updates.jeId = je.id;
+      }
+
+      // 2) When payment arrives:
+      //    - Credit invoice already has accrual JE → post cash receipt (DR Cash, CR AR)
+      //    - Cash/bank invoice with no prior JE → post full sale JE now
+      if (status === "Paid" || status === "Partial") {
+        const paidDate = amountPaid !== undefined ? today : (inv.paidAt?.slice(0, 10) || today);
+        const paidAmt  = parseFloat(amountPaid ?? inv.amountPaid ?? String(grandTotal)) || grandTotal;
+
+        if (inv.jeId && isCredit) {
+          // Credit sale — accrual already posted; record the cash receipt
+          autoPostCashReceiptJE({
+            reference: inv.invoiceNumber, customer: inv.customer || "Customer",
+            date: paidDate, amount: paidAmt, paymentMethod: "Cash",
+          });
+        } else if (!inv.jeId) {
+          // Cash/bank sale (no prior accrual JE) — full JE now
+          const je = autoPostSaleJE({
+            source: "Invoice", reference: inv.invoiceNumber,
+            customer: inv.customer || "Customer",
+            date: invDate, paymentMethod: inv.paymentMethod,
+            subtotal, taxAmount, grandTotal,
+            costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
+            categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+          });
+          if (je) updates.jeId = je.id;
+        }
+      }
     }
+
     editInvoice(id, updates);
     toast({ title: `Invoice marked ${status}` });
   }, [editInvoice, toast]);
@@ -1966,65 +2034,72 @@ export function InvoiceFormPage() {
       paidAt:         inv.paidAt || new Date().toISOString(),
     };
 
-    // Update stock once — add for purchases, deduct for sales
+    // ── Build per-category breakdown ──────────────────────────────────────────
+    const allProds = getProducts();
+    const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
+    for (const item of inv.items) {
+      const prod    = allProds.find(p => p.sku === item.sku || p.name === item.productName);
+      const cat     = prod?.category?.trim() || "Uncategorised";
+      const qty     = parseFloat(item.qty) || 0;
+      const price   = parseFloat(item.unitPrice) || 0;
+      const disc    = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
+      const lineNet  = qty * price * (1 - disc);
+      const lineCost = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+      const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: 0 };
+      entry.subtotal      += lineNet;
+      entry.costTotal     += lineCost;
+      entry.purchaseTotal += qty * price;
+      catMap.set(cat, entry);
+    }
+    const catLines = Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
+
+    // ── Stock management ──────────────────────────────────────────────────────
     if (!inv.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
-        // Post inventory JE: DR Inventory, CR AP
-        const _pTotal2 = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+        const pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
           + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
-        autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal2 });
-        updates.stockReceived = true;   // keep in sync with the "Receive to Stock" button
+        autoPostPurchaseJE({
+          poNumber: inv.invoiceNumber, supplier: inv.customer,
+          date: record.date || new Date().toISOString().slice(0, 10), total: pTotal,
+          categoryLines: catLines.map(c => ({ category: c.category, total: c.purchaseTotal })),
+        });
+        updates.stockReceived = true;
       } else {
         deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       }
       updates.stockDeducted = true;
     }
 
-    // Auto-post JE on first payment (once only)
-    if (!inv.jeId) {
-      const { after: saleSubtotal, tax: taxAmount, total: grandTotal } = computeTotals(
+    // ── Journal entries (sale invoices only) ─────────────────────────────────
+    if (inv.invoiceType !== "purchase") {
+      const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
         inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee,
       );
-      const allProds = getProducts();
-      const costTotal = inv.items.reduce((sum: number, item: SaleItem) => {
-        const prod = allProds.find(p => p.sku === item.sku || p.name === item.productName);
-        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
-      }, 0);
-      const je = autoPostSaleJE({
-        source:        "Invoice",
-        reference:     inv.invoiceNumber,
-        customer:      inv.customer || "Customer",
-        date:          record.date || inv.invoiceDate || new Date().toISOString().slice(0, 10),
-        paymentMethod: record.method as SalePayment,
-        subtotal:      saleSubtotal,
-        taxAmount,
-        grandTotal,
-        costTotal:     parseFloat(costTotal.toFixed(2)),
-      });
-      if (je) updates.jeId = je.id;
-    } else {
-      // Subsequent partial payment — create a supplementary cash receipt JE
-      // Dr Cash/Bank, Cr Accounts Receivable for the incremental amount
-      const amt = parseFloat(record.amount) || 0;
-      if (amt > 0) {
-        const cashAcc  = record.method === "Bank Transfer" ? "sys-1210" : "sys-1200";
-        const cashName = record.method === "Bank Transfer" ? "Bank" : "Cash";
-        try {
-          createJournalEntry({
-            date:        record.date || new Date().toISOString().slice(0, 10),
-            reference:   inv.invoiceNumber,
-            description: `Payment receipt — ${inv.customer || "Customer"} (${record.method})${record.note ? ` · ${record.note}` : ""}`,
-            status:      "posted",
-            totalDebit:  amt,
-            totalCredit: amt,
-            isBalanced:  true,
-            lines: [
-              { id: crypto.randomUUID(), ledgerId: cashAcc,    narration: `[${cashName}] Receipt from ${inv.customer || "Customer"}`, debit: amt,  credit: 0   },
-              { id: crypto.randomUUID(), ledgerId: "sys-1101", narration: `Settlement of ${inv.invoiceNumber}`,                       debit: 0,    credit: amt },
-            ],
+      const payDate    = record.date || inv.invoiceDate || new Date().toISOString().slice(0, 10);
+      const isCredit   = inv.paymentMethod === "Credit";
+      const payAmt     = parseFloat(record.amount) || 0;
+      const payMethod  = (record.method as SalePayment) || inv.paymentMethod;
+
+      if (!inv.jeId) {
+        // First JE: full sale JE (DR Cash/AR, CR Revenue) — for cash sales or first payment of credit
+        const je = autoPostSaleJE({
+          source: "Invoice", reference: inv.invoiceNumber,
+          customer: inv.customer || "Customer",
+          date: inv.invoiceDate || payDate, paymentMethod: inv.paymentMethod,
+          subtotal, taxAmount, grandTotal,
+          costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
+          categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+        });
+        if (je) updates.jeId = je.id;
+      } else {
+        // Subsequent payment or credit sale payment — post receipt JE (DR Cash, CR AR)
+        if (payAmt > 0 && isCredit) {
+          autoPostCashReceiptJE({
+            reference: inv.invoiceNumber, customer: inv.customer || "Customer",
+            date: payDate, amount: payAmt, paymentMethod: payMethod,
           });
-        } catch { /* JE posting is non-critical */ }
+        }
       }
     }
 
