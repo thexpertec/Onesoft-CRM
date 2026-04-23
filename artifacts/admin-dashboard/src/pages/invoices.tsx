@@ -5,7 +5,7 @@ import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  BankAccount,
+  BankAccount, ProductVariant,
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE,
   receiveStockForPurchase, reverseStockForPurchase,
@@ -527,6 +527,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       tag:   p.category || undefined,
     })),
   [products]);
+
+  // Map product.name → variants (only for products that have variants)
+  const productVariantsMap = useMemo(() => {
+    const map = new Map<string, ProductVariant[]>();
+    products.forEach(p => {
+      if (p.variants && p.variants.length > 0) map.set(p.name, p.variants);
+    });
+    return map;
+  }, [products]);
   const customerOpts = useMemo<ComboOption[]>(() => {
     const mapped = customers.map(c => ({
       value: c.name,
@@ -590,10 +599,50 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     if (!p) return updateItem(id, "productName", name);
     setItems(prev => prev.map(i =>
       i.id === id
-        ? { ...i, productName: getInvoiceProductName(p), localName: p.localName || "", sku: p.sku, unit: p.unit, unitPrice: getAutoPrice(p) }
+        ? {
+            ...i,
+            productName: getInvoiceProductName(p),
+            localName: p.localName || "",
+            sku: p.sku,
+            unit: p.unit,
+            unitPrice: getAutoPrice(p),
+            productId: p.id,
+            variantId: undefined,
+            variantLabel: undefined,
+          }
         : i
     ));
   };
+
+  const getVariantPrice = useCallback((v: ProductVariant) => {
+    if (invoiceType === "purchase") {
+      return v.purchasePrice && v.purchasePrice !== "" ? v.purchasePrice : v.price;
+    }
+    return v.price;
+  }, [invoiceType]);
+
+  const pickVariant = useCallback((itemId: string, v: ProductVariant) => {
+    const label = Object.values(v.attributes ?? {})[0] ?? "";
+    setItems(prev => prev.map(i =>
+      i.id === itemId
+        ? { ...i, sku: v.sku ?? i.sku, unitPrice: getVariantPrice(v), variantId: v.id, variantLabel: label }
+        : i
+    ));
+  }, [getVariantPrice]);
+
+  const clearVariant = useCallback((itemId: string) => {
+    setItems(prev => prev.map(i => {
+      if (i.id !== itemId) return i;
+      const p = i.productId ? products.find(pr => pr.id === i.productId) : undefined;
+      return {
+        ...i,
+        sku: p?.sku ?? i.sku,
+        unitPrice: p ? getAutoPrice(p) : i.unitPrice,
+        variantId: undefined,
+        variantLabel: undefined,
+      };
+    }));
+  }, [products, getAutoPrice]);
 
   // Re-price all items whose product is found in the catalogue when mode changes
   useEffect(() => {
@@ -899,7 +948,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         maxResults={15} minDropdownWidth={320}
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
                         inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                      {item.sku && <span className="text-[10px] text-gray-400 pl-1">SKU: {item.sku}</span>}
+                      {item.sku && (
+                        <span className="text-[10px] text-gray-400 pl-1">
+                          SKU: {item.sku}
+                          {item.variantLabel && (
+                            <span className="ml-1 text-blue-500 font-medium">· {item.variantLabel}</span>
+                          )}
+                        </span>
+                      )}
                     </div>
                     {/* Unit Price */}
                     <div className="px-1">
@@ -940,6 +996,38 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </button>
                     </div>
                   </div>
+                  {/* Variant picker — shown when the selected product has variants */}
+                  {(() => {
+                    const variants = productVariantsMap.get(item.productName);
+                    if (!variants || variants.length === 0) return null;
+                    return (
+                      <div className="px-10 pb-2 pt-0.5 flex items-center flex-wrap gap-1.5">
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider shrink-0 mr-0.5">Variant:</span>
+                        {variants.map(v => {
+                          const label = Object.values(v.attributes ?? {})[0] ?? v.sku ?? v.id;
+                          const isSelected = item.variantId === v.id;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => isSelected ? clearVariant(item.id) : pickVariant(item.id, v)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                                isSelected
+                                  ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
+                                  : "bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-600 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                              }`}
+                            >
+                              {label}
+                              {v.sku && !isSelected && (
+                                <span className="text-gray-400 dark:text-zinc-500 text-[9px] ml-0.5">{v.sku}</span>
+                              )}
+                              {isSelected && <X size={9} className="shrink-0 ml-0.5 opacity-80" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {/* Add item after this row */}
                   <button onClick={() => {
                     const newItem = blankItem();

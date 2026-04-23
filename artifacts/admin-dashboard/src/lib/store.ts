@@ -2052,6 +2052,9 @@ export type SaleItem = {
   notes: string;
   itemStatus: ItemStatus;    // per-line delivery status
   bogoApplied?: boolean;     // Clubcard Buy-1-Get-1-Free applied; every 2nd unit is free
+  productId?: string;        // linked Product.id — used for variant lookup
+  variantId?: string;        // selected ProductVariant.id
+  variantLabel?: string;     // display label of the selected variant (e.g. "3500mAh")
 };
 
 export type Sale = {
