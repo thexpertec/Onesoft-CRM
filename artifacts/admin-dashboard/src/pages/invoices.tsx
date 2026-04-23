@@ -528,14 +528,25 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     })),
   [products]);
 
-  // Map product.name → variants (only for products that have variants)
+  // Map product.id → variants (keyed by id so it works regardless of display-name locale setting)
   const productVariantsMap = useMemo(() => {
     const map = new Map<string, ProductVariant[]>();
     products.forEach(p => {
-      if (p.variants && p.variants.length > 0) map.set(p.name, p.variants);
+      if (p.variants && p.variants.length > 0) map.set(p.id, p.variants);
     });
     return map;
   }, [products]);
+
+  // Resolve variants for a line item — prefer productId lookup, fall back to name match
+  const variantsForItem = useCallback((item: SaleItem): ProductVariant[] => {
+    if (item.productId) {
+      const v = productVariantsMap.get(item.productId);
+      if (v) return v;
+    }
+    // Fallback: match by raw name or display name (for items loaded before productId was saved)
+    const p = products.find(pr => pr.name === item.productName || getInvoiceProductName(pr) === item.productName);
+    return p?.variants ?? [];
+  }, [productVariantsMap, products]);
   const customerOpts = useMemo<ComboOption[]>(() => {
     const mapped = customers.map(c => ({
       value: c.name,
@@ -998,7 +1009,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                   {/* Variant picker — shown when the selected product has variants */}
                   {(() => {
-                    const variants = productVariantsMap.get(item.productName);
+                    const variants = variantsForItem(item);
                     if (!variants || variants.length === 0) return null;
                     return (
                       <div className="px-10 pb-2 pt-0.5 flex items-center flex-wrap gap-1.5">
