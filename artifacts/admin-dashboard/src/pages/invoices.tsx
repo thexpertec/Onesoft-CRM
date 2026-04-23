@@ -1681,17 +1681,21 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       const cat = p?.category?.trim() || "Uncategorised";
                       _catMap.set(cat, (_catMap.get(cat) || 0) + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0));
                     }
-                    autoPostPurchaseJE({
+                    const _je = autoPostPurchaseJE({
                       poNumber: invoice!.invoiceNumber, supplier: invoice!.customer,
                       date: new Date().toISOString().slice(0, 10), total: _invTotal,
                       categoryLines: Array.from(_catMap.entries()).map(([category, total]) => ({ category, total })),
                     });
-                    updateInvoice(invoice!.id, { stockReceived: true, stockDeducted: true });
-                    toast({ title: "Stock Received & Inventory Posted", description: `Items from ${invoice!.invoiceNumber} added to stock and inventory ledger updated.` });
+                    updateInvoice(invoice!.id, {
+                      stockReceived: true, stockDeducted: true,
+                      saleStatus:    "Received",
+                      jeId:          _je?.id ?? invoice!.jeId,
+                    });
+                    toast({ title: "Goods Received — Inventory & Ledger Updated", description: `Stock for ${invoice!.invoiceNumber} added. Journal entry posted to Inventory & Payables.` });
                   }}
                     disabled={stockJustReceived}
                     className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${stockJustReceived ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed" : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"}`}>
-                    <PackagePlus size={12}/>{stockJustReceived ? "✓ Stock Already Received" : "Receive to Stock"}
+                    <PackagePlus size={12}/>{stockJustReceived ? "✓ Goods Already Received" : "Mark as Received"}
                   </button>
                 )}
                 {s === "Draft" && invoiceType !== "purchase" && (
@@ -1879,19 +1883,67 @@ export function InvoiceFormPage() {
     (invoice?.invoiceType as "sale" | "purchase" | undefined) ??
     (searchParams.get("type") === "purchase" ? "purchase" : "sale");
 
+  /** Helper — build per-category purchase totals from invoice items */
+  const buildPurchaseCatLines = (items: Invoice["items"]) => {
+    const prods = getProducts();
+    const map   = new Map<string, number>();
+    for (const it of items) {
+      const prod = prods.find(p => p.sku === it.sku || p.name === it.productName);
+      const cat  = prod?.category?.trim() || "Uncategorised";
+      map.set(cat, (map.get(cat) || 0) + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0));
+    }
+    return Array.from(map.entries()).map(([category, total]) => ({ category, total }));
+  };
+
+  /** Receive stock + post purchase JE for a purchase invoice — idempotent (guarded by stockDeducted) */
+  const receivePurchaseStock = useCallback((inv: Invoice) => {
+    if (inv.stockDeducted) return null;           // already received — skip
+    if (inv.invoiceType !== "purchase") return null;
+    receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
+    const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
+      + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+    return autoPostPurchaseJE({
+      poNumber:      inv.invoiceNumber,
+      supplier:      inv.customer,
+      date:          new Date().toISOString().slice(0, 10),
+      total,
+      categoryLines: buildPurchaseCatLines(inv.items),
+    });
+  }, []);
+
   const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
+    const isPurchase = data.invoiceType === "purchase";
+    const isReceived = data.saleStatus === "Received";
+
     if (id) {
-      editInvoice(id, { ...data });
+      const existing = getInvoices().find(i => i.id === id);
+      const wasReceived = existing?.stockDeducted;
+
+      // Goods-receipt trigger: saleStatus changed to "Received" for the first time
+      if (isPurchase && isReceived && !wasReceived) {
+        const tempInv = { ...existing!, ...data, id };
+        const je = receivePurchaseStock(tempInv);
+        editInvoice(id, { ...data, stockReceived: true, stockDeducted: true, jeId: je?.id ?? existing?.jeId });
+      } else {
+        editInvoice(id, { ...data });
+      }
       toast({ title: "Invoice updated" });
       const backUrl = data.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
       navigate(backUrl);
     } else {
+      // New invoice — create first, then receive stock if already "Received"
       const inv = addInvoice(data);
+      if (isPurchase && isReceived) {
+        const je = receivePurchaseStock(inv);
+        if (je || !inv.stockDeducted) {
+          editInvoice(inv.id, { stockReceived: true, stockDeducted: true, jeId: je?.id });
+        }
+      }
       toast({ title: "Invoice created", description: inv.invoiceNumber });
       const backUrl = inv.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
       navigate(backUrl);
     }
-  }, [editInvoice, addInvoice, toast, navigate]);
+  }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock]);
 
   const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
     // Read directly from localStorage for the freshest state — React state may be stale
@@ -1925,20 +1977,6 @@ export function InvoiceFormPage() {
       return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
     };
     const catLines = buildCategoryLines(inv.items);
-
-    // ── Purchase invoices ─────────────────────────────────────────────────────
-    if (inv.invoiceType === "purchase" && (status === "Paid" || status === "Partial") && !inv.stockDeducted) {
-      receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
-      const pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
-        + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
-      autoPostPurchaseJE({
-        poNumber: inv.invoiceNumber, supplier: inv.customer,
-        date: new Date().toISOString().slice(0, 10), total: pTotal,
-        categoryLines: catLines.map(c => ({ category: c.category, total: c.purchaseTotal })),
-      });
-      updates.stockReceived = true;
-      updates.stockDeducted = true;
-    }
 
     // ── Sale invoices: deduct stock when dispatched ───────────────────────────
     if (inv.invoiceType !== "purchase" &&
@@ -2053,21 +2091,9 @@ export function InvoiceFormPage() {
     }
     const catLines = Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
 
-    // ── Stock management ──────────────────────────────────────────────────────
-    if (!inv.stockDeducted) {
-      if (inv.invoiceType === "purchase") {
-        receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
-        const pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
-          + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
-        autoPostPurchaseJE({
-          poNumber: inv.invoiceNumber, supplier: inv.customer,
-          date: record.date || new Date().toISOString().slice(0, 10), total: pTotal,
-          categoryLines: catLines.map(c => ({ category: c.category, total: c.purchaseTotal })),
-        });
-        updates.stockReceived = true;
-      } else {
-        deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
-      }
+    // ── Stock management (sales only — purchases receive stock via "Mark as Received") ──
+    if (!inv.stockDeducted && inv.invoiceType !== "purchase") {
+      deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       updates.stockDeducted = true;
     }
 
