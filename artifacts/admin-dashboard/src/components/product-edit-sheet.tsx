@@ -568,9 +568,17 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             </div>
           </div>
 
-          <Divider label="Pricing" />
+          {variants.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 text-[11px] text-blue-700 dark:text-blue-300">
+              <Layers size={12} className="shrink-0" />
+              Prices and stock are managed per variant — set them in the Variants table below.
+              Category, Subcategory and Department apply to all variants.
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {variants.length === 0 && <Divider label="Pricing" />}
+
+          {variants.length === 0 && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Field label={`Purchase (${sym})`} hint="Supplier cost">
               <Input type="number" min="0" step="0.01" value={form.purchasePrice}
                 onChange={e => patch("purchasePrice", e.target.value)}
@@ -630,22 +638,23 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 ? <p className="text-[10px] text-violet-600 dark:text-violet-400 font-medium leading-tight">{sym}{commissionAmt}/sale</p>
                 : <p className="text-[10px] text-muted-foreground leading-tight">Agent's cut</p>}
             </div>
-          </div>
+          </div>}
 
-          <Divider label="Website Pricing" />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={`Website Price (${sym})`} hint="Online selling price">
-              <Input type="number" min="0" step="0.01" value={form.websitePrice}
-                onChange={e => patch("websitePrice", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm tabular-nums" />
-            </Field>
-            <Field label={`Was Price (${sym})`} hint="Crossed-out price">
-              <Input type="number" min="0" step="0.01" value={form.websitePriceWas}
-                onChange={e => patch("websitePriceWas", e.target.value)}
-                placeholder="0.00" className="h-9 text-sm tabular-nums" />
-            </Field>
-          </div>
+          {variants.length === 0 && <>
+            <Divider label="Website Pricing" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={`Website Price (${sym})`} hint="Online selling price">
+                <Input type="number" min="0" step="0.01" value={form.websitePrice}
+                  onChange={e => patch("websitePrice", e.target.value)}
+                  placeholder="0.00" className="h-9 text-sm tabular-nums" />
+              </Field>
+              <Field label={`Was Price (${sym})`} hint="Crossed-out price">
+                <Input type="number" min="0" step="0.01" value={form.websitePriceWas}
+                  onChange={e => patch("websitePriceWas", e.target.value)}
+                  placeholder="0.00" className="h-9 text-sm tabular-nums" />
+              </Field>
+            </div>
+          </>}
 
           <Divider label="Variants" />
 
@@ -812,18 +821,20 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           <Divider label="Stock & Notes" />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Opening Stock" hint="Initial qty">
-              <Input type="number" min="0" step="1" value={form.openingStock}
-                onChange={e => patch("openingStock", e.target.value)}
-                placeholder="0" className="h-9 text-sm tabular-nums" />
-            </Field>
-            <Field label="Alert Level" hint="Low-stock trigger">
-              <Input type="number" min="0" step="1" value={form.stockAlertValue}
-                onChange={e => patch("stockAlertValue", e.target.value)}
-                placeholder="0" className="h-9 text-sm tabular-nums" />
-            </Field>
-          </div>
+          {variants.length === 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Opening Stock" hint="Initial qty">
+                <Input type="number" min="0" step="1" value={form.openingStock}
+                  onChange={e => patch("openingStock", e.target.value)}
+                  placeholder="0" className="h-9 text-sm tabular-nums" />
+              </Field>
+              <Field label="Alert Level" hint="Low-stock trigger">
+                <Input type="number" min="0" step="1" value={form.stockAlertValue}
+                  onChange={e => patch("stockAlertValue", e.target.value)}
+                  placeholder="0" className="h-9 text-sm tabular-nums" />
+              </Field>
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-[12px] font-semibold text-foreground">Description</label>
