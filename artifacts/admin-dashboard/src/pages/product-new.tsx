@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
 import { BarcodePreview } from "@/components/barcode-preview";
 import BarcodeScanner from "@/components/barcode-scanner";
-import { Plus, ArrowLeft, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon, ScanLine } from "lucide-react";
+import { Plus, ArrowLeft, Package, Camera, Search, CheckCircle, XCircle, Loader2, Wand2, Printer, Layers, ImageIcon, ScanLine, X } from "lucide-react";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,8 @@ export default function ProductNewPage() {
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [pickerVariantId, setPickerVariantId] = useState<string | null>(null);
+  const [thumbnail, setThumbnail] = useState<string>("");
+  const [pickerThumbnail, setPickerThumbnail] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const allAttrs = useMemo(() => getAttributes().filter(a => a.values.trim() && a.active !== false), []);
@@ -239,6 +241,7 @@ export default function ProductNewPage() {
         description: form.description,
         productAttributes: selectedAttrName ? [selectedAttrName] : undefined,
         variants: variants.length ? variants : undefined,
+        thumbnail: thumbnail || undefined,
       });
       toast({ title: "Product added", description: `"${form.name}" created successfully.` });
       nav("/products");
@@ -306,6 +309,43 @@ export default function ProductNewPage() {
             <Input placeholder="e.g. مقامی نام / 本地名称" value={form.localName}
               onChange={e => patch("localName", e.target.value)} className="h-9 text-sm" />
           </Field>
+
+          {/* ── Product Thumbnail ── */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground">Product Thumbnail</label>
+            <div className="relative w-full">
+              <button
+                type="button"
+                onClick={() => setPickerThumbnail(true)}
+                className={`w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all overflow-hidden
+                  ${thumbnail
+                    ? "border-border h-44 p-0"
+                    : "border-border bg-muted/30 h-28 hover:border-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
+                  }`}
+              >
+                {thumbnail ? (
+                  <img src={thumbnail} alt="Thumbnail" className="w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <ImageIcon size={24} className="text-muted-foreground/40" />
+                    <span className="text-[12px] text-muted-foreground">Click to add product thumbnail</span>
+                  </>
+                )}
+              </button>
+              {thumbnail && (
+                <div className="absolute top-2 right-2 flex gap-1.5">
+                  <button type="button" onClick={() => setPickerThumbnail(true)}
+                    className="px-2 py-0.5 rounded text-[10px] bg-background/90 backdrop-blur-sm border border-border text-foreground hover:bg-muted transition-colors shadow-sm">
+                    Change
+                  </button>
+                  <button type="button" onClick={() => setThumbnail("")}
+                    className="w-6 h-6 rounded-full bg-background/90 backdrop-blur-sm border border-border flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shadow-sm">
+                    <X size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
           <Divider label="Identity" />
 
@@ -721,6 +761,14 @@ export default function ProductNewPage() {
         }}
         currentUrl={pickerVariantId ? (variants.find(v => v.id === pickerVariantId)?.image ?? "") : ""}
         title="Select Variant Image"
+      />
+
+      <MediaPickerDialog
+        open={pickerThumbnail}
+        onClose={() => setPickerThumbnail(false)}
+        onSelect={url => { setThumbnail(url); setPickerThumbnail(false); }}
+        currentUrl={thumbnail}
+        title="Select Product Thumbnail"
       />
     </div>
   );
