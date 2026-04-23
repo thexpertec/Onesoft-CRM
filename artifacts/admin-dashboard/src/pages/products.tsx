@@ -1598,9 +1598,9 @@ export default function ProductsPage() {
                       <select autoFocus value={val}
                         onChange={e => setNewRow(r => r ? { ...r, [c.field]: e.target.value } : r)}
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}
-                        className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground">
+                        className="absolute inset-0 w-full h-full px-3 text-[13px] text-foreground bg-white dark:bg-card border-0 outline-none">
                         <option value="">— none —</option>
-                        {c.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                        {c.options?.filter(o => o !== "").map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : isA ? (
                       <input autoFocus type="text" value={val} placeholder={c.label}
@@ -1723,6 +1723,49 @@ export default function ProductsPage() {
                       : parseFloat(rawVal) < 0 ? "text-red-500 dark:text-red-400 font-medium"
                       : "text-muted-foreground")
                     : "";
+
+                  // Status / Condition — clickable dropdown pill (avoids native <select> height issues)
+                  if (c.field === "status" || c.field === "condition") {
+                    const colorMap = c.field === "status" ? STATUS_COLORS : CONDITION_COLORS;
+                    const pillClass = colorMap[rawVal] || "bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400";
+                    return (
+                      <td key={c.field} className="border-r border-gray-100 dark:border-border relative p-0 select-none"
+                        style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                        <div className="w-full h-full flex items-center px-3">
+                          {can("Edit Products") ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap hover:opacity-75 transition-opacity ${pillClass}`}>
+                                  {rawVal || "—"}
+                                  <ChevronDown size={9} />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="text-[13px] min-w-[140px]">
+                                {(c.options ?? []).filter(o => o !== "").map(o => (
+                                  <DropdownMenuItem key={o} className="gap-2" onClick={() => commitCell(prod.id, c.field as EditableField, o)}>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${colorMap[o] || "bg-gray-100 text-gray-600"}`}>{o}</span>
+                                    {rawVal === o && <span className="ml-auto text-[10px] text-muted-foreground">✓</span>}
+                                  </DropdownMenuItem>
+                                ))}
+                                {c.field === "condition" && rawVal && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="text-muted-foreground text-[12px]" onClick={() => commitCell(prod.id, c.field as EditableField, "")}>
+                                      Clear condition
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${pillClass}`}>
+                              {rawVal || "—"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  }
 
                   // clubcardBogo — clickable toggle pill (Buy 1 Get 1 Free)
                   if (c.field === "clubcardBogo") {
