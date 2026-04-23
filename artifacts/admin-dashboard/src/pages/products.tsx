@@ -1635,8 +1635,18 @@ export default function ProductsPage() {
             const isRowActive = activeCell?.id === prod.id;
             const isDragging  = dragId === prod.id;
             const isDragOver  = dragOverId === prod.id;
-            const hasVariants = (prod.variants?.length ?? 0) > 0;
-            const isExpanded  = expandedIds.has(prod.id);
+            const hasVariants  = (prod.variants?.length ?? 0) > 0;
+            const isExpanded   = expandedIds.has(prod.id);
+            const stockQty     = getProductStock(prod);
+            const stockAlert   = parseFloat((prod as Product & { stockAlertQty?: string }).stockAlertQty ?? "0") || 5;
+            const isOutOfStock = stockQty !== null && stockQty === 0;
+            const isLowStock   = stockQty !== null && stockQty > 0 && stockQty <= stockAlert;
+            // Base row BG: red for out-of-stock, yellow for low-stock, else alternating white/gray
+            const baseRowBg = isOutOfStock
+              ? "bg-red-50/70 dark:bg-red-950/20"
+              : isLowStock
+              ? "bg-yellow-50/70 dark:bg-amber-950/20"
+              : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10";
             return (
               <Fragment key={prod.id}>
               <tr data-testid={`row-product-${prod.id}`}
@@ -1645,11 +1655,12 @@ export default function ProductsPage() {
                 onDragOver={e => handleDragOver(e, prod.id)}
                 onDrop={() => handleDrop(prod.id)}
                 onDragEnd={handleDragEnd}
-                className={`border-b border-gray-100 dark:border-border transition-colors group select-none
+                className={`border-b transition-colors group select-none
+                  ${isOutOfStock ? "border-red-200 dark:border-red-900/40 border-l-2 border-l-red-400 dark:border-l-red-600" : isLowStock ? "border-yellow-200 dark:border-yellow-900/40 border-l-2 border-l-amber-400 dark:border-l-amber-500" : "border-gray-100 dark:border-border"}
                   ${selectedIds.has(prod.id) ? "bg-indigo-50/60 dark:bg-indigo-950/20" : ""}
                   ${isDragging  ? "opacity-40 bg-blue-50 dark:bg-blue-950/20" : ""}
                   ${isDragOver  ? "border-t-2 border-t-blue-500 bg-blue-50/50 dark:bg-blue-950/10" : ""}
-                  ${!isDragging && !isDragOver && !selectedIds.has(prod.id) ? (isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10") : ""}
+                  ${!isDragging && !isDragOver && !selectedIds.has(prod.id) ? (isRowActive ? "bg-blue-50/30 dark:bg-blue-950/10" : baseRowBg) : ""}
                   hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
 
                 {/* Checkbox / drag handle */}
