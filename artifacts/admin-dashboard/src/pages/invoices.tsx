@@ -470,6 +470,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   // per-item overrides: { suggestedCost, salePrice }
   const [costOverrides, setCostOverrides] = useState<Record<string, { suggestedCost: string; retailPrice: string; wholesalePrice: string }>>({});
 
+  // ── Variant price overrides — local edits to variant prices within this invoice ──
+  const [variantEdits, setVariantEdits] = useState<Record<string, { purchasePrice: string; price: string }>>({});
+  const patchVariantEdit = useCallback((variantId: string, field: "purchasePrice" | "price", value: string) => {
+    setVariantEdits(prev => ({
+      ...prev,
+      [variantId]: { purchasePrice: prev[variantId]?.purchasePrice ?? "", price: prev[variantId]?.price ?? "", [field]: value },
+    }));
+    // If this variant is currently selected on any line item, sync its unit price
+    const isThisPurchase = invoiceType === "purchase";
+    if ((field === "purchasePrice" && isThisPurchase) || (field === "price" && !isThisPurchase)) {
+      setItems(prev => prev.map(i => i.variantId === variantId ? { ...i, unitPrice: value } : i));
+    }
+  }, [invoiceType]);
+
   // ── Pricing mode (sale invoices only) — default wholesale ──────────────
   const [pricingMode, setPricingMode] = useState<"wholesale" | "retail">(
     () => {
@@ -627,10 +641,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
   const getVariantPrice = useCallback((v: ProductVariant) => {
     if (invoiceType === "purchase") {
+      const override = variantEdits[v.id]?.purchasePrice;
+      if (override !== undefined && override !== "") return override;
       return v.purchasePrice && v.purchasePrice !== "" ? v.purchasePrice : v.price;
     }
+    const override = variantEdits[v.id]?.price;
+    if (override !== undefined && override !== "") return override;
     return v.price;
-  }, [invoiceType]);
+  }, [invoiceType, variantEdits]);
 
   const pickVariant = useCallback((itemId: string, v: ProductVariant) => {
     const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || "";
@@ -1046,11 +1064,23 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                                       {isSelected && <X size={9} className="shrink-0 opacity-80" />}
                                     </span>
                                   </td>
-                                  <td className="px-2 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300 text-[11px]">
-                                    {v.purchasePrice && v.purchasePrice !== "" ? Number(v.purchasePrice).toFixed(dp) : "—"}
+                                  <td className="px-1.5 py-1" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="number" min="0" step="0.01"
+                                      value={variantEdits[v.id]?.purchasePrice ?? v.purchasePrice ?? ""}
+                                      onChange={e => patchVariantEdit(v.id, "purchasePrice", e.target.value)}
+                                      placeholder={v.purchasePrice || "0.00"}
+                                      className="w-full px-2 py-1 rounded border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-xs text-right font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
                                   </td>
-                                  <td className="px-2 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300 text-[11px]">
-                                    {v.price && v.price !== "" ? Number(v.price).toFixed(dp) : "—"}
+                                  <td className="px-1.5 py-1" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="number" min="0" step="0.01"
+                                      value={variantEdits[v.id]?.price ?? v.price ?? ""}
+                                      onChange={e => patchVariantEdit(v.id, "price", e.target.value)}
+                                      placeholder={v.price || "0.00"}
+                                      className="w-full px-2 py-1 rounded border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-xs text-right font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
                                   </td>
                                   <td className="px-2 py-1.5">
                                     {v.image ? (
