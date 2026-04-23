@@ -1033,15 +1033,23 @@ export default function Leads() {
   }, []);
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
+  // For sales agents, stats must be scoped to only their assigned leads.
+  const kpiLeads = useMemo(() =>
+    isSalesAgent && agentName
+      ? leads.filter(l => l.assignedTo?.toLowerCase() === agentName.toLowerCase())
+      : leads,
+    [leads, isSalesAgent, agentName]
+  );
+
   const kpis = useMemo(() => ({
-    total:       leads.length,
-    won:         leads.filter(l => l.status==="Won").length,
-    new:         leads.filter(l => l.status==="New").length,
-    qualified:   leads.filter(l => l.status==="Qualified").length,
-    inProgress:  leads.filter(l => ["Meeting Scheduled","Demo Completed","Negotiation"].includes(l.status)).length,
-    upcoming:    leads.filter(l => l.nextReminder && !isPast(new Date(l.nextReminder))).length,
-    overdue:     leads.filter(l => l.nextReminder && isPast(new Date(l.nextReminder)) && !isToday(new Date(l.nextReminder))).length,
-  }), [leads]);
+    total:       kpiLeads.length,
+    won:         kpiLeads.filter(l => l.status==="Won").length,
+    new:         kpiLeads.filter(l => l.status==="New").length,
+    qualified:   kpiLeads.filter(l => l.status==="Qualified").length,
+    inProgress:  kpiLeads.filter(l => ["Meeting Scheduled","Demo Completed","Negotiation"].includes(l.status)).length,
+    upcoming:    kpiLeads.filter(l => l.nextReminder && !isPast(new Date(l.nextReminder))).length,
+    overdue:     kpiLeads.filter(l => l.nextReminder && isPast(new Date(l.nextReminder)) && !isToday(new Date(l.nextReminder))).length,
+  }), [kpiLeads]);
 
   const CELL_H = 38;
 
