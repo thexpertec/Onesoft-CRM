@@ -1007,35 +1007,63 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </button>
                     </div>
                   </div>
-                  {/* Variant picker — shown when the selected product has variants */}
+                  {/* Variant picker — table style, shown when the selected product has variants */}
                   {(() => {
                     const variants = variantsForItem(item);
                     if (!variants || variants.length === 0) return null;
                     return (
-                      <div className="px-10 pb-2 pt-0.5 flex items-center flex-wrap gap-1.5">
-                        <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider shrink-0 mr-0.5">Variant:</span>
-                        {variants.map(v => {
-                          const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
-                          const isSelected = item.variantId === v.id;
-                          return (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => isSelected ? clearVariant(item.id) : pickVariant(item.id, v)}
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
-                                isSelected
-                                  ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
-                                  : "bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-600 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400"
-                              }`}
-                            >
-                              {label}
-                              {v.sku && !isSelected && (
-                                <span className="text-gray-400 dark:text-zinc-500 text-[9px] ml-0.5">{v.sku}</span>
-                              )}
-                              {isSelected && <X size={9} className="shrink-0 ml-0.5 opacity-80" />}
-                            </button>
-                          );
-                        })}
+                      <div className="mx-4 mb-2 mt-0.5 rounded-lg border border-gray-100 dark:border-zinc-700 overflow-hidden">
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-700">
+                              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-3 py-1.5">Variant</th>
+                              <th className="text-right text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[18%]">Purchase ({sym})</th>
+                              <th className="text-right text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[18%]">Retail ({sym})</th>
+                              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[14%]">Image</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-zinc-700/50">
+                            {variants.map(v => {
+                              const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
+                              const isSelected = item.variantId === v.id;
+                              return (
+                                <tr
+                                  key={v.id}
+                                  onClick={() => isSelected ? clearVariant(item.id) : pickVariant(item.id, v)}
+                                  className={`cursor-pointer transition-colors select-none ${
+                                    isSelected
+                                      ? "bg-blue-50 dark:bg-blue-950/30"
+                                      : "hover:bg-gray-50/70 dark:hover:bg-zinc-800/30"
+                                  }`}
+                                >
+                                  <td className="px-3 py-1.5">
+                                    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors ${
+                                      isSelected
+                                        ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
+                                        : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50"
+                                    }`}>
+                                      {label}
+                                      {isSelected && <X size={9} className="shrink-0 opacity-80" />}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300 text-[11px]">
+                                    {v.purchasePrice && v.purchasePrice !== "" ? Number(v.purchasePrice).toFixed(dp) : "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300 text-[11px]">
+                                    {v.price && v.price !== "" ? Number(v.price).toFixed(dp) : "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    {v.image ? (
+                                      <img src={v.image} alt={label} className="w-7 h-7 rounded object-cover border border-gray-200 dark:border-zinc-600" />
+                                    ) : (
+                                      <span className="text-[10px] text-gray-300 dark:text-zinc-600">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     );
                   })()}
