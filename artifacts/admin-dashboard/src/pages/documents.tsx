@@ -31,8 +31,11 @@ function statusBadgeClass(status: string) {
 
 export default function Documents() {
   const { docs, removeDoc, editDoc } = useDocs();
-  const { isAuthenticated, can } = useAuth();
+  const { isAuthenticated, can, isSalesAgent, currentUser } = useAuth();
   const { toast } = useToast();
+
+  // Sales agents only see documents they prepared
+  const agentName = isSalesAgent ? (currentUser?.fullName ?? "") : "";
   const [, navigate] = useLocation();
 
   // Sync any localStorage-only docs to the API server on mount (rescues pre-sync documents)
@@ -48,12 +51,17 @@ export default function Documents() {
 
   const filteredDocs = useMemo(() => {
     return docs.filter((doc) => {
+      // Sales agents only see their own prepared documents
+      if (isSalesAgent && agentName) {
+        const preparedBy = (doc.sections?.s1 as Record<string, unknown> | undefined)?.preparedBy as string | undefined;
+        if (!preparedBy || preparedBy.toLowerCase() !== agentName.toLowerCase()) return false;
+      }
       const searchContent = (doc.title + doc.clientName + doc.company + doc.industry).toLowerCase();
       const matchesSearch = searchContent.includes(search.toLowerCase());
       const matchesStatus = statusFilter === "All" || doc.status === statusFilter;
       return matchesSearch && matchesStatus;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [docs, search, statusFilter]);
+  }, [docs, search, statusFilter, isSalesAgent, agentName]);
 
   const openDoc = (doc: RequirementDoc) => {
     setSelectedDoc(doc);

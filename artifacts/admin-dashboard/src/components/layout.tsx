@@ -506,7 +506,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   /** Modules a Sales Agent can access (always, regardless of configured HRM role) */
-  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices", "calc_invoice"];
+  const AGENT_ALLOWED_MODULES: ModuleId[] = ["crm_leads", "crm_customers", "sales", "invoices", "calc_invoice", "documents"];
 
   const isModuleAllowed = (moduleId: ModuleId): boolean => {
     // Sales Agent: only their allowed modules

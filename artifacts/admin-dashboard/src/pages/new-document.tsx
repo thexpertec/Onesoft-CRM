@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   FileText, Briefcase, DollarSign, Clock,
@@ -9,7 +9,7 @@ import {
 import RichTextEditor from "@/components/RichTextEditor";
 import { useDocs, useLeads, useCustomers } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getTeamMembers, addTeamMember, getDoc, RequirementDoc, Lead, Customer, LegalDocument, getSettings } from "@/lib/store";
+import { getTeamMembers, addTeamMember, getDoc, RequirementDoc, Lead, Customer, LegalDocument, getSettings, getSalesAgents, getStaff } from "@/lib/store";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 
 const BUSINESS_TYPES = ["Services", "Products", "E-commerce", "Healthcare", "Education", "Finance & Fintech", "Real Estate", "Logistics", "Media & Entertainment", "Non-profit / Charity", "Other"];
@@ -576,7 +576,15 @@ function SectionDivider() {
 }
 
 function PreparedByField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [members, setMembers] = useState<string[]>(() => getTeamMembers());
+  // Pull names from Sales Agents + Staff as the primary source
+  const agents   = useMemo(() => getSalesAgents().filter(a => a.status !== "Inactive").map(a => a.name), []);
+  const staffList= useMemo(() => getStaff().filter(s => s.status !== "Terminated").map(s => s.name), []);
+  // Also allow any manually-added custom names (legacy / fallback)
+  const [customMembers, setCustomMembers] = useState<string[]>(() => {
+    const all  = getTeamMembers();
+    const known = new Set([...getSalesAgents().map(a => a.name), ...getStaff().map(s => s.name)]);
+    return all.filter(m => !known.has(m));
+  });
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -584,8 +592,8 @@ function PreparedByField({ value, onChange }: { value: string; onChange: (v: str
   const handleAdd = () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    const updated = addTeamMember(trimmed);
-    setMembers(updated);
+    addTeamMember(trimmed);
+    setCustomMembers(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
     onChange(trimmed);
     setNewName("");
     setAdding(false);
@@ -610,14 +618,28 @@ function PreparedByField({ value, onChange }: { value: string; onChange: (v: str
             className="w-full appearance-none px-3 py-2.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all pr-9"
           >
             <option value="" disabled>Select team member</option>
-            {members.map((m) => <option key={m} value={m}>{m}</option>)}
+            {agents.length > 0 && (
+              <optgroup label="Sales Agents">
+                {agents.map(n => <option key={`agent-${n}`} value={n}>{n}</option>)}
+              </optgroup>
+            )}
+            {staffList.length > 0 && (
+              <optgroup label="Staff Members">
+                {staffList.map(n => <option key={`staff-${n}`} value={n}>{n}</option>)}
+              </optgroup>
+            )}
+            {customMembers.length > 0 && (
+              <optgroup label="Other">
+                {customMembers.map(n => <option key={`custom-${n}`} value={n}>{n}</option>)}
+              </optgroup>
+            )}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
-          title="Add new team member"
+          title="Add a name not in the list"
           className="flex-shrink-0 h-[42px] w-[42px] flex items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-primary hover:border-primary/50 transition-all"
         >
           {adding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -658,14 +680,17 @@ export default function NewDocument() {
   const { docs, addDoc, editDoc } = useDocs();
   const { leads } = useLeads();
   const { customers } = useCustomers();
-  const { isAuthenticated, can } = useAuth();
+  const { isAuthenticated, can, isSalesAgent, currentUser } = useAuth();
 
   const today = new Date().toISOString().split("T")[0];
 
   const [clientInfoOpen, setClientInfoOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docDate, setDocDate] = useState(today);
-  const [preparedBy, setPreparedBy] = useState("");
+  // Auto-fill "Prepared By" for sales agents on a new document
+  const [preparedBy, setPreparedBy] = useState(() =>
+    (!params.id && isSalesAgent && currentUser?.fullName) ? currentUser.fullName : ""
+  );
   const [selectedClient, setSelectedClient] = useState("");
   const handleSelectClient = (name: string) => { setSelectedClient(name); if (name) setClientInfoOpen(true); };
   const [businessType, setBusinessType] = useState("");
