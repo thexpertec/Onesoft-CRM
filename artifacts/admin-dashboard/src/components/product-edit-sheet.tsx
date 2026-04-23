@@ -398,34 +398,42 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-[12px] font-semibold text-foreground">Barcode / QR</label>
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <ScanLine size={11} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                  USB · BT Scanner Ready
-                </span>
+                {variants.length > 0 ? (
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    <Layers size={11} />
+                    Inactive — managed per variant
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    <ScanLine size={11} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                    USB · BT Scanner Ready
+                  </span>
+                )}
               </div>
               <div className="flex gap-1.5">
                 <Input
                   value={form.barcode}
                   onChange={e => { patch("barcode", e.target.value); resetLookup(); }}
                   onKeyDown={e => { if (e.key === "Enter") handleBarcodeLookup(); }}
-                  placeholder="Point scanner here, or type / generate…"
+                  placeholder={variants.length > 0 ? "Barcode managed per variant — clear variants to edit" : "Point scanner here, or type / generate…"}
+                  disabled={variants.length > 0}
                   className="h-9 text-sm font-mono flex-1 min-w-0"
                 />
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Scan with device camera (webcam)"
-                  onClick={() => setScanOpen(true)}>
+                  onClick={() => setScanOpen(true)} disabled={variants.length > 0}>
                   <Camera size={14} />
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Lookup product info"
-                  onClick={() => handleBarcodeLookup()} disabled={!(form.barcode ?? "").trim() || lookupLoading}>
+                  onClick={() => handleBarcodeLookup()} disabled={!(form.barcode ?? "").trim() || lookupLoading || variants.length > 0}>
                   {lookupLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Auto-generate EAN-13"
-                  onClick={() => { patch("barcode", generateEan13()); resetLookup(); }}>
+                  onClick={() => { patch("barcode", generateEan13()); resetLookup(); }} disabled={variants.length > 0}>
                   <Wand2 size={14} />
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 px-2 shrink-0" title="Print barcode label"
-                  onClick={handlePrintBarcode}>
+                  onClick={handlePrintBarcode} disabled={variants.length > 0}>
                   <Printer size={14} />
                 </Button>
               </div>
@@ -711,73 +719,86 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
               {variants.length > 0 && (
                 <div className="rounded-lg border border-border overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-max">
-                      <span className="w-[130px] shrink-0">Variant Name</span>
-                      <span className="w-[84px] shrink-0">SKU</span>
-                      <span className="w-[104px] shrink-0">Barcode</span>
-                      <span className="w-[72px] shrink-0 text-right">Purchase ({sym})</span>
-                      <span className="w-[72px] shrink-0 text-right">Retail ({sym})</span>
-                      <span className="w-[80px] shrink-0">Image</span>
-                    </div>
-                    <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-muted/50 border-b border-border">
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-2 w-[17%]">Variant Name</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[11%]">SKU</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[30%]">Barcode</th>
+                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[11%]">Purchase ({sym})</th>
+                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[11%]">Retail ({sym})</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[20%]">Image</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
                       {variants.map(v => {
                         const label = Object.values(v.attributes)[0] ?? "—";
                         return (
-                          <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors min-w-max">
-                            <span className="w-[130px] shrink-0 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
-                              {label}
-                            </span>
-                            <Input
-                              value={v.sku ?? ""}
-                              onChange={e => patchVariantSku(v.id, e.target.value)}
-                              placeholder="SKU…"
-                              className="h-7 w-[84px] shrink-0 text-xs font-mono px-2"
-                            />
-                            <Input
-                              value={v.barcode ?? ""}
-                              onChange={e => patchVariantBarcode(v.id, e.target.value)}
-                              placeholder="Barcode…"
-                              className="h-7 w-[104px] shrink-0 text-xs font-mono px-2"
-                            />
-                            <Input
-                              type="number" min="0" step="0.01"
-                              value={v.purchasePrice ?? ""}
-                              onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
-                              placeholder={form.purchasePrice || "0.00"}
-                              className="h-7 w-[72px] shrink-0 text-xs tabular-nums text-right px-2"
-                            />
-                            <Input
-                              type="number" min="0" step="0.01"
-                              value={v.price}
-                              onChange={e => patchVariantPrice(v.id, e.target.value)}
-                              placeholder={form.price || "0.00"}
-                              className="h-7 w-[72px] shrink-0 text-xs tabular-nums text-right px-2"
-                            />
-                            <div className="flex items-center gap-1 w-[80px] shrink-0">
-                              <button type="button"
-                                onClick={() => setPickerVariantId(v.id)}
-                                className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 flex-1 min-w-0">
-                                {v.image ? (
-                                  <img src={v.image} alt={label}
-                                    className="w-5 h-5 rounded object-cover border border-border shrink-0" />
-                                ) : (
-                                  <ImageIcon size={11} className="shrink-0 opacity-50" />
-                                )}
-                                <span className="truncate">{v.image ? "Change" : "Image…"}</span>
-                              </button>
-                              {v.image && (
-                                <button type="button" onClick={() => patchVariantImage(v.id, "")}
-                                  className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
-                                  <ImageIcon size={9} className="opacity-40" />
+                          <tr key={v.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-1.5">
+                              <span className="block text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
+                                {label}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Input value={v.sku ?? ""} onChange={e => patchVariantSku(v.id, e.target.value)}
+                                placeholder="SKU…" className="h-7 w-full text-xs font-mono px-2" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <Input value={v.barcode ?? ""} onChange={e => patchVariantBarcode(v.id, e.target.value)}
+                                  placeholder="Point scanner or generate…"
+                                  className="h-7 flex-1 min-w-0 text-xs font-mono px-2" />
+                                <button type="button" title="Auto-generate EAN-13"
+                                  onClick={() => patchVariantBarcode(v.id, generateEan13())}
+                                  className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 text-muted-foreground hover:text-blue-600 transition-colors">
+                                  <Wand2 size={11} />
                                 </button>
-                              )}
-                            </div>
-                          </div>
+                                <button type="button" title="Print barcode label"
+                                  onClick={() => printBarcodeLabels([{ name: `${form.name || "Variant"} – ${label}`, barcode: v.barcode || generateEan13(), sku: v.sku || undefined, price: v.price || undefined }])}
+                                  className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition-colors">
+                                  <Printer size={11} />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Input type="number" min="0" step="0.01"
+                                value={v.purchasePrice ?? ""}
+                                onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
+                                placeholder={form.purchasePrice || "0.00"}
+                                className="h-7 w-full text-xs tabular-nums text-right px-2" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Input type="number" min="0" step="0.01"
+                                value={v.price}
+                                onChange={e => patchVariantPrice(v.id, e.target.value)}
+                                placeholder={form.price || "0.00"}
+                                className="h-7 w-full text-xs tabular-nums text-right px-2" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <button type="button" onClick={() => setPickerVariantId(v.id)}
+                                  className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 flex-1 min-w-0">
+                                  {v.image ? (
+                                    <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover border border-border shrink-0" />
+                                  ) : (
+                                    <ImageIcon size={11} className="shrink-0 opacity-50" />
+                                  )}
+                                  <span className="truncate">{v.image ? "Change" : "Image…"}</span>
+                                </button>
+                                {v.image && (
+                                  <button type="button" onClick={() => patchVariantImage(v.id, "")}
+                                    className="w-5 h-5 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors">
+                                    <X size={9} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         );
                       })}
-                    </div>
-                  </div>
+                    </tbody>
+                  </table>
                 </div>
               )}
 
