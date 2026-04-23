@@ -1548,28 +1548,35 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                               </div>
                             </div>
 
-                            {/* ── Row 2: current catalogue prices (read-only) ── */}
+                            {/* ── Row 2: current catalogue prices (read-only, variant-aware) ── */}
                             <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 pb-2 items-center bg-gray-50/60 dark:bg-zinc-800/30">
-                              <div className="text-[10px] text-gray-400 italic">Current in catalogue</div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-gray-400 italic">
+                                  {variant ? "Current in catalogue — variant" : "Current in catalogue"}
+                                </p>
+                                {variant && it.variantLabel && (
+                                  <p className="text-[9px] text-indigo-400 truncate">{it.variantLabel}</p>
+                                )}
+                              </div>
                               <div/><div/><div/>
                               {/* Current Cost Price */}
                               <div className="px-1.5 text-center">
                                 <span className="text-[11px] font-mono text-amber-600 dark:text-amber-400">
-                                  {prod?.costPrice ? `${sym}${parseFloat(prod.costPrice).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                  {ep.cost ? `${sym}${parseFloat(ep.cost).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
                                 <p className="text-[9px] text-gray-400 leading-tight">Cost</p>
                               </div>
                               {/* Current Retail Price */}
                               <div className="px-1.5 text-center">
                                 <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                                  {prod?.price ? `${sym}${parseFloat(prod.price).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                  {ep.retail ? `${sym}${parseFloat(ep.retail).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
                                 <p className="text-[9px] text-gray-400 leading-tight">Retail</p>
                               </div>
                               {/* Current Wholesale Price */}
                               <div className="px-1.5 text-center">
                                 <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">
-                                  {prod?.wholesalePrice ? `${sym}${parseFloat(prod.wholesalePrice).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                  {ep.wholesale ? `${sym}${parseFloat(ep.wholesale).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
                                 <p className="text-[9px] text-gray-400 leading-tight">Wholesale</p>
                               </div>
