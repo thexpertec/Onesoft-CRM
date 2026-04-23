@@ -1708,17 +1708,21 @@ export function InvoiceFormPage() {
     if (status === "Paid" || status === "Partial") {
       if (!inv.paidAt) updates.paidAt = new Date().toISOString();
     }
-    if ((status === "Paid" || status === "Partial") && !inv.stockDeducted) {
-      if (inv.invoiceType === "purchase") {
-        receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
-        // Post inventory JE: DR Inventory, CR AP
-        const _pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
-          + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
-        autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal });
-        updates.stockReceived = true;   // keep in sync so the button shows ✓
-      } else {
-        deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
-      }
+    // Purchase invoices: receive stock only when payment is confirmed
+    if (inv.invoiceType === "purchase" && (status === "Paid" || status === "Partial") && !inv.stockDeducted) {
+      receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
+      // Post inventory JE: DR Inventory, CR AP
+      const _pTotal = inv.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+        + (parseFloat(inv.shippingFee)||0) + (parseFloat(inv.handlingFee)||0);
+      autoPostPurchaseJE({ poNumber: inv.invoiceNumber, supplier: inv.customer, date: new Date().toISOString().slice(0,10), total: _pTotal });
+      updates.stockReceived = true;   // keep in sync so the button shows ✓
+      updates.stockDeducted = true;
+    }
+    // Sale invoices: deduct stock when goods are dispatched — i.e. any active status (Sent / Overdue / Paid / Partial)
+    if (inv.invoiceType !== "purchase" &&
+        (status === "Sent" || status === "Overdue" || status === "Paid" || status === "Partial") &&
+        !inv.stockDeducted) {
+      deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
       updates.stockDeducted = true;
     }
     if ((status === "Draft" || status === "Cancelled") && inv.stockDeducted) {
