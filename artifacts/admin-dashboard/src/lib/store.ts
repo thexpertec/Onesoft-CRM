@@ -4446,7 +4446,6 @@ export function seedDefaultCoaAccounts(): void {
   let nextInvCode = invChildren.reduce((max, a) => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 1140) + 1;
 
   let categoryLedgersAdded = 0;
-  const productLedgersAdded = 0;
 
   for (const cat of uniqueCategories) {
     const slug   = _catSlug(cat);
@@ -4526,7 +4525,7 @@ export function seedDefaultCoaAccounts(): void {
     console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact ledger(s) — customers/suppliers no longer exist`);
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0 || orphansRemoved > 0 || contactOrphansRemoved > 0) {
+  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || categoryLedgersAdded > 0 || legacyRemoved > 0 || orphansRemoved > 0 || contactOrphansRemoved > 0) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
     _apiWrite(sk, workingAccounts);
