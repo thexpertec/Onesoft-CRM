@@ -1026,8 +1026,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                   {/* Variant picker — pill row, shown when the selected product has variants */}
                   {(() => {
-                    const variants = variantsForItem(item);
-                    if (!variants || variants.length === 0) return null;
+                    const allVariants = variantsForItem(item);
+                    if (!allVariants || allVariants.length === 0) return null;
+                    // Variant IDs already claimed by OTHER rows of the same product
+                    const takenByOthers = new Set(
+                      items
+                        .filter(i => i.id !== item.id && i.productId === item.productId && i.variantId)
+                        .map(i => i.variantId as string)
+                    );
+                    // Show: this item's own selected variant (so it appears highlighted) + any not yet taken
+                    const visibleVariants = allVariants.filter(v => v.id === item.variantId || !takenByOthers.has(v.id));
                     const noneSelected = !item.variantId;
                     return (
                       <div className={`mx-4 mb-2 mt-0.5 flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors ${
@@ -1040,26 +1048,32 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             Select variant:
                           </span>
                         )}
-                        {variants.map(v => {
-                          const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
-                          const isSelected = item.variantId === v.id;
-                          const price = getVariantPrice(v);
-                          return (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => { if (!isSelected) pickVariant(item.id, v); }}
-                              title={price ? `${sym}${Number(price).toFixed(dp)}` : undefined}
-                              className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors select-none ${
-                                isSelected
-                                  ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500 cursor-default"
-                                  : "bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
+                        {visibleVariants.length === 0 ? (
+                          <span className="text-[11px] text-gray-400 dark:text-zinc-500 italic">
+                            All variants already added on other lines
+                          </span>
+                        ) : (
+                          visibleVariants.map(v => {
+                            const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
+                            const isSelected = item.variantId === v.id;
+                            const price = getVariantPrice(v);
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => { if (!isSelected) pickVariant(item.id, v); }}
+                                title={price ? `${sym}${Number(price).toFixed(dp)}` : undefined}
+                                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors select-none ${
+                                  isSelected
+                                    ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500 cursor-default"
+                                    : "bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     );
                   })()}
