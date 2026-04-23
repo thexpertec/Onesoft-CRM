@@ -1403,17 +1403,30 @@ function _saveCoaAccounts(accounts: Account[]): void {
   _apiWrite(sk, accounts);
 }
 
-function _upsertProductLedger(
-  product: Product,
+/** Stable URL-safe slug from a category name. */
+function _catSlug(category: string): string {
+  return (category || "uncategorised")
+    .trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "uncategorised";
+}
+
+/**
+ * Upsert a single category-level COA ledger.
+ * All products sharing the same category share the same ledger.
+ */
+function _upsertCategoryLedger(
+  category: string,
   ledgerId: string,
   parentSysId: string,
   baseCode: number,
-  label: string,           // " | Revenue" or " | Purchase"
+  label: string,
   head: AccountHead,
   subType: string,
 ): void {
   const accounts = _coaAccounts();
-  const name = `${product.name} | ${label}`;
+  const displayName = category.trim() || "Uncategorised";
+  const name = `${displayName} | ${label}`;
   const idx = accounts.findIndex(a => a.id === ledgerId);
   const now = new Date().toISOString();
   if (idx === -1) {
@@ -1424,38 +1437,43 @@ function _upsertProductLedger(
     accounts.push({
       id: ledgerId, code: String(nextCode), name,
       head, accountType: "Ledger", parentId: parentSysId, subType,
-      description: `${label} account for ${product.name}`,
+      description: `${label} account for the ${displayName} category`,
       openingBalance: 0, paymentType: null, isActive: true,
       createdAt: now, updatedAt: now,
     });
+    _saveCoaAccounts(accounts);
   } else if (accounts[idx].name !== name) {
-    accounts[idx] = { ...accounts[idx], name, description: `${label} account for ${product.name}`, updatedAt: now };
-  } else {
-    return;
+    accounts[idx] = {
+      ...accounts[idx], name,
+      description: `${label} account for the ${displayName} category`,
+      updatedAt: now,
+    };
+    _saveCoaAccounts(accounts);
   }
-  _saveCoaAccounts(accounts);
 }
 
-function _removeProductLedger(ledgerId: string): void {
-  const accounts = _coaAccounts();
-  const filtered = accounts.filter(a => a.id !== ledgerId);
-  if (filtered.length !== accounts.length) _saveCoaAccounts(filtered);
-}
-
-const _upsertProductSalesLedger = (product: Product) =>
-  _upsertProductLedger(product, `sr-prod-${product.id}`, SYS_ACCS.SALES_REVENUE, 3100, "Revenue", "Revenue / Income", "Sales");
-
-const _upsertProductPurchaseLedger = (product: Product) =>
-  _upsertProductLedger(product, `pur-prod-${product.id}`, SYS_ACCS.PURCHASE_EXP, 4600, "Purchase", "Expense", "Purchases");
-
+/**
+ * Sync the three category-level ledgers for a product:
+ *   Category | Revenue   → under Sales Revenue (3100)
+ *   Category | Purchase  → under Purchases (4600)
+ *   Category | Inventory → under Inventory / Stock (1140)
+ */
 function _syncProductLedgers(product: Product): void {
-  _upsertProductSalesLedger(product);
-  _upsertProductPurchaseLedger(product);
+  const cat  = product.category?.trim() || "Uncategorised";
+  const slug = _catSlug(cat);
+  _upsertCategoryLedger(cat, `sr-cat-${slug}`,  SYS_ACCS.SALES_REVENUE, 3100, "Revenue",   "Revenue / Income", "Sales");
+  _upsertCategoryLedger(cat, `pur-cat-${slug}`, SYS_ACCS.PURCHASE_EXP,  4600, "Purchase",  "Expense",          "Purchases");
+  _upsertCategoryLedger(cat, `inv-cat-${slug}`, SYS_ACCS.INVENTORY,     1140, "Inventory", "Assets",           "Inventory");
 }
 
-function _removeProductLedgers(productId: string): void {
-  _removeProductLedger(`sr-prod-${productId}`);
-  _removeProductLedger(`pur-prod-${productId}`);
+/**
+ * Category-based ledgers are shared across all products in a category.
+ * We do NOT remove them when a single product is deleted — the category
+ * ledger may still be referenced by other products.
+ * Orphan cleanup is handled by initTenantCOA if no products use the category.
+ */
+function _removeProductLedgers(_productId: string): void {
+  // intentional no-op: category ledgers outlive individual products
 }
 
 /** Generate a random EAN-13 barcode (12 random digits + check digit). */
@@ -4396,36 +4414,98 @@ export function seedDefaultCoaAccounts(): void {
     };
   }
 
-  // ── Sync per-product Sales Revenue & Purchase ledgers ─────────────────────────
-  // Each product gets a "| Revenue" ledger under Sales Revenue (3100)
-  // and a "| Purchase" ledger under Purchases (4600).
+  // ── Sync per-category COA ledgers ────────────────────────────────────────────
+  // Each unique product category gets three shared ledgers:
+  //   Category | Revenue   → Sales Revenue (3100)
+  //   Category | Purchase  → Purchases (4600)
+  //   Category | Inventory → Inventory / Stock (1140)
   const products = getProducts();
   const existingWorkingIds = new Set(workingAccounts.map(a => a.id));
 
+  // ── Migrate: remove all old per-product ledgers (sr-prod-*, pur-prod-*, inv-prod-*)
+  // These are superseded by per-category ledgers. Remove them all.
+  const LEGACY_PROD_PREFIXES = ["sr-prod-", "pur-prod-", "inv-prod-"];
+  const beforeLegacyClean = workingAccounts.length;
+  workingAccounts = workingAccounts.filter(
+    a => !LEGACY_PROD_PREFIXES.some(pfx => a.id.startsWith(pfx))
+  );
+  const legacyRemoved = beforeLegacyClean - workingAccounts.length;
+  if (legacyRemoved > 0) {
+    console.info(`[COA] Migrated: removed ${legacyRemoved} old per-product ledger(s) → replaced by per-category ledgers`);
+  }
+
+  // Collect unique categories from all products
+  const uniqueCategories = [...new Set(products.map(p => p.category?.trim() || "Uncategorised"))];
+
   const srChildren  = workingAccounts.filter(a => a.parentId === SYS_ACCS.SALES_REVENUE);
   const purChildren = workingAccounts.filter(a => a.parentId === SYS_ACCS.PURCHASE_EXP);
+  const invChildren = workingAccounts.filter(a => a.parentId === SYS_ACCS.INVENTORY);
 
   let nextSrCode  = srChildren.reduce((max, a)  => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 3100) + 1;
   let nextPurCode = purChildren.reduce((max, a) => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 4600) + 1;
+  let nextInvCode = invChildren.reduce((max, a) => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 1140) + 1;
 
-  let productLedgersAdded = 0;
+  let categoryLedgersAdded = 0;
+  const productLedgersAdded = 0;
 
-  // ── Remove orphaned per-product ledgers ────────────────────────────────────
-  // Any sr-prod-*, pur-prod-*, or inv-prod-* account whose product no longer
-  // exists must be deleted from the COA.  This is the authoritative cleanup:
-  // it runs on every initTenantCOA call and ensures the server copy is correct.
-  const productIdSet = new Set(products.map(p => p.id));
-  const PROD_PREFIXES = ["sr-prod-", "pur-prod-", "inv-prod-"];
-  const beforeClean = workingAccounts.length;
+  for (const cat of uniqueCategories) {
+    const slug   = _catSlug(cat);
+    const srId   = `sr-cat-${slug}`;
+    const purId  = `pur-cat-${slug}`;
+    const invId  = `inv-cat-${slug}`;
+    const srName  = `${cat} | Revenue`;
+    const purName = `${cat} | Purchase`;
+    const invName = `${cat} | Inventory`;
+
+    if (!existingWorkingIds.has(srId)) {
+      workingAccounts.push({
+        id: srId, code: String(nextSrCode++), name: srName,
+        head: "Revenue / Income", accountType: "Ledger",
+        parentId: SYS_ACCS.SALES_REVENUE, subType: "Sales",
+        description: `Revenue account for the ${cat} category`,
+        openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
+      });
+      categoryLedgersAdded++;
+    }
+
+    if (!existingWorkingIds.has(purId)) {
+      workingAccounts.push({
+        id: purId, code: String(nextPurCode++), name: purName,
+        head: "Expense", accountType: "Ledger",
+        parentId: SYS_ACCS.PURCHASE_EXP, subType: "Purchases",
+        description: `Purchase account for the ${cat} category`,
+        openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
+      });
+      categoryLedgersAdded++;
+    }
+
+    if (!existingWorkingIds.has(invId)) {
+      workingAccounts.push({
+        id: invId, code: String(nextInvCode++), name: invName,
+        head: "Assets", accountType: "Ledger",
+        parentId: SYS_ACCS.INVENTORY, subType: "Inventory",
+        description: `Inventory account for the ${cat} category`,
+        openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
+      });
+      categoryLedgersAdded++;
+    }
+  }
+
+  // ── Orphaned category ledger cleanup ──────────────────────────────────────
+  // Remove sr-cat-*, pur-cat-*, inv-cat-* entries whose category no longer
+  // exists in any product.
+  const activeCatSlugs = new Set(uniqueCategories.map(c => _catSlug(c)));
+  const CAT_PREFIXES = ["sr-cat-", "pur-cat-", "inv-cat-"];
+  const beforeCatClean = workingAccounts.length;
   workingAccounts = workingAccounts.filter(a => {
-    const matchedPrefix = PROD_PREFIXES.find(pfx => a.id.startsWith(pfx));
-    if (!matchedPrefix) return true; // not a product ledger — keep
-    const prodId = a.id.slice(matchedPrefix.length);
-    return productIdSet.has(prodId); // keep only if product still exists
+    const pfx = CAT_PREFIXES.find(p => a.id.startsWith(p));
+    if (!pfx) return true;
+    const slug = a.id.slice(pfx.length);
+    return activeCatSlugs.has(slug);
   });
-  const orphansRemoved = beforeClean - workingAccounts.length;
+  const orphansRemoved = beforeCatClean - workingAccounts.length;
   if (orphansRemoved > 0) {
-    console.info(`[COA] Removed ${orphansRemoved} orphaned product ledger(s) — products no longer exist`);
+    console.info(`[COA] Removed ${orphansRemoved} orphaned category ledger(s) — no products use those categories`);
   }
 
   // ── Orphaned contact ledger cleanup ─────────────────────────────────────────
@@ -4444,43 +4524,6 @@ export function seedDefaultCoaAccounts(): void {
   const contactOrphansRemoved = beforeContactClean - workingAccounts.length;
   if (contactOrphansRemoved > 0) {
     console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact ledger(s) — customers/suppliers no longer exist`);
-  }
-
-  // Rename any old sr-prod-* ledgers that were named without "| Revenue" suffix
-  workingAccounts = workingAccounts.map(a => {
-    if (a.id.startsWith("sr-prod-") && !a.name.endsWith("| Revenue")) {
-      return { ...a, name: `${a.name} | Revenue`, description: `Revenue account for ${a.name}`, updatedAt: now };
-    }
-    return a;
-  });
-
-  for (const p of products) {
-    const srId  = `sr-prod-${p.id}`;
-    const purId = `pur-prod-${p.id}`;
-    const srName  = `${p.name} | Revenue`;
-    const purName = `${p.name} | Purchase`;
-
-    if (!existingWorkingIds.has(srId)) {
-      workingAccounts.push({
-        id: srId, code: String(nextSrCode++), name: srName,
-        head: "Revenue / Income", accountType: "Ledger",
-        parentId: SYS_ACCS.SALES_REVENUE, subType: "Sales",
-        description: `Revenue account for ${p.name}`,
-        openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
-      });
-      productLedgersAdded++;
-    }
-
-    if (!existingWorkingIds.has(purId)) {
-      workingAccounts.push({
-        id: purId, code: String(nextPurCode++), name: purName,
-        head: "Expense", accountType: "Ledger",
-        parentId: SYS_ACCS.PURCHASE_EXP, subType: "Purchases",
-        description: `Purchase account for ${p.name}`,
-        openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
-      });
-      productLedgersAdded++;
-    }
   }
 
   if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || productLedgersAdded > 0 || orphansRemoved > 0 || contactOrphansRemoved > 0) {
