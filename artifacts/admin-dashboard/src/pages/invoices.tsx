@@ -1883,7 +1883,7 @@ export function InvoiceFormPage() {
     (invoice?.invoiceType as "sale" | "purchase" | undefined) ??
     (searchParams.get("type") === "purchase" ? "purchase" : "sale");
 
-  /** Helper — build per-category purchase totals from invoice items */
+  /** Build per-category purchase cost totals from items */
   const buildPurchaseCatLines = (items: Invoice["items"]) => {
     const prods = getProducts();
     const map   = new Map<string, number>();
@@ -1895,20 +1895,65 @@ export function InvoiceFormPage() {
     return Array.from(map.entries()).map(([category, total]) => ({ category, total }));
   };
 
+  /** Build per-category sale revenue + cost breakdown from items */
+  const buildSaleCatLines = (items: Invoice["items"]) => {
+    const prods = getProducts();
+    const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+    for (const it of items) {
+      const prod    = prods.find(p => p.sku === it.sku || p.name === it.productName);
+      const cat     = prod?.category?.trim() || "Uncategorised";
+      const qty     = parseFloat(it.qty) || 0;
+      const price   = parseFloat(it.unitPrice) || 0;
+      const disc    = parseFloat((it as { discountPct?: string }).discountPct || "0") / 100;
+      const lineNet = qty * price * (1 - disc);
+      const cost    = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+      const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
+      entry.subtotal  += lineNet;
+      entry.costTotal += cost;
+      catMap.set(cat, entry);
+    }
+    return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
+  };
+
   /** Receive stock + post purchase JE for a purchase invoice — idempotent (guarded by stockDeducted) */
   const receivePurchaseStock = useCallback((inv: Invoice) => {
-    if (inv.stockDeducted) return null;           // already received — skip
+    if (inv.stockDeducted) return null;
     if (inv.invoiceType !== "purchase") return null;
     receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
     const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
       + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
     return autoPostPurchaseJE({
-      poNumber:      inv.invoiceNumber,
-      supplier:      inv.customer,
-      date:          new Date().toISOString().slice(0, 10),
-      total,
+      poNumber: inv.invoiceNumber, supplier: inv.customer,
+      date: new Date().toISOString().slice(0, 10), total,
       categoryLines: buildPurchaseCatLines(inv.items),
     });
+  }, []);
+
+  /** Deduct stock + post sale JE for a sale invoice — idempotent (guarded by jeId / stockDeducted) */
+  const postSaleJE = useCallback((inv: Invoice, extraUpdates: Partial<Invoice>) => {
+    if (inv.invoiceType === "purchase") return;
+    const activeStatuses: string[] = ["Sent", "Overdue", "Paid", "Partial"];
+    if (!activeStatuses.includes(inv.status as string)) return;
+    if (!inv.stockDeducted) {
+      deductStockForSale(inv.items, inv.invoiceNumber, "Invoiced");
+      extraUpdates.stockDeducted = true;
+    }
+    if (!inv.jeId) {
+      const catLines = buildSaleCatLines(inv.items);
+      const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
+        inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee,
+      );
+      const je = autoPostSaleJE({
+        source: "Invoice", reference: inv.invoiceNumber,
+        customer: inv.customer || "Customer",
+        date: inv.invoiceDate || new Date().toISOString().slice(0, 10),
+        paymentMethod: inv.paymentMethod,
+        subtotal, taxAmount, grandTotal,
+        costTotal: catLines.reduce((s, c) => s + c.costTotal, 0),
+        categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+      });
+      if (je) extraUpdates.jeId = je.id;
+    }
   }, []);
 
   const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
@@ -1918,32 +1963,45 @@ export function InvoiceFormPage() {
     if (id) {
       const existing = getInvoices().find(i => i.id === id);
       const wasReceived = existing?.stockDeducted;
+      const updates: Partial<Invoice> = { ...data };
 
-      // Goods-receipt trigger: saleStatus changed to "Received" for the first time
-      if (isPurchase && isReceived && !wasReceived) {
-        const tempInv = { ...existing!, ...data, id };
-        const je = receivePurchaseStock(tempInv);
-        editInvoice(id, { ...data, stockReceived: true, stockDeducted: true, jeId: je?.id ?? existing?.jeId });
+      if (isPurchase) {
+        // Purchase: trigger goods-receipt when saleStatus first becomes "Received"
+        if (isReceived && !wasReceived) {
+          const tempInv = { ...existing!, ...data, id } as Invoice;
+          const je = receivePurchaseStock(tempInv);
+          updates.stockReceived = true;
+          updates.stockDeducted = true;
+          if (je) updates.jeId = je.id;
+        }
       } else {
-        editInvoice(id, { ...data });
+        // Sale: post JE + deduct stock if status is active and JE not yet posted
+        const tempInv = { ...existing!, ...data, id } as Invoice;
+        postSaleJE(tempInv, updates);
       }
+
+      editInvoice(id, updates);
       toast({ title: "Invoice updated" });
-      const backUrl = data.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
-      navigate(backUrl);
+      navigate(isPurchase ? "/invoices?type=purchase" : "/invoices");
     } else {
-      // New invoice — create first, then receive stock if already "Received"
+      // New invoice — create first, then apply JE / stock logic
       const inv = addInvoice(data);
+      const extraUpdates: Partial<Invoice> = {};
+
       if (isPurchase && isReceived) {
         const je = receivePurchaseStock(inv);
-        if (je || !inv.stockDeducted) {
-          editInvoice(inv.id, { stockReceived: true, stockDeducted: true, jeId: je?.id });
-        }
+        extraUpdates.stockReceived = true;
+        extraUpdates.stockDeducted = true;
+        if (je) extraUpdates.jeId = je.id;
+      } else if (!isPurchase) {
+        postSaleJE(inv, extraUpdates);
       }
+
+      if (Object.keys(extraUpdates).length > 0) editInvoice(inv.id, extraUpdates);
       toast({ title: "Invoice created", description: inv.invoiceNumber });
-      const backUrl = inv.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
-      navigate(backUrl);
+      navigate(isPurchase ? "/invoices?type=purchase" : "/invoices");
     }
-  }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock]);
+  }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock, postSaleJE]);
 
   const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
     // Read directly from localStorage for the freshest state — React state may be stale

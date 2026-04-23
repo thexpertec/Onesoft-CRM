@@ -601,7 +601,9 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                {vtype === "receipt" ? "Received Against (AR / Revenue Accounts)" : "Paid For (AP / Expense Accounts)"}
+                {vtype === "receipt"
+                  ? "Clearing Against — Receivables / Revenue (Credit Side)"
+                  : "Paid For — Payables / Expenses (Debit Side)"}
               </label>
               {!isPosted && (
                 <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
