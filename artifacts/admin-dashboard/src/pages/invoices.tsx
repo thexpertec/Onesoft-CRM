@@ -1821,7 +1821,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           onConfirm={(record) => {
             const newHistory = [...savedHistory, record];
             const newPaid = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-            const { total: invTotal } = computeTotals(invoice.items, form.taxRate, newPaid.toFixed(dp), form.shippingFee, form.handlingFee);
+            const { total: invTotal } = computeTotals(invoice.items, effectiveTaxRate, newPaid.toFixed(dp), form.shippingFee, form.handlingFee);
             const newStatus: InvoiceStatus = newPaid >= invTotal - 0.005 ? "Paid" : "Partial";
             setPayHist(newHistory);
             setPayInput(newPaid.toFixed(dp));
@@ -2294,9 +2294,9 @@ export default function InvoicesPage() {
                     { header: isPurchase ? "Supplier" : "Customer", key: "customer", width: 24 },
                     { header: "Status",         key: "status",        width: 14 },
                     { header: "Payment",        key: "paymentMethod", width: 16 },
-                    { header: "Total (£)",      key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).total.toFixed(dp), width: 14 },
+                    { header: "Total (£)",      key: "id",            getValue: r => computeTotals(r.items, r.invoiceType === "purchase" ? "0" : r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).total.toFixed(dp), width: 14 },
                     { header: "Paid (£)",       key: "amountPaid",    width: 12 },
-                    { header: "Balance (£)",    key: "id",            getValue: r => computeTotals(r.items, r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).balance.toFixed(dp), width: 14 },
+                    { header: "Balance (£)",    key: "id",            getValue: r => computeTotals(r.items, r.invoiceType === "purchase" ? "0" : r.taxRate, r.amountPaid, r.shippingFee, r.handlingFee).balance.toFixed(dp), width: 14 },
                   ]
                 );
               }}
@@ -2408,7 +2408,10 @@ export default function InvoicesPage() {
 
             {/* Rows */}
             {filtered.map(inv => {
-              const { total, paid } = computeTotals(inv.items, inv.taxRate, inv.amountPaid);
+              // Purchase invoices: item prices are entered as-is (tax NOT added on top).
+              // The form uses effectiveTaxRate="0" for purchases — the list must match.
+              const listTaxRate = inv.invoiceType === "purchase" ? "0" : (inv.taxRate ?? "0");
+              const { total, paid } = computeTotals(inv.items, listTaxRate, inv.amountPaid, inv.shippingFee, inv.handlingFee);
               const overdue = isOverdue(inv);
               const inStock = !!(inv.stockReceived || inv.stockDeducted);
               return (
