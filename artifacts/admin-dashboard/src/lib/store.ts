@@ -1257,6 +1257,7 @@ export type ProductVariant = {
   id: string;
   attributes: Record<string, string>; // e.g. { "Color": "Red" }
   price: string;
+  purchasePrice?: string;
   image?: string;
   sku?: string;
   barcode?: string;

@@ -145,14 +145,11 @@ export default function ProductNewPage() {
     setVariants([]);
   }, []);
 
-  const patchVariantPrice = (id: string, price: string) =>
-    setVariants(prev => prev.map(v => v.id === id ? { ...v, price } : v));
-
-  const patchVariantSku = (id: string, sku: string) =>
-    setVariants(prev => prev.map(v => v.id === id ? { ...v, sku } : v));
-
-  const patchVariantImage = (id: string, image: string) =>
-    setVariants(prev => prev.map(v => v.id === id ? { ...v, image } : v));
+  const patchVariantPrice        = (id: string, price: string)        => setVariants(prev => prev.map(v => v.id === id ? { ...v, price }        : v));
+  const patchVariantPurchasePrice= (id: string, purchasePrice: string) => setVariants(prev => prev.map(v => v.id === id ? { ...v, purchasePrice } : v));
+  const patchVariantSku          = (id: string, sku: string)           => setVariants(prev => prev.map(v => v.id === id ? { ...v, sku }           : v));
+  const patchVariantBarcode      = (id: string, barcode: string)       => setVariants(prev => prev.map(v => v.id === id ? { ...v, barcode }       : v));
+  const patchVariantImage        = (id: string, image: string)         => setVariants(prev => prev.map(v => v.id === id ? { ...v, image }         : v));
 
   const subCatOptions = useMemo(() => {
     const allCats = getProductCategories();
@@ -652,55 +649,72 @@ export default function ProductNewPage() {
 
               {variants.length > 0 && (
                 <div className="rounded-lg border border-border overflow-hidden">
-                  <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    <span className="flex-1">Name</span>
-                    <span className="w-[110px] shrink-0">SKU</span>
-                    <span className="w-[82px] shrink-0 text-right">Price ({sym})</span>
-                    <span className="w-[90px] shrink-0">Image</span>
-                  </div>
-                  <div className="divide-y divide-border max-h-72 overflow-y-auto">
-                    {variants.map(v => {
-                      const label = Object.values(v.attributes)[0] ?? "—";
-                      return (
-                        <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors">
-                          <span className="flex-1 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
-                            {label}
-                          </span>
-                          <Input
-                            value={v.sku ?? ""}
-                            onChange={e => patchVariantSku(v.id, e.target.value)}
-                            placeholder="SKU…"
-                            className="h-7 w-[110px] shrink-0 text-xs font-mono px-2"
-                          />
-                          <Input
-                            type="number" min="0" step="0.01"
-                            value={v.price}
-                            onChange={e => patchVariantPrice(v.id, e.target.value)}
-                            placeholder={form.price || "0.00"}
-                            className="h-7 w-[82px] shrink-0 text-xs tabular-nums text-right px-2"
-                          />
-                          <div className="flex items-center gap-1.5 w-[90px] shrink-0">
-                            <button type="button"
-                              onClick={() => setPickerVariantId(v.id)}
-                              className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 w-full">
-                              {v.image ? (
-                                <img src={v.image} alt={label}
-                                  className="w-5 h-5 rounded object-cover border border-border shrink-0" />
-                              ) : (
-                                <ImageIcon size={11} className="shrink-0 opacity-50" />
-                              )}
-                              <span className="truncate">{v.image ? "Change" : "Image…"}</span>
-                            </button>
-                            {v.image && (
-                              <button type="button" onClick={() => patchVariantImage(v.id, "")}
-                                className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
-                                <ImageIcon size={9} className="opacity-40" />
+                  <div className="overflow-x-auto">
+                    <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-max">
+                      <span className="w-[140px] shrink-0">Variant Name</span>
+                      <span className="w-[88px] shrink-0">SKU</span>
+                      <span className="w-[108px] shrink-0">Barcode</span>
+                      <span className="w-[76px] shrink-0 text-right">Purchase ({sym})</span>
+                      <span className="w-[76px] shrink-0 text-right">Retail ({sym})</span>
+                      <span className="w-[80px] shrink-0">Image</span>
+                    </div>
+                    <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                      {variants.map(v => {
+                        const label = Object.values(v.attributes)[0] ?? "—";
+                        return (
+                          <div key={v.id} className="flex items-center px-3 py-1.5 gap-2 hover:bg-muted/30 transition-colors min-w-max">
+                            <span className="w-[140px] shrink-0 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
+                              {label}
+                            </span>
+                            <Input
+                              value={v.sku ?? ""}
+                              onChange={e => patchVariantSku(v.id, e.target.value)}
+                              placeholder="SKU…"
+                              className="h-7 w-[88px] shrink-0 text-xs font-mono px-2"
+                            />
+                            <Input
+                              value={v.barcode ?? ""}
+                              onChange={e => patchVariantBarcode(v.id, e.target.value)}
+                              placeholder="Barcode…"
+                              className="h-7 w-[108px] shrink-0 text-xs font-mono px-2"
+                            />
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={v.purchasePrice ?? ""}
+                              onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
+                              placeholder={form.purchasePrice || "0.00"}
+                              className="h-7 w-[76px] shrink-0 text-xs tabular-nums text-right px-2"
+                            />
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={v.price}
+                              onChange={e => patchVariantPrice(v.id, e.target.value)}
+                              placeholder={form.price || "0.00"}
+                              className="h-7 w-[76px] shrink-0 text-xs tabular-nums text-right px-2"
+                            />
+                            <div className="flex items-center gap-1 w-[80px] shrink-0">
+                              <button type="button"
+                                onClick={() => setPickerVariantId(v.id)}
+                                className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 flex-1 min-w-0">
+                                {v.image ? (
+                                  <img src={v.image} alt={label}
+                                    className="w-5 h-5 rounded object-cover border border-border shrink-0" />
+                                ) : (
+                                  <ImageIcon size={11} className="shrink-0 opacity-50" />
+                                )}
+                                <span className="truncate">{v.image ? "Change" : "Image…"}</span>
                               </button>
-                            )}
+                              {v.image && (
+                                <button type="button" onClick={() => patchVariantImage(v.id, "")}
+                                  className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
+                                  <ImageIcon size={9} className="opacity-40" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
