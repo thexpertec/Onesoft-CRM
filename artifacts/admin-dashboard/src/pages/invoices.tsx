@@ -470,19 +470,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   // per-item overrides: { suggestedCost, salePrice }
   const [costOverrides, setCostOverrides] = useState<Record<string, { suggestedCost: string; retailPrice: string; wholesalePrice: string }>>({});
 
-  // ── Variant price overrides — local edits to variant prices within this invoice ──
-  const [variantEdits, setVariantEdits] = useState<Record<string, { purchasePrice: string; price: string }>>({});
-  const patchVariantEdit = useCallback((variantId: string, field: "purchasePrice" | "price", value: string) => {
-    setVariantEdits(prev => ({
-      ...prev,
-      [variantId]: { purchasePrice: prev[variantId]?.purchasePrice ?? "", price: prev[variantId]?.price ?? "", [field]: value },
-    }));
-    // If this variant is currently selected on any line item, sync its unit price
-    const isThisPurchase = invoiceType === "purchase";
-    if ((field === "purchasePrice" && isThisPurchase) || (field === "price" && !isThisPurchase)) {
-      setItems(prev => prev.map(i => i.variantId === variantId ? { ...i, unitPrice: value } : i));
-    }
-  }, [invoiceType]);
+  // Variant price is read directly from the catalogue — no local overrides in the invoice table
 
   // ── Pricing mode (sale invoices only) — default wholesale ──────────────
   const [pricingMode, setPricingMode] = useState<"wholesale" | "retail">(
@@ -641,14 +629,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
   const getVariantPrice = useCallback((v: ProductVariant) => {
     if (invoiceType === "purchase") {
-      const override = variantEdits[v.id]?.purchasePrice;
-      if (override !== undefined && override !== "") return override;
       return v.purchasePrice && v.purchasePrice !== "" ? v.purchasePrice : v.price;
     }
-    const override = variantEdits[v.id]?.price;
-    if (override !== undefined && override !== "") return override;
     return v.price;
-  }, [invoiceType, variantEdits]);
+  }, [invoiceType]);
 
   const pickVariant = useCallback((itemId: string, v: ProductVariant) => {
     const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || "";
@@ -986,13 +970,28 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         </span>
                       )}
                     </div>
-                    {/* Unit Price */}
-                    <div className="px-1">
-                      <input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => updateItem(item.id, "unitPrice", e.target.value)} placeholder="0.00"
-                        data-item-id={item.id} data-field="price"
-                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "price"); } }}
-                        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-right text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
-                    </div>
+                    {/* Unit Price — locked when product has variants and none is selected */}
+                    {(() => {
+                      const hasVariants = (variantsForItem(item)?.length ?? 0) > 0;
+                      const needsPick   = hasVariants && !item.variantId;
+                      return (
+                        <div className="px-1">
+                          <input type="number" min="0" step="0.01"
+                            value={needsPick ? "" : item.unitPrice}
+                            onChange={e => { if (!needsPick) updateItem(item.id, "unitPrice", e.target.value); }}
+                            placeholder={needsPick ? "—" : "0.00"}
+                            readOnly={needsPick}
+                            data-item-id={item.id} data-field="price"
+                            onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "price"); } }}
+                            className={`w-full px-2 py-1.5 rounded-lg border text-sm text-right outline-none transition-colors ${
+                              needsPick
+                                ? "border-amber-300 dark:border-amber-700/60 bg-amber-50/60 dark:bg-amber-950/20 text-amber-400 dark:text-amber-600 cursor-not-allowed"
+                                : "border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                            }`}
+                          />
+                        </div>
+                      );
+                    })()}
                     {/* Qty */}
                     <div className="px-1">
                       <input type="number" min="0" value={item.qty} onChange={e => updateItem(item.id, "qty", e.target.value)}
@@ -1025,75 +1024,42 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </button>
                     </div>
                   </div>
-                  {/* Variant picker — table style, shown when the selected product has variants */}
+                  {/* Variant picker — pill row, shown when the selected product has variants */}
                   {(() => {
                     const variants = variantsForItem(item);
                     if (!variants || variants.length === 0) return null;
+                    const noneSelected = !item.variantId;
                     return (
-                      <div className="mx-4 mb-2 mt-0.5 rounded-lg border border-gray-100 dark:border-zinc-700 overflow-hidden">
-                        <table className="w-full border-collapse text-xs">
-                          <thead>
-                            <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-100 dark:border-zinc-700">
-                              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-3 py-1.5">Variant</th>
-                              <th className="text-right text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[18%]">Purchase ({sym})</th>
-                              <th className="text-right text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[18%]">Retail ({sym})</th>
-                              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-2 py-1.5 w-[14%]">Image</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-zinc-700/50">
-                            {variants.map(v => {
-                              const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
-                              const isSelected = item.variantId === v.id;
-                              return (
-                                <tr
-                                  key={v.id}
-                                  onClick={() => isSelected ? clearVariant(item.id) : pickVariant(item.id, v)}
-                                  className={`cursor-pointer transition-colors select-none ${
-                                    isSelected
-                                      ? "bg-blue-50 dark:bg-blue-950/30"
-                                      : "hover:bg-gray-50/70 dark:hover:bg-zinc-800/30"
-                                  }`}
-                                >
-                                  <td className="px-3 py-1.5">
-                                    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors ${
-                                      isSelected
-                                        ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
-                                        : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50"
-                                    }`}>
-                                      {label}
-                                      {isSelected && <X size={9} className="shrink-0 opacity-80" />}
-                                    </span>
-                                  </td>
-                                  <td className="px-1.5 py-1" onClick={e => e.stopPropagation()}>
-                                    <input
-                                      type="number" min="0" step="0.01"
-                                      value={variantEdits[v.id]?.purchasePrice ?? v.purchasePrice ?? ""}
-                                      onChange={e => patchVariantEdit(v.id, "purchasePrice", e.target.value)}
-                                      placeholder={v.purchasePrice || "0.00"}
-                                      className="w-full px-2 py-1 rounded border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-xs text-right font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    />
-                                  </td>
-                                  <td className="px-1.5 py-1" onClick={e => e.stopPropagation()}>
-                                    <input
-                                      type="number" min="0" step="0.01"
-                                      value={variantEdits[v.id]?.price ?? v.price ?? ""}
-                                      onChange={e => patchVariantEdit(v.id, "price", e.target.value)}
-                                      placeholder={v.price || "0.00"}
-                                      className="w-full px-2 py-1 rounded border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-xs text-right font-mono text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    />
-                                  </td>
-                                  <td className="px-2 py-1.5">
-                                    {v.image ? (
-                                      <img src={v.image} alt={label} className="w-7 h-7 rounded object-cover border border-gray-200 dark:border-zinc-600" />
-                                    ) : (
-                                      <span className="text-[10px] text-gray-300 dark:text-zinc-600">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                      <div className={`mx-4 mb-2 mt-0.5 flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors ${
+                        noneSelected
+                          ? "border-amber-400/60 dark:border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20"
+                          : "border-gray-100 dark:border-zinc-700 bg-gray-50/40 dark:bg-zinc-800/20"
+                      }`}>
+                        {noneSelected && (
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 mr-1 shrink-0">
+                            Select variant:
+                          </span>
+                        )}
+                        {variants.map(v => {
+                          const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
+                          const isSelected = item.variantId === v.id;
+                          const price = getVariantPrice(v);
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => { if (!isSelected) pickVariant(item.id, v); }}
+                              title={price ? `${sym}${Number(price).toFixed(dp)}` : undefined}
+                              className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors select-none ${
+                                isSelected
+                                  ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500 cursor-default"
+                                  : "bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     );
                   })()}
