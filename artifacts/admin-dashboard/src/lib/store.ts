@@ -4637,9 +4637,21 @@ export function seedTenantCOA(tenantId: string): void {
     return;
   }
 
+  // Strip party-specific subsidiary ledger accounts before copying.
+  // Shareholder capital (5100-NNN), customer AR (1130-NNN) and supplier AP (2111-NNN)
+  // sub-ledgers belong to the originating tenant and must never be carried over.
+  const partyParentIds = new Set([
+    SYS_ACCS.AR_GROUP,       // sys-1100  — customer receivable sub-ledgers
+    SYS_ACCS.AP_TRADE,       // sys-2101  — supplier payable sub-ledgers
+    SYS_ACCS.OWNERS_CAPITAL, // sys-5100  — shareholder capital sub-ledgers
+  ]);
+  const filteredTemplate = templateAccounts.filter(
+    a => !(a.accountType === "Ledger" && a.parentId && partyParentIds.has(a.parentId)),
+  );
+
   // Copy the template: preserve IDs and hierarchy, but zero-out opening balances
   const now = new Date().toISOString();
-  const tenantAccounts: Account[] = templateAccounts.map(a => ({
+  const tenantAccounts: Account[] = filteredTemplate.map(a => ({
     ...a,
     openingBalance: 0,   // new tenant starts with clean balances
     createdAt: now,
