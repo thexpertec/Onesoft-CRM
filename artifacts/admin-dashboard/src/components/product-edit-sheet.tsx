@@ -174,6 +174,9 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const patchVariantPrice = (id: string, price: string) =>
     setVariants(prev => prev.map(v => v.id === id ? { ...v, price } : v));
 
+  const patchVariantSku = (id: string, sku: string) =>
+    setVariants(prev => prev.map(v => v.id === id ? { ...v, sku } : v));
+
   const patchVariantImage = (id: string, image: string) =>
     setVariants(prev => prev.map(v => v.id === id ? { ...v, image } : v));
 
@@ -672,6 +675,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 <div className="rounded-lg border border-border overflow-hidden">
                   <div className="flex bg-muted/50 border-b border-border px-3 py-2 gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex-1">Name</span>
+                    <span className="w-[110px] shrink-0">SKU</span>
                     <span className="w-[82px] shrink-0 text-right">Price ({sym})</span>
                     <span className="w-[90px] shrink-0">Image</span>
                   </div>
@@ -683,6 +687,12 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                           <span className="flex-1 text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
                             {label}
                           </span>
+                          <Input
+                            value={v.sku ?? ""}
+                            onChange={e => patchVariantSku(v.id, e.target.value)}
+                            placeholder="SKU…"
+                            className="h-7 w-[110px] shrink-0 text-xs font-mono px-2"
+                          />
                           <Input
                             type="number" min="0" step="0.01"
                             value={v.price}
