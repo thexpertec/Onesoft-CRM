@@ -1510,10 +1510,18 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
     const conflict = skuConflict(updates.sku, id);
     if (conflict) throw new Error(`SKU "${updates.sku}" is already used by "${conflict}".`);
   }
-  // Validate each variant SKU uniqueness when variants are being saved
+  // Validate variant SKU uniqueness — only for variants whose SKU actually changed.
+  // Skipping unchanged SKUs prevents false "duplicate" errors when editing other
+  // variant fields while a product already has any pre-existing shared SKUs.
   if (updates.variants) {
+    const storedVariantSkus = new Map(
+      (items[i].variants ?? []).map(v => [v.id, (v.sku ?? "").trim().toLowerCase()])
+    );
     for (const v of updates.variants) {
       if (!v.sku?.trim()) continue;
+      const newSkuLower = v.sku.trim().toLowerCase();
+      const storedSku   = storedVariantSkus.get(v.id) ?? "";
+      if (newSkuLower === storedSku) continue;      // SKU unchanged — skip uniqueness check
       const conflict = skuConflict(v.sku, id, v.id);
       if (conflict) throw new Error(`Variant SKU "${v.sku}" is already used by "${conflict}".`);
     }
