@@ -633,7 +633,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   }, [invoiceType]);
 
   const pickVariant = useCallback((itemId: string, v: ProductVariant) => {
-    const label = Object.values(v.attributes ?? {})[0] ?? "";
+    const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || "";
     setItems(prev => prev.map(i =>
       i.id === itemId
         ? { ...i, sku: v.sku ?? i.sku, unitPrice: getVariantPrice(v), variantId: v.id, variantLabel: label }
@@ -1015,7 +1015,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       <div className="px-10 pb-2 pt-0.5 flex items-center flex-wrap gap-1.5">
                         <span className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider shrink-0 mr-0.5">Variant:</span>
                         {variants.map(v => {
-                          const label = Object.values(v.attributes ?? {})[0] ?? v.sku ?? v.id;
+                          const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
                           const isSelected = item.variantId === v.id;
                           return (
                             <button
