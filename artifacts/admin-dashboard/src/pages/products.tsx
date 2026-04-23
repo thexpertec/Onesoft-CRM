@@ -233,6 +233,22 @@ export default function ProductsPage() {
   const [viewProdId,    setViewProdId]    = useState<string | null>(null);
   const [editProdId,    setEditProdId]    = useState<string | null>(null);
   const [expandedIds,   setExpandedIds]   = useState<Set<string>>(new Set());
+  // Inline edits for variant sub-rows: keyed as "productId:variantId"
+  const [variantDraft,  setVariantDraft]  = useState<Record<string, Partial<{ sku: string; barcode: string; purchasePrice: string; price: string; stock: string; condition: string; clubcardPrice: string; showOnWeb: boolean }>>>({});
+  const patchVDraft = useCallback((prodId: string, varId: string, updates: Record<string, string | boolean>) => {
+    setVariantDraft(prev => {
+      const key = `${prodId}:${varId}`;
+      return { ...prev, [key]: { ...prev[key], ...updates } };
+    });
+  }, []);
+  const saveVariantEdit = useCallback((prodId: string, varId: string, variantsList: typeof products[0]["variants"]) => {
+    const key = `${prodId}:${varId}`;
+    const draft = variantDraft[key];
+    if (!draft || Object.keys(draft).length === 0) return;
+    const newVariants = (variantsList ?? []).map(v => v.id === varId ? { ...v, ...draft } : v);
+    editProduct(prodId, { variants: newVariants });
+    setVariantDraft(prev => { const n = { ...prev }; delete n[key]; return n; });
+  }, [variantDraft, editProduct]);
   const toggleExpand = (id: string) => setExpandedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const [showHelp,      setShowHelp]      = useState(false);
@@ -1974,43 +1990,113 @@ export default function ProductsPage() {
                     </td>
                     {/* Per-column cells aligned with parent row headers */}
                     {visibleCols.map(c => {
-                      const TD = (content: React.ReactNode) => (
-                        <td key={c.field} className="border-r border-blue-100 dark:border-blue-900/30 px-2 align-middle" style={{ height: "36px" }}>
-                          {content}
+                      const draftKey = `${prod.id}:${v.id}`;
+                      const draft = variantDraft[draftKey] ?? {};
+                      const onBlur = () => saveVariantEdit(prod.id, v.id, prod.variants);
+                      const cellCls = "border-r border-blue-100 dark:border-blue-900/30 px-1.5 align-middle";
+                      const inputCls = "w-full h-7 px-2 rounded border border-transparent hover:border-blue-200 dark:hover:border-blue-700 focus:border-blue-400 dark:focus:border-blue-500 bg-transparent focus:bg-white dark:focus:bg-zinc-800 text-[12px] text-foreground outline-none transition-colors";
+                      const numCls  = inputCls + " text-right font-mono tabular-nums";
+                      const dash = <span className="text-[11px] text-muted-foreground/30 px-1">—</span>;
+
+                      // Variant identity — show badge; not inline-editable (attributes define identity)
+                      if (c.field === "name") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-medium whitespace-nowrap">
+                            {attrLabel || `Variant ${vi + 1}`}
+                          </span>
                         </td>
                       );
-                      const fmt = (n: string) => parseFloat(n).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
-                      const dash = <span className="text-[11px] text-muted-foreground/30">—</span>;
 
-                      if (c.field === "name" || c.field === "localName") {
-                        return TD(
-                          c.field === "name" ? (
-                            <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-medium whitespace-nowrap">
-                              {attrLabel || `Variant ${vi + 1}`}
-                            </span>
-                          ) : dash
-                        );
-                      }
-                      if (c.field === "sku")           return TD(v.sku     ? <span className="font-mono text-[11px] text-foreground font-semibold">{v.sku}</span>     : dash);
-                      if (c.field === "barcode")        return TD(v.barcode ? <span className="font-mono text-[11px] text-muted-foreground">{v.barcode}</span>          : dash);
-                      if (c.field === "price")          return TD(v.price && !isNaN(parseFloat(v.price)) ? <span className="text-[12px] font-bold text-foreground">{sym}{fmt(v.price)}</span> : dash);
-                      if (c.field === "stock")          return TD(
-                        (v.stock !== undefined && v.stock !== null) ? (
-                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full tabular-nums ${Number(v.stock) <= 0 ? "bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400" : Number(v.stock) <= 5 ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"}`}>
-                            {Number(v.stock) <= 0 ? "0 — Out" : Number(v.stock) <= 5 ? `⚠ ${v.stock}` : v.stock}
-                          </span>
-                        ) : dash
+                      // Product-level fields — variants don't have these
+                      if (["localName","model","brand","category","department","unit","costPrice","wholesalePrice","retailProfit","wholesaleProfit","websitePrice","websitePriceWas","clubcardBogo","status","description"].includes(c.field))
+                        return <td key={c.field} className={cellCls} style={{ height: "36px" }}>{dash}</td>;
+
+                      // SKU
+                      if (c.field === "sku") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input className={inputCls + " font-mono font-semibold"}
+                            value={draft.sku ?? v.sku ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { sku: e.target.value })}
+                            onBlur={onBlur} placeholder="SKU…" />
+                        </td>
                       );
-                      if (c.field === "condition")      return TD(v.condition ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${CONDITION_COLORS[v.condition] || "bg-gray-100 text-gray-600"}`}>{v.condition}</span> : dash);
-                      if (c.field === "clubcardPrice")  return TD(v.clubcardPrice && !isNaN(parseFloat(v.clubcardPrice)) ? <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400">{sym}{fmt(v.clubcardPrice)}</span> : dash);
-                      if (c.field === "showOnWeb")      return TD(
-                        v.showOnWeb !== undefined ? (
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${v.showOnWeb ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"}`}>
-                            {v.showOnWeb ? "Show" : "Hide"}
-                          </span>
-                        ) : dash
+
+                      // Barcode
+                      if (c.field === "barcode") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input className={inputCls + " font-mono"}
+                            value={draft.barcode ?? v.barcode ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { barcode: e.target.value })}
+                            onBlur={onBlur} placeholder="Barcode…" />
+                        </td>
                       );
-                      return TD(dash);
+
+                      // Purchase price
+                      if (c.field === "purchasePrice") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={draft.purchasePrice ?? v.purchasePrice ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { purchasePrice: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // Retail price
+                      if (c.field === "price") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={draft.price ?? v.price ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { price: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // Clubcard price
+                      if (c.field === "clubcardPrice") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={draft.clubcardPrice ?? v.clubcardPrice ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { clubcardPrice: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // Stock
+                      if (c.field === "stock") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="1" className={numCls}
+                            value={draft.stock ?? v.stock ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { stock: e.target.value })}
+                            onBlur={onBlur} placeholder="0" />
+                        </td>
+                      );
+
+                      // Condition
+                      if (c.field === "condition") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={draft.condition ?? v.condition ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { condition: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {["New","Used","Fresh","Refurbished","Damaged"].map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // Show on Web
+                      if (c.field === "showOnWeb") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={draft.showOnWeb !== undefined ? String(draft.showOnWeb) : v.showOnWeb !== undefined ? String(v.showOnWeb) : ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { showOnWeb: e.target.value === "true" }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            <option value="true">Show</option>
+                            <option value="false">Hide</option>
+                          </select>
+                        </td>
+                      );
+
+                      return <td key={c.field} className={cellCls} style={{ height: "36px" }}>{dash}</td>;
                     })}
                     {/* Actions col placeholder */}
                     <td className="sticky right-0 bg-blue-50/40 dark:bg-blue-950/10 border-l border-blue-100 dark:border-blue-900/30" style={{ height: "36px", width: 160 }} />
