@@ -234,7 +234,7 @@ export default function ProductsPage() {
   const [editProdId,    setEditProdId]    = useState<string | null>(null);
   const [expandedIds,   setExpandedIds]   = useState<Set<string>>(new Set());
   // Inline edits for variant sub-rows: keyed as "productId:variantId"
-  const [variantDraft,  setVariantDraft]  = useState<Record<string, Partial<{ sku: string; barcode: string; purchasePrice: string; price: string; stock: string; condition: string; clubcardPrice: string; showOnWeb: boolean }>>>({});
+  const [variantDraft,  setVariantDraft]  = useState<Record<string, Record<string, string | boolean>>>({});
   const patchVDraft = useCallback((prodId: string, varId: string, updates: Record<string, string | boolean>) => {
     setVariantDraft(prev => {
       const key = `${prodId}:${varId}`;
@@ -2007,9 +2007,139 @@ export default function ProductsPage() {
                         </td>
                       );
 
-                      // Product-level fields — variants don't have these
-                      if (["localName","model","brand","category","department","unit","costPrice","wholesalePrice","retailProfit","wholesaleProfit","websitePrice","websitePriceWas","clubcardBogo","status","description"].includes(c.field))
+                      // Truly computed / readonly columns — show dash only for these
+                      if (["retailProfit","wholesaleProfit","clubcardBogo"].includes(c.field))
                         return <td key={c.field} className={cellCls} style={{ height: "36px" }}>{dash}</td>;
+
+                      // localName
+                      if (c.field === "localName") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input className={inputCls}
+                            value={(draft.localName as string) ?? v.localName ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { localName: e.target.value })}
+                            onBlur={onBlur} placeholder="Local name…" />
+                        </td>
+                      );
+
+                      // model
+                      if (c.field === "model") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input className={inputCls}
+                            value={(draft.model as string) ?? v.model ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { model: e.target.value })}
+                            onBlur={onBlur} placeholder="Model…" />
+                        </td>
+                      );
+
+                      // brand — select
+                      if (c.field === "brand") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={(draft.brand as string) ?? v.brand ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { brand: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {brandOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // category — select
+                      if (c.field === "category") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={(draft.category as string) ?? v.category ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { category: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // department — select
+                      if (c.field === "department") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={(draft.department as string) ?? v.department ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { department: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {deptOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // unit — select
+                      if (c.field === "unit") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={(draft.unit as string) ?? v.unit ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { unit: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {unitOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // costPrice
+                      if (c.field === "costPrice") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={(draft.costPrice as string) ?? v.costPrice ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { costPrice: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // wholesalePrice
+                      if (c.field === "wholesalePrice") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={(draft.wholesalePrice as string) ?? v.wholesalePrice ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { wholesalePrice: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // websitePrice
+                      if (c.field === "websitePrice") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={(draft.websitePrice as string) ?? v.websitePrice ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { websitePrice: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // websitePriceWas
+                      if (c.field === "websitePriceWas") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input type="number" min="0" step="0.01" className={numCls}
+                            value={(draft.websitePriceWas as string) ?? v.websitePriceWas ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { websitePriceWas: e.target.value })}
+                            onBlur={onBlur} placeholder="0.00" />
+                        </td>
+                      );
+
+                      // status — select
+                      if (c.field === "status") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <select className={inputCls}
+                            value={(draft.status as string) ?? v.status ?? ""}
+                            onChange={e => { patchVDraft(prod.id, v.id, { status: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
+                            <option value="">—</option>
+                            {["Active","Inactive","Draft"].map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+
+                      // description
+                      if (c.field === "description") return (
+                        <td key={c.field} className={cellCls} style={{ height: "36px" }}>
+                          <input className={inputCls}
+                            value={(draft.description as string) ?? v.description ?? ""}
+                            onChange={e => patchVDraft(prod.id, v.id, { description: e.target.value })}
+                            onBlur={onBlur} placeholder="Description…" />
+                        </td>
+                      );
 
                       // SKU
                       if (c.field === "sku") return (

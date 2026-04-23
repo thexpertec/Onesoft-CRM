@@ -1265,6 +1265,19 @@ export type ProductVariant = {
   condition?: string;
   clubcardPrice?: string;
   showOnWeb?: boolean;
+  // Optional per-variant overrides for product-level fields
+  localName?: string;
+  model?: string;
+  brand?: string;
+  category?: string;
+  department?: string;
+  unit?: string;
+  costPrice?: string;
+  wholesalePrice?: string;
+  websitePrice?: string;
+  websitePriceWas?: string;
+  status?: string;
+  description?: string;
 };
 
 export type Product = {
