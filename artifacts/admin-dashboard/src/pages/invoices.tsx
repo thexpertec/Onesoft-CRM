@@ -1324,6 +1324,27 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 p.name.toLowerCase() === it.productName.toLowerCase()
               );
 
+            /** Find the specific variant selected on this line item (if any). */
+            const findVariant = (it: SaleItem): ProductVariant | undefined => {
+              if (!it.variantId) return undefined;
+              return variantsForItem(it).find(v => v.id === it.variantId);
+            };
+
+            /**
+             * Effective price source for the calculator — variant overrides product
+             * for all three price columns (retail, wholesale, cost).
+             */
+            const effectivePrices = (it: SaleItem) => {
+              const v = findVariant(it);
+              const p = findProd(it);
+              return {
+                retail:    v?.price       ?? p?.price          ?? "",
+                wholesale: v?.wholesalePrice ?? p?.wholesalePrice ?? "",
+                cost:      v?.costPrice   ?? p?.costPrice      ?? "",
+                hasProd:   !!p,
+              };
+            };
+
             const initOverrides = () => {
               const next: Record<string, { suggestedCost: string; retailPrice: string; wholesalePrice: string }> = {};
               items.forEach(it => {
@@ -1331,17 +1352,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 const qty  = parseFloat(it.qty) || 0;
                 const uPrc = parseFloat(it.unitPrice) || 0;
                 const suggested = (uPrc + (qty > 0 ? extraPerPiece : 0)).toFixed(dp);
-                const prod = findProd(it);
+                const ep = effectivePrices(it);
                 next[it.id] = {
                   suggestedCost: existing?.suggestedCost ?? suggested,
-                  retailPrice:   existing?.retailPrice   ?? (prod?.price ?? ""),
-                  wholesalePrice:existing?.wholesalePrice?? (prod?.wholesalePrice ?? ""),
+                  retailPrice:   existing?.retailPrice   ?? ep.retail,
+                  wholesalePrice:existing?.wholesalePrice ?? ep.wholesale,
                 };
               });
               setCostOverrides(next);
             };
 
-            // Push cost + retail + wholesale prices to product catalogue
+            // Push cost + retail + wholesale prices to catalogue (variant-aware)
             const handlePush = () => {
               let pushed = 0;
               items.forEach(it => {
@@ -1349,19 +1370,30 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 if (!prod) return;
                 const ov = costOverrides[it.id];
                 if (!ov) return;
-                const updates: Partial<{ purchasePrice: string; costPrice: string; price: string; wholesalePrice: string }> = {};
-                if (ov.suggestedCost) {
-                  updates.purchasePrice = ov.suggestedCost;
-                  updates.costPrice     = ov.suggestedCost;
+                const variant = findVariant(it);
+                if (variant) {
+                  const updatedVariants = (prod.variants ?? []).map(v =>
+                    v.id === variant.id ? {
+                      ...v,
+                      ...(ov.suggestedCost ? { purchasePrice: ov.suggestedCost, costPrice: ov.suggestedCost } : {}),
+                      ...(ov.retailPrice    ? { price: ov.retailPrice }                                        : {}),
+                      ...(ov.wholesalePrice ? { wholesalePrice: ov.wholesalePrice }                            : {}),
+                    } : v
+                  );
+                  updateProduct(prod.id, { variants: updatedVariants });
+                } else {
+                  const updates: Partial<{ purchasePrice: string; costPrice: string; price: string; wholesalePrice: string }> = {};
+                  if (ov.suggestedCost) { updates.purchasePrice = ov.suggestedCost; updates.costPrice = ov.suggestedCost; }
+                  if (ov.retailPrice)    updates.price          = ov.retailPrice;
+                  if (ov.wholesalePrice) updates.wholesalePrice = ov.wholesalePrice;
+                  if (Object.keys(updates).length) updateProduct(prod.id, updates);
                 }
-                if (ov.retailPrice)    updates.price          = ov.retailPrice;
-                if (ov.wholesalePrice) updates.wholesalePrice = ov.wholesalePrice;
-                if (Object.keys(updates).length) { updateProduct(prod.id, updates); pushed++; }
+                pushed++;
               });
               toast({ title: `Prices updated`, description: `${pushed} product(s) updated in catalogue.` });
             };
 
-            // Push only the raw supplier/purchase price from the invoice
+            // Push only the raw supplier/purchase price (variant-aware)
             const handlePushPurchasePrice = () => {
               let pushed = 0;
               items.forEach(it => {
@@ -1369,7 +1401,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 if (!prod) return;
                 const uPrc = it.unitPrice;
                 if (!uPrc) return;
-                updateProduct(prod.id, { purchasePrice: uPrc });
+                const variant = findVariant(it);
+                if (variant) {
+                  const updatedVariants = (prod.variants ?? []).map(v =>
+                    v.id === variant.id ? { ...v, purchasePrice: uPrc } : v
+                  );
+                  updateProduct(prod.id, { variants: updatedVariants });
+                } else {
+                  updateProduct(prod.id, { purchasePrice: uPrc });
+                }
                 pushed++;
               });
               toast({ title: `Purchase price updated`, description: `${pushed} product(s) updated with supplier price from this invoice.` });
@@ -1438,14 +1478,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
                       {/* Table rows — two rows per item */}
                       {items.filter(it => it.productName).map(it => {
-                        const qty   = parseFloat(it.qty) || 0;
-                        const uPrc  = parseFloat(it.unitPrice) || 0;
-                        const extra = extraPerPiece;
-                        const prod  = findProd(it);
-                        const ov    = costOverrides[it.id] ?? {
+                        const qty     = parseFloat(it.qty) || 0;
+                        const uPrc    = parseFloat(it.unitPrice) || 0;
+                        const extra   = extraPerPiece;
+                        const ep      = effectivePrices(it);
+                        const variant = findVariant(it);
+                        const ov      = costOverrides[it.id] ?? {
                           suggestedCost: (uPrc + extra).toFixed(dp),
-                          retailPrice:   prod?.price ?? "",
-                          wholesalePrice:prod?.wholesalePrice ?? "",
+                          retailPrice:   ep.retail,
+                          wholesalePrice:ep.wholesale,
                         };
 
                         const setOv = (field: "suggestedCost" | "retailPrice" | "wholesalePrice", val: string) =>
@@ -1454,7 +1495,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             [it.id]: { ...(prev[it.id] ?? { suggestedCost: "", retailPrice: "", wholesalePrice: "" }), [field]: val },
                           }));
 
-                        const hasProd = !!prod;
+                        const hasProd = ep.hasProd;
 
                         return (
                           <div key={it.id} className={`border-b border-gray-100 dark:border-zinc-800 last:border-0 ${hasProd ? "" : "opacity-50"}`}>
