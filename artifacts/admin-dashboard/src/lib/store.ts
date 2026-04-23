@@ -1365,12 +1365,31 @@ export async function syncProductsToStore(tenantId?: string | null): Promise<num
 }
 
 // ── SKU uniqueness helper ──────────────────────────────────────────────────
-const skuConflict = (sku: string, excludeId?: string): string | null => {
+/**
+ * Returns the name of the product (or "ProductName (variant)") that already
+ * owns this SKU, or null if it is available.
+ *
+ * @param sku            - SKU to check.
+ * @param excludeProductId - Skip this product's own main-SKU (used when updating a product's main SKU).
+ * @param excludeVariantId - Skip this specific variant (used when updating a variant's SKU).
+ */
+const skuConflict = (sku: string, excludeProductId?: string, excludeVariantId?: string): string | null => {
   if (!sku.trim()) return null;
-  const match = getProducts().find(
-    p => p.sku.trim().toLowerCase() === sku.trim().toLowerCase() && p.id !== excludeId
-  );
-  return match ? match.name : null;
+  const skuLower = sku.trim().toLowerCase();
+  for (const p of getProducts()) {
+    // Check main product SKU (skip the product whose own main SKU we're updating)
+    if (p.id !== excludeProductId && p.sku.trim().toLowerCase() === skuLower) {
+      return p.name;
+    }
+    // Check every variant in every product
+    for (const v of (p.variants ?? [])) {
+      if (v.id === excludeVariantId) continue;        // skip the variant being edited
+      if (v.sku?.trim().toLowerCase() === skuLower) {
+        return `${p.name} — variant`;
+      }
+    }
+  }
+  return null;
 };
 
 // ── COA ledger sync for per-product Sales Revenue & Purchase accounts ─────────
@@ -1468,9 +1487,18 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   const items = getProducts();
   const i = items.findIndex(p => p.id === id);
   if (i === -1) throw new Error("Product not found");
+  // Validate main product SKU uniqueness
   if (updates.sku?.trim()) {
     const conflict = skuConflict(updates.sku, id);
     if (conflict) throw new Error(`SKU "${updates.sku}" is already used by "${conflict}".`);
+  }
+  // Validate each variant SKU uniqueness when variants are being saved
+  if (updates.variants) {
+    for (const v of updates.variants) {
+      if (!v.sku?.trim()) continue;
+      const conflict = skuConflict(v.sku, id, v.id);
+      if (conflict) throw new Error(`Variant SKU "${v.sku}" is already used by "${conflict}".`);
+    }
   }
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(PRODUCTS_KEY, items);

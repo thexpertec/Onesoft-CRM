@@ -246,9 +246,16 @@ export default function ProductsPage() {
     const draft = variantDraft[key];
     if (!draft || Object.keys(draft).length === 0) return;
     const newVariants = (variantsList ?? []).map(v => v.id === varId ? { ...v, ...draft } : v);
-    editProduct(prodId, { variants: newVariants });
-    setVariantDraft(prev => { const n = { ...prev }; delete n[key]; return n; });
-  }, [variantDraft, editProduct]);
+    try {
+      editProduct(prodId, { variants: newVariants });
+      setVariantDraft(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save variant.";
+      toast({ title: "Duplicate SKU", description: msg, variant: "destructive" });
+      // Revert the draft so the input goes back to the last saved value
+      setVariantDraft(prev => { const n = { ...prev }; delete n[key]; return n; });
+    }
+  }, [variantDraft, editProduct, toast]);
   const toggleExpand = (id: string) => setExpandedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const [showHelp,      setShowHelp]      = useState(false);
