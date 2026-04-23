@@ -4192,6 +4192,9 @@ export const SYS_ACCS = {
   OFFICE_EXP:         "sys-4400",   // Office & Administration (4400)
   UTILITIES:          "sys-4500",   // Utility Bills (4500)
   PURCHASE_EXP:       "sys-4600",   // Purchases (4600)
+  // Fallback "General" Ledgers — always-postable catch-alls when no category ledger exists
+  GENERAL_SALES_REV:  "sys-3101",   // General Sales Revenue LEDGER (3101) — parent: SALES_REVENUE
+  GENERAL_INVENTORY:  "sys-1141",   // General Inventory LEDGER (1141)      — parent: INVENTORY
   // Equity
   EQUITY_GROUP:       "sys-5000",   // Capital & Equity root (5000)
   OWNERS_CAPITAL:     "sys-5100",   // Owner's Capital / Share Capital (5100)
@@ -4216,6 +4219,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
   { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "Aggregate receivable for credit customers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value — subsidiary ledgers per product/category" },
+  { id: SYS_ACCS.GENERAL_INVENTORY, code: "1141", name: "General Inventory",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.INVENTORY,           subType: "Inventory",        description: "Catch-all inventory ledger — used when no per-category inventory ledger exists" },
   // Non-Current Assets
   { id: SYS_ACCS.NON_CURRENT_ASSETS, code: "1200", name: "Non-Current Assets",         head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Non-Current Asset", description: "Assets held for long-term use (over 12 months)" },
 
@@ -4238,6 +4242,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   // ─────────────────────────────────────────────────────────────────────────────
   { id: SYS_ACCS.REVENUE_GROUP,      code: "3000", name: "Revenue",                    head: "Revenue / Income", accountType: "Group",  parentId: null,                         subType: "Revenue",          description: "Income from business operations" },
   { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales — subsidiary ledgers per product" },
+  { id: SYS_ACCS.GENERAL_SALES_REV, code: "3101", name: "General Sales Revenue",      head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.SALES_REVENUE,       subType: "Sales",            description: "Catch-all revenue ledger — used when no per-category revenue ledger exists" },
   { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income — subsidiary ledgers per income type" },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -4503,10 +4508,14 @@ export function seedDefaultCoaAccounts(): void {
   // ── Orphaned category ledger cleanup ──────────────────────────────────────
   // Remove sr-cat-*, pur-cat-*, inv-cat-* entries whose category no longer
   // exists in any product.
+  // NOTE: sys-3101 (General Sales Revenue) and sys-1141 (General Inventory) are
+  //       NOT prefixed with these patterns and are always preserved.
   const activeCatSlugs = new Set(uniqueCategories.map(c => _catSlug(c)));
   const CAT_PREFIXES = ["sr-cat-", "pur-cat-", "inv-cat-"];
+  const PROTECTED_IDS = new Set<string>([SYS_ACCS.GENERAL_SALES_REV, SYS_ACCS.GENERAL_INVENTORY]);
   const beforeCatClean = workingAccounts.length;
   workingAccounts = workingAccounts.filter(a => {
+    if (PROTECTED_IDS.has(a.id)) return true;      // always keep General fallback ledgers
     const pfx = CAT_PREFIXES.find(p => a.id.startsWith(p));
     if (!pfx) return true;
     const slug = a.id.slice(pfx.length);
@@ -5045,30 +5054,34 @@ export function autoPostSaleJE(params: {
   const catLines = params.categoryLines ?? [];
   const allAccounts = getAccounts();
 
+  // ── Resolved fallback IDs — always valid Ledger targets ─────────────────
+  const _generalRevId  = resolveToLedger(s.accSalesRevenue) ?? SYS_ACCS.GENERAL_SALES_REV;
+  const _generalInvId  = resolveToLedger(s.accInventory)    ?? SYS_ACCS.GENERAL_INVENTORY;
+  const _cogsId        = resolveToLedger(s.accCogs)         ?? SYS_ACCS.COGS;
+  const _vatId         = resolveToLedger(s.accVatPayable)   ?? s.accVatPayable ?? null;
+
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.subtotal <= 0) continue;
       const slug      = (cl.category || "uncategorised").trim().toLowerCase()
                           .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
       const catRevId  = `sr-cat-${slug}`;
+      // Use per-category ledger if it exists; otherwise fall back to General Sales Revenue
       const revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
                           ? catRevId
-                          : (resolveToLedger(s.accSalesRevenue) ?? s.accSalesRevenue ?? null);
-      if (!revLedger) continue;
+                          : _generalRevId;
       lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
         narration: `Revenue – ${params.reference} – ${cl.category}`, debit: 0, credit: cl.subtotal });
     }
   } else {
     // No breakdown — post total to first postable Revenue ledger
-    const revLedger = resolveToLedger(s.accSalesRevenue) ?? s.accSalesRevenue ?? null;
-    if (!revLedger) return null;
-    lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
+    lines.push({ id: crypto.randomUUID(), ledgerId: _generalRevId,
       narration: `Revenue – ${params.reference}`, debit: 0, credit: params.subtotal });
   }
 
   // VAT
-  if (params.taxAmount > 0 && s.accVatPayable) {
-    lines.push({ id: crypto.randomUUID(), ledgerId: s.accVatPayable,
+  if (params.taxAmount > 0 && _vatId) {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _vatId,
       narration: `VAT – ${params.reference}`, debit: 0, credit: params.taxAmount });
   }
 
@@ -5079,12 +5092,11 @@ export function autoPostSaleJE(params: {
       const slug      = (cl.category || "uncategorised").trim().toLowerCase()
                           .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
       const catInvId  = `inv-cat-${slug}`;
+      // Use per-category inventory ledger if it exists; otherwise fall back to General Inventory
       const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
                           ? catInvId
-                          : (resolveToLedger(s.accInventory) ?? null);
-      const cogsId    = resolveToLedger(s.accCogs) ?? s.accCogs ?? SYS_ACCS.COGS;
-      if (!invLedger || !cogsId) continue;
-      lines.push({ id: crypto.randomUUID(), ledgerId: cogsId,
+                          : _generalInvId;
+      lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
         narration: `COGS – ${params.reference} – ${cl.category}`, debit: cl.costTotal, credit: 0 });
       lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
         narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: cl.costTotal });
@@ -5092,14 +5104,10 @@ export function autoPostSaleJE(params: {
   } else {
     const costTotal = params.costTotal ?? 0;
     if (costTotal > 0) {
-      const cogsId    = resolveToLedger(s.accCogs) ?? s.accCogs ?? SYS_ACCS.COGS;
-      const invLedger = resolveToLedger(s.accInventory);
-      if (cogsId && invLedger) {
-        lines.push({ id: crypto.randomUUID(), ledgerId: cogsId,
-          narration: `COGS – ${params.reference}`, debit: costTotal, credit: 0 });
-        lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
-          narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: costTotal });
-      }
+      lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
+        narration: `COGS – ${params.reference}`, debit: costTotal, credit: 0 });
+      lines.push({ id: crypto.randomUUID(), ledgerId: _generalInvId,
+        narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: costTotal });
     }
   }
 
@@ -5192,8 +5200,10 @@ export function autoPostPurchaseJE(params: {
     || SYS_ACCS.AP_GENERAL;
   if (!apId) return null;
 
-  const allAccounts = getAccounts();
-  const catLines    = params.categoryLines ?? [];
+  const allAccounts  = getAccounts();
+  const catLines     = params.categoryLines ?? [];
+  // Always-valid fallback inventory ledger — prevents silent line omissions
+  const _genInvId    = resolveToLedger(s.accInventory) ?? SYS_ACCS.GENERAL_INVENTORY;
 
   const lines: JournalEntryLine[] = [];
 
@@ -5204,18 +5214,16 @@ export function autoPostPurchaseJE(params: {
       const slug      = (cl.category || "uncategorised").trim().toLowerCase()
                           .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
       const catInvId  = `inv-cat-${slug}`;
+      // Use per-category ledger if it exists; otherwise fall back to General Inventory
       const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
                           ? catInvId
-                          : (resolveToLedger(s.accInventory) ?? null);
-      if (!invLedger) continue;
+                          : _genInvId;
       lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
         narration: `Stock received – ${params.poNumber} – ${cl.category}`,
         debit: cl.total, credit: 0 });
     }
   } else {
-    const invLedger = resolveToLedger(s.accInventory);
-    if (!invLedger) return null;
-    lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+    lines.push({ id: crypto.randomUUID(), ledgerId: _genInvId,
       narration: `Stock received – ${params.poNumber}`, debit: params.total, credit: 0 });
   }
 
