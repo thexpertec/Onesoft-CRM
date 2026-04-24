@@ -19,6 +19,7 @@ import {
   Clock, PhoneCall, PhoneOff, PhoneMissed, MessageSquare,
   ChevronRight, ChevronUp, Pencil, Globe, MapPin, Briefcase, DollarSign,
   User, Check, UserCircle2, Filter, ChevronDown, Layers,
+  CheckSquare, Square, UserPlus, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -903,6 +904,69 @@ export default function Leads() {
   const [viewLead,   setViewLead]   = useState<Lead | null>(null);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
 
+  // ── Bulk selection ─────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const allFilteredSelected = filtered.length > 0 && filtered.every(l => selectedIds.has(l.id));
+  const someSelected = !allFilteredSelected && filtered.some(l => selectedIds.has(l.id));
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (allFilteredSelected) {
+      setSelectedIds(prev => { const n = new Set(prev); filtered.forEach(l => n.delete(l.id)); return n; });
+    } else {
+      setSelectedIds(prev => { const n = new Set(prev); filtered.forEach(l => n.add(l.id)); return n; });
+    }
+  }, [allFilteredSelected, filtered]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // ── Bulk action dialogs ────────────────────────────────────────────────────
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [bulkAssignOpen,    setBulkAssignOpen]    = useState(false);
+  const [bulkAssignAgent,   setBulkAssignAgent]   = useState("");
+  const [bulkSourceOpen,    setBulkSourceOpen]    = useState(false);
+  const [bulkSource,        setBulkSource]        = useState("");
+
+  const handleBulkDelete = () => {
+    const ids = Array.from(selectedIds);
+    ids.forEach(id => removeLead(id));
+    toast({ title: "Deleted", description: `${ids.length} lead${ids.length !== 1 ? "s" : ""} deleted.` });
+    clearSelection();
+    setBulkDeleteConfirm(false);
+  };
+
+  const handleBulkAssign = () => {
+    Array.from(selectedIds).forEach(id => editLead(id, { assignedTo: bulkAssignAgent }));
+    toast({ title: "Assigned", description: `${selectedIds.size} lead${selectedIds.size !== 1 ? "s" : ""} assigned to ${bulkAssignAgent || "Unassigned"}.` });
+    clearSelection();
+    setBulkAssignOpen(false);
+    setBulkAssignAgent("");
+  };
+
+  const handleBulkSource = () => {
+    Array.from(selectedIds).forEach(id => editLead(id, { source: bulkSource }));
+    toast({ title: "Updated", description: `Source set to "${bulkSource}" for ${selectedIds.size} lead${selectedIds.size !== 1 ? "s" : ""}.` });
+    clearSelection();
+    setBulkSourceOpen(false);
+    setBulkSource("");
+  };
+
+  const handleBulkRelevant = (isRelevant: boolean) => {
+    Array.from(selectedIds).forEach(id => editLead(id, { isRelevant }));
+    toast({ title: isRelevant ? "Marked Relevant" : "Marked Irrelevant", description: `${selectedIds.size} lead${selectedIds.size !== 1 ? "s" : ""} updated.` });
+    clearSelection();
+  };
+
+  // Clear selection when filters change
+  useEffect(() => { clearSelection(); }, [search, statusFilter, relevanceFilter, agentFilter, sourceFilter, industryFilter]);
+
   // Sync viewLead when underlying leads array updates
   useEffect(() => {
     if (viewLead) {
@@ -1260,6 +1324,60 @@ export default function Leads() {
         </div>
       </div>
 
+      {/* ── Bulk Action Toolbar ────────────────────────────────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 flex-wrap px-3 py-2 rounded-xl bg-primary/5 border border-primary/20 animate-in slide-in-from-top-1 duration-200">
+          <span className="text-[13px] font-semibold text-primary flex-shrink-0">
+            {selectedIds.size} selected
+          </span>
+          <div className="h-4 w-px bg-border mx-1" />
+
+          {/* Assign to agent */}
+          {can("Edit Leads") && !isSalesAgent && (
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[12px] border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => { setBulkAssignAgent(""); setBulkAssignOpen(true); }}>
+              <UserPlus size={12} /> Assign Agent
+            </Button>
+          )}
+
+          {/* Set source */}
+          {can("Edit Leads") && (
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[12px] border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => { setBulkSource(""); setBulkSourceOpen(true); }}>
+              <Tag size={12} /> Set Source
+            </Button>
+          )}
+
+          {/* Mark Relevant */}
+          {can("Edit Leads") && (
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[12px] border-emerald-400 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              onClick={() => handleBulkRelevant(true)}>
+              <Star size={12} /> Relevant
+            </Button>
+          )}
+
+          {/* Mark Irrelevant */}
+          {can("Edit Leads") && (
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[12px] border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+              onClick={() => handleBulkRelevant(false)}>
+              <StarOff size={12} /> Irrelevant
+            </Button>
+          )}
+
+          {/* Delete */}
+          {can("Delete Leads") && (
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[12px] border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              onClick={() => setBulkDeleteConfirm(true)}>
+              <Trash2 size={12} /> Delete
+            </Button>
+          )}
+
+          <button onClick={clearSelection} className="ml-auto text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 flex-shrink-0">
+            <X size={11} /> Clear selection
+          </button>
+        </div>
+      )}
+
       {/* ── Excel-like Grid ───────────────────────────────────────────────────── */}
       <div ref={tableRef} className="rounded-xl border border-gray-200 dark:border-border overflow-auto bg-white dark:bg-card shadow-sm"
         style={{ maxHeight: "calc(100vh - 300px)" }}>
@@ -1271,7 +1389,15 @@ export default function Leads() {
           </colgroup>
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">#</th>
+              <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none" onClick={toggleSelectAll} style={{cursor:"pointer"}} title={allFilteredSelected?"Deselect all":"Select all"}>
+                <div className="flex items-center justify-center gap-1">
+                  {allFilteredSelected
+                    ? <CheckSquare size={13} className="text-primary" />
+                    : someSelected
+                      ? <div className="w-3 h-3 border-2 border-primary rounded-sm bg-primary/20" />
+                      : <Square size={13} className="text-gray-300" />}
+                </div>
+              </th>
               {COLS.map(c => (
                 <th key={c.field} className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none relative group">
                   <span className="pr-2">{c.label}</span>
@@ -1367,11 +1493,19 @@ export default function Leads() {
               return (
                 <React.Fragment key={lead.id}>
                 <tr data-testid={`row-lead-${lead.id}`}
-                  className={`border-b border-gray-100 dark:border-border transition-colors group ${isExpanded?"border-b-0":""}  ${isRowActive?"bg-blue-50/30 dark:bg-blue-950/10":rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10 ${lead.isRelevant===false?"opacity-60":""}`}>
-                  {/* Row number + indicators */}
-                  <td className="border-r border-gray-100 dark:border-border text-center select-none font-mono" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>
+                  className={`border-b border-gray-100 dark:border-border transition-colors group ${isExpanded?"border-b-0":""}  ${selectedIds.has(lead.id)?"bg-primary/5 dark:bg-primary/10":isRowActive?"bg-blue-50/30 dark:bg-blue-950/10":rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10 ${lead.isRelevant===false?"opacity-60":""}`}>
+                  {/* Checkbox + row number + indicators */}
+                  <td className="border-r border-gray-100 dark:border-border text-center select-none font-mono cursor-pointer" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}
+                    onClick={e => { e.stopPropagation(); toggleSelect(lead.id); }}>
                     <div className="flex flex-col items-center justify-center gap-0.5">
-                      <span className="text-[10px] text-gray-300 dark:text-muted-foreground/50">{rowIdx+1}</span>
+                      {selectedIds.has(lead.id) ? (
+                        <CheckSquare size={13} className="text-primary" />
+                      ) : (
+                        <span className="group-hover:hidden text-[10px] text-gray-300 dark:text-muted-foreground/50">{rowIdx+1}</span>
+                      )}
+                      {!selectedIds.has(lead.id) && (
+                        <Square size={13} className="hidden group-hover:block text-gray-300 hover:text-primary transition-colors" />
+                      )}
                       <div className="flex gap-0.5">
                         {lead.isRelevant === false && <span title="Irrelevant"><StarOff size={8} className="text-gray-300" /></span>}
                         {remInfo?.urgent && <span title={`Reminder: ${remInfo.label}`}><Bell size={8} className="text-orange-400" /></span>}
@@ -1608,6 +1742,96 @@ export default function Leads() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Bulk Delete Confirm ─────────────────────────────────────────────── */}
+      <AlertDialog open={bulkDeleteConfirm} onOpenChange={o => !o && setBulkDeleteConfirm(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><Trash2 size={16} className="text-destructive" /> Delete {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>This will permanently delete {selectedIds.size} selected lead{selectedIds.size !== 1 ? "s" : ""}. This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Bulk Assign Agent Dialog ─────────────────────────────────────────── */}
+      <Dialog open={bulkAssignOpen} onOpenChange={o => !o && setBulkAssignOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[16px]">
+              <UserPlus size={16} className="text-primary" /> Assign {selectedIds.size} Lead{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-[13px] text-muted-foreground">Select a sales agent to assign to the {selectedIds.size} selected lead{selectedIds.size !== 1 ? "s" : ""}.</p>
+            <select
+              value={bulkAssignAgent}
+              onChange={e => setBulkAssignAgent(e.target.value)}
+              className="w-full h-9 border border-border rounded-md px-2 text-[13px] bg-background focus:ring-2 focus:ring-primary outline-none"
+            >
+              <option value="">— Unassigned —</option>
+              {salesAgents.filter(a => a.status === "Active").map(a => (
+                <option key={a.id} value={a.name}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setBulkAssignOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleBulkAssign} className="gap-1.5">
+              <UserPlus size={13} /> Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Set Source Dialog ───────────────────────────────────────────── */}
+      <Dialog open={bulkSourceOpen} onOpenChange={o => !o && setBulkSourceOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[16px]">
+              <Tag size={16} className="text-primary" /> Set Source for {selectedIds.size} Lead{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-[13px] text-muted-foreground">Choose a source to apply to all {selectedIds.size} selected lead{selectedIds.size !== 1 ? "s" : ""}.</p>
+            <div className="space-y-1.5">
+              <input
+                type="text"
+                placeholder="Type or select a source…"
+                value={bulkSource}
+                onChange={e => setBulkSource(e.target.value)}
+                className="w-full h-9 border border-border rounded-md px-3 text-[13px] bg-background focus:ring-2 focus:ring-primary outline-none"
+                list="bulk-source-options"
+              />
+              <datalist id="bulk-source-options">
+                {uniqueSources.map(s => <option key={s} value={s} />)}
+                {["Website","Referral","Social Media","Cold Call","Email Campaign","Walk-in","Partner","Other"].filter(s => !uniqueSources.includes(s)).map(s => <option key={s} value={s} />)}
+              </datalist>
+              {/* Quick-pick chips */}
+              <div className="flex flex-wrap gap-1 pt-1">
+                {["Website","Referral","Social Media","Cold Call","Email Campaign","Walk-in","Partner","Other"].map(s => (
+                  <button key={s} type="button"
+                    onClick={() => setBulkSource(s)}
+                    className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${bulkSource === s ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-primary hover:text-primary"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setBulkSourceOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleBulkSource} disabled={!bulkSource.trim()} className="gap-1.5">
+              <Tag size={13} /> Apply Source
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Convert-to-Customer Confirm Dialog ────────────────────────────────── */}
       <Dialog open={!!convertLead} onOpenChange={o => !o && setConvertLead(null)}>
