@@ -3178,6 +3178,18 @@ export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | 
 };
 
 export const deleteInvoice = (id: string): void => {
+  // Cascade: delete every voucher (and its JE) linked to this invoice
+  const linked = getRPVouchers().filter(v =>
+    v.linkedInvoiceId === id ||
+    (v.linkedInvoiceIds ?? []).includes(id) ||
+    v.lines.some(l => l.invoiceId === id)
+  );
+  for (const v of linked) {
+    if (v.journalEntryId) {
+      _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId));
+    }
+  }
+  _saveRPVouchers(getRPVouchers().filter(v => !linked.find(l => l.id === v.id)));
   setStored(INVOICES_KEY, getInvoices().filter(inv => inv.id !== id));
 };
 
@@ -5009,6 +5021,27 @@ export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntr
 }
 
 export function deleteJournalEntry(id: string): void {
+  // Find any voucher that references this JE and reset it back to draft
+  const linked = getRPVouchers().find(v => v.journalEntryId === id);
+  if (linked && linked.status === "posted") {
+    // Reverse invoice payment before unposting
+    if (linked.linkedInvoiceId) {
+      _reverseInvoicePayment(linked.linkedInvoiceId, linked.totalAmount, linked.voucherNumber);
+    }
+    if (linked.linkedInvoiceIds?.length) {
+      for (const line of linked.lines) {
+        if (line.invoiceId) {
+          _reverseInvoicePayment(line.invoiceId, line.amount, linked.voucherNumber);
+        }
+      }
+    }
+    // Reset voucher to draft
+    _saveRPVouchers(getRPVouchers().map(v =>
+      v.id === linked.id
+        ? { ...v, status: "draft", journalEntryId: undefined, updatedAt: new Date().toISOString() }
+        : v
+    ));
+  }
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
 }
 
@@ -5322,6 +5355,8 @@ export interface RPVoucherLine {
   accountName: string;
   description: string;
   amount: number;
+  /** For multi-invoice payment AP lines — the invoice ID this line clears */
+  invoiceId?: string;
 }
 
 export interface RPVoucher {
@@ -5340,7 +5375,9 @@ export interface RPVoucher {
   narration: string;
   status: "draft" | "posted";
   journalEntryId?: string;
-  linkedInvoiceId?: string;    // invoice linked on receipt vouchers
+  linkedInvoiceId?: string;    // single invoice linked on receipt vouchers
+  /** Multi-invoice payment — IDs of every invoice cleared by this payment voucher */
+  linkedInvoiceIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -5392,8 +5429,64 @@ export function updateRPVoucher(
   return all.find(v => v.id === id)!;
 }
 
+/**
+ * Remove the contribution of a voucher from an invoice's payment history and
+ * recalculate its status.  Call this BEFORE deleting a posted voucher.
+ */
+function _reverseInvoicePayment(invoiceId: string, amount: number, voucherNumber: string): void {
+  const inv = getInvoices().find(i => i.id === invoiceId);
+  if (!inv) return;
+  const filtered = (inv.paymentHistory ?? []).filter(r =>
+    !(r.note?.includes(voucherNumber) && Math.abs((parseFloat(r.amount) || 0) - amount) < 0.01)
+  );
+  const newPaid = filtered.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const subtotal = (inv.items || []).reduce((s, it) => {
+    const qty   = parseFloat(it.qty) || 0;
+    const price = parseFloat(it.unitPrice) || 0;
+    const disc  = parseFloat(it.discount) || 0;
+    return s + (qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc));
+  }, 0);
+  const tax   = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
+  const grand = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+  const newStatus: InvoiceStatus =
+    newPaid >= grand - 0.01 ? "Paid" :
+    newPaid > 0             ? "Partial" :
+    "Unpaid";
+  updateInvoice(invoiceId, {
+    amountPaid:     String(newPaid),
+    status:         newStatus,
+    paymentHistory: filtered,
+    paidAt:         newStatus === "Paid" ? inv.paidAt : "",
+  });
+}
+
 export function deleteRPVoucher(id: string): void {
-  _saveRPVouchers(getRPVouchers().filter(v => v.id !== id));
+  const v = getRPVouchers().find(r => r.id === id);
+  if (!v) return;
+
+  // 1. Delete linked Journal Entry
+  if (v.journalEntryId) {
+    _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId));
+  }
+
+  // 2. Reverse invoice payment(s) if this voucher was posted
+  if (v.status === "posted") {
+    // Single-invoice link (receipt vouchers + legacy payment)
+    if (v.linkedInvoiceId) {
+      _reverseInvoicePayment(v.linkedInvoiceId, v.totalAmount, v.voucherNumber);
+    }
+    // Multi-invoice payment — each AP line knows its invoice
+    if (v.linkedInvoiceIds?.length) {
+      for (const line of v.lines) {
+        if (line.invoiceId) {
+          _reverseInvoicePayment(line.invoiceId, line.amount, v.voucherNumber);
+        }
+      }
+    }
+  }
+
+  // 3. Remove the voucher
+  _saveRPVouchers(getRPVouchers().filter(r => r.id !== id));
 }
 
 /**
@@ -5405,9 +5498,15 @@ export function postRPVoucherJE(id: string): JournalEntry {
   const v = getRPVouchers().find(v => v.id === id);
   if (!v) throw new Error("Voucher not found");
   if (v.status === "posted") throw new Error("Already posted");
-  if (!v.cashBankAccountId) throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
 
-  const total = v.lines.reduce((s, l) => s + l.amount, 0);
+  // For payment vouchers that use bankLines, cashBankAccountId is not required
+  const hasMultiBank = v.voucherType === "payment" && v.bankLines && v.bankLines.length > 0;
+  if (!hasMultiBank && !v.cashBankAccountId) {
+    throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
+  }
+
+  const apDebitTotal = v.lines.reduce((s, l) => s + l.amount, 0);
+
   const lines: JournalEntryLine[] = [];
   const partyRef = `${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`;
 
@@ -5416,9 +5515,9 @@ export function postRPVoucherJE(id: string): JournalEntry {
     // DR  Cash / Bank account (money coming in)
     // CR  each line — typically AR, Revenue, or other income accounts
     lines.push({
-      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
+      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId!,
       narration: `Receipt — ${partyRef}`,
-      debit: total, credit: 0,
+      debit: apDebitTotal, credit: 0,
     });
     for (const l of v.lines) {
       lines.push({
@@ -5438,9 +5537,9 @@ export function postRPVoucherJE(id: string): JournalEntry {
         debit: l.amount, credit: 0,
       });
     }
-    if (v.bankLines && v.bankLines.length > 0) {
+    if (hasMultiBank) {
       // Multi-bank payment — credit each bank account separately
-      for (const bl of v.bankLines) {
+      for (const bl of v.bankLines!) {
         lines.push({
           id: crypto.randomUUID(), ledgerId: bl.accountId,
           narration: bl.description || `Payment — ${partyRef}`,
@@ -5449,11 +5548,10 @@ export function postRPVoucherJE(id: string): JournalEntry {
       }
     } else {
       // Legacy / simple payment — single cash/bank account
-      if (!v.cashBankAccountId) throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
       lines.push({
-        id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
+        id: crypto.randomUUID(), ledgerId: v.cashBankAccountId!,
         narration: `Payment — ${partyRef}`,
-        debit: 0, credit: total,
+        debit: 0, credit: apDebitTotal,
       });
     }
   }
@@ -5461,47 +5559,60 @@ export function postRPVoucherJE(id: string): JournalEntry {
   const je = createJournalEntry({
     date: v.date,
     reference: v.voucherNumber,
-    description: `${v.voucherType === "receipt" ? "Receipt" : "Payment"} Voucher${v.partyName ? " — " + v.partyName : ""}`,
+    description: `${v.voucherType === "receipt" ? "Receipt" : "Payment"} Voucher — ${v.partyName || "Party"}`,
     lines,
     status: "posted",
-    totalDebit: total,
-    totalCredit: total,
-    isBalanced: true,
+    totalDebit:  lines.reduce((s, l) => s + l.debit,  0),
+    totalCredit: lines.reduce((s, l) => s + l.credit, 0),
+    isBalanced:  true,
   });
 
-  updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: total });
+  updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: apDebitTotal });
 
-  // ── Update linked invoice balance (Receipt = sale invoice, Payment = purchase invoice) ──
+  // ── Helper: apply payment to one invoice ──────────────────────────────────
+  function _applyInvoicePayment(invoiceId: string, amount: number): void {
+    const inv = getInvoices().find(i => i.id === invoiceId);
+    if (!inv) return;
+    const newPaid = (parseFloat(inv.amountPaid) || 0) + amount;
+    const subtotal = (inv.items || []).reduce((s, it) => {
+      const qty   = parseFloat(it.qty) || 0;
+      const price = parseFloat(it.unitPrice) || 0;
+      const disc  = parseFloat(it.discount) || 0;
+      return s + (qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc));
+    }, 0);
+    const tax   = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
+    const grand = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+    const newStatus: InvoiceStatus =
+      newPaid >= grand - 0.01 ? "Paid" :
+      newPaid > 0             ? "Partial" :
+      inv.status;
+    const record: PaymentRecord = {
+      id:     crypto.randomUUID(),
+      date:   v.date,
+      amount: String(amount),
+      method: v.voucherType === "receipt" ? "Receipt Voucher" : "Payment Voucher",
+      note:   `${v.voucherNumber}${v.narration ? " — " + v.narration : ""}`,
+    };
+    updateInvoice(inv.id, {
+      amountPaid:     String(newPaid),
+      status:         newStatus,
+      paymentHistory: [...(inv.paymentHistory || []), record],
+      paidAt:         newStatus === "Paid" ? new Date().toISOString() : inv.paidAt,
+    });
+  }
+
+  // ── Update linked invoice balance ─────────────────────────────────────────
+  // Single-invoice link (receipt vouchers + legacy payment)
   if (v.linkedInvoiceId) {
-    const inv = getInvoices().find(i => i.id === v.linkedInvoiceId);
-    if (inv) {
-      const newPaid = (parseFloat(inv.amountPaid) || 0) + total;
-      const subtotal = (inv.items || []).reduce((s, it) => {
-        const qty   = parseFloat(it.qty) || 0;
-        const price = parseFloat(it.unitPrice) || 0;
-        const disc  = parseFloat(it.discount) || 0;
-        const line  = qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc);
-        return s + line;
-      }, 0);
-      const tax   = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
-      const grand = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
-      const newStatus: InvoiceStatus =
-        newPaid >= grand - 0.01 ? "Paid" :
-        newPaid > 0             ? "Partial" :
-        inv.status;
-      const record: PaymentRecord = {
-        id:     crypto.randomUUID(),
-        date:   v.date,
-        amount: String(total),
-        method: v.voucherType === "receipt" ? "Receipt Voucher" : "Payment Voucher",
-        note:   `${v.voucherNumber}${v.narration ? " — " + v.narration : ""}`,
-      };
-      updateInvoice(inv.id, {
-        amountPaid:     String(newPaid),
-        status:         newStatus,
-        paymentHistory: [...(inv.paymentHistory || []), record],
-        paidAt:         newStatus === "Paid" ? new Date().toISOString() : inv.paidAt,
-      });
+    _applyInvoicePayment(v.linkedInvoiceId, apDebitTotal);
+  }
+
+  // Multi-invoice payment — apply each AP line's amount to its invoice
+  if (v.linkedInvoiceIds?.length) {
+    for (const line of v.lines) {
+      if (line.invoiceId) {
+        _applyInvoicePayment(line.invoiceId, line.amount);
+      }
     }
   }
 

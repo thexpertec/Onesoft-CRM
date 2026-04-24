@@ -457,14 +457,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
         reference:          ref,
         narration:          narr || `Payment to ${supplierName}`,
         linkedInvoiceId:    undefined,
-        lines: scaledApLines.map(l => ({
+        lines: scaledApLines.map((l, idx) => ({
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
+          invoiceId: supplierInvoices.filter(i => selectedInvIds.has(i.id))[idx]?.id,
         })),
         bankLines: validBank.map(l => ({
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
         })),
+        linkedInvoiceIds: supplierInvoices.filter(i => selectedInvIds.has(i.id)).map(i => i.id),
         totalAmount: Math.min(bankTotal, totalDue),
         status: "draft",
       };
