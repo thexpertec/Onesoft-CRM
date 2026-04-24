@@ -207,31 +207,31 @@ export function LeadsReportDocument({
           </View>
         </View>
 
-        {/* ── Analytics 2×2 ── */}
+        {/* ── Analytics 2x2 ── */}
         <View style={s.analyticsGrid}>
 
           {/* Temperature */}
           <View style={s.analyticsCard}>
             <View style={s.analyticsHead}>
-              <Text style={s.analyticsTitle}>🌡 Temperature  ({totalLeads} leads)</Text>
+              <Text style={s.analyticsTitle}>TEMPERATURE  ({totalLeads} leads)</Text>
             </View>
             <View style={s.analyticsBody}>
-              <PdfBarRow label="🔴 Hot"   count={tempStats.Hot}   total={totalLeads} color={C.hot}  />
-              <PdfBarRow label="🟡 Warm"  count={tempStats.Warm}  total={totalLeads} color={C.warm} />
-              <PdfBarRow label="🔵 Cold"  count={tempStats.Cold}  total={totalLeads} color={C.cold} />
-              <PdfBarRow label="⚪ Unset" count={tempStats.Unset} total={totalLeads} color="#9ca3af" />
+              <PdfBarRow label="Hot"   count={tempStats.Hot}   total={totalLeads} color={C.hot}  />
+              <PdfBarRow label="Warm"  count={tempStats.Warm}  total={totalLeads} color={C.warm} />
+              <PdfBarRow label="Cold"  count={tempStats.Cold}  total={totalLeads} color={C.cold} />
+              <PdfBarRow label="Unset" count={tempStats.Unset} total={totalLeads} color="#9ca3af" />
             </View>
           </View>
 
           {/* Relevance */}
           <View style={s.analyticsCard}>
             <View style={s.analyticsHead}>
-              <Text style={s.analyticsTitle}>⭐ Relevance  ({totalLeads} leads)</Text>
+              <Text style={s.analyticsTitle}>RELEVANCE  ({totalLeads} leads)</Text>
             </View>
             <View style={s.analyticsBody}>
-              <PdfBarRow label="✓ Relevant"     count={relevanceStats.yes}   total={totalLeads} color={C.success} />
-              <PdfBarRow label="✗ Not Relevant" count={relevanceStats.no}    total={totalLeads} color={C.danger}  />
-              <PdfBarRow label="⚪ Not Set"      count={relevanceStats.unset} total={totalLeads} color="#9ca3af"  />
+              <PdfBarRow label="Relevant"     count={relevanceStats.yes}   total={totalLeads} color={C.success} />
+              <PdfBarRow label="Not Relevant" count={relevanceStats.no}    total={totalLeads} color={C.danger}  />
+              <PdfBarRow label="Not Set"      count={relevanceStats.unset} total={totalLeads} color="#9ca3af"   />
               <View style={s.divider} />
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <Text style={{ fontSize: 7.5, color: C.muted }}>Relevance rate</Text>
@@ -246,7 +246,7 @@ export function LeadsReportDocument({
           {/* Pipeline Status */}
           <View style={s.analyticsCard}>
             <View style={s.analyticsHead}>
-              <Text style={s.analyticsTitle}>📊 Pipeline Status  ({totalLeads} leads)</Text>
+              <Text style={s.analyticsTitle}>PIPELINE STATUS  ({totalLeads} leads)</Text>
             </View>
             <View style={s.analyticsBody}>
               {statusStats.slice(0, 8).map(({ label, count }) => (
@@ -258,7 +258,7 @@ export function LeadsReportDocument({
           {/* Source */}
           <View style={s.analyticsCard}>
             <View style={s.analyticsHead}>
-              <Text style={s.analyticsTitle}>🌐 Lead Source  ({totalLeads} leads)</Text>
+              <Text style={s.analyticsTitle}>LEAD SOURCE  ({totalLeads} leads)</Text>
             </View>
             <View style={s.analyticsBody}>
               {sourceStats.slice(0, 8).map(({ label, count }) => (
@@ -391,10 +391,16 @@ export function LeadsReportDocument({
   );
 }
 
-// ─── Trigger: renders PDF and opens in new tab ────────────────────────────────
+// ─── Trigger: renders PDF and downloads directly ─────────────────────────────
 export async function generateLeadsReportPdf(props: LeadsReportPdfProps): Promise<void> {
-  const blob = await pdf(<LeadsReportDocument {...props} />).toBlob();
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, "_blank");
-  if (win) win.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+  const blob     = await pdf(<LeadsReportDocument {...props} />).toBlob();
+  const url      = URL.createObjectURL(blob);
+  const filename = `leads-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const a        = document.createElement("a");
+  a.href         = url;
+  a.download     = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
