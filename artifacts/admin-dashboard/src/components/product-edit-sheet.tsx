@@ -737,12 +737,12 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                     <thead>
                       <tr className="bg-muted/50 border-b border-border">
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-2 w-[16%]">Variant Name</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[13%]">SKU</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[11%]">Model</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[19%]">SKU</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[16%]">Model</th>
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[22%]">Barcode</th>
                         <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Purchase ({sym})</th>
                         <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Retail ({sym})</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[18%]">Image</th>
+                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[7%]">Image</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -794,21 +794,20 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                                 placeholder={form.price || "0.00"}
                                 className="h-7 w-full text-xs tabular-nums text-right px-2" />
                             </td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex items-center gap-1">
-                                <button type="button" onClick={() => setPickerVariantId(v.id)}
-                                  className="flex items-center gap-1.5 h-7 px-2 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-[10px] text-muted-foreground hover:text-blue-600 flex-1 min-w-0">
+                            <td className="px-1 py-1.5">
+                              <div className="flex items-center gap-0.5 justify-center">
+                                <button type="button" onClick={() => setPickerVariantId(v.id)} title={v.image ? "Change image" : "Add image"}
+                                  className="flex items-center justify-center h-7 w-7 shrink-0 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-muted-foreground hover:text-blue-600">
                                   {v.image ? (
-                                    <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover border border-border shrink-0" />
+                                    <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover" />
                                   ) : (
-                                    <ImageIcon size={11} className="shrink-0 opacity-50" />
+                                    <ImageIcon size={12} className="opacity-50" />
                                   )}
-                                  <span className="truncate">{v.image ? "Change" : "Image…"}</span>
                                 </button>
                                 {v.image && (
-                                  <button type="button" onClick={() => patchVariantImage(v.id, "")}
-                                    className="w-5 h-5 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors">
-                                    <X size={9} />
+                                  <button type="button" onClick={() => patchVariantImage(v.id, "")} title="Remove image"
+                                    className="w-4 h-4 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors">
+                                    <X size={8} />
                                   </button>
                                 )}
                               </div>
