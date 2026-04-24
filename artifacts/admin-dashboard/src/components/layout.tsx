@@ -147,8 +147,9 @@ const CRM_COLUMNS: MegaColumn[] = [
     color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
     desc: "Pipeline & prospecting",
     links: [
-      { label: "All Leads", href: "/leads", icon: Users    },
-      { label: "Add Lead",  href: "/leads", icon: UserPlus },
+      { label: "All Leads",    href: "/leads",        icon: Users      },
+      { label: "Add Lead",     href: "/leads",        icon: UserPlus   },
+      { label: "Leads Report", href: "/leads-report", icon: BarChart3  },
     ],
   },
   {
