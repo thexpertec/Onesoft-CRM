@@ -1408,18 +1408,29 @@ export async function syncProductsToStore(tenantId?: string | null): Promise<num
   const products = getProducts();
   if (products.length === 0) return 0;
   const ns = tenantId ? `t:${tenantId}` : "global";
+
+  // Inject live stock qty into each product's openingStock field so the
+  // tenant-store always shows current available stock rather than the static
+  // value that was entered when the product was first created.
+  const liveStock = getStock();
+  const productsWithStock = products.map(p => {
+    const liveQty = getProductStockQty(p, liveStock);
+    if (liveQty === null) return p;                       // no stock records — keep original
+    return { ...p, openingStock: String(liveQty) };
+  });
+
   // Use a direct fetch that throws on error instead of the fire-and-forget helper
   const url = `/api/kv/${encodeURIComponent(ns)}/${encodeURIComponent(PRODUCTS_KEY)}`;
   const res = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value: products }),
+    body: JSON.stringify({ value: productsWithStock }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.status.toString());
     throw new Error(`Server returned ${res.status}: ${text}`);
   }
-  return products.length;
+  return productsWithStock.length;
 }
 
 // ── SKU uniqueness helper ──────────────────────────────────────────────────
@@ -2551,6 +2562,48 @@ const STOCK_KEY = "admin-stock";
 
 export const getStock = (): StockItem[] => getStored<StockItem>(STOCK_KEY);
 
+/**
+ * Return total available quantity for a product across ALL of its stock records.
+ * For products with variants, this sums both the parent product's SKU stock and
+ * every variant's own SKU stock so that the product list and POS grid stay in sync
+ * regardless of whether stock was received under a parent or variant SKU.
+ *
+ * @param prod  Full Product object (needs sku + optional variants array)
+ * @param all   Optional pre-fetched stock array (avoids re-reading storage)
+ * @returns     Total qty, or null if there are no stock records at all for this product
+ */
+export function getProductStockQty(prod: Product, all?: StockItem[]): number | null {
+  const stocks = all ?? getStock();
+  const skus = new Set<string>();
+  if (prod.sku?.trim()) skus.add(prod.sku.trim().toLowerCase());
+  prod.variants?.forEach(v => { if (v.sku?.trim()) skus.add(v.sku.trim().toLowerCase()); });
+  if (skus.size === 0) return null;
+
+  let total = 0;
+  let found = false;
+  for (const s of stocks) {
+    const ssku = (s.sku?.trim() || s.productName?.trim())?.toLowerCase();
+    if (ssku && skus.has(ssku)) {
+      total += Math.max(0, parseFloat(s.quantity) || 0);
+      found = true;
+    }
+  }
+  // Also try matching by product name if no SKU match was found
+  if (!found) {
+    const name = prod.name?.trim().toLowerCase();
+    if (name) {
+      for (const s of stocks) {
+        const sname = s.productName?.trim().toLowerCase();
+        if (sname && sname === name) {
+          total += Math.max(0, parseFloat(s.quantity) || 0);
+          found = true;
+        }
+      }
+    }
+  }
+  return found ? total : null;
+}
+
 export const createStockItem = (data: Omit<StockItem, "id" | "createdAt" | "updatedAt">): StockItem => {
   const item: StockItem = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(STOCK_KEY, [...getStock(), item]);
@@ -2870,54 +2923,75 @@ export function reconcileAllStock(): number {
 }
 
 // ─── Stock Mutations (with Ledger) ────────────────────────────────────────────
+/** Deduct qty from stock records that match `sku`, recording ledger entries. Returns remaining undeducted qty. */
+function _deductFromStockBySku(
+  sku: string,
+  qty: number,
+  stocks: StockItem[],
+  ledger: Omit<StockLedgerEntry, "id" | "createdAt">[],
+  today: string,
+  reference: string,
+  sourceType: string | undefined,
+  alreadyExists?: (entityId: string) => boolean,
+): number {
+  let remaining = qty;
+  for (let i = 0; i < stocks.length && remaining > 0; i++) {
+    if (stocks[i].sku !== sku) continue;
+    if (alreadyExists && alreadyExists(stocks[i].id)) continue;
+    const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+    const deduct  = Math.min(current, remaining);
+    stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+    remaining -= deduct;
+    if (deduct > 0) ledger.push({
+      entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+      date: today, txType: "sale", sourceType, reference,
+      qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+      unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
+    });
+  }
+  return remaining;
+}
+
 export const deductStockForSale = (saleItems: SaleItem[], reference = "", sourceType?: string): void => {
   const stocks = getStock();
   const today  = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
-  // Duplicate guard: skip entirely if this reference already has ledger entries
-  if (reference) {
-    const existing = getStockLedger();
-    const alreadyExists = (entityId: string) =>
-      existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "sale");
+  // Resolve parent-product SKU lookup map for variant fallback
+  // (lazy-loaded once, only if any item has a variantId)
+  let _parentSkuCache: Map<string, string> | null = null;
+  const parentSkuFor = (item: SaleItem): string | null => {
+    if (!item.variantId || !item.productId) return null;
+    if (!_parentSkuCache) {
+      _parentSkuCache = new Map();
+      getProducts().forEach(p => { if (p.sku) _parentSkuCache!.set(p.id, p.sku); });
+    }
+    return _parentSkuCache.get(item.productId) ?? null;
+  };
 
-    saleItems.forEach(item => {
-      if (!item.sku) return;
-      let remaining = parseFloat(item.qty) || 0;
-      for (let i = 0; i < stocks.length && remaining > 0; i++) {
-        if (stocks[i].sku !== item.sku) continue;
-        if (alreadyExists(stocks[i].id)) return; // skip — already recorded
-        const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-        const deduct  = Math.min(current, remaining);
-        stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
-        remaining -= deduct;
-        if (deduct > 0) ledger.push({
-          entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-          date: today, txType: "sale", sourceType, reference,
-          qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
-          unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
-        });
+  const existing = reference ? getStockLedger() : [];
+  const alreadyExists = reference
+    ? (entityId: string) => existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "sale")
+    : undefined;
+
+  saleItems.forEach(item => {
+    if (!item.sku) return;
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0) return;
+
+    // Primary: deduct from stock records keyed by the item's own SKU
+    let remaining = _deductFromStockBySku(item.sku, qty, stocks, ledger, today, reference, sourceType, alreadyExists);
+
+    // Fallback: if item is a variant (variantId set) and stock was received under the
+    // parent product's SKU (common when purchase invoices don't use variant lines),
+    // deduct from the parent-SKU stock records for whatever is still remaining.
+    if (remaining > 0 && item.variantId) {
+      const parentSku = parentSkuFor(item);
+      if (parentSku && parentSku !== item.sku) {
+        _deductFromStockBySku(parentSku, remaining, stocks, ledger, today, reference, sourceType, alreadyExists);
       }
-    });
-  } else {
-    saleItems.forEach(item => {
-      if (!item.sku) return;
-      let remaining = parseFloat(item.qty) || 0;
-      for (let i = 0; i < stocks.length && remaining > 0; i++) {
-        if (stocks[i].sku !== item.sku) continue;
-        const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-        const deduct  = Math.min(current, remaining);
-        stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
-        remaining -= deduct;
-        if (deduct > 0) ledger.push({
-          entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-          date: today, txType: "sale", sourceType, reference,
-          qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
-          unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
-        });
-      }
-    });
-  }
+    }
+  });
 
   setStored(STOCK_KEY, stocks);
   batchLedger(ledger);

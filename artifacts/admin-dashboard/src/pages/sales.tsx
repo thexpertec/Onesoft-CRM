@@ -7,7 +7,7 @@ import {
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
-  importOnlineSalesFromKv, findProductForItem, effectiveItemCost,
+  importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -1026,12 +1026,20 @@ function POSView({
     return Array.from(set).sort();
   }, [allProducts]);
 
-  // Stock qty per SKU (moved here so filteredProds can use it for sorting)
+  // Stock qty per SKU (for variant-level lookups: POS variant picker, cart map)
   const stockMap = useMemo(() => {
     const m: Record<string, number> = {};
     stock.forEach(s => { if (s.sku) m[s.sku] = (m[s.sku] || 0) + (parseFloat(s.quantity) || 0); });
     return m;
   }, [stock]);
+
+  // Product-level stock map: product.id → total qty (parent SKU + ALL variant SKUs)
+  // This is what the product grid uses so variant stock shows correctly per product card.
+  const productStockMap = useMemo(() => {
+    const m: Record<string, number | null> = {};
+    allProducts.forEach(p => { m[p.id] = getProductStockQty(p, stock); });
+    return m;
+  }, [allProducts, stock]);
 
   // ── Sales summary for top-selling sorts ──────────────────────────────────
   const saleSummary = useMemo(() => {
@@ -1991,8 +1999,10 @@ function POSView({
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
                   const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
-                  const inCart       = cartQtyMap[product.sku] || 0;
-                  const stockQty     = stockMap[product.sku] ?? null;
+                  // Aggregate inCart across parent + all variant SKUs
+                  const allSkus = [product.sku, ...(product.variants?.map(v => v.sku).filter(Boolean) ?? [])] as string[];
+                  const inCart       = allSkus.reduce((s, sku) => s + (cartQtyMap[sku] || 0), 0);
+                  const stockQty     = productStockMap[product.id] ?? null;
                   const availableQty = (stockQty ?? 0) - inCart;
                   const lowStock     = stockQty !== null && availableQty > 0 && availableQty <= 5;
                   const stockBlocked = !allowNegativeStock && stockQty !== null && availableQty <= 0;
@@ -2070,8 +2080,9 @@ function POSView({
                 {filteredProds.map((product) => {
                   const catIdx   = allCats.indexOf(product.category);
                   const catColor = catIdx >= 0 ? CAT_COLOURS[catIdx % CAT_COLOURS.length] : CAT_COLOURS[0];
-                  const inCart       = cartQtyMap[product.sku] || 0;
-                  const stockQty     = stockMap[product.sku] ?? null;
+                  const allSkus2 = [product.sku, ...(product.variants?.map(v => v.sku).filter(Boolean) ?? [])] as string[];
+                  const inCart       = allSkus2.reduce((s, sku) => s + (cartQtyMap[sku] || 0), 0);
+                  const stockQty     = productStockMap[product.id] ?? null;
                   const availableQty = (stockQty ?? 0) - inCart;
                   const lowStock     = stockQty !== null && availableQty > 0 && availableQty <= 5;
                   // Card is blocked if: sale not draft  OR  (overselling disabled AND no available stock)

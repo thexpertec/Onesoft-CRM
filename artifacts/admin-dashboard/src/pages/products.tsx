@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore } from "@/lib/store";
+import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -207,12 +207,7 @@ export default function ProductsPage() {
     return m;
   }, [stock]);
 
-  const getProductStock = (prod: Product): number | null => {
-    const bysku  = prod.sku?.trim()  ? stockBySkuMap[prod.sku.trim().toLowerCase()]  : undefined;
-    const byname = prod.name?.trim() ? stockBySkuMap[prod.name.trim().toLowerCase()] : undefined;
-    const v = bysku ?? byname;
-    return v !== undefined ? v : null;
-  };
+  const getProductStock = (prod: Product): number | null => getProductStockQty(prod, stock);
 
   const { toast } = useToast();
   const [, navigate] = useLocation();
