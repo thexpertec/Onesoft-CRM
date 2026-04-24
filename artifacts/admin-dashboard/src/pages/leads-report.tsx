@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from "react";
 import { useLeads, useSalesAgents } from "@/hooks/use-data";
 import { Lead, CallLog, CallOutcome } from "@/lib/store";
-import { format, subDays, startOfDay, parseISO, isWithinInterval } from "date-fns";
+import { format, subDays, startOfDay, parseISO } from "date-fns";
 import {
   PhoneCall, PhoneOff, MessageSquare, PhoneMissed, Clock,
   ChevronDown, ChevronRight, BarChart3, Users, Calendar,
-  TrendingUp, TrendingDown, Filter, Download,
+  Filter, Download, FileDown, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { generateLeadsReportPdf } from "./leads-report-pdf";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type Range = "7" | "14" | "30" | "90" | "custom";
@@ -58,6 +59,7 @@ export default function LeadsReportPage() {
   const [customTo, setCustomTo]     = useState("");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [expanded, setExpanded]     = useState<Set<string>>(new Set());
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // ── Date window ──────────────────────────────────────────────────────────
   const { fromDate, toDate } = useMemo(() => {
@@ -150,6 +152,30 @@ export default function LeadsReportPage() {
     });
   };
 
+  // ── PDF export ────────────────────────────────────────────────────────────
+  const handlePrintPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const rangeLabel = range === "custom"
+        ? `${customFrom || "—"} → ${customTo || "—"}`
+        : `Last ${range} days`;
+      await generateLeadsReportPdf({
+        dayStats,
+        agentStats,
+        grandTotal,
+        totalAnswered,
+        answerRate,
+        totalLeadsCreated: dayStats.reduce((s, d) => s + d.leadsCreated, 0),
+        todayCalls: todayStat?.total ?? 0,
+        agentFilter,
+        rangeLabel,
+        generatedAt: format(new Date(), "dd MMM yyyy, HH:mm"),
+      });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   // ── CSV export ────────────────────────────────────────────────────────────
   const exportCsv = () => {
     const rows = [
@@ -177,9 +203,17 @@ export default function LeadsReportPage() {
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Leads Report</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Daily call activity & lead creation by agent</p>
         </div>
-        <Button variant="outline" size="sm" onClick={exportCsv} className="gap-1.5">
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-1.5">
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+          <Button size="sm" onClick={handlePrintPdf} disabled={pdfLoading} className="gap-1.5">
+            {pdfLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <FileDown className="h-4 w-4" />}
+            {pdfLoading ? "Generating…" : "Print PDF"}
+          </Button>
+        </div>
       </div>
 
       {/* ── Filters ── */}

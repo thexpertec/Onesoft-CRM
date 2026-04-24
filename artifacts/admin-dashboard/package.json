@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
     "@tiptap/extension-color": "^3.22.1",
     "@tiptap/extension-highlight": "^3.22.1",
     "@tiptap/extension-link": "^3.22.1",
