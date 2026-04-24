@@ -371,9 +371,12 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const total = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
-  // ── Payment-mode (new voucher only) ─────────────────────────────────────────
-  const isNewPayment = vtype === "payment" && !isEdit;
+  // ── Payment-mode (new payment voucher only) ─────────────────────────────────
+  const isNewPayment  = vtype === "payment" && !isEdit;
+  // ── Receipt-mode (new receipt voucher only) ──────────────────────────────────
+  const isNewReceipt  = vtype === "receipt"  && !isEdit;
 
+  // ─── Payment state ───────────────────────────────────────────────────────────
   const [supplierName,   setSupplierName]   = useState<string>(initial?.partyName ?? "");
   const [selectedInvIds, setSelectedInvIds] = useState<Set<string>>(new Set());
   const [payBankLines,   setPayBankLines]   = useState<LineRow[]>(() =>
@@ -439,6 +442,75 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const remainingBalance = totalDue - Math.min(bankTotal, totalDue);
 
+  // ─── Receipt state (mirrors payment state with buyer / AR) ───────────────────
+  const [buyerName,            setBuyerName]            = useState<string>(initial?.partyName ?? "");
+  const [selectedReceiptInvIds,setSelectedReceiptInvIds] = useState<Set<string>>(new Set());
+  const [recvBankLines,        setRecvBankLines]        = useState<LineRow[]>(() =>
+    initial?.bankLines?.length
+      ? initial.bankLines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
+      : [emptyLine()]
+  );
+
+  // All customers that could be payers (anyone who is NOT supplier-only)
+  const buyers = useMemo<Customer[]>(() =>
+    getCustomers().filter(c => c.customerRole !== "Supplier"),
+  []);
+
+  // Sale invoices for the selected buyer that have an outstanding balance
+  const buyerInvoices = useMemo<Invoice[]>(() => {
+    if (!isNewReceipt || !buyerName) return [];
+    return getInvoices().filter(inv =>
+      inv.invoiceType !== "purchase" &&
+      inv.status !== "Cancelled" &&
+      (inv.customer ?? "").toLowerCase() === buyerName.toLowerCase()
+    );
+  }, [buyerName, isNewReceipt]);
+
+  // Auto-select all buyer invoices when the buyer changes
+  const receiptInvIdsKey = buyerInvoices.map(i => i.id).join(",");
+  useEffect(() => {
+    if (!isNewReceipt) return;
+    setSelectedReceiptInvIds(new Set(buyerInvoices.map(i => i.id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receiptInvIdsKey, isNewReceipt]);
+
+  // AR credit lines auto-generated from selected buyer invoices
+  const computedArLines = useMemo<LineRow[]>(() => {
+    if (!isNewReceipt) return [];
+    const settings  = getSettings();
+    const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
+    return buyerInvoices
+      .filter(inv => selectedReceiptInvIds.has(inv.id))
+      .map(inv => {
+        const arAccId  = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AR_GROUP) || groupArId;
+        const arAcc    = accounts.find(a => a.id === arAccId);
+        const outstanding = invOutstanding(inv);
+        return {
+          id:          inv.id,
+          accountId:   arAccId,
+          accountName: arAcc?.name ?? "Trade Receivables",
+          description: inv.invoiceNumber,
+          amount:      outstanding.toFixed(2),
+        };
+      });
+  }, [buyerInvoices, selectedReceiptInvIds, accounts, isNewReceipt]);
+
+  const totalReceivable   = computedArLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const recvBankTotal     = recvBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const overRecvBank      = recvBankTotal > totalReceivable + 0.001;
+  const remainingReceiptBalance = totalReceivable - Math.min(recvBankTotal, totalReceivable);
+
+  // Scale AR credit lines proportionally when receiving partial payment
+  const scaledArLines = useMemo<LineRow[]>(() => {
+    if (!isNewReceipt || totalReceivable === 0 || recvBankTotal === 0) return computedArLines;
+    const recvAmount = Math.min(recvBankTotal, totalReceivable);
+    const scale      = recvAmount / totalReceivable;
+    return computedArLines.map(l => ({
+      ...l,
+      amount: ((parseFloat(l.amount) || 0) * scale).toFixed(2),
+    }));
+  }, [computedArLines, recvBankTotal, totalReceivable, isNewReceipt]);
+
   const setLine = (id: string, patch: Partial<LineRow>) =>
     setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
 
@@ -471,6 +543,33 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
         status: "draft",
       };
     }
+    if (isNewReceipt) {
+      const validBank = recvBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      return {
+        voucherType:         "receipt",
+        date,
+        partyName:           buyerName,
+        cashBankAccountId:   validBank[0]?.accountId   ?? "",
+        cashBankAccountName: validBank[0]?.accountName ?? "",
+        reference:           ref,
+        narration:           narr || `Receipt from ${buyerName}`,
+        linkedInvoiceId:     undefined,
+        // lines = AR credit lines (cleared receivables) — scaled to bank total
+        lines: scaledArLines.map((l, idx) => ({
+          id: l.id, accountId: l.accountId, accountName: l.accountName,
+          description: l.description, amount: parseFloat(l.amount) || 0,
+          invoiceId: buyerInvoices.filter(i => selectedReceiptInvIds.has(i.id))[idx]?.id,
+        })),
+        // bankLines = cash/bank debit lines (money in)
+        bankLines: validBank.map(l => ({
+          id: l.id, accountId: l.accountId, accountName: l.accountName,
+          description: l.description, amount: parseFloat(l.amount) || 0,
+        })),
+        linkedInvoiceIds: buyerInvoices.filter(i => selectedReceiptInvIds.has(i.id)).map(i => i.id),
+        totalAmount: Math.min(recvBankTotal, totalReceivable),
+        status: "draft",
+      };
+    }
     return {
       voucherType: vtype,
       date,
@@ -499,6 +598,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
       if (validBank.length === 0) return "Please add at least one bank / cash payment line.";
       if (overBank) return `Bank total (${fmtAmt(bankTotal, sym)}) exceeds total due (${fmtAmt(totalDue, sym)}).`;
+      return null;
+    }
+    if (isNewReceipt) {
+      if (!buyerName) return "Please select a buyer.";
+      if (computedArLines.length === 0) return "Please select at least one invoice to receive payment for.";
+      const validBank = recvBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      if (validBank.length === 0) return "Please add at least one bank / cash account to receive payment into.";
+      if (overRecvBank) return `Bank total (${fmtAmt(recvBankTotal, sym)}) exceeds total receivable (${fmtAmt(totalReceivable, sym)}).`;
       return null;
     }
     if (!cbId) return `${vtype === "receipt" ? "Received Into" : "Paid From"} (Cash / Bank) account is required.`;
@@ -802,9 +909,247 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
           )}
 
           {/* ══════════════════════════════════════════════════════════════════
-               RECEIPT / EDIT FLOW  (existing receipt vouchers + all edits)
+               NEW RECEIPT FLOW  (new receipt vouchers only — mirrors payment)
           ══════════════════════════════════════════════════════════════════ */}
-          {!isNewPayment && (
+          {isNewReceipt && (
+            <>
+              {/* 1 — Buyer selector */}
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Buyer *
+                </label>
+                <div className="relative">
+                  <select
+                    value={buyerName}
+                    onChange={e => setBuyerName(e.target.value)}
+                    className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">— Select buyer —</option>
+                    {buyers.map(b => (
+                      <option key={b.id} value={b.name}>
+                        {b.name}{b.company ? ` (${b.company})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+
+              {/* 2 — Invoice capsule chips */}
+              {buyerName && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      Sale Invoices
+                    </label>
+                    {buyerInvoices.length > 0 && (
+                      <div className="flex gap-2 text-xs">
+                        <button type="button" onClick={() => setSelectedReceiptInvIds(new Set(buyerInvoices.map(i => i.id)))}
+                          className="text-primary hover:underline">Select All</button>
+                        <span className="text-border">|</span>
+                        <button type="button" onClick={() => setSelectedReceiptInvIds(new Set())}
+                          className="text-muted-foreground hover:underline">Clear</button>
+                      </div>
+                    )}
+                  </div>
+                  {buyerInvoices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">No sale invoices found for this buyer.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {buyerInvoices.map(inv => {
+                        const outstanding = invOutstanding(inv);
+                        const isSelected  = selectedReceiptInvIds.has(inv.id);
+                        return (
+                          <button key={inv.id} type="button"
+                            onClick={() => setSelectedReceiptInvIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(inv.id)) next.delete(inv.id); else next.add(inv.id);
+                              return next;
+                            })}
+                            className={`inline-flex flex-col items-start px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                              isSelected
+                                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                                : "bg-background border-border text-muted-foreground hover:border-emerald-400 hover:text-foreground"
+                            }`}
+                          >
+                            <span className="font-semibold">{inv.invoiceNumber}</span>
+                            <span className="text-[10px] opacity-80">{sym}{outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3 — Date + balance summary */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="space-y-1.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                      Total Outstanding{selectedReceiptInvIds.size > 0 ? ` (${selectedReceiptInvIds.size} invoice${selectedReceiptInvIds.size !== 1 ? "s" : ""})` : ""}
+                    </label>
+                    <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
+                      {fmtAmt(totalReceivable, sym)}
+                    </div>
+                  </div>
+                  {recvBankTotal > 0 && (
+                    <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">You're receiving</span>
+                      <span className="font-semibold text-foreground">{fmtAmt(Math.min(recvBankTotal, totalReceivable), sym)}</span>
+                    </div>
+                  )}
+                  {recvBankTotal > 0 && remainingReceiptBalance > 0.001 && (
+                    <div className="rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Due balance remaining</span>
+                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(remainingReceiptBalance, sym)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4 — AR credit lines (read-only, auto-generated) */}
+              {computedArLines.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      Clearing — Receivables (Credit Side, Auto-Generated)
+                    </label>
+                    {recvBankTotal > 0 && remainingReceiptBalance > 0.001 && (
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                        Partial payment — amounts scaled to received total
+                      </span>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
+                          <th className="text-left px-3 py-2 w-8">#</th>
+                          <th className="text-left px-3 py-2">AR Account</th>
+                          <th className="text-left px-3 py-2 w-32">Invoice</th>
+                          <th className="text-right px-3 py-2 w-28">Outstanding</th>
+                          <th className="text-right px-3 py-2 w-28">Receiving Now</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {computedArLines.map((l, idx) => {
+                          const scaled       = scaledArLines[idx];
+                          const outstanding  = parseFloat(l.amount) || 0;
+                          const receivingNow = parseFloat(scaled?.amount ?? l.amount) || 0;
+                          const isPartial    = Math.abs(receivingNow - outstanding) > 0.001;
+                          return (
+                            <tr key={l.id} className="border-t border-border bg-muted/10">
+                              <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                              <td className="px-3 py-2 text-foreground/80">{l.accountName}</td>
+                              <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{l.description}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground text-xs">{fmtAmt(outstanding, sym)}</td>
+                              <td className={`px-3 py-2 text-right font-semibold ${isPartial ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                                {fmtAmt(receivingNow, sym)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/30">
+                          <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground font-semibold text-sm">{fmtAmt(totalReceivable, sym)}</td>
+                          <td className={`px-3 py-2 text-right font-bold text-sm ${overRecvBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                            {fmtAmt(Math.min(recvBankTotal || totalReceivable, totalReceivable), sym)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 5 — Multi-bank receive lines (debit side) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                    Received Into — Bank / Cash Accounts (Debit Side)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {overRecvBank && <span className="text-[10px] text-red-500 font-medium">⚠ Exceeds total receivable</span>}
+                    <button type="button" onClick={() => setRecvBankLines(p => [...p, emptyLine()])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline">
+                      <Plus className="h-3.5 w-3.5" /> Add Bank
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
+                        <th className="text-left px-3 py-2 w-8">#</th>
+                        <th className="text-left px-3 py-2">Cash / Bank Account *</th>
+                        <th className="text-left px-3 py-2 w-40">Reference / Cheque</th>
+                        <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recvBankLines.map((l, idx) => (
+                        <tr key={l.id} className="border-t border-border">
+                          <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                          <td className="px-2 py-1.5">
+                            <AccDropdown
+                              accounts={accounts}
+                              value={l.accountId}
+                              onChange={(id, name) => setRecvBankLines(prev => prev.map(r => r.id === l.id ? { ...r, accountId: id, accountName: name } : r))}
+                              placeholder="Select Cash / Bank account…"
+                              filterCashBank
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input type="text" value={l.description}
+                              onChange={e => setRecvBankLines(prev => prev.map(r => r.id === l.id ? { ...r, description: e.target.value } : r))}
+                              placeholder="Cheque #, IBAN, ref…"
+                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
+                          </td>
+                          <td className="px-2 py-1.5 text-right">
+                            <input type="number" min="0" step="0.01" value={l.amount}
+                              onChange={e => setRecvBankLines(prev => prev.map(r => r.id === l.id ? { ...r, amount: e.target.value } : r))}
+                              className={`w-full rounded border px-2 py-1 text-sm bg-transparent outline-none text-right ${
+                                overRecvBank ? "border-red-400 text-red-600" : "border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring"
+                              }`} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button type="button"
+                              onClick={() => setRecvBankLines(prev => prev.length > 1 ? prev.filter(r => r.id !== l.id) : prev)}
+                              className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/30">
+                        <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Bank Total</td>
+                        <td className={`px-3 py-2 text-right font-bold ${overRecvBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {fmtAmt(recvBankTotal, sym)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+               EDIT FLOW  (existing vouchers being edited / viewed)
+          ══════════════════════════════════════════════════════════════════ */}
+          {!isNewPayment && !isNewReceipt && (
             <>
               {/* Invoice link */}
               <div className="space-y-3">

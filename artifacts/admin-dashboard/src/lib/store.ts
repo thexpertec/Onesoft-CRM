@@ -5600,26 +5600,38 @@ export function postRPVoucherJE(id: string): JournalEntry {
   if (!v) throw new Error("Voucher not found");
   if (v.status === "posted") throw new Error("Already posted");
 
-  // For payment vouchers that use bankLines, cashBankAccountId is not required
-  const hasMultiBank = v.voucherType === "payment" && v.bankLines && v.bankLines.length > 0;
+  // Both payment AND new-flow receipt vouchers store bank accounts in bankLines
+  const hasMultiBank = (v.bankLines && v.bankLines.length > 0) ?? false;
   if (!hasMultiBank && !v.cashBankAccountId) {
     throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
   }
 
-  const apDebitTotal = v.lines.reduce((s, l) => s + l.amount, 0);
+  const linesTotal = v.lines.reduce((s, l) => s + l.amount, 0);
 
   const lines: JournalEntryLine[] = [];
   const partyRef = `${v.partyName || "Party"}${v.reference ? " | " + v.reference : ""}`;
 
   if (v.voucherType === "receipt") {
     // ── Receipt ──────────────────────────────────────────────────────────────
-    // DR  Cash / Bank account (money coming in)
-    // CR  each line — typically AR, Revenue, or other income accounts
-    lines.push({
-      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId!,
-      narration: `Receipt — ${partyRef}`,
-      debit: apDebitTotal, credit: 0,
-    });
+    // DR  Bank / Cash accounts (money coming in) — multi-bank or single
+    // CR  each line — AR accounts (one per invoice, auto-generated)
+    if (hasMultiBank) {
+      // New multi-bank receipt flow
+      for (const bl of v.bankLines!) {
+        lines.push({
+          id: crypto.randomUUID(), ledgerId: bl.accountId,
+          narration: bl.description || `Receipt — ${partyRef}`,
+          debit: bl.amount, credit: 0,
+        });
+      }
+    } else {
+      // Legacy / simple receipt — single cash/bank account
+      lines.push({
+        id: crypto.randomUUID(), ledgerId: v.cashBankAccountId!,
+        narration: `Receipt — ${partyRef}`,
+        debit: linesTotal, credit: 0,
+      });
+    }
     for (const l of v.lines) {
       lines.push({
         id: crypto.randomUUID(), ledgerId: l.accountId,
@@ -5652,7 +5664,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
       lines.push({
         id: crypto.randomUUID(), ledgerId: v.cashBankAccountId!,
         narration: `Payment — ${partyRef}`,
-        debit: 0, credit: apDebitTotal,
+        debit: 0, credit: linesTotal,
       });
     }
   }
@@ -5668,7 +5680,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
     isBalanced:  true,
   });
 
-  updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: apDebitTotal });
+  updateRPVoucher(id, { status: "posted", journalEntryId: je.id, totalAmount: linesTotal });
 
   // ── Helper: apply payment to one invoice ──────────────────────────────────
   function _applyInvoicePayment(invoiceId: string, amount: number): void {
@@ -5703,9 +5715,9 @@ export function postRPVoucherJE(id: string): JournalEntry {
   }
 
   // ── Update linked invoice balance ─────────────────────────────────────────
-  // Single-invoice link (receipt vouchers + legacy payment)
+  // Single-invoice link (legacy simple receipt / payment)
   if (v.linkedInvoiceId) {
-    _applyInvoicePayment(v.linkedInvoiceId, apDebitTotal);
+    _applyInvoicePayment(v.linkedInvoiceId, linesTotal);
   }
 
   // Multi-invoice payment — apply each AP line's amount to its invoice
