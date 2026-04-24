@@ -555,13 +555,18 @@ export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY)
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
 export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "updatedAt">): Customer => {
+  const role        = data.customerRole ?? "Buyer";
+  const isSupplier  = role === "Supplier";
+  const displayName = data.name + (data.company ? ` (${data.company})` : "");
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
-    parentId:   SYS_ACCS.AR_GROUP,
-    parentCode: "1100",
-    name:       data.name + (data.company ? ` (${data.company})` : ""),
-    head:       "Assets",
-    subType:    "Receivable",
-    description: `Receivable account for customer: ${data.name}`,
+    parentId:    isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP,
+    parentCode:  isSupplier ? "2111"             : "1130",
+    name:        displayName,
+    head:        isSupplier ? "Liabilities"      : "Assets",
+    subType:     isSupplier ? "Payable"          : "Receivable",
+    description: isSupplier
+      ? `Payable account for supplier: ${data.name}`
+      : `Receivable account for customer: ${data.name}`,
   });
   const newCustomer: Customer = {
     ...data,
@@ -579,12 +584,65 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
   const customers = getCustomers();
   const index = customers.findIndex(c => c.id === id);
   if (index === -1) throw new Error("Customer not found");
-  customers[index] = { ...customers[index], ...updates, updatedAt: new Date().toISOString() };
+  const existing = customers[index];
+
+  // ── Sync the linked COA ledger ──────────────────────────────────────────────
+  if (existing.ledgerAccountId) {
+    const newRole    = updates.customerRole ?? existing.customerRole ?? "Buyer";
+    const oldRole    = existing.customerRole ?? "Buyer";
+    const roleChanged = newRole !== oldRole;
+
+    const newName    = (updates.name    ?? existing.name    ?? "").trim();
+    const newCompany = (updates.company ?? existing.company ?? "").trim();
+    const displayName = newName + (newCompany ? ` (${newCompany})` : "");
+
+    const allAccounts = _coaAccounts();
+    const accIdx      = allAccounts.findIndex(a => a.id === existing.ledgerAccountId);
+    if (accIdx !== -1) {
+      const isSupplier = newRole === "Supplier";
+      const updated: Partial<Account> = {
+        name:    displayName,
+        updatedAt: new Date().toISOString(),
+      };
+      if (roleChanged) {
+        // Only move the ledger if no JE entries reference it
+        const hasEntries = getJournalEntries().some(je =>
+          je.lines.some(l => l.ledgerId === existing.ledgerAccountId),
+        );
+        if (!hasEntries) {
+          updated.parentId = isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP;
+          updated.head     = isSupplier ? "Liabilities"      : "Assets";
+          updated.subType  = isSupplier ? "Payable"          : "Receivable";
+          updated.description = isSupplier
+            ? `Payable account for supplier: ${newName}`
+            : `Receivable account for customer: ${newName}`;
+        } else {
+          // Block the role change silently — entries exist
+          delete updates.customerRole;
+        }
+      }
+      allAccounts[accIdx] = { ...allAccounts[accIdx], ...updated };
+      _saveCoaAccounts(allAccounts);
+    }
+  }
+
+  customers[index] = { ...existing, ...updates, updatedAt: new Date().toISOString() };
   setStored(CUSTOMERS_KEY, customers);
   const detail = updates.status ? `Status → ${updates.status}` : undefined;
   addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Customer", entityName: customers[index].name, detail });
   return customers[index];
 };
+
+/**
+ * Returns true if any posted journal entry references this customer's sub-ledger.
+ * Used to lock the Buyer/Supplier toggle in the edit form.
+ */
+export function customerLedgerHasEntries(ledgerAccountId: string | undefined): boolean {
+  if (!ledgerAccountId) return false;
+  return getJournalEntries().some(je =>
+    je.lines.some(l => l.ledgerId === ledgerAccountId),
+  );
+}
 
 export const deleteCustomer = (id: string): void => {
   const customer = getCustomers().find(c => c.id === id);

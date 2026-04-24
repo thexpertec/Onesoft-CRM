@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { useCustomers, useCities, useAreas } from "@/hooks/use-data";
-import { CustomerStatus, Address, isAddressEmpty, formatAddress, getCustomer } from "@/lib/store";
+import { CustomerStatus, Address, isAddressEmpty, formatAddress, getCustomer, customerLedgerHasEntries } from "@/lib/store";
 import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
-import { Save, ArrowLeft, UserCog } from "lucide-react";
+import { Save, ArrowLeft, UserCog, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,7 +42,8 @@ export default function CustomerEditPage() {
   const cityComboOpts = useMemo<ComboOption[]>(() => cities.map(c => ({ value: c.name, label: c.name })), [cities]);
   const areaComboOpts = useMemo<ComboOption[]>(() => areas.map(a => ({ value: a.name, label: a.name })), [areas]);
 
-  const customer = useMemo(() => getCustomer(params.id), [params.id, customers]);
+  const customer    = useMemo(() => getCustomer(params.id), [params.id, customers]);
+  const roleIsLocked = useMemo(() => customerLedgerHasEntries(customer?.ledgerAccountId), [customer]);
 
   const [form, setForm] = useState({
     name: "", company: "", email: "", phone: "", industry: "",
@@ -195,16 +196,32 @@ export default function CustomerEditPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <p className="text-[12px] font-semibold text-foreground">Customer Type</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-[12px] font-semibold text-foreground">Customer Type</p>
+                {roleIsLocked && (
+                  <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                    <Lock size={10} /> Locked — account entries exist
+                  </span>
+                )}
+              </div>
               <div className="flex gap-3">
                 {(["Buyer", "Supplier"] as const).map(r => (
-                  <button key={r} type="button" onClick={() => setForm(p => ({ ...p, customerRole: r }))}
+                  <button key={r} type="button"
+                    disabled={roleIsLocked}
+                    onClick={() => !roleIsLocked && setForm(p => ({ ...p, customerRole: r }))}
+                    title={roleIsLocked ? "Cannot change type: journal entries exist for this customer's account" : undefined}
                     className={`flex-1 h-9 rounded-lg text-[13px] font-semibold transition-all border ${
-                      form.customerRole === r
-                        ? r === "Buyer"
-                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                          : "bg-orange-500 border-orange-500 text-white shadow-sm"
-                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                      roleIsLocked
+                        ? form.customerRole === r
+                          ? r === "Buyer"
+                            ? "bg-emerald-600/50 border-emerald-600/50 text-white cursor-not-allowed"
+                            : "bg-orange-500/50 border-orange-500/50 text-white cursor-not-allowed"
+                          : "bg-muted border-border text-muted-foreground/50 cursor-not-allowed"
+                        : form.customerRole === r
+                          ? r === "Buyer"
+                            ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                            : "bg-orange-500 border-orange-500 text-white shadow-sm"
+                          : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
                     }`}>{r}</button>
                 ))}
               </div>
