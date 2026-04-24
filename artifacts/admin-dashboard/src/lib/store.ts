@@ -5330,10 +5330,12 @@ export interface RPVoucher {
   voucherType: "receipt" | "payment";
   date: string;
   partyName: string;
-  cashBankAccountId: string;   // ID of Cash or Bank ledger account
+  cashBankAccountId: string;   // ID of Cash or Bank ledger account (primary / first bank)
   cashBankAccountName: string;
   reference: string;           // cheque #, transfer ref, etc.
   lines: RPVoucherLine[];
+  /** Payment vouchers only: multiple bank/cash accounts on the credit side. */
+  bankLines?: RPVoucherLine[];
   totalAmount: number;
   narration: string;
   status: "draft" | "posted";
@@ -5427,8 +5429,8 @@ export function postRPVoucherJE(id: string): JournalEntry {
     }
   } else {
     // ── Payment ───────────────────────────────────────────────────────────────
-    // DR  each line — typically AP, Expense, or other accounts
-    // CR  Cash / Bank account (money going out)
+    // DR  each line — AP / Expense accounts (one per invoice)
+    // CR  bank lines (multiple) or single cash/bank account
     for (const l of v.lines) {
       lines.push({
         id: crypto.randomUUID(), ledgerId: l.accountId,
@@ -5436,11 +5438,24 @@ export function postRPVoucherJE(id: string): JournalEntry {
         debit: l.amount, credit: 0,
       });
     }
-    lines.push({
-      id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
-      narration: `Payment — ${partyRef}`,
-      debit: 0, credit: total,
-    });
+    if (v.bankLines && v.bankLines.length > 0) {
+      // Multi-bank payment — credit each bank account separately
+      for (const bl of v.bankLines) {
+        lines.push({
+          id: crypto.randomUUID(), ledgerId: bl.accountId,
+          narration: bl.description || `Payment — ${partyRef}`,
+          debit: 0, credit: bl.amount,
+        });
+      }
+    } else {
+      // Legacy / simple payment — single cash/bank account
+      if (!v.cashBankAccountId) throw new Error("Cash / Bank account is required. Please edit the voucher and select one before posting.");
+      lines.push({
+        id: crypto.randomUUID(), ledgerId: v.cashBankAccountId,
+        narration: `Payment — ${partyRef}`,
+        debit: 0, credit: total,
+      });
+    }
   }
 
   const je = createJournalEntry({

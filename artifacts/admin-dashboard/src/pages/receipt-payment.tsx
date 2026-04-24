@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -371,36 +371,121 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const total = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
+  // ── Payment-mode (new voucher only) ─────────────────────────────────────────
+  const isNewPayment = vtype === "payment" && !isEdit;
+
+  const [supplierName,   setSupplierName]   = useState<string>(initial?.partyName ?? "");
+  const [selectedInvIds, setSelectedInvIds] = useState<Set<string>>(new Set());
+  const [payBankLines,   setPayBankLines]   = useState<LineRow[]>(() =>
+    initial?.bankLines?.length
+      ? initial.bankLines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
+      : [emptyLine()]
+  );
+
+  const suppliers = useMemo<Customer[]>(() =>
+    getCustomers().filter(c => c.customerRole === "Supplier"),
+  []);
+
+  const supplierInvoices = useMemo<Invoice[]>(() => {
+    if (!isNewPayment || !supplierName) return [];
+    return getInvoices().filter(inv =>
+      inv.invoiceType === "purchase" &&
+      (inv.customer ?? "").toLowerCase() === supplierName.toLowerCase()
+    );
+  }, [supplierName, isNewPayment]);
+
+  // Select all invoices when the supplier or supplier invoice list changes
+  const invIdsKey = supplierInvoices.map(i => i.id).join(",");
+  useEffect(() => {
+    if (!isNewPayment) return;
+    setSelectedInvIds(new Set(supplierInvoices.map(i => i.id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invIdsKey, isNewPayment]);
+
+  const computedApLines = useMemo<LineRow[]>(() => {
+    if (!isNewPayment) return [];
+    const settings  = getSettings();
+    const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+    return supplierInvoices
+      .filter(inv => selectedInvIds.has(inv.id))
+      .map(inv => {
+        const apAccId = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AP_TRADE) || groupApId;
+        const apAcc   = accounts.find(a => a.id === apAccId);
+        const outstanding = invOutstanding(inv);
+        return {
+          id:          inv.id,
+          accountId:   apAccId,
+          accountName: apAcc?.name ?? "Trade Payables",
+          description: inv.invoiceNumber,
+          amount:      outstanding.toFixed(2),
+        };
+      });
+  }, [supplierInvoices, selectedInvIds, accounts, isNewPayment]);
+
+  const totalDue  = computedApLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const bankTotal = payBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const overBank  = bankTotal > totalDue + 0.001;
+
   const setLine = (id: string, patch: Partial<LineRow>) =>
     setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
 
   const removeLine = (id: string) =>
     setLines(prev => prev.length > 1 ? prev.filter(l => l.id !== id) : prev);
 
-  const buildPayload = (): Omit<RPVoucher, "id" | "voucherNumber" | "createdAt" | "updatedAt"> => ({
-    voucherType: vtype,
-    date,
-    partyName: party,
-    cashBankAccountId: cbId,
-    cashBankAccountName: cbName,
-    reference: ref,
-    narration: narr,
-    linkedInvoiceId: linkedInvId ?? undefined,
-    lines: lines.filter(l => l.accountId && parseFloat(l.amount) > 0).map(l => ({
-      id: l.id,
-      accountId: l.accountId,
-      accountName: l.accountName,
-      description: l.description,
-      amount: parseFloat(l.amount) || 0,
-    })),
-    totalAmount: total,
-    status: "draft",
-  });
+  const buildPayload = (): Omit<RPVoucher, "id" | "voucherNumber" | "createdAt" | "updatedAt"> => {
+    if (isNewPayment) {
+      const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      return {
+        voucherType:        "payment",
+        date,
+        partyName:          supplierName,
+        cashBankAccountId:  validBank[0]?.accountId   ?? "",
+        cashBankAccountName: validBank[0]?.accountName ?? "",
+        reference:          ref,
+        narration:          narr || `Payment to ${supplierName}`,
+        linkedInvoiceId:    undefined,
+        lines: computedApLines.map(l => ({
+          id: l.id, accountId: l.accountId, accountName: l.accountName,
+          description: l.description, amount: parseFloat(l.amount) || 0,
+        })),
+        bankLines: validBank.map(l => ({
+          id: l.id, accountId: l.accountId, accountName: l.accountName,
+          description: l.description, amount: parseFloat(l.amount) || 0,
+        })),
+        totalAmount: totalDue,
+        status: "draft",
+      };
+    }
+    return {
+      voucherType: vtype,
+      date,
+      partyName: party,
+      cashBankAccountId: cbId,
+      cashBankAccountName: cbName,
+      reference: ref,
+      narration: narr,
+      linkedInvoiceId: linkedInvId ?? undefined,
+      lines: lines.filter(l => l.accountId && parseFloat(l.amount) > 0).map(l => ({
+        id: l.id, accountId: l.accountId, accountName: l.accountName,
+        description: l.description, amount: parseFloat(l.amount) || 0,
+      })),
+      totalAmount: total,
+      status: "draft",
+    };
+  };
 
   const overBalance = invBalance !== null && total > invBalance + 0.001;
 
   const validate = (): string | null => {
     if (!date) return "Date is required.";
+    if (isNewPayment) {
+      if (!supplierName) return "Please select a supplier.";
+      if (computedApLines.length === 0) return "Please select at least one invoice to pay.";
+      const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      if (validBank.length === 0) return "Please add at least one bank / cash payment line.";
+      if (overBank) return `Bank total (${fmtAmt(bankTotal, sym)}) exceeds total due (${fmtAmt(totalDue, sym)}).`;
+      return null;
+    }
     if (!cbId) return `${vtype === "receipt" ? "Received Into" : "Paid From"} (Cash / Bank) account is required.`;
     const validLines = lines.filter(l => l.accountId && parseFloat(l.amount) > 0);
     if (validLines.length === 0) return "At least one line with an account and amount is required.";
@@ -463,211 +548,410 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             </div>
           )}
 
-          {/* ── Invoice Link (Receipt = sale invoices, Payment = purchase invoices) ── */}
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                {vtype === "receipt"
-                  ? <>Link to Invoice <span className="text-[10px] normal-case font-normal opacity-70">(receivable invoices only)</span></>
-                  : <>Link to Invoice (Purchase) <span className="text-[10px] normal-case font-normal opacity-70">(purchase / supplier invoices)</span></>}
-              </label>
-              <InvoiceSearchDropdown
-                value={linkedInvId}
-                disabled={isPosted}
-                invoiceTypeFilter={vtype === "payment" ? "purchase" : "sale"}
-                onChange={inv => {
-                  if (!inv?.id) { setLinkedInvId(null); return; }
-                  setLinkedInvId(inv.id);
-                  if (inv.customer && !party) setParty(inv.customer);
-                  // Auto-populate the first line with the correct AR / AP account.
-                  // For receipts, prefer the per-customer AR sub-ledger so that
-                  // individual customer ledgers are correctly populated.
-                  const settings = getSettings();
-                  const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
-                  const arAccId   = (vtype === "receipt" && inv.customer)
-                    ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AR_GROUP) || groupArId)
-                    : groupArId;
-                  const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
-                  const apAccId   = (vtype === "payment" && inv.customer)
-                    ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AP_TRADE) || groupApId)
-                    : groupApId;
-                  const targetId = vtype === "receipt" ? arAccId : apAccId;
-                  if (targetId) {
-                    const acct = accounts.find(a => a.id === targetId);
-                    if (acct) {
-                      const outstanding = invOutstanding(inv);
-                      setLines([{
-                        id:          crypto.randomUUID(),
-                        accountId:   acct.id,
-                        accountName: acct.name,
-                        description: inv.invoiceNumber,
-                        amount:      outstanding > 0 ? String(outstanding.toFixed(2)) : "",
-                      }]);
-                    }
-                  }
-                }}
-              />
-            </div>
-            {linkedInv && (
-              <div className={`rounded-lg border px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 ${
-                vtype === "payment"
-                  ? "border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/20"
-                  : "border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20"
-              }`}>
-                <div className="flex items-center gap-2">
-                  <Hash className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</p>
-                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.invoiceNumber}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Supplier" : "Payer Name"}</p>
-                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.customer || "—"}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
-                    <p className="text-[13px] font-semibold text-foreground">{linkedInv.buyerPhone || "—"}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Due Date" : "Company"}</p>
-                    <p className="text-[13px] font-semibold text-foreground">
-                      {vtype === "payment" ? (linkedInv.dueDate || "—") : (linkedInv.salesOfficer || "—")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Core fields — Date + Cash/Bank + Balance Due / Due Payable */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
-              <input
-                type="date" value={date} onChange={e => setDate(e.target.value)}
-                disabled={isPosted}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              />
-            </div>
-            {invBalance !== null && (
+          {/* ══════════════════════════════════════════════════════════════════
+               NEW PAYMENT FLOW  (new payment vouchers only)
+          ══════════════════════════════════════════════════════════════════ */}
+          {isNewPayment && (
+            <>
+              {/* 1 — Supplier selector */}
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                  {vtype === "payment" ? "Due Payable" : "Invoice Balance Due"}
+                  Supplier *
                 </label>
-                <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
-                  overBalance
-                    ? "border-red-400 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
-                    : "border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300"
-                }`}>
-                  {fmtAmt(invBalance, sym)}
-                  {overBalance && <span className="ml-2 text-[11px] font-normal">⚠ Total exceeds balance</span>}
+                <div className="relative">
+                  <select
+                    value={supplierName}
+                    onChange={e => setSupplierName(e.target.value)}
+                    className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">— Select supplier —</option>
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}{s.company ? ` (${s.company})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* ── Cash / Bank Account selector ── */}
-          <div>
-            <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-              {vtype === "receipt" ? "Received Into (Cash / Bank Account) *" : "Paid From (Cash / Bank Account) *"}
-            </label>
-            {isPosted
-              ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">{cbName || "—"}</div>
-              : <AccDropdown
-                  accounts={accounts}
-                  value={cbId}
-                  onChange={(id, name) => { setCbId(id); setCbName(name); }}
-                  placeholder="Select Cash / Bank account…"
-                  filterCashBank
-                />
-            }
-          </div>
-
-          {/* Lines */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                {vtype === "receipt"
-                  ? "Clearing Against — Receivables / Revenue (Credit Side)"
-                  : "Paid For — Payables / Expenses (Debit Side)"}
-              </label>
-              {!isPosted && (
-                <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
-                  className="flex items-center gap-1 text-xs text-primary hover:underline">
-                  <Plus className="h-3.5 w-3.5" /> Add Line
-                </button>
+              {/* 2 — Invoice capsule chips */}
+              {supplierName && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      Purchase Invoices
+                    </label>
+                    {supplierInvoices.length > 0 && (
+                      <div className="flex gap-2 text-xs">
+                        <button type="button" onClick={() => setSelectedInvIds(new Set(supplierInvoices.map(i => i.id)))}
+                          className="text-primary hover:underline">Select All</button>
+                        <span className="text-border">|</span>
+                        <button type="button" onClick={() => setSelectedInvIds(new Set())}
+                          className="text-muted-foreground hover:underline">Clear</button>
+                      </div>
+                    )}
+                  </div>
+                  {supplierInvoices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">No purchase invoices found for this supplier.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {supplierInvoices.map(inv => {
+                        const outstanding = invOutstanding(inv);
+                        const isSelected  = selectedInvIds.has(inv.id);
+                        return (
+                          <button key={inv.id} type="button"
+                            onClick={() => setSelectedInvIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(inv.id)) next.delete(inv.id); else next.add(inv.id);
+                              return next;
+                            })}
+                            className={`inline-flex flex-col items-start px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                              isSelected
+                                ? "bg-rose-600 border-rose-600 text-white shadow-sm"
+                                : "bg-background border-border text-muted-foreground hover:border-rose-400 hover:text-foreground"
+                            }`}
+                          >
+                            <span className="font-semibold">{inv.invoiceNumber}</span>
+                            <span className="text-[10px] opacity-80">{sym}{outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
-                    <th className="text-left px-3 py-2 w-8">#</th>
-                    <th className="text-left px-3 py-2">Account</th>
-                    <th className="text-left px-3 py-2 w-48">Description</th>
-                    <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
-                    {!isPosted && <th className="w-8" />}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l, idx) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
-                      <td className="px-2 py-1.5">
-                        {isPosted
-                          ? <span className="px-1">{l.accountName || "—"}</span>
-                          : <AccDropdown
+
+              {/* 3 — Total due + date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Total Due</label>
+                  <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
+                    {fmtAmt(totalDue, sym)}
+                    {selectedInvIds.size > 0 && (
+                      <span className="ml-2 font-normal text-[11px]">{selectedInvIds.size} invoice{selectedInvIds.size !== 1 ? "s" : ""} selected</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 — AP debit lines (read-only, auto-generated) */}
+              {computedApLines.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                    Paid For — Payables (Debit Side, Auto-Generated)
+                  </label>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
+                          <th className="text-left px-3 py-2 w-8">#</th>
+                          <th className="text-left px-3 py-2">AP Account</th>
+                          <th className="text-left px-3 py-2 w-40">Invoice</th>
+                          <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {computedApLines.map((l, idx) => (
+                          <tr key={l.id} className="border-t border-border bg-muted/10">
+                            <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                            <td className="px-3 py-2 text-foreground/80">{l.accountName}</td>
+                            <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{l.description}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{fmtAmt(parseFloat(l.amount) || 0, sym)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/30">
+                          <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
+                          <td className="px-3 py-2 text-right font-bold">{fmtAmt(totalDue, sym)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 5 — Multi-bank payment lines (credit side) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                    Paid Via — Bank / Cash Accounts (Credit Side)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {overBank && <span className="text-[10px] text-red-500 font-medium">⚠ Exceeds total due</span>}
+                    <button type="button" onClick={() => setPayBankLines(p => [...p, emptyLine()])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline">
+                      <Plus className="h-3.5 w-3.5" /> Add Bank
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
+                        <th className="text-left px-3 py-2 w-8">#</th>
+                        <th className="text-left px-3 py-2">Cash / Bank Account *</th>
+                        <th className="text-left px-3 py-2 w-40">Reference / Cheque</th>
+                        <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payBankLines.map((l, idx) => (
+                        <tr key={l.id} className="border-t border-border">
+                          <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                          <td className="px-2 py-1.5">
+                            <AccDropdown
                               accounts={accounts}
                               value={l.accountId}
-                              onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })}
-                              placeholder={vtype === "receipt" ? "AR / Revenue account…" : "AP / Expense account…"}
-                              excludeIds={lines.filter(r => r.id !== l.id && r.accountId).map(r => r.accountId)}
-                            />}
-                      </td>
-                      <td className="px-2 py-1.5">
-                        {isPosted
-                          ? <span className="px-1">{l.description || "—"}</span>
-                          : <input type="text" value={l.description} onChange={e => setLine(l.id, { description: e.target.value })}
-                              placeholder="Ref. / Cheque"
-                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />}
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        {isPosted
-                          ? <span className="px-1">{fmtAmt(parseFloat(l.amount) || 0, sym)}</span>
-                          : <input type="number" min="0" step="0.01" value={l.amount}
-                              onChange={e => setLine(l.id, { amount: e.target.value })}
-                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none text-right" />}
-                      </td>
-                      {!isPosted && (
-                        <td className="px-1 py-1.5 text-center">
-                          <button type="button" onClick={() => removeLine(l.id)}
-                            className="text-muted-foreground hover:text-destructive transition-colors p-1">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                              onChange={(id, name) => setPayBankLines(prev => prev.map(r => r.id === l.id ? { ...r, accountId: id, accountName: name } : r))}
+                              placeholder="Select Cash / Bank account…"
+                              filterCashBank
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input type="text" value={l.description}
+                              onChange={e => setPayBankLines(prev => prev.map(r => r.id === l.id ? { ...r, description: e.target.value } : r))}
+                              placeholder="Cheque #, IBAN, ref…"
+                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
+                          </td>
+                          <td className="px-2 py-1.5 text-right">
+                            <input type="number" min="0" step="0.01" value={l.amount}
+                              onChange={e => setPayBankLines(prev => prev.map(r => r.id === l.id ? { ...r, amount: e.target.value } : r))}
+                              className={`w-full rounded border px-2 py-1 text-sm bg-transparent outline-none text-right ${
+                                overBank ? "border-red-400 text-red-600" : "border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring"
+                              }`} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button type="button"
+                              onClick={() => setPayBankLines(prev => prev.length > 1 ? prev.filter(r => r.id !== l.id) : prev)}
+                              className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/30">
+                        <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Bank Total</td>
+                        <td className={`px-3 py-2 text-right font-bold ${overBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {fmtAmt(bankTotal, sym)}
                         </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-border bg-muted/30">
-                    <td colSpan={isPosted ? 3 : 3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
-                    <td className="px-3 py-2 text-right font-bold text-base">{fmtAmt(total, sym)}</td>
-                    {!isPosted && <td />}
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+               RECEIPT / EDIT FLOW  (existing receipt vouchers + all edits)
+          ══════════════════════════════════════════════════════════════════ */}
+          {!isNewPayment && (
+            <>
+              {/* Invoice link */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                    {vtype === "receipt"
+                      ? <>Link to Invoice <span className="text-[10px] normal-case font-normal opacity-70">(receivable invoices only)</span></>
+                      : <>Link to Invoice (Purchase) <span className="text-[10px] normal-case font-normal opacity-70">(purchase / supplier invoices)</span></>}
+                  </label>
+                  <InvoiceSearchDropdown
+                    value={linkedInvId}
+                    disabled={isPosted}
+                    invoiceTypeFilter={vtype === "payment" ? "purchase" : "sale"}
+                    onChange={inv => {
+                      if (!inv?.id) { setLinkedInvId(null); return; }
+                      setLinkedInvId(inv.id);
+                      if (inv.customer && !party) setParty(inv.customer);
+                      const settings = getSettings();
+                      const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
+                      const arAccId   = (vtype === "receipt" && inv.customer)
+                        ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AR_GROUP) || groupArId)
+                        : groupArId;
+                      const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+                      const apAccId   = (vtype === "payment" && inv.customer)
+                        ? (findSubLedgerForParty(inv.customer, SYS_ACCS.AP_TRADE) || groupApId)
+                        : groupApId;
+                      const targetId = vtype === "receipt" ? arAccId : apAccId;
+                      if (targetId) {
+                        const acct = accounts.find(a => a.id === targetId);
+                        if (acct) {
+                          const outstanding = invOutstanding(inv);
+                          setLines([{
+                            id: crypto.randomUUID(), accountId: acct.id, accountName: acct.name,
+                            description: inv.invoiceNumber,
+                            amount: outstanding > 0 ? String(outstanding.toFixed(2)) : "",
+                          }]);
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                {linkedInv && (
+                  <div className={`rounded-lg border px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 ${
+                    vtype === "payment"
+                      ? "border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/20"
+                      : "border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/20"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</p>
+                        <p className="text-[13px] font-semibold text-foreground">{linkedInv.invoiceNumber}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Supplier" : "Payer Name"}</p>
+                        <p className="text-[13px] font-semibold text-foreground">{linkedInv.customer || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
+                        <p className="text-[13px] font-semibold text-foreground">{linkedInv.buyerPhone || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{vtype === "payment" ? "Due Date" : "Company"}</p>
+                        <p className="text-[13px] font-semibold text-foreground">
+                          {vtype === "payment" ? (linkedInv.dueDate || "—") : (linkedInv.salesOfficer || "—")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Date + balance */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                    disabled={isPosted}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60" />
+                </div>
+                {invBalance !== null && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                      {vtype === "payment" ? "Due Payable" : "Invoice Balance Due"}
+                    </label>
+                    <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                      overBalance
+                        ? "border-red-400 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                        : "border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300"
+                    }`}>
+                      {fmtAmt(invBalance, sym)}
+                      {overBalance && <span className="ml-2 text-[11px] font-normal">⚠ Total exceeds balance</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cash / Bank Account selector */}
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  {vtype === "receipt" ? "Received Into (Cash / Bank Account) *" : "Paid From (Cash / Bank Account) *"}
+                </label>
+                {isPosted
+                  ? <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">{cbName || "—"}</div>
+                  : <AccDropdown accounts={accounts} value={cbId}
+                      onChange={(id, name) => { setCbId(id); setCbName(name); }}
+                      placeholder="Select Cash / Bank account…" filterCashBank />
+                }
+              </div>
+
+              {/* Lines */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                    {vtype === "receipt"
+                      ? "Clearing Against — Receivables / Revenue (Credit Side)"
+                      : "Paid For — Payables / Expenses (Debit Side)"}
+                  </label>
+                  {!isPosted && (
+                    <button type="button" onClick={() => setLines(p => [...p, emptyLine()])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline">
+                      <Plus className="h-3.5 w-3.5" /> Add Line
+                    </button>
+                  )}
+                </div>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
+                        <th className="text-left px-3 py-2 w-8">#</th>
+                        <th className="text-left px-3 py-2">Account</th>
+                        <th className="text-left px-3 py-2 w-48">Description</th>
+                        <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
+                        {!isPosted && <th className="w-8" />}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((l, idx) => (
+                        <tr key={l.id} className="border-t border-border">
+                          <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                          <td className="px-2 py-1.5">
+                            {isPosted
+                              ? <span className="px-1">{l.accountName || "—"}</span>
+                              : <AccDropdown accounts={accounts} value={l.accountId}
+                                  onChange={(id, name) => setLine(l.id, { accountId: id, accountName: name })}
+                                  placeholder={vtype === "receipt" ? "AR / Revenue account…" : "AP / Expense account…"}
+                                  excludeIds={lines.filter(r => r.id !== l.id && r.accountId).map(r => r.accountId)} />}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {isPosted
+                              ? <span className="px-1">{l.description || "—"}</span>
+                              : <input type="text" value={l.description}
+                                  onChange={e => setLine(l.id, { description: e.target.value })}
+                                  placeholder="Ref. / Cheque"
+                                  className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />}
+                          </td>
+                          <td className="px-2 py-1.5 text-right">
+                            {isPosted
+                              ? <span className="px-1">{fmtAmt(parseFloat(l.amount) || 0, sym)}</span>
+                              : <input type="number" min="0" step="0.01" value={l.amount}
+                                  onChange={e => setLine(l.id, { amount: e.target.value })}
+                                  className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none text-right" />}
+                          </td>
+                          {!isPosted && (
+                            <td className="px-1 py-1.5 text-center">
+                              <button type="button" onClick={() => removeLine(l.id)}
+                                className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/30">
+                        <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
+                        <td className="px-3 py-2 text-right font-bold text-base">{fmtAmt(total, sym)}</td>
+                        {!isPosted && <td />}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Narration */}
           <div>
