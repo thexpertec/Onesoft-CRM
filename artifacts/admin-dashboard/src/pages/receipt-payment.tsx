@@ -1026,10 +1026,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
         {/* Footer */}
         <div className="border-t border-border px-5 py-4 flex items-center justify-between gap-3">
           <div className="flex gap-2">
-            {isEdit && !isPosted && (
+            {isEdit && (
               <button type="button" onClick={() => onDelete(initial!.id!)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border border-destructive text-destructive hover:bg-destructive/10 transition-colors">
-                <Trash2 className="h-4 w-4" /> Delete
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+                  isPosted
+                    ? "border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    : "border-destructive text-destructive hover:bg-destructive/10"
+                }`}
+                title={isPosted ? "Deletes JE & reverses invoice payments" : "Delete draft voucher"}>
+                <Trash2 className="h-4 w-4" />
+                {isPosted ? "Delete & Reverse" : "Delete"}
               </button>
             )}
           </div>
@@ -1376,13 +1382,15 @@ export default function ReceiptPaymentPage() {
                       className="p-1.5 rounded hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors">
                       {v.status === "draft" ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                    {v.status === "draft" && (
-                      <button onClick={() => setDeleteId(v.id)}
-                        title="Delete"
-                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
+                    <button onClick={() => setDeleteId(v.id)}
+                      title={v.status === "posted" ? "Delete (reverses JE & invoice payments)" : "Delete"}
+                      className={`p-1.5 rounded transition-colors ${
+                        v.status === "posted"
+                          ? "hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
+                          : "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      }`}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -1411,22 +1419,45 @@ export default function ReceiptPaymentPage() {
       )}
 
       {/* Delete Confirm */}
-      <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Voucher?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This draft voucher will be permanently deleted. Posted vouchers cannot be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={confirmDelete}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {(() => {
+        const delV = deleteId ? vouchers.find(v => v.id === deleteId) : null;
+        const isPostedDel = delV?.status === "posted";
+        return (
+          <AlertDialog open={!!deleteId} onOpenChange={o => { if (!o) setDeleteId(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  {isPostedDel && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                  Delete {isPostedDel ? "Posted" : "Draft"} Voucher?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>
+                      <strong>{delV?.voucherNumber}</strong> will be permanently deleted. This cannot be undone.
+                    </p>
+                    {isPostedDel && (
+                      <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-sm text-red-700 dark:text-red-300 space-y-1">
+                        <p className="font-semibold">This posted voucher will also:</p>
+                        <ul className="list-disc list-inside space-y-0.5 text-xs">
+                          <li>Delete its linked Journal Entry from the COA &amp; Balance Sheet</li>
+                          <li>Reverse any invoice payments it recorded</li>
+                          <li>Update linked invoice statuses (Paid → Partial / Unpaid)</li>
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={confirmDelete}>
+                  {isPostedDel ? "Yes, Delete & Reverse" : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        );
+      })()}
     </div>
   );
 }
