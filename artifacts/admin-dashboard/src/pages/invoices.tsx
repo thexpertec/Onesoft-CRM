@@ -5,12 +5,13 @@ import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  BankAccount, ProductVariant,
+  BankAccount, ProductVariant, Product,
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
   deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
   autoPostPurchaseJE,
   createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
+  findProductForItem, effectiveItemCost,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -73,6 +74,7 @@ const blankItem = (): SaleItem => ({
   unitPrice: "", discount: "0", discountType: "pct", notes: "",
   itemStatus: "Delivered",
 });
+
 
 const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> => {
   const s = getSettings();
@@ -1891,13 +1893,13 @@ export function InvoiceFormPage() {
     const prods = getProducts();
     const catMap = new Map<string, { subtotal: number; costTotal: number }>();
     for (const it of items) {
-      const prod    = prods.find(p => p.sku === it.sku || p.name === it.productName);
+      const prod    = findProductForItem(it, prods);
       const cat     = prod?.category?.trim() || "Uncategorised";
       const qty     = parseFloat(it.qty) || 0;
       const price   = parseFloat(it.unitPrice) || 0;
       const disc    = parseFloat((it as { discountPct?: string }).discountPct || "0") / 100;
       const lineNet = qty * price * (1 - disc);
-      const cost    = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+      const cost    = effectiveItemCost(it, prod) * qty;
       const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
       entry.subtotal  += lineNet;
       entry.costTotal += cost;
@@ -2010,13 +2012,13 @@ export function InvoiceFormPage() {
     const buildCategoryLines = (items: SaleItem[]) => {
       const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
       for (const item of items) {
-        const prod   = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
-        const cat    = prod?.category?.trim() || "Uncategorised";
-        const qty    = parseFloat(item.qty) || 0;
-        const price  = parseFloat(item.unitPrice) || 0;
-        const disc   = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
+        const prod    = findProductForItem(item, allProducts);
+        const cat     = prod?.category?.trim() || "Uncategorised";
+        const qty     = parseFloat(item.qty) || 0;
+        const price   = parseFloat(item.unitPrice) || 0;
+        const disc    = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
         const lineNet = qty * price * (1 - disc);
-        const lineCost = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+        const lineCost = effectiveItemCost(item, prod) * qty;
         const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: qty * price };
         entry.subtotal      += lineNet;
         entry.costTotal     += lineCost;
@@ -2125,13 +2127,13 @@ export function InvoiceFormPage() {
     const allProds = getProducts();
     const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
     for (const item of inv.items) {
-      const prod    = allProds.find(p => p.sku === item.sku || p.name === item.productName);
+      const prod    = findProductForItem(item, allProds);
       const cat     = prod?.category?.trim() || "Uncategorised";
       const qty     = parseFloat(item.qty) || 0;
       const price   = parseFloat(item.unitPrice) || 0;
       const disc    = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
       const lineNet  = qty * price * (1 - disc);
-      const lineCost = (parseFloat(prod?.costPrice ?? "0") || 0) * qty;
+      const lineCost = effectiveItemCost(item, prod) * qty;
       const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: 0 };
       entry.subtotal      += lineNet;
       entry.costTotal     += lineCost;

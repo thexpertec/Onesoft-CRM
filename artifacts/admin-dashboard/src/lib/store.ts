@@ -4056,6 +4056,33 @@ export function getInvoiceProductName(p: Pick<Product, "name" | "localName">): s
   return p.name;
 }
 
+/**
+ * Find the parent product for a sale/invoice line item.
+ * Prefers productId match (most accurate), then falls back to SKU then name.
+ */
+export function findProductForItem(it: SaleItem, prods: Product[]): Product | undefined {
+  if (it.productId) {
+    const byId = prods.find(p => p.id === it.productId);
+    if (byId) return byId;
+  }
+  return prods.find(p => (it.sku && p.sku === it.sku) || p.name === it.productName);
+}
+
+/**
+ * Resolve the unit cost for a sale line item, respecting variant-level costPrice.
+ * When a variant was sold (variantId is set), the variant's own costPrice takes
+ * priority over the parent product's costPrice. Falls back gracefully if either
+ * the variant or its costPrice is absent.
+ */
+export function effectiveItemCost(it: SaleItem, prod: Product | undefined): number {
+  if (it.variantId && prod?.variants?.length) {
+    const variant = prod.variants.find(v => v.id === it.variantId);
+    const vCost = parseFloat(variant?.costPrice ?? "");
+    if (!isNaN(vCost) && vCost > 0) return vCost;
+  }
+  return parseFloat(prod?.costPrice ?? "0") || 0;
+}
+
 export function saveSettings(s: AppSettings): void {
   const sk = tenantKey(SETTINGS_KEY);
   _lsSet(sk, s);

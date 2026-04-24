@@ -7,7 +7,7 @@ import {
   SALE_STATUSES, SALE_PAYMENTS,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
-  importOnlineSalesFromKv,
+  importOnlineSalesFromKv, findProductForItem, effectiveItemCost,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -2646,8 +2646,8 @@ export default function SalesPage() {
       const taxAmt_  = parseFloat((sub_ * taxPct_ / 100).toFixed(2));
       const delAmt_  = parseFloat(localMeta.deliveryCharges || "0") || 0;
       const costTotal = localItems.reduce((sum, item) => {
-        const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
-        return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+        const prod = findProductForItem(item, allProducts);
+        return sum + effectiveItemCost(item, prod) * (parseFloat(item.qty) || 0);
       }, 0);
       const je = autoPostSaleJE({
         source:        "POS",
@@ -2714,8 +2714,8 @@ export default function SalesPage() {
       if (!jeId) {
         const costTotal = allProducts.length > 0
           ? localItems.reduce((sum, item) => {
-              const prod = allProducts.find(p => p.sku === item.sku || p.name === item.productName);
-              return sum + (parseFloat(prod?.costPrice ?? "0") || 0) * (parseFloat(item.qty) || 0);
+              const prod = findProductForItem(item, allProducts);
+              return sum + effectiveItemCost(item, prod) * (parseFloat(item.qty) || 0);
             }, 0)
           : 0;
         const je = autoPostSaleJE({
