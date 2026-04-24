@@ -426,6 +426,19 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const bankTotal = payBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
   const overBank  = bankTotal > totalDue + 0.001;
 
+  // Scale AP debit lines so they sum to bankTotal (partial-payment support)
+  const scaledApLines = useMemo<LineRow[]>(() => {
+    if (!isNewPayment || totalDue === 0 || bankTotal === 0) return computedApLines;
+    const payAmount = Math.min(bankTotal, totalDue);
+    const scale     = payAmount / totalDue;
+    return computedApLines.map(l => ({
+      ...l,
+      amount: ((parseFloat(l.amount) || 0) * scale).toFixed(2),
+    }));
+  }, [computedApLines, bankTotal, totalDue, isNewPayment]);
+
+  const remainingBalance = totalDue - Math.min(bankTotal, totalDue);
+
   const setLine = (id: string, patch: Partial<LineRow>) =>
     setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
 
@@ -444,7 +457,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
         reference:          ref,
         narration:          narr || `Payment to ${supplierName}`,
         linkedInvoiceId:    undefined,
-        lines: computedApLines.map(l => ({
+        lines: scaledApLines.map(l => ({
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
         })),
@@ -452,7 +465,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
         })),
-        totalAmount: totalDue,
+        totalAmount: Math.min(bankTotal, totalDue),
         status: "draft",
       };
     }
@@ -622,54 +635,87 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 </div>
               )}
 
-              {/* 3 — Total due + date */}
+              {/* 3 — Date + balance summary */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
                   <input type="date" value={date} onChange={e => setDate(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Total Due</label>
-                  <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
-                    {fmtAmt(totalDue, sym)}
-                    {selectedInvIds.size > 0 && (
-                      <span className="ml-2 font-normal text-[11px]">{selectedInvIds.size} invoice{selectedInvIds.size !== 1 ? "s" : ""} selected</span>
-                    )}
+                <div className="space-y-1.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                      Total Outstanding{selectedInvIds.size > 0 ? ` (${selectedInvIds.size} invoice${selectedInvIds.size !== 1 ? "s" : ""})` : ""}
+                    </label>
+                    <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
+                      {fmtAmt(totalDue, sym)}
+                    </div>
                   </div>
+                  {bankTotal > 0 && (
+                    <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">You're paying</span>
+                      <span className="font-semibold text-foreground">{fmtAmt(Math.min(bankTotal, totalDue), sym)}</span>
+                    </div>
+                  )}
+                  {bankTotal > 0 && remainingBalance > 0.001 && (
+                    <div className="rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Remaining balance</span>
+                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(remainingBalance, sym)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* 4 — AP debit lines (read-only, auto-generated) */}
               {computedApLines.length > 0 && (
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                    Paid For — Payables (Debit Side, Auto-Generated)
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      Paid For — Payables (Debit Side, Auto-Generated)
+                    </label>
+                    {bankTotal > 0 && remainingBalance > 0.001 && (
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                        Partial payment — amounts scaled to bank total
+                      </span>
+                    )}
+                  </div>
                   <div className="rounded-lg border border-border overflow-hidden">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-muted/50 text-[11px] text-muted-foreground uppercase tracking-widest">
                           <th className="text-left px-3 py-2 w-8">#</th>
                           <th className="text-left px-3 py-2">AP Account</th>
-                          <th className="text-left px-3 py-2 w-40">Invoice</th>
-                          <th className="text-right px-3 py-2 w-32">Amount ({sym})</th>
+                          <th className="text-left px-3 py-2 w-32">Invoice</th>
+                          <th className="text-right px-3 py-2 w-28">Outstanding</th>
+                          <th className="text-right px-3 py-2 w-28">Paying Now</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {computedApLines.map((l, idx) => (
-                          <tr key={l.id} className="border-t border-border bg-muted/10">
-                            <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
-                            <td className="px-3 py-2 text-foreground/80">{l.accountName}</td>
-                            <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{l.description}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{fmtAmt(parseFloat(l.amount) || 0, sym)}</td>
-                          </tr>
-                        ))}
+                        {computedApLines.map((l, idx) => {
+                          const scaled = scaledApLines[idx];
+                          const outstanding = parseFloat(l.amount) || 0;
+                          const payingNow   = parseFloat(scaled?.amount ?? l.amount) || 0;
+                          const isPartial   = Math.abs(payingNow - outstanding) > 0.001;
+                          return (
+                            <tr key={l.id} className="border-t border-border bg-muted/10">
+                              <td className="px-3 py-2 text-muted-foreground text-center text-xs">{idx + 1}</td>
+                              <td className="px-3 py-2 text-foreground/80">{l.accountName}</td>
+                              <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{l.description}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground text-xs">{fmtAmt(outstanding, sym)}</td>
+                              <td className={`px-3 py-2 text-right font-semibold ${isPartial ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                                {fmtAmt(payingNow, sym)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-border bg-muted/30">
                           <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
-                          <td className="px-3 py-2 text-right font-bold">{fmtAmt(totalDue, sym)}</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground font-semibold text-sm">{fmtAmt(totalDue, sym)}</td>
+                          <td className={`px-3 py-2 text-right font-bold text-sm ${overBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                            {fmtAmt(Math.min(bankTotal || totalDue, totalDue), sym)}
+                          </td>
                         </tr>
                       </tfoot>
                     </table>
