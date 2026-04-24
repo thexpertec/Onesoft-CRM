@@ -3,12 +3,12 @@ import { useSearch } from "wouter";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown,
-  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil,
+  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil, ShieldAlert,
 } from "lucide-react";
 import { useAccounts } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { Account, JournalEntry } from "@/lib/store";
+import { Account, JournalEntry, purgeOrphanedVoucherJEs } from "@/lib/store";
 import { getSettingsDecimalPlaces } from "@/lib/currencies";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -180,7 +180,7 @@ function LedgerDropdown({
 
 export default function JournalEntryPage() {
   const { accounts } = useAccounts();
-  const { entries, addEntry, editEntry, removeEntry } = useJournalEntries();
+  const { entries, addEntry, editEntry, removeEntry, refresh: refreshEntries } = useJournalEntries();
   const { toast } = useToast();
   const dp = getSettingsDecimalPlaces();
 
@@ -226,6 +226,17 @@ export default function JournalEntryPage() {
   const [listSearch, setListSearch] = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [viewEntry, setViewEntry] = useState<string | null>(null);
   const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
+
+  // ── Fix Data: purge orphaned voucher JEs ─────────────────────────────────
+  const handleFixData = useCallback(() => {
+    const removed = purgeOrphanedVoucherJEs();
+    refreshEntries();                          // repaint list immediately
+    if (removed === 0) {
+      toast({ title: "No orphans found", description: "All journal entries are linked to valid vouchers.", duration: 3000 });
+    } else {
+      toast({ title: `Fixed: removed ${removed} orphaned JE${removed > 1 ? "s" : ""}`, description: "Journal entries for deleted vouchers have been cleaned up and saved.", duration: 4000 });
+    }
+  }, [toast, refreshEntries]);
 
   // Reset reference when entries change
   useEffect(() => {
@@ -613,6 +624,14 @@ export default function JournalEntryPage() {
                 />
                 {listSearch && <button onClick={() => setListSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><span className="text-[10px]">✕</span></button>}
               </div>
+              <button
+                onClick={handleFixData}
+                title="Remove journal entries that were left behind by deleted vouchers (fixes Balance Sheet / COA totals)"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-amber-200 dark:border-amber-700 text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-colors whitespace-nowrap shrink-0"
+              >
+                <ShieldAlert size={12} />
+                Fix Data
+              </button>
             </div>
 
             {entries.length === 0 ? (

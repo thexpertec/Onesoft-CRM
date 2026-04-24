@@ -5653,6 +5653,51 @@ function _dedupeByKey<T extends { createdAt?: string }>(
  */
 const SELF_HEAL_GLOBAL_KEYS = ["admin-tenants", "admin-users"] as const;
 
+/**
+ * Removes Journal Entries whose reference matches a receipt/payment voucher
+ * number (RV-XXXXXX / PV-XXXXXX) but whose voucher no longer exists.
+ * These "orphans" are created when a voucher was deleted by old code that
+ * didn't cascade-delete the linked JE.
+ *
+ * @param tenantId  Active tenant ID (null = skip; no tenant-scoped data yet)
+ * @param writeToDB Whether to persist the cleaned list to the server immediately.
+ *                  Pass true for manual/on-demand calls, false for the silent
+ *                  auto-heal that runs inside syncAllFromServer (which already
+ *                  has the fresh server data in memory).
+ * @returns Number of orphaned JEs removed.
+ */
+function _purgeOrphanedVoucherJEs(tenantId: string, writeToDB: boolean): number {
+  const allJEs     = getJournalEntries();
+  const voucherNos = new Set(getRPVouchers().map(v => v.voucherNumber));
+
+  const VOUCHER_REF_RE = /^(RV|PV)-\d+$/;
+  const orphans = allJEs.filter(je =>
+    VOUCHER_REF_RE.test((je.reference ?? "").trim()) &&
+    !voucherNos.has((je.reference ?? "").trim())
+  );
+
+  if (orphans.length === 0) return 0;
+
+  const clean = allJEs.filter(je => !orphans.find(o => o.id === je.id));
+  const sk    = tenantKey(JE_KEY);
+  _lsSet(sk, clean);   // update in-memory immediately
+  if (writeToDB) {
+    _apiWrite(sk, clean).catch(err =>
+      console.error("[purge] Failed to persist orphan-JE cleanup:", err)
+    );
+  }
+  console.info(`[purge] Removed ${orphans.length} orphaned voucher JE(s):`,
+    orphans.map(j => j.reference).join(", "));
+  return orphans.length;
+}
+
+/** Public API so the UI can trigger a manual clean-up with visible feedback. */
+export function purgeOrphanedVoucherJEs(): number {
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return 0;
+  return _purgeOrphanedVoucherJEs(tenantId, true /* write to DB */);
+}
+
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
     // Always sync global data (users, tenants, module groups)
@@ -5697,6 +5742,12 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           }
         }
       }
+
+      // ── Auto-heal: remove orphaned voucher Journal Entries ─────────────────
+      // JEs whose reference matches a voucher number (RV-/PV-) but the voucher
+      // no longer exists are "orphans" — left behind by pre-cascade deletes.
+      // Purge them and persist back to DB so the fix survives next refresh.
+      _purgeOrphanedVoucherJEs(tenantId, true /* persist to DB */);
     }
 
     // ── Auto-repair: deduplicate products and stock by name ─────────────────
