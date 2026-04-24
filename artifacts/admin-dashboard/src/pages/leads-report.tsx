@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useLeads, useSalesAgents } from "@/hooks/use-data";
 import { CallLog, CallOutcome, LeadStatus } from "@/lib/store";
-import { format, subDays, startOfDay, parseISO } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import {
   PhoneCall, PhoneOff, MessageSquare, PhoneMissed, Clock,
   ChevronDown, ChevronRight, BarChart3, Users, Calendar,
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { generateLeadsReportPdf } from "./leads-report-pdf";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-type Range = "7" | "14" | "30" | "90" | "custom";
+type Range = "today" | "yesterday" | "7" | "14" | "30" | "90" | "custom";
 
 const OUTCOMES: CallOutcome[] = ["Answered", "No Answer", "Voicemail", "Busy", "Scheduled Callback"];
 const OUTCOME_META: Record<CallOutcome, { icon: React.ElementType; color: string; short: string }> = {
@@ -81,14 +81,17 @@ export default function LeadsReportPage() {
 
   // ── Date window ────────────────────────────────────────────────────────────
   const { fromDate, toDate } = useMemo(() => {
-    const to = startOfDay(new Date());
+    const now = new Date();
+    const today = startOfDay(now);
+    if (range === "today")     return { fromDate: today,              toDate: endOfDay(now) };
+    if (range === "yesterday") return { fromDate: startOfDay(subDays(today, 1)), toDate: endOfDay(subDays(today, 1)) };
     if (range === "custom") {
       return {
-        fromDate: customFrom ? startOfDay(parseISO(customFrom)) : subDays(to, 30),
-        toDate:   customTo   ? startOfDay(parseISO(customTo))   : to,
+        fromDate: customFrom ? startOfDay(parseISO(customFrom)) : subDays(today, 30),
+        toDate:   customTo   ? endOfDay(parseISO(customTo))     : endOfDay(now),
       };
     }
-    return { fromDate: subDays(to, parseInt(range, 10)), toDate: to };
+    return { fromDate: subDays(today, parseInt(range, 10)), toDate: endOfDay(now) };
   }, [range, customFrom, customTo]);
 
   // ── Agent-filtered leads (for all widgets) ─────────────────────────────────
@@ -194,8 +197,9 @@ export default function LeadsReportPage() {
   const handlePrintPdf = async () => {
     setPdfLoading(true);
     try {
-      const rangeLabel = range === "custom"
-        ? `${customFrom || "—"} → ${customTo || "—"}`
+      const rangeLabel = range === "today" ? "Today"
+        : range === "yesterday" ? "Yesterday"
+        : range === "custom" ? `${customFrom || "—"} → ${customTo || "—"}`
         : `Last ${range} days`;
       await generateLeadsReportPdf({
         dayStats, agentStats, grandTotal, totalAnswered, answerRate,
@@ -227,8 +231,9 @@ export default function LeadsReportPage() {
     a.click();
   };
 
-  const rangeLabel = range === "custom"
-    ? `${customFrom || "—"} → ${customTo || "—"}`
+  const rangeLabel = range === "today" ? "Today"
+    : range === "yesterday" ? "Yesterday"
+    : range === "custom" ? `${customFrom || "—"} → ${customTo || "—"}`
     : `Last ${range} days`;
 
   return (
@@ -274,6 +279,8 @@ export default function LeadsReportPage() {
           <Select value={range} onValueChange={v => setRange(v as Range)}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
               <SelectItem value="7">Last 7 days</SelectItem>
               <SelectItem value="14">Last 14 days</SelectItem>
               <SelectItem value="30">Last 30 days</SelectItem>
