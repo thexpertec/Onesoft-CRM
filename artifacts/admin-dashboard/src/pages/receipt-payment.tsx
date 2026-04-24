@@ -20,6 +20,33 @@ import {
 
 function todayStr(): string { return new Date().toISOString().slice(0, 10); }
 
+/**
+ * Purchase invoices are tax-exclusive in the UI (effectiveTaxRate = 0).
+ * The stored `inv.taxRate` field may still hold the global VAT rate.
+ * Always use this helper so we don't double-apply tax on purchases.
+ */
+function invTaxRate(inv: Invoice): number {
+  return inv.invoiceType === "purchase" ? 0 : (parseFloat(inv.taxRate) || 0);
+}
+
+/** Recompute the gross total of an invoice, respecting purchase tax exclusion. */
+function invGrandTotal(inv: Invoice): number {
+  const sub = (inv.items || []).reduce((s, it) => {
+    const qty   = parseFloat(it.qty) || 0;
+    const price = parseFloat(it.unitPrice) || 0;
+    const disc  = parseFloat(it.discount) || 0;
+    const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+    return s + line;
+  }, 0);
+  const tax = sub * invTaxRate(inv) / 100;
+  return sub + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+}
+
+/** Outstanding balance = grand total – amount already paid. */
+function invOutstanding(inv: Invoice): number {
+  return Math.max(0, invGrandTotal(inv) - (parseFloat(inv.amountPaid) || 0));
+}
+
 function fmtAmt(n: number, sym: string): string {
   return `${sym}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -151,18 +178,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled, invoiceTypeFilter = 
                 {q ? "No invoices match" : invoiceTypeFilter === "purchase" ? "No purchase invoices found" : "No receivable invoices found"}
               </div>
             ) : invoices.map(inv => {
-              const outstanding = (() => {
-                const total = inv.items.reduce((s, it) => {
-                  const qty = parseFloat(it.qty) || 0, price = parseFloat(it.unitPrice) || 0;
-                  const disc = parseFloat(it.discount) || 0;
-                  const sub = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
-                  return s + sub;
-                }, 0);
-                const tax = total * (parseFloat(inv.taxRate) || 0) / 100;
-                const grand = total + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
-                const paid = parseFloat(inv.amountPaid) || 0;
-                return grand - paid;
-              })();
+              const outstanding = invOutstanding(inv);
               return (
                 <button key={inv.id} type="button"
                   onClick={() => { onChange(inv); setOpen(false); setQ(""); }}
@@ -350,17 +366,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
 
   const invBalance = useMemo(() => {
     if (!linkedInv) return null;
-    const subtotal = (linkedInv.items || []).reduce((s, it) => {
-      const qty   = parseFloat(it.qty) || 0;
-      const price = parseFloat(it.unitPrice) || 0;
-      const disc  = parseFloat(it.discount) || 0;
-      const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
-      return s + line;
-    }, 0);
-    const tax   = subtotal * (parseFloat(linkedInv.taxRate) || 0) / 100;
-    const grand = subtotal + tax + (parseFloat(linkedInv.shippingFee) || 0) + (parseFloat(linkedInv.handlingFee) || 0);
-    const paid  = parseFloat(linkedInv.amountPaid) || 0;
-    return Math.max(0, grand - paid);
+    return invOutstanding(linkedInv);
   }, [linkedInv]);
 
   const total = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
@@ -489,18 +495,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   if (targetId) {
                     const acct = accounts.find(a => a.id === targetId);
                     if (acct) {
-                      // compute outstanding balance from invoice
-                      const sub = inv.items.reduce((s, it) => {
-                        const qty = parseFloat(it.qty) || 0;
-                        const price = parseFloat(it.unitPrice) || 0;
-                        const disc = parseFloat(it.discount) || 0;
-                        const line = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
-                        return s + line;
-                      }, 0);
-                      const tax   = sub * (parseFloat(inv.taxRate) || 0) / 100;
-                      const grand = sub + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
-                      const paid  = parseFloat(inv.amountPaid) || 0;
-                      const outstanding = Math.max(0, grand - paid);
+                      const outstanding = invOutstanding(inv);
                       setLines([{
                         id:          crypto.randomUUID(),
                         accountId:   acct.id,
@@ -819,17 +814,7 @@ export default function ReceiptPaymentPage() {
     const inv = getInvoices().find(i => i.id === invoiceId);
     let outstanding = parseFloat(amount ?? "0") || 0;
     if (inv) {
-      const sub = inv.items.reduce((s, it) => {
-        const qty   = parseFloat(it.qty) || 0;
-        const price = parseFloat(it.unitPrice) || 0;
-        const disc  = parseFloat(it.discount) || 0;
-        const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
-        return s + line;
-      }, 0);
-      const tax   = sub * (parseFloat(inv.taxRate) || 0) / 100;
-      const grand = sub + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
-      const paid  = parseFloat(inv.amountPaid) || 0;
-      outstanding = parseFloat(Math.max(0, grand - paid).toFixed(2));
+      outstanding = parseFloat(invOutstanding(inv).toFixed(2));
     }
 
     const prefill: Partial<RPVoucher> = {
