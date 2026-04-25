@@ -1272,7 +1272,27 @@ export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "upda
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setGlobal(USERS_KEY, [...getAdminUsers(), newUser]);
+  const updated = [...getAdminUsers(), newUser];
+  // Use _lsCache (memory + localStorage) immediately for this tab session,
+  // then push to server via setGlobalAsync so the write is durable before
+  // the next page load's syncAllFromServer can overwrite localStorage.
+  _lsCache(USERS_KEY, updated);
+  setGlobalAsync(USERS_KEY, updated).catch(err =>
+    console.error("[users] Failed to persist new user to server:", err)
+  );
+  return newUser;
+};
+
+export const createAdminUserAsync = async (user: Omit<AdminUser, "id" | "createdAt" | "updatedAt">): Promise<AdminUser> => {
+  const newUser: AdminUser = {
+    ...user,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const updated = [...getAdminUsers(), newUser];
+  _lsCache(USERS_KEY, updated);
+  await setGlobalAsync(USERS_KEY, updated);
   return newUser;
 };
 
@@ -1281,12 +1301,19 @@ export const updateAdminUser = (id: string, updates: Partial<Omit<AdminUser, "id
   const index = users.findIndex(u => u.id === id);
   if (index === -1) throw new Error("User not found");
   users[index] = { ...users[index], ...updates, updatedAt: new Date().toISOString() };
-  setGlobal(USERS_KEY, users);
+  _lsCache(USERS_KEY, users);
+  setGlobalAsync(USERS_KEY, users).catch(err =>
+    console.error("[users] Failed to persist user update to server:", err)
+  );
   return users[index];
 };
 
 export const deleteAdminUser = (id: string): void => {
-  setGlobal(USERS_KEY, getAdminUsers().filter(u => u.id !== id));
+  const updated = getAdminUsers().filter(u => u.id !== id);
+  _lsCache(USERS_KEY, updated);
+  setGlobalAsync(USERS_KEY, updated).catch(err =>
+    console.error("[users] Failed to persist user deletion to server:", err)
+  );
 };
 
 // ─── Team Members API (for New Document "Prepared By") ───────────────────────
@@ -5824,23 +5851,42 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         }
       }
 
-      // ── Self-heal: if the server is missing a critical platform key but
-      //    we hold local data for it, push local → server. This fixes the
-      //    legacy state where tenant writes were fire-and-forget and may
-      //    never have reached the DB.  After one sync the server becomes
-      //    the single source of truth and deletes/creations propagate
-      //    correctly across devices.
+      // ── Self-heal: critical platform keys must always converge on the server.
+      //    Case 1: key is MISSING from server — push entire local array up.
+      //    Case 2: key EXISTS on server but local has MORE items (fire-and-forget
+      //            write hadn't completed before the last sync) — merge the
+      //            local-only records back in, push merged result, and update
+      //            in-memory + localStorage so this page load is correct too.
       for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
-        if (platKey in globalData) continue;          // server has it — nothing to heal
-        const raw = _memRaw.get(platKey) ?? (() => { try { return localStorage.getItem(platKey); } catch { return null; } })();
-        if (!raw) continue;                            // nothing local either
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            console.info(`[sync] Self-heal: pushing local "${platKey}" (${parsed.length} items) up to server`);
-            kvPut("global", platKey, parsed).catch(() => { /* error already surfaced via console */ });
-          }
-        } catch { /* malformed local — ignore */ }
+        const rawLocal = (() => { try { return localStorage.getItem(platKey); } catch { return null; } })();
+
+        if (!(platKey in globalData)) {
+          // Case 1: key missing from server entirely — push local up
+          if (!rawLocal) continue;
+          try {
+            const parsed = JSON.parse(rawLocal);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.info(`[sync] Self-heal(missing): pushing local "${platKey}" (${parsed.length} items) up to server`);
+              kvPut("global", platKey, parsed).catch(() => {});
+            }
+          } catch { /* malformed */ }
+        } else {
+          // Case 2: key exists on server — check if local has items server is missing
+          if (!rawLocal) continue;
+          try {
+            const localArr  = JSON.parse(rawLocal) as Array<{ id?: string }>;
+            const serverVal = globalData[platKey];
+            const serverArr = Array.isArray(serverVal) ? (serverVal as Array<{ id?: string }>) : [];
+            const serverIds = new Set(serverArr.map(x => x.id).filter(Boolean));
+            const localOnly = localArr.filter(x => x.id && !serverIds.has(x.id));
+            if (localOnly.length > 0) {
+              const merged = [...serverArr, ...localOnly];
+              console.info(`[sync] Self-heal(merge): "${platKey}" — server had ${serverArr.length}, local had ${localOnly.length} extra. Merged to ${merged.length}.`);
+              _lsCache(platKey, merged);   // fix this page load immediately
+              kvPut("global", platKey, merged).catch(() => {}); // push merged to server
+            }
+          } catch { /* malformed — ignore */ }
+        }
       }
     }
 

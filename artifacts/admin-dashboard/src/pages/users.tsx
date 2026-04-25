@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { AdminUser, UserRole, getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getTenants, Tenant } from "@/lib/store";
+import { AdminUser, UserRole, getAdminUsers, createAdminUser, createAdminUserAsync, updateAdminUser, deleteAdminUser, getTenants, Tenant } from "@/lib/store";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_BG } from "@/components/editable-cell";
 
 // ─── Column definitions ────────────────────────────────────────────────────────
@@ -81,6 +81,7 @@ export default function UsersPage() {
   const [tenants,    setTenants]    = useState<Tenant[]>([]);
   const [roleFilter, setRoleFilter] = useState<"All" | "superadmin" | "admin" | "manager">("All");
   const [addOpen,    setAddOpen]    = useState(false);
+  const [addSaving,  setAddSaving]  = useState(false);
   const [resetUser,  setResetUser]  = useState<AdminUser | null>(null);
   const [deleteId,   setDeleteId]   = useState<string | null>(null);
   const [activeCell, setActiveCell] = useState<{ id: string; col: number } | null>(null);
@@ -159,21 +160,28 @@ export default function UsersPage() {
   });
   const watchedRole = addForm.watch("role");
 
-  const handleAdd = (data: AddUserValues) => {
+  const handleAdd = async (data: AddUserValues) => {
     const existing = getAdminUsers();
     if (existing.some(u => u.username.toLowerCase() === data.username.toLowerCase())) {
       addForm.setError("username", { message: "Username already taken" }); return;
     }
-    createAdminUser({
-      username: data.username,
-      fullName: data.fullName,
-      email: data.email,
-      role: data.role,
-      password: data.password,
-      ...(data.role === "manager" ? { assignedTenants: data.assignedTenants ?? [] } : {}),
-    });
-    toast({ title: "User created", description: `${data.fullName} (@${data.username}) added.` });
-    addForm.reset(); setAddOpen(false); reload();
+    setAddSaving(true);
+    try {
+      await createAdminUserAsync({
+        username: data.username,
+        fullName: data.fullName,
+        email: data.email,
+        role: data.role,
+        password: data.password,
+        ...(data.role === "manager" ? { assignedTenants: data.assignedTenants ?? [] } : {}),
+      });
+      toast({ title: "User created", description: `${data.fullName} (@${data.username}) added.` });
+      addForm.reset(); setAddOpen(false); reload();
+    } catch {
+      toast({ title: "Save failed", description: "User was created locally but could not be saved to the server. Please try again.", variant: "destructive" });
+    } finally {
+      setAddSaving(false);
+    }
   };
 
   // Toggle tenant selection for manager
@@ -404,8 +412,10 @@ export default function UsersPage() {
                 )} />
               </div>
               <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => { setAddOpen(false); addForm.reset(); }}>Cancel</Button>
-                <Button type="submit">Create User</Button>
+                <Button type="button" variant="outline" disabled={addSaving} onClick={() => { setAddOpen(false); addForm.reset(); }}>Cancel</Button>
+                <Button type="submit" disabled={addSaving} className="min-w-[110px]">
+                  {addSaving ? "Saving…" : "Create User"}
+                </Button>
               </DialogFooter>
             </form>
           </Form>
