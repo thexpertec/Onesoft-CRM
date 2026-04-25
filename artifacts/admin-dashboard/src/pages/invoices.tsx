@@ -777,14 +777,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             {/* Customer Card */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-white uppercase tracking-wider">
                   {invoiceType === "purchase" ? "Supplier" : "Customer"}
                 </span>
               </div>
               <div className="px-5 py-4 space-y-3">
                 {/* Name (combobox) */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">
                     {invoiceType === "purchase" ? "Supplier Name" : "Customer Name"}
                   </label>
                   <Combobox
@@ -800,25 +800,25 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 </div>
                 {/* Company */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Company</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Company</label>
                   <input value={form.salesOfficer} onChange={e => setF("salesOfficer", e.target.value)} placeholder="Company / organisation name"
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Phone */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Phone</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Phone</label>
                   <input value={form.buyerPhone} onChange={e => setF("buyerPhone", e.target.value)} placeholder="+44…"
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Area */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Area / City</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Area / City</label>
                   <input value={form.buyerTown} onChange={e => setF("buyerTown", e.target.value)} placeholder="Town / Area / City"
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Address */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Address</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Address</label>
                   <textarea rows={2} value={form.buyerAddress} onChange={e => setF("buyerAddress", e.target.value)} placeholder="Street address…"
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"/>
                 </div>
@@ -828,7 +828,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             {/* Invoice Details Card */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Invoice Details</span>
+                <span className="text-[13px] font-bold text-white uppercase tracking-wider">Invoice Details</span>
                 {!isNew && (
                   <span className="text-[10px] text-gray-400 dark:text-gray-500">
                     Created {new Date(invoice.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -838,19 +838,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               <div className="px-5 py-4 space-y-3">
                 {/* Invoice Title */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Invoice Title</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Title</label>
                   <input value={form.invoiceTitle} onChange={e => setF("invoiceTitle", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Date + Due Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Invoice Date</label>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Date</label>
                     <input type="date" value={form.invoiceDate} onChange={e => setF("invoiceDate", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Due Date</label>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Due Date</label>
                     <input type="date" value={form.dueDate} onChange={e => setF("dueDate", e.target.value)}
                       className={`w-full px-3 py-2 rounded-lg border bg-white dark:bg-zinc-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isOverdue(form as unknown as Invoice) ? "border-red-300 dark:border-red-800 text-red-600 dark:text-red-400" : "border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100"}`}/>
                   </div>
@@ -860,7 +860,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   const agents = getSalesAgents().filter(a => a.status === "Active");
                   return (
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Sales Agent</label>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Sales Agent</label>
                       <select value={form.agentId || ""} onChange={e => {
                         const agent = agents.find(a => a.id === e.target.value);
                         setF("agentId", agent?.id || ""); setF("agentName", agent?.name || "");
@@ -874,14 +874,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 {/* Tax — sale invoices only */}
                 {invoiceType !== "purchase" && (
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">VAT / Tax %</label>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">VAT / Tax %</label>
                     <input type="number" min="0" max="100" value={form.taxRate} onChange={e => setF("taxRate", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                 )}
                 {/* Sale/Purchase Status */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">
                     {invoiceType === "purchase" ? "Purchase Status" : "Sale Status"}
                   </label>
                   <select value={form.saleStatus ?? ""} onChange={e => setF("saleStatus", e.target.value)}
@@ -900,12 +900,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
               {/* Column labels */}
               <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 flex-1 items-center">
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">#</span>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider pl-1">Product / Service</span>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Unit Price</span>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Qty</span>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-center">Discount</span>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider text-right">Sub Total</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider">#</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider pl-1">Product / Service</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Unit Price</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Qty</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Discount</span>
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Sub Total</span>
                 <span />
               </div>
               {/* Pricing mode switcher — sale invoices only */}
@@ -948,9 +948,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               {items.map((item, idx) => (
                 <div key={item.id}>
                   {/* Item row */}
-                  <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-2 items-center hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                  <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-3 items-center hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors">
                     {/* # */}
-                    <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-500">{idx + 1}</span>
+                    <span className="text-sm font-bold text-gray-500 dark:text-zinc-400">{idx + 1}</span>
                     {/* Product */}
                     <div className="pl-1 pr-2" data-item-product={item.id}>
                       <Combobox value={item.productName} onChange={v => pickProduct(item.id, v)}
@@ -964,7 +964,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         </span>
                       )}
                       {item.sku && (
-                        <span className="text-[10px] text-gray-400 pl-1">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 pl-1">
                           SKU: {item.sku}
                           {item.variantLabel && (
                             <span className="ml-1 text-blue-500 font-medium">· {item.variantLabel}</span>
@@ -1017,7 +1017,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </div>
                     {/* Sub Total */}
                     <div className="px-1 text-right">
-                      <span className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{lineTotal(item).toFixed(dp)}</span>
+                      <span className="text-[15px] font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{lineTotal(item).toFixed(dp)}</span>
                     </div>
                     {/* Delete */}
                     <div className="flex justify-center">
@@ -1100,12 +1100,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Section 3: Charges + Bank Details (full width) ──────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-              <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Charges &amp; Bank Details</span>
+              <span className="text-[13px] font-bold text-white uppercase tracking-wider">Charges &amp; Bank Details</span>
             </div>
             <div className="px-5 py-4">
               <div className="grid lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Delivery Charges</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1.5">Delivery Charges</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">{sym}</span>
                     <input type="number" min="0" step="0.01" value={form.shippingFee} onChange={e => setF("shippingFee", e.target.value)} placeholder="0.00"
@@ -1113,7 +1113,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Other Charges</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1.5">Other Charges</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">{sym}</span>
                     <input type="number" min="0" step="0.01" value={form.handlingFee} onChange={e => setF("handlingFee", e.target.value)} placeholder="0.00"
@@ -1121,7 +1121,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Payment / Bank Accounts</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1.5">Payment / Bank Accounts</label>
                   {availableBankAccounts.length === 0 ? (
                     <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">
                       No bank accounts configured. Add them in Settings → Invoice Defaults.
@@ -1158,50 +1158,50 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {/* ── Section 4: Totals (full width) ──────────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-              <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Summary</span>
+              <span className="text-[13px] font-bold text-white uppercase tracking-wider">Summary</span>
             </div>
             <div className="px-5 py-4">
-              <div className="max-w-sm ml-auto space-y-1.5">
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+              <div className="max-w-sm ml-auto space-y-2">
+                <div className="flex justify-between text-[14px] text-gray-700 dark:text-gray-300">
                   <span>Sub Total</span>
                   <span className="font-mono font-semibold">{sym}{subtotal.toFixed(dp)}</span>
                 </div>
                 {discountAmt > 0 && (
-                  <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                  <div className="flex justify-between text-[14px] text-emerald-600 dark:text-emerald-400">
                     <span>Discount</span>
                     <span className="font-mono font-semibold">−{sym}{discountAmt.toFixed(dp)}</span>
                   </div>
                 )}
                 {invoiceType !== "purchase" && (
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex justify-between text-[14px] text-gray-700 dark:text-gray-300">
                     <span>VAT / Tax ({form.taxRate || 0}%)</span>
                     <span className="font-mono font-semibold">{sym}{tax.toFixed(dp)}</span>
                   </div>
                 )}
                 {shipping > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex justify-between text-[14px] text-gray-700 dark:text-gray-300">
                     <span>Delivery Charges</span>
                     <span className="font-mono font-semibold">{sym}{shipping.toFixed(dp)}</span>
                   </div>
                 )}
                 {handling > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex justify-between text-[14px] text-gray-700 dark:text-gray-300">
                     <span>Other Charges</span>
                     <span className="font-mono font-semibold">{sym}{handling.toFixed(dp)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base font-bold text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-zinc-700">
+                <div className="flex justify-between text-[18px] font-bold text-gray-900 dark:text-gray-100 pt-3 border-t-2 border-gray-300 dark:border-zinc-600">
                   <span>Total Amount</span>
                   <span className="font-mono">{sym}{total.toFixed(dp)}</span>
                 </div>
                 {balance > 0.005 && (
-                  <div className="flex justify-between text-sm font-bold text-red-600 dark:text-red-400">
+                  <div className="flex justify-between text-[15px] font-bold text-red-600 dark:text-red-400">
                     <span>Balance Due</span>
                     <span className="font-mono">{sym}{balance.toFixed(dp)}</span>
                   </div>
                 )}
                 {paid > 0 && balance <= 0.005 && (
-                  <div className="flex justify-between text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                  <div className="flex justify-between text-[15px] font-semibold text-emerald-600 dark:text-emerald-400">
                     <span>✓ Fully Paid</span>
                     <span className="font-mono">{sym}{total.toFixed(dp)}</span>
                   </div>
@@ -1216,7 +1216,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             return selected.length > 0 ? (
               <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
                 <div className="px-5 py-3 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-                  <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Payment Details</span>
+                  <span className="text-[13px] font-bold text-white uppercase tracking-wider">Payment Details</span>
                 </div>
                 <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {selected.map(acc => (
@@ -1236,12 +1236,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               className="w-full flex items-center justify-between px-5 py-3 bg-gray-800 dark:bg-zinc-950 hover:bg-gray-700 dark:hover:bg-zinc-900 border-b border-gray-700 dark:border-zinc-700 transition-colors">
               <div className="flex items-center gap-2">
                 <ChevronRight size={14} className={`text-gray-300 transition-transform ${docsOpen ? "rotate-90" : ""}`}/>
-                <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Document</span>
+                <span className="text-[13px] font-bold text-white uppercase tracking-wider">Document</span>
                 {docs.length > 0 && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-600 text-gray-200">{docs.length}</span>
                 )}
               </div>
-              <span className="text-[11px] text-gray-400">Payment terms, agreement, notes</span>
+              <span className="text-xs text-gray-300">Payment terms, agreement, notes</span>
             </button>
             {docsOpen && (
               <div className="border-t border-gray-100 dark:border-zinc-800 px-5 py-4 space-y-3">
@@ -1411,9 +1411,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <div className="flex items-center gap-2">
                     <ChevronRight size={14} className={`text-gray-300 transition-transform ${costCalcOpen ? "rotate-90" : ""}`}/>
                     <Calculator size={14} className="text-amber-400"/>
-                    <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Cost Rate Calculator</span>
+                    <span className="text-[13px] font-bold text-white uppercase tracking-wider">Cost Rate Calculator</span>
                   </div>
-                  <span className="text-[11px] text-gray-400">Landed cost distribution → push to product catalogue</span>
+                  <span className="text-xs text-gray-300">Landed cost distribution → push to product catalogue</span>
                 </button>
 
                 {costCalcOpen && (
@@ -1421,20 +1421,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     {/* ── Summary bar ──────────────────────────────────────── */}
                     <div className="grid grid-cols-3 gap-4">
                       <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-center">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total Pieces</p>
-                        <p className="text-2xl font-black text-gray-800 dark:text-gray-100">{totalPieces.toFixed(0)}</p>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Pieces</p>
+                        <p className="text-3xl font-black text-gray-800 dark:text-gray-100">{totalPieces.toFixed(0)}</p>
                       </div>
                       <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl px-4 py-3 text-center">
-                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Total Charges</p>
-                        <p className="text-2xl font-black text-amber-700 dark:text-amber-300">{sym}{totalCharges.toFixed(dp)}</p>
-                        <p className="text-[10px] text-amber-500 mt-0.5">Delivery + Other</p>
+                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Total Charges</p>
+                        <p className="text-3xl font-black text-amber-700 dark:text-amber-300">{sym}{totalCharges.toFixed(dp)}</p>
+                        <p className="text-[11px] text-amber-500 mt-0.5">Delivery + Other</p>
                       </div>
                       <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl px-4 py-3 text-center">
-                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">Extra Cost / Piece</p>
-                        <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300">
+                        <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">Extra Cost / Piece</p>
+                        <p className="text-3xl font-black text-indigo-700 dark:text-indigo-300">
                           {totalPieces > 0 ? `${sym}${extraPerPiece.toFixed(dp)}` : "—"}
                         </p>
-                        <p className="text-[10px] text-indigo-400 mt-0.5">÷ {totalPieces} pcs</p>
+                        <p className="text-[11px] text-indigo-400 mt-0.5">÷ {totalPieces} pcs</p>
                       </div>
                     </div>
 
@@ -1454,7 +1454,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       {/* Table head */}
                       <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
                         {["Product", "Qty", "Supplier Price", "Extra Cost/Unit", "Cost Price", "Retail Price", "Wholesale Price"].map(h => (
-                          <span key={h} className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center first:text-left">{h}</span>
+                          <span key={h} className="text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-center first:text-left">{h}</span>
                         ))}
                       </div>
 
@@ -1499,7 +1499,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                               {/* Cost Price (suggestedCost) — editable */}
                               <div className="px-1.5">
                                 <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">{sym}</span>
                                   <input type="number" min="0" step="0.01" value={ov.suggestedCost}
                                     onChange={e => setOv("suggestedCost", e.target.value)}
                                     className="w-full pl-5 pr-1 py-1.5 text-sm font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-right"
@@ -1509,7 +1509,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                               {/* Retail Price — editable */}
                               <div className="px-1.5">
                                 <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">{sym}</span>
                                   <input type="number" min="0" step="0.01" value={ov.retailPrice}
                                     onChange={e => setOv("retailPrice", e.target.value)}
                                     placeholder="—"
@@ -1520,7 +1520,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                               {/* Wholesale Price — editable */}
                               <div className="px-1.5">
                                 <div className="relative">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">{sym}</span>
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">{sym}</span>
                                   <input type="number" min="0" step="0.01" value={ov.wholesalePrice}
                                     onChange={e => setOv("wholesalePrice", e.target.value)}
                                     placeholder="—"
@@ -1533,34 +1533,34 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             {/* ── Row 2: current catalogue prices (read-only, variant-aware) ── */}
                             <div className="grid grid-cols-[1fr_60px_100px_110px_120px_120px_120px] gap-0 px-4 pb-2 items-center bg-gray-50/60 dark:bg-zinc-800/30">
                               <div className="min-w-0">
-                                <p className="text-[10px] text-gray-400 italic">
+                                <p className="text-xs text-gray-500 italic">
                                   {variant ? "Current in catalogue — variant" : "Current in catalogue"}
                                 </p>
                                 {variant && it.variantLabel && (
-                                  <p className="text-[9px] text-indigo-400 truncate">{it.variantLabel}</p>
+                                  <p className="text-[10px] text-indigo-500 truncate">{it.variantLabel}</p>
                                 )}
                               </div>
                               <div/><div/><div/>
                               {/* Current Cost Price */}
                               <div className="px-1.5 text-center">
-                                <span className="text-[11px] font-mono text-amber-600 dark:text-amber-400">
+                                <span className="text-[13px] font-bold font-mono text-amber-600 dark:text-amber-400">
                                   {ep.cost ? `${sym}${parseFloat(ep.cost).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
-                                <p className="text-[9px] text-gray-400 leading-tight">Cost</p>
+                                <p className="text-[10px] text-gray-500 leading-tight">Cost</p>
                               </div>
                               {/* Current Retail Price */}
                               <div className="px-1.5 text-center">
-                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                <span className="text-[13px] font-bold font-mono text-emerald-600 dark:text-emerald-400">
                                   {ep.retail ? `${sym}${parseFloat(ep.retail).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
-                                <p className="text-[9px] text-gray-400 leading-tight">Retail</p>
+                                <p className="text-[10px] text-gray-500 leading-tight">Retail</p>
                               </div>
                               {/* Current Wholesale Price */}
                               <div className="px-1.5 text-center">
-                                <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">
+                                <span className="text-[13px] font-bold font-mono text-blue-600 dark:text-blue-400">
                                   {ep.wholesale ? `${sym}${parseFloat(ep.wholesale).toFixed(dp)}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
                                 </span>
-                                <p className="text-[9px] text-gray-400 leading-tight">Wholesale</p>
+                                <p className="text-[10px] text-gray-500 leading-tight">Wholesale</p>
                               </div>
                             </div>
                           </div>
@@ -1570,7 +1570,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
                     {/* ── Footer: legend + action buttons ─────────────────── */}
                     <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-xs text-gray-500">
                         Amber = Cost Price · Green = Retail · Blue = Wholesale · Greyed = no catalogue match
                       </p>
                       <div className="flex items-center gap-2">
@@ -1602,7 +1602,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               <div className="px-5 py-3 border-b border-gray-700 dark:border-zinc-700 flex items-center justify-between bg-gray-800 dark:bg-zinc-950">
                 <div className="flex items-center gap-2">
                   <Receipt size={14} className="text-emerald-400"/>
-                  <span className="text-xs font-bold text-gray-100 uppercase tracking-wider">Payments</span>
+                  <span className="text-[13px] font-bold text-white uppercase tracking-wider">Payments</span>
                 </div>
                 {jeId && (
                   <button
@@ -1616,7 +1616,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               <div className="px-5 py-4">
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/60 text-center">
-                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Invoice Total</p>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Total</p>
                     <p className="text-sm font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{total.toFixed(dp)}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-center">
@@ -2468,7 +2468,7 @@ export default function InvoicesPage() {
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             {/* Table Header */}
-            <div className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-2.5 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider`}>
+            <div className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700 text-[12px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider`}>
               <div>Invoice #</div>
               <div>{isPurchase ? "Supplier" : "Customer"}</div>
               <div>Date</div>
@@ -2494,41 +2494,41 @@ export default function InvoicesPage() {
                 <div
                   key={inv.id}
                   onClick={() => navigate(`/invoices/${inv.id}${inv.invoiceType === "purchase" ? "?type=purchase" : ""}`)}
-                  className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
+                  className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
                 >
                   {/* Invoice # */}
-                  <div className={`font-mono text-[12px] font-bold text-gray-900 dark:text-gray-100 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
+                  <div className={`font-mono text-[13px] font-bold text-gray-900 dark:text-gray-100 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
                     {inv.invoiceNumber}
                   </div>
 
                   {/* Customer / Supplier */}
-                  <div className={`text-[12px] text-gray-700 dark:text-gray-300 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
+                  <div className={`text-[13px] text-gray-800 dark:text-gray-200 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
                     {inv.customer || <span className="text-gray-400 italic">{isPurchase ? "—" : "Walk-in"}</span>}
                   </div>
 
                   {/* Date */}
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                  <div className="text-[12px] text-gray-600 dark:text-gray-400">
                     {fmtDate(inv.invoiceDate)}
                   </div>
 
                   {/* Due Date */}
-                  <div className={`text-[11px] font-semibold ${overdue ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}>
+                  <div className={`text-[12px] font-semibold ${overdue ? "text-red-500" : "text-gray-600 dark:text-gray-400"}`}>
                     {fmtDate(inv.dueDate)}
-                    {overdue && <span className="ml-1 text-[9px]">⚠</span>}
+                    {overdue && <span className="ml-1 text-[10px]">⚠</span>}
                   </div>
 
                   {/* Items count */}
-                  <div className="text-[12px] text-gray-500 dark:text-gray-400 text-right">
+                  <div className="text-[13px] text-gray-600 dark:text-gray-400 text-right">
                     {inv.items.length}
                   </div>
 
                   {/* Total */}
-                  <div className="text-[12px] font-bold text-gray-900 dark:text-gray-100 text-right font-mono">
+                  <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100 text-right font-mono">
                     {fmtCcy(total)}
                   </div>
 
                   {/* Paid */}
-                  <div className={`text-[12px] font-semibold text-right font-mono ${
+                  <div className={`text-[13px] font-semibold text-right font-mono ${
                     paid >= total - 0.005 && total > 0
                       ? "text-emerald-600 dark:text-emerald-400"
                       : paid > 0
@@ -2546,7 +2546,7 @@ export default function InvoicesPage() {
                   {/* Stock Status — purchase only */}
                   {isPurchase && (
                     <div>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                         inStock
                           ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
                           : "bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400"
@@ -2561,7 +2561,7 @@ export default function InvoicesPage() {
                   {isPurchase && (
                     <div>
                       {inv.saleStatus ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300">
                           {inv.saleStatus}
                         </span>
                       ) : (
