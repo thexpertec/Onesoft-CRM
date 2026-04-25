@@ -3049,12 +3049,37 @@ function _deductFromStockBySku(
   today: string,
   reference: string,
   sourceType: string | undefined,
-  alreadyExists?: (entityId: string) => boolean,
 ): number {
   let remaining = qty;
   for (let i = 0; i < stocks.length && remaining > 0; i++) {
     if (stocks[i].sku !== sku) continue;
-    if (alreadyExists && alreadyExists(stocks[i].id)) continue;
+    const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
+    const deduct  = Math.min(current, remaining);
+    stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
+    remaining -= deduct;
+    if (deduct > 0) ledger.push({
+      entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
+      date: today, txType: "sale", sourceType, reference,
+      qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
+      unit: stocks[i].unit, notes: reference ? `Sale ${reference}` : "Sale",
+    });
+  }
+  return remaining;
+}
+
+/** Deduct qty from stock records that match productName (last-resort fallback). Returns remaining undeducted qty. */
+function _deductFromStockByName(
+  productName: string,
+  qty: number,
+  stocks: StockItem[],
+  ledger: Omit<StockLedgerEntry, "id" | "createdAt">[],
+  today: string,
+  reference: string,
+  sourceType: string | undefined,
+): number {
+  let remaining = qty;
+  for (let i = 0; i < stocks.length && remaining > 0; i++) {
+    if (stocks[i].productName !== productName) continue;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, remaining);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
@@ -3070,54 +3095,71 @@ function _deductFromStockBySku(
 }
 
 export const deductStockForSale = (saleItems: SaleItem[], reference = "", sourceType?: string): void => {
+  // ── Invoice-level duplicate guard ─────────────────────────────────────────
+  // Check once at the invoice level: if ANY sale ledger entry for this reference
+  // already exists we've already processed it. Bail out entirely to prevent
+  // double-deduction. This replaces the old per-entity guard which incorrectly
+  // blocked later line items that shared the same parent stock record as an
+  // earlier line item (common with multi-variant sales).
+  if (reference) {
+    const existing = getStockLedger();
+    if (existing.some(e => e.reference === reference && e.txType === "sale")) return;
+  }
+
   const stocks = getStock();
   const today  = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
-  // Resolve parent-product SKU lookup map for variant fallback
-  // (lazy-loaded once, only if any item has a variantId)
+  // Lazy parent-SKU cache: productId → parent product's SKU
   let _parentSkuCache: Map<string, string> | null = null;
-  const parentSkuFor = (item: SaleItem): string | null => {
-    if (!item.variantId || !item.productId) return null;
+  const ensureCache = () => {
     if (!_parentSkuCache) {
       _parentSkuCache = new Map();
       getProducts().forEach(p => { if (p.sku) _parentSkuCache!.set(p.id, p.sku); });
     }
-    return _parentSkuCache.get(item.productId) ?? null;
   };
-
-  const existing = reference ? getStockLedger() : [];
-  const alreadyExists = reference
-    ? (entityId: string) => existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "sale")
-    : undefined;
+  const parentSkuFor = (item: SaleItem): string | null => {
+    if (!item.variantId || !item.productId) return null;
+    ensureCache();
+    return _parentSkuCache!.get(item.productId) ?? null;
+  };
 
   saleItems.forEach(item => {
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Resolve effective SKU — item.sku may be blank if product has no SKU entered.
-    // Fall back to looking up the product by productId to get its sku.
+    // Resolve effective SKU for this line item.
+    // • For plain products: item.sku (auto-generated or manually entered).
+    // • If blank, look up current product SKU by productId.
+    // • For variant lines: item.sku is the variant SKU (e.g. "A", "B", "C").
     let effectiveSku = item.sku || "";
     if (!effectiveSku && item.productId) {
-      if (!_parentSkuCache) {
-        _parentSkuCache = new Map();
-        getProducts().forEach(p => { if (p.sku) _parentSkuCache!.set(p.id, p.sku); });
-      }
-      effectiveSku = _parentSkuCache.get(item.productId) ?? "";
+      ensureCache();
+      effectiveSku = _parentSkuCache!.get(item.productId) ?? "";
     }
-    if (!effectiveSku) return;
 
-    // Primary: deduct from stock records keyed by the item's own SKU
-    let remaining = _deductFromStockBySku(effectiveSku, qty, stocks, ledger, today, reference, sourceType, alreadyExists);
+    let remaining = qty;
 
-    // Fallback: if item is a variant (variantId set) and stock was received under the
-    // parent product's SKU (common when purchase invoices don't use variant lines),
-    // deduct from the parent-SKU stock records for whatever is still remaining.
+    // Step 1 — Deduct from stock keyed by the item's own SKU (variant or product)
+    if (effectiveSku) {
+      remaining = _deductFromStockBySku(effectiveSku, remaining, stocks, ledger, today, reference, sourceType);
+    }
+
+    // Step 2 — Variant fallback: stock may have been received under the PARENT
+    // product's SKU rather than the individual variant SKU (happens when purchase
+    // invoices use only the parent product, not per-variant lines).
     if (remaining > 0 && item.variantId) {
       const parentSku = parentSkuFor(item);
       if (parentSku && parentSku !== effectiveSku) {
-        _deductFromStockBySku(parentSku, remaining, stocks, ledger, today, reference, sourceType, alreadyExists);
+        remaining = _deductFromStockBySku(parentSku, remaining, stocks, ledger, today, reference, sourceType);
       }
+    }
+
+    // Step 3 — Name fallback: stock record was created by productName (when the
+    // product had no SKU at the time the purchase was received). This mirrors the
+    // lookup priority used inside receiveStockForPurchase.
+    if (remaining > 0 && item.productName) {
+      _deductFromStockByName(item.productName, remaining, stocks, ledger, today, reference, sourceType);
     }
   });
 
@@ -3131,24 +3173,45 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
   const today    = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
+  /** Restore qty back into a specific stock record, with ledger entry. */
+  const restoreInto = (idx: number, qty: number) => {
+    const current = Math.max(0, parseFloat(stocks[idx].quantity) || 0);
+    stocks[idx] = { ...stocks[idx], quantity: String(current + qty), updatedAt: new Date().toISOString() };
+    if (qty > 0) ledger.push({
+      entityType: "product", entityId: stocks[idx].id, entityName: stocks[idx].productName,
+      date: today, txType: "sale-refund", reference,
+      qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
+      unit: stocks[idx].unit, notes: reference ? `Refund ${reference}` : "Sale Refund",
+    });
+  };
+
   saleItems.forEach(item => {
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0) return;
+
     // Resolve effective SKU — fall back to productId lookup
     let effectiveSku = item.sku || "";
     if (!effectiveSku && item.productId) {
       effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
     }
-    if (!effectiveSku) return;
-    const qty = parseFloat(item.qty) || 0;
-    const i = stocks.findIndex(s => s.sku === effectiveSku);
-    if (i >= 0) {
-      const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-      stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
-      if (qty > 0) ledger.push({
-        entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
-        date: today, txType: "sale-refund", reference,
-        qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
-        unit: stocks[i].unit, notes: reference ? `Refund ${reference}` : "Sale Refund",
-      });
+
+    // Step 1 — Restore to stock record keyed by item's own SKU
+    let found = effectiveSku ? stocks.findIndex(s => s.sku === effectiveSku) : -1;
+    if (found >= 0) { restoreInto(found, qty); return; }
+
+    // Step 2 — Variant fallback: stock may be under parent product's SKU
+    if (item.variantId && item.productId) {
+      const parentSku = allProds.find(p => p.id === item.productId)?.sku ?? "";
+      if (parentSku && parentSku !== effectiveSku) {
+        found = stocks.findIndex(s => s.sku === parentSku);
+        if (found >= 0) { restoreInto(found, qty); return; }
+      }
+    }
+
+    // Step 3 — Name fallback: stock record was created by productName
+    if (item.productName) {
+      found = stocks.findIndex(s => s.productName === item.productName);
+      if (found >= 0) { restoreInto(found, qty); }
     }
   });
 
