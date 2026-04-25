@@ -103,7 +103,7 @@ const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | 
     shippingFee:    "",
     handlingFee:    "",
     shippingMethod: "",
-    saleStatus:     "",
+    saleStatus:     type === "purchase" ? "Received" : "",
     notes:          "",
     agreement:      "",
     invoiceFooter:  "",
