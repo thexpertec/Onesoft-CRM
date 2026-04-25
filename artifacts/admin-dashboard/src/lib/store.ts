@@ -5252,16 +5252,23 @@ export function autoPostSaleJE(params: {
   const s = getSettings();
 
   // ── Debit side: AR / Cash / Bank ─────────────────────────────────────────
-  // Rule: if there is an outstanding balance (amountPaid explicitly given and < grandTotal),
-  // always debit Accounts Receivable — the customer owes us; Cash/Bank is only debited when
-  // payment is actually in hand.  "Credit" payment method also always uses AR.
+  // Rule:
+  //   Invoice source   → always DR Accounts Receivable (accrual basis).
+  //                       Cash/Bank is only debited via a separate cash-receipt JE when
+  //                       payment actually arrives.
+  //   POS source       → payment is collected on the spot, so DR Cash/Bank directly.
+  //   "Credit" method  → always AR (explicit credit sale regardless of source).
+  //   Outstanding bal  → AR whenever amountPaid < grandTotal (payment not yet received).
   const isCredit      = params.paymentMethod === "Credit";
   const isCash        = params.paymentMethod === "Cash";
   const outstanding   = params.amountPaid !== undefined
                         ? params.grandTotal - params.amountPaid
                         : 0;
   const isOutstanding = outstanding > 0.005; // > half-cent to avoid float noise
-  const useAR         = isCredit || isOutstanding;
+  // Invoice-source JEs are always accrual (AR debit) unless it's a POS sale paid in full
+  const useAR         = params.source === "Invoice"
+                        ? true                         // invoices always go through AR
+                        : isCredit || isOutstanding;   // POS: only AR when credit / outstanding
 
   let debitAccId: string | null;
   if (useAR) {

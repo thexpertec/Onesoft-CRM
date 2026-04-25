@@ -2055,6 +2055,11 @@ export function InvoiceFormPage() {
       updates.stockDeducted = false;
       updates.paidAt = "";
     }
+    // ── Clear JE ref when voided (sale invoices) so it is re-posted correctly on next issue ──
+    if ((status === "Draft" || status === "Cancelled") && inv.invoiceType !== "purchase" && inv.jeId) {
+      updates.jeId      = undefined;
+      updates.jeUsesAR  = undefined;
+    }
 
     // ── Journal entries (sale invoices only) ─────────────────────────────────
     if (inv.invoiceType !== "purchase") {
