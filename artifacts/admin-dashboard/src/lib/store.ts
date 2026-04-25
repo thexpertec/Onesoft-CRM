@@ -3002,19 +3002,30 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
     : undefined;
 
   saleItems.forEach(item => {
-    if (!item.sku) return;
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
+    // Resolve effective SKU — item.sku may be blank if product has no SKU entered.
+    // Fall back to looking up the product by productId to get its sku.
+    let effectiveSku = item.sku || "";
+    if (!effectiveSku && item.productId) {
+      if (!_parentSkuCache) {
+        _parentSkuCache = new Map();
+        getProducts().forEach(p => { if (p.sku) _parentSkuCache!.set(p.id, p.sku); });
+      }
+      effectiveSku = _parentSkuCache.get(item.productId) ?? "";
+    }
+    if (!effectiveSku) return;
+
     // Primary: deduct from stock records keyed by the item's own SKU
-    let remaining = _deductFromStockBySku(item.sku, qty, stocks, ledger, today, reference, sourceType, alreadyExists);
+    let remaining = _deductFromStockBySku(effectiveSku, qty, stocks, ledger, today, reference, sourceType, alreadyExists);
 
     // Fallback: if item is a variant (variantId set) and stock was received under the
     // parent product's SKU (common when purchase invoices don't use variant lines),
     // deduct from the parent-SKU stock records for whatever is still remaining.
     if (remaining > 0 && item.variantId) {
       const parentSku = parentSkuFor(item);
-      if (parentSku && parentSku !== item.sku) {
+      if (parentSku && parentSku !== effectiveSku) {
         _deductFromStockBySku(parentSku, remaining, stocks, ledger, today, reference, sourceType, alreadyExists);
       }
     }
@@ -3025,14 +3036,20 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
 };
 
 export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void => {
-  const stocks = getStock();
-  const today  = new Date().toISOString().slice(0, 10);
+  const stocks   = getStock();
+  const allProds = getProducts();
+  const today    = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
   saleItems.forEach(item => {
-    if (!item.sku) return;
+    // Resolve effective SKU — fall back to productId lookup
+    let effectiveSku = item.sku || "";
+    if (!effectiveSku && item.productId) {
+      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
+    }
+    if (!effectiveSku) return;
     const qty = parseFloat(item.qty) || 0;
-    const i = stocks.findIndex(s => s.sku === item.sku);
+    const i = stocks.findIndex(s => s.sku === effectiveSku);
     if (i >= 0) {
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
       stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
@@ -3052,8 +3069,9 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
 /** Add stock when a purchase invoice is paid / partially paid. Creates a new
  *  stock record for the SKU if one doesn't already exist. */
 export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourceType?: string): void => {
-  const stocks  = getStock();
-  const today   = new Date().toISOString().slice(0, 10);
+  const stocks    = getStock();
+  const allProds  = getProducts();
+  const today     = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
   // Duplicate guard: build a set of entityIds already recorded for this reference
@@ -3062,13 +3080,28 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     reference && existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "purchase-receipt");
 
   items.forEach(item => {
-    if (!item.sku) return;
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Prefer a "For Sale" record; fall back to any record with this SKU
-    let i = stocks.findIndex(s => s.sku === item.sku && s.stockType === "For Sale");
-    if (i < 0) i = stocks.findIndex(s => s.sku === item.sku);
+    // Resolve effective SKU — item.sku may be blank if product has no SKU entered.
+    // Fall back to looking up the product by productId to get its sku.
+    let effectiveSku = item.sku || "";
+    if (!effectiveSku && item.productId) {
+      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
+    }
+
+    // Prefer a "For Sale" record; fall back to any record matching SKU or productName
+    let i = effectiveSku
+      ? stocks.findIndex(s => s.sku === effectiveSku && s.stockType === "For Sale")
+      : -1;
+    if (i < 0 && effectiveSku) i = stocks.findIndex(s => s.sku === effectiveSku);
+    // Last resort: match by productName when no SKU available
+    if (i < 0 && item.productName) {
+      i = stocks.findIndex(s => s.productName === item.productName && s.stockType === "For Sale");
+      if (i < 0) i = stocks.findIndex(s => s.productName === item.productName);
+    }
+    // Skip only when we truly cannot identify the item
+    if (i < 0 && !effectiveSku && !item.productName) return;
 
     if (i >= 0) {
       if (alreadyReceived(stocks[i].id)) return; // duplicate guard — skip
@@ -3084,8 +3117,8 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
       // No stock record yet — create one with all required fields
       const newItem: StockItem = {
         id:           crypto.randomUUID(),
-        productName:  item.productName || item.sku,
-        sku:          item.sku,
+        productName:  item.productName || effectiveSku,
+        sku:          effectiveSku,
         store:        "Warehouse",
         stockType:    "For Sale",
         quantity:     String(qty),
@@ -3114,17 +3147,30 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
 /** Reverse a purchase receipt — removes the stock that was added when the
  *  invoice was paid (e.g. when reverted to Draft or Cancelled). */
 export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void => {
-  const stocks = getStock();
-  const today  = new Date().toISOString().slice(0, 10);
+  const stocks   = getStock();
+  const allProds = getProducts();
+  const today    = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
   items.forEach(item => {
-    if (!item.sku) return;
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
+
+    // Resolve effective SKU — mirror the same logic used when receiving
+    let effectiveSku = item.sku || "";
+    if (!effectiveSku && item.productId) {
+      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
+    }
+
     // Mirror the same lookup priority used when receiving
-    let i = stocks.findIndex(s => s.sku === item.sku && s.stockType === "For Sale");
-    if (i < 0) i = stocks.findIndex(s => s.sku === item.sku);
+    let i = effectiveSku
+      ? stocks.findIndex(s => s.sku === effectiveSku && s.stockType === "For Sale")
+      : -1;
+    if (i < 0 && effectiveSku) i = stocks.findIndex(s => s.sku === effectiveSku);
+    if (i < 0 && item.productName) {
+      i = stocks.findIndex(s => s.productName === item.productName && s.stockType === "For Sale");
+      if (i < 0) i = stocks.findIndex(s => s.productName === item.productName);
+    }
     if (i < 0) return;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, qty);
