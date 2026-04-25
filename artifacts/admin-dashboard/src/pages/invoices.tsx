@@ -1937,7 +1937,8 @@ export function InvoiceFormPage() {
       extraUpdates.stockDeducted = true;
     }
     if (!inv.jeId) {
-      const catLines = buildSaleCatLines(inv.items);
+      const catLines  = buildSaleCatLines(inv.items);
+      const paidSoFar = parseFloat(inv.amountPaid || "0") || 0;
       const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
         inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee,
       );
@@ -1947,10 +1948,11 @@ export function InvoiceFormPage() {
         date: inv.invoiceDate || new Date().toISOString().slice(0, 10),
         paymentMethod: inv.paymentMethod,
         subtotal, taxAmount, grandTotal,
+        amountPaid: paidSoFar,
         costTotal: catLines.reduce((s, c) => s + c.costTotal, 0),
         categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
       });
-      if (je) extraUpdates.jeId = je.id;
+      if (je) { extraUpdates.jeId = je.id; extraUpdates.jeUsesAR = je.usesAR; }
     }
   }, []);
 
@@ -2065,43 +2067,50 @@ export function InvoiceFormPage() {
 
       const isCredit = inv.paymentMethod === "Credit";
 
-      // 1) Accrual JE when invoice is issued (Sent / Overdue for credit; or when Sent for any type)
+      // 1) Accrual JE when invoice is issued (Sent / Overdue for any payment method).
+      //    Pass amountPaid so the function can route to AR when there's an outstanding balance.
       if ((status === "Sent" || status === "Overdue") && !inv.jeId) {
+        const paidSoFar = parseFloat(inv.amountPaid || "0") || 0;
         const je = autoPostSaleJE({
           source: "Invoice", reference: inv.invoiceNumber,
           customer: inv.customer || "Customer",
           date: invDate, paymentMethod: inv.paymentMethod,
           subtotal, taxAmount, grandTotal,
+          amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
         });
-        if (je) updates.jeId = je.id;
+        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
       }
 
       // 2) When payment arrives:
-      //    - Credit invoice already has accrual JE → post cash receipt (DR Cash, CR AR)
-      //    - Cash/bank invoice with no prior JE → post full sale JE now
+      //    - Invoice already has an AR-based accrual JE (credit or outstanding) → post cash receipt (DR Cash/Bank, CR AR)
+      //    - Invoice with no prior JE (immediate cash sale) → post full JE now with Cash/Bank debit
       if (status === "Paid" || status === "Partial") {
-        const paidDate = amountPaid !== undefined ? today : (inv.paidAt?.slice(0, 10) || today);
-        const paidAmt  = parseFloat(amountPaid ?? inv.amountPaid ?? String(grandTotal)) || grandTotal;
+        const paidDate  = amountPaid !== undefined ? today : (inv.paidAt?.slice(0, 10) || today);
+        const paidAmt   = parseFloat(amountPaid ?? inv.amountPaid ?? String(grandTotal)) || grandTotal;
+        const hadARJE   = inv.jeId && (isCredit || inv.jeUsesAR);
 
-        if (inv.jeId && isCredit) {
-          // Credit sale — accrual already posted; record the cash receipt
+        if (hadARJE) {
+          // Accrual (AR) JE already posted — record the cash receipt to clear AR
           autoPostCashReceiptJE({
             reference: inv.invoiceNumber, customer: inv.customer || "Customer",
-            date: paidDate, amount: paidAmt, paymentMethod: "Cash",
+            date: paidDate, amount: paidAmt,
+            paymentMethod: inv.paymentMethod === "Cash" ? "Cash" : inv.paymentMethod,
           });
         } else if (!inv.jeId) {
-          // Cash/bank sale (no prior accrual JE) — full JE now
+          // Immediate cash/bank sale with no prior JE — full JE now (payment in hand → Cash debit)
           const je = autoPostSaleJE({
             source: "Invoice", reference: inv.invoiceNumber,
             customer: inv.customer || "Customer",
             date: invDate, paymentMethod: inv.paymentMethod,
             subtotal, taxAmount, grandTotal,
+            // grandTotal === paidAmt here, so no outstanding balance → Cash/Bank debit
+            amountPaid: paidAmt,
             costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
             categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
           });
-          if (je) updates.jeId = je.id;
+          if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
         }
       }
     }
@@ -2164,19 +2173,21 @@ export function InvoiceFormPage() {
       const payMethod  = (record.method as SalePayment) || inv.paymentMethod;
 
       if (!inv.jeId) {
-        // First JE: full sale JE (DR Cash/AR, CR Revenue) — for cash sales or first payment of credit
+        // First JE: pass amountPaid so AR is used if there's an outstanding balance
+        const paidSoFar = parseFloat(newTotalPaid) || 0;
         const je = autoPostSaleJE({
           source: "Invoice", reference: inv.invoiceNumber,
           customer: inv.customer || "Customer",
           date: inv.invoiceDate || payDate, paymentMethod: inv.paymentMethod,
           subtotal, taxAmount, grandTotal,
+          amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
         });
-        if (je) updates.jeId = je.id;
+        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
       } else {
-        // Subsequent payment or credit sale payment — post receipt JE (DR Cash, CR AR)
-        if (payAmt > 0 && isCredit) {
+        // Subsequent payment — post receipt JE (DR Cash/Bank, CR AR) whenever the prior JE used AR
+        if (payAmt > 0 && (isCredit || inv.jeUsesAR)) {
           autoPostCashReceiptJE({
             reference: inv.invoiceNumber, customer: inv.customer || "Customer",
             date: payDate, amount: payAmt, paymentMethod: payMethod,

@@ -3205,6 +3205,7 @@ export type Invoice = {
   invoiceDocs?:      InvoiceDoc[];  // dynamic document blocks (replaces paymentTerms/notes/agreement)
   stockDeducted:     boolean;
   jeId?:             string;   // journal entry ID auto-created on payment (prevents duplicates)
+  jeUsesAR?:         boolean;  // true when the accrual JE debited AR (so a cash receipt JE is needed on payment)
   createdAt:         string;
   updatedAt:         string;
 };
@@ -5241,16 +5242,29 @@ export function autoPostSaleJE(params: {
   taxAmount:     number;    // VAT / tax collected
   grandTotal:    number;    // subtotal + taxAmount
   costTotal?:    number;    // total cost of goods sold (for COGS/Inventory entry)
+  /** When provided, an outstanding balance (grandTotal − amountPaid > 0) routes the debit to AR
+   *  instead of Cash/Bank, so a cash-receipt JE can be posted separately when payment arrives.
+   *  Leave undefined for POS/cash sales where payment is collected immediately. */
+  amountPaid?:   number;
   /** Per-category breakdown — drives per-category Revenue and Inventory JE lines */
   categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
-}): JournalEntry | null {
+}): JournalEntry & { usesAR: boolean } | null {
   const s = getSettings();
 
   // ── Debit side: AR / Cash / Bank ─────────────────────────────────────────
-  const isCredit = params.paymentMethod === "Credit";
-  const isCash   = params.paymentMethod === "Cash";
+  // Rule: if there is an outstanding balance (amountPaid explicitly given and < grandTotal),
+  // always debit Accounts Receivable — the customer owes us; Cash/Bank is only debited when
+  // payment is actually in hand.  "Credit" payment method also always uses AR.
+  const isCredit      = params.paymentMethod === "Credit";
+  const isCash        = params.paymentMethod === "Cash";
+  const outstanding   = params.amountPaid !== undefined
+                        ? params.grandTotal - params.amountPaid
+                        : 0;
+  const isOutstanding = outstanding > 0.005; // > half-cent to avoid float noise
+  const useAR         = isCredit || isOutstanding;
+
   let debitAccId: string | null;
-  if (isCredit) {
+  if (useAR) {
     // Prefer per-customer AR sub-ledger; fall back to Trade Receivables ledger
     debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
               || resolveToLedger(s.accReceivable)
@@ -5333,7 +5347,7 @@ export function autoPostSaleJE(params: {
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
   const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
 
-  return createJournalEntry({
+  const je = createJournalEntry({
     date:        params.date,
     reference:   `AUTO-${params.reference}`,
     description: `${params.source} Sale: ${params.reference} – ${params.customer}`,
@@ -5343,6 +5357,8 @@ export function autoPostSaleJE(params: {
     totalCredit,
     isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
+  if (!je) return null;
+  return Object.assign(je, { usesAR: useAR });
 }
 
 /**
