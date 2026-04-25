@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13 } from "@/lib/store";
+import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13, generateProductSku } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
@@ -276,12 +276,15 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const handleSave = () => {
     if (!product) return;
     if (!form.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); return; }
+    // Ensure SKU is always set — auto-generate if the user left it blank
+    const finalSku = form.sku.trim() || generateProductSku(form.name.trim());
+    if (finalSku !== form.sku) patch("sku", finalSku);
     setSaving(true);
     try {
       editProduct(product.id, {
         name:              form.name,
         localName:         form.localName || undefined,
-        sku:               form.sku,
+        sku:               form.sku.trim() || finalSku,
         barcode:           form.barcode || undefined,
         brand:             form.brand,
         category:          form.category,
@@ -390,9 +393,11 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
           {/* SKU + Barcode — flex row: SKU fixed width, Barcode takes remaining space */}
           <div className="flex gap-3 items-start">
             <div className="w-36 shrink-0 space-y-1">
-              <label className="text-[12px] font-semibold text-foreground">SKU</label>
+              <label className="text-[12px] font-semibold text-foreground">
+                SKU <span className="text-[10px] font-normal text-muted-foreground">(auto if blank)</span>
+              </label>
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
-                placeholder="ODT-001" className="h-9 text-sm font-mono" />
+                placeholder="Auto-generate" className="h-9 text-sm font-mono" />
             </div>
 
             {/* ── Barcode field with scan + lookup ── */}

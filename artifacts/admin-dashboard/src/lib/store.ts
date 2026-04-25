@@ -1579,10 +1579,81 @@ export function generateEan13(): string {
   return [...digits, check].join("");
 }
 
+/**
+ * Generate a unique product SKU.
+ * Format: {3-4 LETTER PREFIX}-{4 RANDOM DIGITS}  e.g. "APPL-4827", "MILK-0312"
+ * Prefix is derived from the product name (letters only, uppercased, max 4 chars).
+ * Retries up to 20 times to avoid collisions; appends timestamp suffix as last resort.
+ */
+export function generateProductSku(name: string): string {
+  const existing = new Set(
+    getProducts().flatMap(p => [
+      p.sku?.trim().toUpperCase(),
+      ...(p.variants ?? []).map(v => v.sku?.trim().toUpperCase()),
+    ]).filter(Boolean)
+  );
+
+  // Build prefix: up to 4 uppercase letters from the name
+  const letters = (name || "").replace(/[^a-zA-Z]/g, "").toUpperCase();
+  const prefix  = letters.slice(0, 4) || "PRD";
+
+  const rand4 = () => String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const sku = `${prefix}-${rand4()}`;
+    if (!existing.has(sku)) return sku;
+  }
+  // Absolute fallback — timestamp suffix guarantees uniqueness
+  return `${prefix}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+}
+
+/**
+ * One-time migration: scan all stored products and assign an auto-generated SKU
+ * to any product (or variant) that has an empty / missing SKU.
+ * Safe to call multiple times — only writes if changes were actually needed.
+ */
+export function backfillMissingSKUs(): void {
+  const products = getProducts();
+  let changed = false;
+
+  for (const p of products) {
+    if (!p.sku?.trim()) {
+      p.sku = generateProductSku(p.name);
+      changed = true;
+    }
+    if (p.variants?.length) {
+      for (const v of p.variants) {
+        if (!v.sku?.trim()) {
+          v.sku = generateProductSku(`${p.name} ${Object.values(v.attributes ?? {}).join(" ")}`);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    setStored(PRODUCTS_KEY, products);
+  }
+}
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
+  // Auto-generate SKU if not provided — SKU is required on every product
+  const sku = data.sku?.trim() || generateProductSku(data.name);
+  if (sku !== data.sku?.trim()) {
+    data = { ...data, sku };
+  }
   if (data.sku?.trim()) {
     const conflict = skuConflict(data.sku);
     if (conflict) throw new Error(`SKU "${data.sku}" is already used by "${conflict}".`);
+  }
+  // Auto-generate SKU for any variants that are missing one
+  if (data.variants?.length) {
+    data = {
+      ...data,
+      variants: data.variants.map(v =>
+        v.sku?.trim() ? v : { ...v, sku: generateProductSku(`${data.name} ${Object.values(v.attributes ?? {}).join(" ")}`) }
+      ),
+    };
   }
   const item: Product = {
     ...data,
@@ -1601,15 +1672,26 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   const items = getProducts();
   const i = items.findIndex(p => p.id === id);
   if (i === -1) throw new Error("Product not found");
+  // Auto-generate SKU if neither the update nor the existing record has one
+  if (!updates.sku?.trim() && !items[i].sku?.trim()) {
+    updates = { ...updates, sku: generateProductSku(updates.name ?? items[i].name) };
+  }
   // Validate main product SKU uniqueness
   if (updates.sku?.trim()) {
     const conflict = skuConflict(updates.sku, id);
     if (conflict) throw new Error(`SKU "${updates.sku}" is already used by "${conflict}".`);
   }
-  // Validate variant SKU uniqueness — only for variants whose SKU actually changed.
+  // Auto-generate SKU for any variants that are missing one, then validate uniqueness.
   // Skipping unchanged SKUs prevents false "duplicate" errors when editing other
   // variant fields while a product already has any pre-existing shared SKUs.
   if (updates.variants) {
+    const productName = updates.name ?? items[i].name;
+    updates = {
+      ...updates,
+      variants: updates.variants.map(v =>
+        v.sku?.trim() ? v : { ...v, sku: generateProductSku(`${productName} ${Object.values(v.attributes ?? {}).join(" ")}`) }
+      ),
+    };
     const storedVariantSkus = new Map(
       (items[i].variants ?? []).map(v => [v.id, (v.sku ?? "").trim().toLowerCase()])
     );
@@ -1668,13 +1750,21 @@ export const bulkImportProducts = async (
     }
   }
 
-  // Build new product records
-  const created: Product[] = toCreate.map(data => ({
-    ...data,
-    id: crypto.randomUUID(),
-    createdAt: now,
-    updatedAt: now,
-  }));
+  // Build new product records — auto-generate SKU if not provided
+  const created: Product[] = toCreate.map(data => {
+    const sku = data.sku?.trim() || generateProductSku(data.name);
+    const variants = data.variants?.map(v =>
+      v.sku?.trim() ? v : { ...v, sku: generateProductSku(`${data.name} ${Object.values(v.attributes ?? {}).join(" ")}`) }
+    );
+    return {
+      ...data,
+      sku,
+      ...(variants ? { variants } : {}),
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
 
   // Single bulk write (existing already has updates applied)
   const finalList = [...existing, ...created];

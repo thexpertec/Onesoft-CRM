@@ -1,5 +1,6 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { useEffect, Component } from "react";
+import { backfillMissingSKUs } from "@/lib/store";
 import type { ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -117,6 +118,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated) {
       navigate(`/login?from=${encodeURIComponent(location)}`, { replace: true });
     }
+  }, [isAuthenticated]);
+
+  // Silently backfill any products that were saved without a SKU
+  useEffect(() => {
+    if (isAuthenticated) backfillMissingSKUs();
   }, [isAuthenticated]);
 
   if (!isAuthenticated) return null;

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useProducts } from "@/hooks/use-data";
-import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13 } from "@/lib/store";
+import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, getAttributes, generateEan13, generateProductSku } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { useBarcodeLookup } from "@/hooks/use-barcode-lookup";
@@ -216,13 +216,23 @@ export default function ProductNewPage() {
     resetLookup();
   };
 
+  // Auto-fill SKU from name when name loses focus and SKU is still empty
+  const handleNameBlur = () => {
+    if (!form.sku.trim() && form.name.trim()) {
+      patch("sku", generateProductSku(form.name.trim()));
+    }
+  };
+
   const handleSubmit = () => {
     if (!form.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); return; }
+    // Ensure SKU is always set before saving
+    const finalSku = form.sku.trim() || generateProductSku(form.name.trim());
+    if (finalSku !== form.sku) patch("sku", finalSku);
     setSaving(true);
     try {
       addProduct({
         name: form.name, localName: form.localName || undefined,
-        sku: form.sku, barcode: form.barcode || undefined,
+        sku: form.sku.trim() || finalSku, barcode: form.barcode || undefined,
         brand: form.brand, category: form.category,
         subcategory: form.subcategory || undefined,
         subSubcategory: form.subSubcategory || undefined,
@@ -300,7 +310,9 @@ export default function ProductNewPage() {
         <div className="px-6 py-6 space-y-5">
           <Field label="Product Name *">
             <Input autoFocus placeholder="e.g. Oak Dining Table" value={form.name}
-              onChange={e => patch("name", e.target.value)} className="h-10 text-[15px] font-medium" />
+              onChange={e => patch("name", e.target.value)}
+              onBlur={handleNameBlur}
+              className="h-10 text-[15px] font-medium" />
           </Field>
 
           <Field label="Local Name" hint="Optional alternate or local language name for this product">
@@ -348,10 +360,13 @@ export default function ProductNewPage() {
           <Divider label="Identity" />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Field label="SKU">
+            <div className="space-y-1">
+              <label className="text-[12px] font-semibold text-foreground">
+                SKU <span className="text-[10px] font-normal text-muted-foreground">(auto if blank)</span>
+              </label>
               <Input value={form.sku} onChange={e => patch("sku", e.target.value)}
-                placeholder="ODT-001" className="h-9 text-sm font-mono" />
-            </Field>
+                placeholder="Auto-generate" className="h-9 text-sm font-mono" />
+            </div>
 
             {/* ── Barcode field with scan + lookup ── */}
             <div className="col-span-2 space-y-1">
