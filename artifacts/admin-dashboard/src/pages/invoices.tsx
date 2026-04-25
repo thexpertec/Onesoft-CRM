@@ -288,8 +288,12 @@ function DocPicker({
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: InvoiceStatus }) {
-  const s = STATUS_STYLE[status];
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_STYLE[status as InvoiceStatus] ?? {
+    bg:  "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
+    dot: "bg-gray-400",
+    label: status || "Unknown",
+  };
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${s.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
