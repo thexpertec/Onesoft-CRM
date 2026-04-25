@@ -954,6 +954,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         maxResults={15} minDropdownWidth={320}
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
                         inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      {item.localName && (
+                        <span className="block text-[11px] text-muted-foreground pl-1 leading-tight mt-0.5 font-medium" dir="auto">
+                          {item.localName}
+                        </span>
+                      )}
                       {item.sku && (
                         <span className="text-[10px] text-gray-400 pl-1">
                           SKU: {item.sku}

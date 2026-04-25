@@ -19,6 +19,7 @@ type CalcRow = {
   id: string;
   productId: string;
   productName: string;
+  localName: string;
   rowType: RowType;
   height: string;
   width: string;
@@ -40,7 +41,7 @@ function makeInvoiceNumber() {
 
 function blankRow(): CalcRow {
   return {
-    id: makeId(), productId: "", productName: "", rowType: "qty",
+    id: makeId(), productId: "", productName: "", localName: "", rowType: "qty",
     height: "", width: "", sizeUnit: "ft",
     qty: "1", unit: "", rate: "", description: "",
   };
@@ -121,10 +122,11 @@ export default function CalcInvoicePage() {
 
   const selectProduct = useCallback((rowId: string, productId: string) => {
     const prod = products.find(p => p.id === productId);
-    if (!prod) { updateRow(rowId, { productId: "", productName: "" }); return; }
+    if (!prod) { updateRow(rowId, { productId: "", productName: "", localName: "" }); return; }
     updateRow(rowId, {
       productId: prod.id,
       productName: prod.name,
+      localName: prod.localName || "",
       rate: prod.price ?? "",
       unit: prod.unit ?? "",
     });
@@ -351,6 +353,11 @@ export default function CalcInvoicePage() {
                     <Input className={inp} placeholder="e.g. White Sheet, Glass Panel…"
                       value={row.productName || row.description}
                       onChange={e => updateRow(row.id, { productName: e.target.value, description: e.target.value })} />
+                    {row.localName && (
+                      <p className="text-[11px] text-muted-foreground font-medium leading-tight pl-0.5" dir="auto">
+                        {row.localName}
+                      </p>
+                    )}
                   </div>
                 </div>
 
