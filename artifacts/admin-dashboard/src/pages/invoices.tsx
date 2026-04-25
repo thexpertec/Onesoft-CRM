@@ -616,7 +616,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       i.id === id
         ? {
             ...i,
-            productName: getInvoiceProductName(p),
+            productName: p.name,
             localName: p.localName || "",
             sku: p.sku,
             unit: p.unit,
