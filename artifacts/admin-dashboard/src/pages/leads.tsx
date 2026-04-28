@@ -1399,17 +1399,24 @@ export default function Leads() {
                 </div>
               </th>
               {COLS.map(c => (
-                <th key={c.field} className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none relative group">
-                  <span className="pr-2">{c.label}</span>
-                  {/* Resize handle */}
-                  <div
-                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize z-20 flex items-center justify-end"
-                    onMouseDown={e => startResize(e, c.field)}
-                    title="Drag to resize column"
-                  >
-                    <div className="w-[3px] h-4 rounded-full bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </th>
+                <React.Fragment key={c.field}>
+                  <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none relative group">
+                    <span className="pr-2">{c.label}</span>
+                    {/* Resize handle */}
+                    <div
+                      className="absolute top-0 right-0 h-full w-2 cursor-col-resize z-20 flex items-center justify-end"
+                      onMouseDown={e => startResize(e, c.field)}
+                      title="Drag to resize column"
+                    >
+                      <div className="w-[3px] h-4 rounded-full bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </th>
+                  {c.field === "status" && (
+                    <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-left px-3 py-2 text-[11px] font-bold text-gray-500 dark:text-muted-foreground uppercase tracking-wide whitespace-nowrap select-none" style={{minWidth: 200}}>
+                      Last Call
+                    </th>
+                  )}
+                </React.Fragment>
               ))}
               <th className="border-b border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none sticky right-0">
                 Actions
@@ -1425,7 +1432,8 @@ export default function Leads() {
                 {COLS.map((c, ci) => {
                   const isActive = newRowActive === ci;
                   return (
-                    <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>
+                    <React.Fragment key={c.field}>
+                    <td className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-amber-50 dark:hover:bg-amber-950/40"}`} style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}}>
                       {isActive && c.type==="select" ? (
                         <select autoFocus value={newRow[c.field]} onChange={e=>setNewRow(r=>r?{...r,[c.field]:e.target.value}:r)}
                           onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();navigateNewRow(ci,e.shiftKey);}if(e.key==="Enter"){e.preventDefault();navigateNewRow(ci,false);}if(e.key==="Escape")cancelNewRow();}}
@@ -1466,6 +1474,10 @@ export default function Leads() {
                         </div>
                       )}
                     </td>
+                    {c.field === "status" && (
+                      <td className="border-r border-gray-100 dark:border-border" style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} />
+                    )}
+                    </React.Fragment>
                   );
                 })}
                 <td className="text-center sticky right-0 bg-amber-50/60 dark:bg-amber-950/20 border-l border-gray-100 dark:border-border" style={{height:`${CELL_H}px`}}>
@@ -1479,7 +1491,7 @@ export default function Leads() {
 
             {/* Existing rows */}
             {filtered.length === 0 ? (
-              <tr><td colSpan={COLS.length+2} className="text-center py-16 text-muted-foreground text-sm">
+              <tr><td colSpan={COLS.length+3} className="text-center py-16 text-muted-foreground text-sm">
                 {hasActiveFilters ? (
                   <span>No leads match your filters. <button className="text-primary underline" onClick={clearAllFilters}>Clear filters</button></span>
                 ) : isAuthenticated
@@ -1519,7 +1531,8 @@ export default function Leads() {
                     const isActive = activeCell?.id===lead.id && activeCell.col===ci;
                     const rawVal = String((lead as Record<string,unknown>)[c.field] ?? "");
                     return (
-                      <td key={c.field}
+                      <React.Fragment key={c.field}>
+                      <td
                         className={`border-r border-gray-100 dark:border-border relative p-0 ${isActive?"ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10":"hover:bg-blue-50/40 dark:hover:bg-blue-950/20"}`}
                         style={wrapText?{minHeight:`${CELL_H}px`}:{height:`${CELL_H}px`}} onClick={() => !isActive && can("Edit Leads") && activateCell(lead.id, ci)}>
                         {c.type === "agent-select" ? (
@@ -1553,6 +1566,29 @@ export default function Leads() {
                           />
                         )}
                       </td>
+
+                      {/* ── Last Call column — injected after Status ─────── */}
+                      {c.field === "status" && (
+                        <td
+                          className="border-r border-gray-100 dark:border-border px-3"
+                          style={wrapText?{minWidth:200,minHeight:`${CELL_H}px`}:{minWidth:200,height:`${CELL_H}px`}}>
+                          {lastCallLog ? (
+                            <div className={`flex flex-col justify-center gap-0.5 ${wrapText?"py-1.5":"h-full"}`}>
+                              <span className={`inline-flex items-center self-start gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${OUTCOME_COLOR[lastCallLog.outcome]}`}>
+                                {lastCallLog.outcome}
+                              </span>
+                              {lastCallLog.notes && (
+                                <span className="text-[11px] text-muted-foreground leading-tight line-clamp-2">
+                                  {lastCallLog.notes}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground/40 italic">—</span>
+                          )}
+                        </td>
+                      )}
+                      </React.Fragment>
                     );
                   })}
 
@@ -1598,7 +1634,7 @@ export default function Leads() {
                 {/* ── Collapsed detail row ───────────────────────────────── */}
                 {isExpanded && (
                   <tr className={`border-b border-gray-200 dark:border-border ${rowIdx%2===0?"bg-white dark:bg-card":"bg-gray-50/50 dark:bg-muted/10"}`}>
-                    <td colSpan={COLS.length + 2} className="px-0 pb-0">
+                    <td colSpan={COLS.length + 3} className="px-0 pb-0">
                       <div className="mx-3 mb-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/10 overflow-hidden">
                         {/* Detail grid — 4 columns */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-y divide-indigo-100 dark:divide-indigo-900/40">
