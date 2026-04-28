@@ -1613,27 +1613,49 @@ export function generateProductSku(name: string): string {
  * Safe to call multiple times — only writes if changes were actually needed.
  */
 export function backfillMissingSKUs(): void {
+  // ── Step 1: ensure every product (and variant) has a SKU ─────────────────
   const products = getProducts();
-  let changed = false;
-
+  let prodChanged = false;
   for (const p of products) {
     if (!p.sku?.trim()) {
       p.sku = generateProductSku(p.name);
-      changed = true;
+      prodChanged = true;
     }
     if (p.variants?.length) {
       for (const v of p.variants) {
         if (!v.sku?.trim()) {
           v.sku = generateProductSku(`${p.name} ${Object.values(v.attributes ?? {}).join(" ")}`);
-          changed = true;
+          prodChanged = true;
         }
       }
     }
   }
+  if (prodChanged) setStored(PRODUCTS_KEY, products);
 
-  if (changed) {
-    setStored(PRODUCTS_KEY, products);
+  // ── Step 2: backfill SKU on any stock records that still have none ────────
+  // Now that every product has a SKU we can match stock records by productName
+  // and stamp the correct SKU on them, making all deductions SKU-only from here on.
+  const stocks = getStock();
+  let stockChanged = false;
+  const nameToProd = new Map<string, typeof products[number]>();
+  for (const p of products) {
+    if (p.name?.trim()) nameToProd.set(p.name.trim().toLowerCase(), p);
   }
+  for (const s of stocks) {
+    if (!s.sku?.trim() && s.productName?.trim()) {
+      const prod = nameToProd.get(s.productName.trim().toLowerCase());
+      if (prod?.sku?.trim()) {
+        s.sku = prod.sku.trim();
+        stockChanged = true;
+      } else if (!prod) {
+        // No matching product — generate a stable SKU from the product name so
+        // this stock record is still addressable by SKU going forward.
+        s.sku = generateProductSku(s.productName);
+        stockChanged = true;
+      }
+    }
+  }
+  if (stockChanged) setStored(STOCK_KEY, stocks);
 }
 
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
@@ -2710,23 +2732,10 @@ export function getProductStockQty(prod: Product, all?: StockItem[]): number | n
   let total = 0;
   let found = false;
   for (const s of stocks) {
-    const ssku = (s.sku?.trim() || s.productName?.trim())?.toLowerCase();
+    const ssku = s.sku?.trim().toLowerCase();
     if (ssku && skus.has(ssku)) {
       total += Math.max(0, parseFloat(s.quantity) || 0);
       found = true;
-    }
-  }
-  // Also try matching by product name if no SKU match was found
-  if (!found) {
-    const name = prod.name?.trim().toLowerCase();
-    if (name) {
-      for (const s of stocks) {
-        const sname = s.productName?.trim().toLowerCase();
-        if (sname && sname === name) {
-          total += Math.max(0, parseFloat(s.quantity) || 0);
-          found = true;
-        }
-      }
     }
   }
   return found ? total : null;
@@ -3168,12 +3177,8 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
       }
     }
 
-    // Step 3 — Name fallback: stock record was created by productName (when the
-    // product had no SKU at the time the purchase was received). This mirrors the
-    // lookup priority used inside receiveStockForPurchase.
-    if (remaining > 0 && item.productName) {
-      _deductFromStockByName(item.productName, remaining, stocks, ledger, today, reference, sourceType);
-    }
+    // (Name-based fallback removed: every stock record now has a SKU after
+    // backfillMissingSKUs() runs on login. SKU-only matching is authoritative.)
   });
 
   setStored(STOCK_KEY, stocks);
@@ -3223,12 +3228,8 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
       }
     }
 
-    // Step 3 — Name fallback: stock record was created by productName (case-insensitive, trimmed)
-    if (item.productName) {
-      const nameLower = item.productName.trim().toLowerCase();
-      found = stocks.findIndex(s => (s.productName?.trim() || "").toLowerCase() === nameLower);
-      if (found >= 0) { restoreInto(found, qty); }
-    }
+    // (Name-based fallback removed: every stock record now has a SKU after
+    // backfillMissingSKUs() runs on login. SKU-only matching is authoritative.)
   });
 
   setStored(STOCK_KEY, stocks);
@@ -3271,22 +3272,18 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     // Use canonical product name for storage (prevents duplicate records from name-casing variations)
     const canonicalName = canonicalProd?.name || item.productName;
 
-    const skuLower  = effectiveSku.toLowerCase();
-    const nameLower = canonicalName.toLowerCase();
-
-    // Prefer a "For Sale" record; fall back to any record matching SKU or productName
-    // All comparisons are case-insensitive to prevent duplicate records from casing differences.
-    let i = effectiveSku
-      ? stocks.findIndex(s => (s.sku || "").toLowerCase() === skuLower && s.stockType === "For Sale")
-      : -1;
-    if (i < 0 && effectiveSku) i = stocks.findIndex(s => (s.sku || "").toLowerCase() === skuLower);
-    // Last resort: match by productName when no SKU available
-    if (i < 0 && canonicalName) {
-      i = stocks.findIndex(s => (s.productName || "").toLowerCase() === nameLower && s.stockType === "For Sale");
-      if (i < 0) i = stocks.findIndex(s => (s.productName || "").toLowerCase() === nameLower);
+    // Every stock record must have a SKU — generate one if we still don't have one
+    if (!effectiveSku && canonicalName) {
+      effectiveSku = generateProductSku(canonicalName);
     }
-    // Skip only when we truly cannot identify the item
-    if (i < 0 && !effectiveSku && !canonicalName) return;
+    if (!effectiveSku && !canonicalName) return; // nothing to identify the item
+
+    const skuLower = effectiveSku.trim().toLowerCase();
+
+    // SKU-only lookup — name-based fallback removed; backfillMissingSKUs() ensures
+    // all existing stock records have a SKU before purchases are received.
+    let i = stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === skuLower && s.stockType === "For Sale");
+    if (i < 0) i = stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === skuLower);
 
     if (i >= 0) {
       if (alreadyReceived(stocks[i].id)) return; // duplicate guard — skip
