@@ -149,6 +149,13 @@ export function clearActivities(): void {
 const _memRaw = new Map<string, string>();
 
 /**
+ * Tracks every in-flight _apiWrite promise by storageKey (most recent write
+ * wins). syncAllFromServer drains this before fetching from the server so it
+ * never reads stale data and resurrects records the user just deleted.
+ */
+const _pendingWrites = new Map<string, Promise<void>>();
+
+/**
  * Read: in-memory first (fastest), then localStorage warm-start cache.
  * localStorage is only populated by syncAllFromServer, never by mutations.
  */
@@ -198,11 +205,17 @@ function _apiWrite(storageKey: string, value: unknown): Promise<void> {
     ns = "global";
     key = storageKey;
   }
-  return kvPut(ns, key, value).catch((err) => {
+  const p: Promise<void> = kvPut(ns, key, value).catch((err) => {
     console.error(`[kv] server write FAILED for ${ns}/${key}:`, err instanceof Error ? err.message : err);
-    // Re-throw so awaiting callers can react to failure
     throw err;
+  }).finally(() => {
+    // De-register once settled (only if this is still the latest promise for the key)
+    if (_pendingWrites.get(storageKey) === p) _pendingWrites.delete(storageKey);
   });
+  // Register — newer writes for the same key replace older ones; the Map always
+  // holds the most-recent promise so syncAllFromServer awaits the freshest write.
+  _pendingWrites.set(storageKey, p);
+  return p;
 }
 
 /** Tenant-namespaced read (all business data). */
@@ -217,11 +230,11 @@ function getStored<T>(key: string): T[] {
   return [];
 }
 
-/** Tenant-namespaced write: memory + server. No localStorage write. */
+/** Tenant-namespaced write: memory + localStorage cache + server. */
 function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
-  _lsSet(sk, data);
-  _apiWrite(sk, data);
+  _lsCache(sk, data);   // update _memRaw AND localStorage so warm-start is immediately correct
+  _apiWrite(sk, data);  // persist to server (tracked by _pendingWrites)
   // Notify same-tab listeners (browser storage event only fires in other tabs)
   try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop in non-browser env */ }
 }
@@ -6167,6 +6180,16 @@ export function purgeOrphanedVoucherJEs(): number {
 
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
+    // ── Drain pending writes FIRST ───────────────────────────────────────────
+    // Any fire-and-forget _apiWrite (delete, update, create) that hasn't
+    // landed on the server yet would cause the subsequent kvGetAll to return
+    // stale data — which would then overwrite _memRaw and resurrect records
+    // the user just deleted.  Settling all pending promises here guarantees
+    // the server holds the freshest state before we read from it.
+    if (_pendingWrites.size > 0) {
+      await Promise.allSettled([..._pendingWrites.values()]);
+    }
+
     // Always sync global data (users, tenants, module groups)
     const globalData = await kvGetAll("global");
     if (globalData) {
