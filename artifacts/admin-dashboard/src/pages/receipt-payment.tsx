@@ -317,6 +317,120 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
   );
 }
 
+// ─── Party (Buyer / Supplier) Searchable Dropdown ────────────────────────────
+
+interface PartyDropdownProps {
+  contacts: Customer[];
+  value: string;
+  onChange: (name: string) => void;
+  placeholder?: string;
+}
+
+function PartyDropdown({ contacts, value, onChange, placeholder = "Select…" }: PartyDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ]       = useState("");
+  const trigRef         = useRef<HTMLButtonElement>(null);
+  const listRef         = useRef<HTMLDivElement>(null);
+  const [pos, setPos]   = useState({ top: 0, left: 0, width: 0 });
+
+  const filtered = useMemo(() => {
+    const sq = q.toLowerCase().trim();
+    if (!sq) return contacts;
+    return contacts.filter(c =>
+      (c.name || "").toLowerCase().includes(sq) ||
+      (c.company || "").toLowerCase().includes(sq) ||
+      (c.email || "").toLowerCase().includes(sq)
+    );
+  }, [contacts, q]);
+
+  const selected = contacts.find(c => c.name === value);
+  const displayLabel = selected
+    ? `${selected.name}${selected.company ? ` (${selected.company})` : ""}`
+    : "";
+
+  const openDropdown = () => {
+    if (!trigRef.current) return;
+    const r = trigRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!trigRef.current?.contains(e.target as Node) && !listRef.current?.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={trigRef} type="button"
+        onClick={open ? () => setOpen(false) : openDropdown}
+        className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <span className={value ? "text-foreground" : "text-muted-foreground"}>
+          {value ? displayLabel : placeholder}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {value && (
+            <span onMouseDown={e => { e.stopPropagation(); onChange(""); setOpen(false); }}
+              className="text-muted-foreground hover:text-destructive p-0.5">
+              <X className="h-3 w-3" />
+            </span>
+          )}
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={listRef}
+          style={{ position: "absolute", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="rounded-md border border-input bg-popover shadow-lg overflow-hidden"
+        >
+          <div className="p-2 border-b border-border">
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-muted/60">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                autoFocus className="flex-1 text-sm bg-transparent outline-none"
+                placeholder="Search by name, company…" value={q}
+                onChange={e => setQ(e.target.value)}
+              />
+              {q && <button onClick={() => setQ("")}><X className="h-3 w-3 text-muted-foreground" /></button>}
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">No contacts found</div>
+            ) : filtered.map(c => {
+              const label = `${c.name}${c.company ? ` (${c.company})` : ""}`;
+              return (
+                <button key={c.id} type="button"
+                  onClick={() => { onChange(c.name); setOpen(false); setQ(""); }}
+                  className={`w-full text-left px-3 py-2.5 text-sm hover:bg-accent/60 transition-colors border-b border-border/40 last:border-0 ${c.name === value ? "bg-primary/10 text-primary font-medium" : ""}`}
+                >
+                  <div className="font-medium text-foreground">{label}</div>
+                  {(c.email || c.customerRole) && (
+                    <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
+                      {c.email && <span>{c.email}</span>}
+                      {c.customerRole && <span className="capitalize opacity-70">{c.customerRole}</span>}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ─── Line row ─────────────────────────────────────────────────────────────────
 
 type LineRow = {
@@ -385,9 +499,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       : [emptyLine()]
   );
 
-  const suppliers = useMemo<Customer[]>(() =>
-    getCustomers().filter(c => c.customerRole === "Supplier"),
-  []);
+  // Show ALL CRM contacts — a contact might be tagged as Buyer in CRM but still used as a supplier
+  const suppliers = useMemo<Customer[]>(() => getCustomers(), []);
 
   const supplierInvoices = useMemo<Invoice[]>(() => {
     if (!isNewPayment || !supplierName) return [];
@@ -451,10 +564,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       : [emptyLine()]
   );
 
-  // All customers that could be payers (anyone who is NOT supplier-only)
-  const buyers = useMemo<Customer[]>(() =>
-    getCustomers().filter(c => c.customerRole !== "Supplier"),
-  []);
+  // Show ALL CRM contacts — a contact might be tagged as Supplier but also receive payments
+  const buyers = useMemo<Customer[]>(() => getCustomers(), []);
 
   // Sale invoices for the selected buyer that have an outstanding balance
   const buyerInvoices = useMemo<Invoice[]>(() => {
@@ -680,21 +791,12 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
                   Supplier *
                 </label>
-                <div className="relative">
-                  <select
-                    value={supplierName}
-                    onChange={e => setSupplierName(e.target.value)}
-                    className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">— Select supplier —</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}{s.company ? ` (${s.company})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                </div>
+                <PartyDropdown
+                  contacts={suppliers}
+                  value={supplierName}
+                  onChange={setSupplierName}
+                  placeholder="— Select supplier —"
+                />
               </div>
 
               {/* 2 — Invoice capsule chips */}
@@ -918,21 +1020,12 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
                   Buyer *
                 </label>
-                <div className="relative">
-                  <select
-                    value={buyerName}
-                    onChange={e => setBuyerName(e.target.value)}
-                    className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">— Select buyer —</option>
-                    {buyers.map(b => (
-                      <option key={b.id} value={b.name}>
-                        {b.name}{b.company ? ` (${b.company})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                </div>
+                <PartyDropdown
+                  contacts={buyers}
+                  value={buyerName}
+                  onChange={setBuyerName}
+                  placeholder="— Select buyer —"
+                />
               </div>
 
               {/* 2 — Invoice capsule chips */}
