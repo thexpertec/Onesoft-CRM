@@ -5416,6 +5416,30 @@ export function resolveToLedger(accountId: string | undefined): string | null {
 export function findSubLedgerForParty(partyName: string, parentGroupId: string): string | null {
   if (!partyName) return null;
   const lower = partyName.toLowerCase();
+
+  // ── 1. CRM-first lookup ──────────────────────────────────────────────────
+  // Find the contact by exact name (or "Name (Company)" format) and use
+  // their assigned ledgerAccountId — this works regardless of which COA
+  // group the account sits under (AR, AP, or even a custom group).
+  const contacts = getCustomers();
+  const contact = contacts.find(c =>
+    (c.name || "").toLowerCase() === lower ||
+    (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === lower
+  );
+  if (contact?.ledgerAccountId) {
+    const all = getAccounts();
+    const acct = all.find(
+      a => a.id === contact.ledgerAccountId &&
+           a.accountType === "Ledger" &&
+           a.isActive !== false
+    );
+    if (acct) return acct.id;
+  }
+
+  // ── 2. Name-based fallback (original behaviour) ──────────────────────────
+  // Search within the specified parent group for an account whose name
+  // contains the party name. Kept as safety net for system/demo accounts
+  // that don't have a CRM contact record.
   const all = getAccounts();
   const match = all.find(
     a => a.accountType === "Ledger"
