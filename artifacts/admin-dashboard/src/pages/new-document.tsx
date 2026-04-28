@@ -1212,10 +1212,10 @@ export default function NewDocument() {
   }
 
   return (
-    <div className="flex items-start min-h-full">
+    <div className="flex items-start">
 
       {/* ── Section Navigator Sidebar ─────────────────────────────────────── */}
-      <aside className="hidden xl:flex flex-col flex-shrink-0 w-52 sticky top-0 max-h-screen overflow-y-auto border-r border-border/50 bg-background/95 backdrop-blur-sm z-10">
+      <aside className="hidden xl:flex flex-col flex-shrink-0 w-52 sticky top-0 h-[calc(100vh-60px)] overflow-y-auto border-r border-border/50 bg-background/95 backdrop-blur-sm z-10 self-start">
         <div className="px-3 py-3 border-b border-border/50 flex-shrink-0">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Sections</span>
         </div>
