@@ -2610,14 +2610,15 @@ export default function SalesPage() {
 
     // ── Stock guard ──────────────────────────────────────────────────────────
     if (!allowNeg) {
-      // Sum stock across all stock-items with this SKU
-      const available = getStock()
-        .filter(s => s.sku === product.sku)
-        .reduce((sum, s) => sum + (parseFloat(s.quantity) || 0), 0);
+      // Use getProductStockQty for accurate stock level (handles SKU/name matching + trim)
+      const available = getProductStockQty(product) ?? 0;
 
-      // Count qty already in cart for this SKU
+      // Count qty already in cart for this product (match by SKU case-insensitively, fall back to name)
+      const skuKey = product.sku?.trim().toLowerCase();
       const inCart = localItemsRef.current
-        .filter(i => i.sku === product.sku)
+        .filter(i => skuKey
+          ? (i.sku?.trim().toLowerCase() === skuKey)
+          : (i.productName?.trim().toLowerCase() === product.name?.trim().toLowerCase()))
         .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
 
       if (available - inCart <= 0) {
@@ -2637,12 +2638,18 @@ export default function SalesPage() {
       : priceMode === "clubcard" && !isBogo && product.clubcardPrice
         ? product.clubcardPrice
         : product.price || "0.00";
-    const existing = current.find(i => i.sku === product.sku);
+    // Match existing cart item by SKU (case-insensitive) or product name when no SKU
+    const skuKey = product.sku?.trim().toLowerCase();
+    const existing = current.find(i => skuKey
+      ? (i.sku?.trim().toLowerCase() === skuKey)
+      : (i.productName?.trim().toLowerCase() === product.name?.trim().toLowerCase()));
     if (existing) {
       // For BOGO: increment by 2 to maintain pairs; otherwise +1
       const addQty = isBogo ? 2 : 1;
       const next = current.map(i =>
-        i.sku === product.sku
+        (skuKey
+          ? i.sku?.trim().toLowerCase() === skuKey
+          : i.productName?.trim().toLowerCase() === product.name?.trim().toLowerCase())
           ? { ...i, qty: String((parseFloat(i.qty) || 0) + addQty), bogoApplied: isBogo || i.bogoApplied }
           : i
       );

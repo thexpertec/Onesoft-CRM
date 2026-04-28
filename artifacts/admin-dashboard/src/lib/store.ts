@@ -3061,10 +3061,10 @@ function _deductFromStockBySku(
   reference: string,
   sourceType: string | undefined,
 ): number {
-  const skuLower = sku.toLowerCase();
+  const skuLower = sku.trim().toLowerCase();
   let remaining = qty;
   for (let i = 0; i < stocks.length && remaining > 0; i++) {
-    if ((stocks[i].sku || "").toLowerCase() !== skuLower) continue;
+    if ((stocks[i].sku?.trim() || "").toLowerCase() !== skuLower) continue;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, remaining);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
@@ -3089,10 +3089,10 @@ function _deductFromStockByName(
   reference: string,
   sourceType: string | undefined,
 ): number {
-  const nameLower = productName.toLowerCase();
+  const nameLower = productName.trim().toLowerCase();
   let remaining = qty;
   for (let i = 0; i < stocks.length && remaining > 0; i++) {
-    if ((stocks[i].productName || "").toLowerCase() !== nameLower) continue;
+    if ((stocks[i].productName?.trim() || "").toLowerCase() !== nameLower) continue;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, remaining);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
@@ -3208,22 +3208,25 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
       effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
     }
 
-    // Step 1 — Restore to stock record keyed by item's own SKU
-    let found = effectiveSku ? stocks.findIndex(s => s.sku === effectiveSku) : -1;
+    // Step 1 — Restore to stock record keyed by item's own SKU (case-insensitive, trimmed)
+    const effSkuLower = effectiveSku.trim().toLowerCase();
+    let found = effectiveSku ? stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === effSkuLower) : -1;
     if (found >= 0) { restoreInto(found, qty); return; }
 
     // Step 2 — Variant fallback: stock may be under parent product's SKU
     if (item.variantId && item.productId) {
       const parentSku = allProds.find(p => p.id === item.productId)?.sku ?? "";
       if (parentSku && parentSku !== effectiveSku) {
-        found = stocks.findIndex(s => s.sku === parentSku);
+        const parentSkuLower = parentSku.trim().toLowerCase();
+        found = stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === parentSkuLower);
         if (found >= 0) { restoreInto(found, qty); return; }
       }
     }
 
-    // Step 3 — Name fallback: stock record was created by productName
+    // Step 3 — Name fallback: stock record was created by productName (case-insensitive, trimmed)
     if (item.productName) {
-      found = stocks.findIndex(s => s.productName === item.productName);
+      const nameLower = item.productName.trim().toLowerCase();
+      found = stocks.findIndex(s => (s.productName?.trim() || "").toLowerCase() === nameLower);
       if (found >= 0) { restoreInto(found, qty); }
     }
   });
