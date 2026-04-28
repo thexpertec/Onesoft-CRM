@@ -836,17 +836,77 @@ export default function NewDocument() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data })); } catch { /* quota */ }
   };
 
-  const saveS1  = () => { persist("s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory }); markSaved("s1");  markClean("s1"); };
-  const saveS2  = () => { persist("s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems }); markSaved("s2");  markClean("s2"); };
-  const saveS35 = () => { persist("s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages }); markSaved("s35"); markClean("s35"); };
+  // Builds the full sections payload from current in-memory state so each
+  // per-section "Update" saves the ENTIRE document to the database (edit mode).
+  const buildSections = () => ({
+    s1:  { docTitle, docDate, preparedBy, selectedClient, versionHistory },
+    s2:  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems },
+    s35: { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages },
+    sCustom:  { sections: customSections },
+    s5:  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible },
+    s6:  { startDate, deliveryDate, milestones, publicVisible: s6PublicVisible },
+    sCustom2: { sections: customSections2 },
+    sectionOrder,
+  });
+
+  const persistAndSave = (sectionKey: string, draftKey: string, draftData: object) => {
+    // 1. Write draft to localStorage (works even when not logged in / new doc)
+    persist(draftKey, draftData);
+    // 2. In edit mode: also write the full document to the database immediately
+    if (isEditMode && params.id) {
+      const sections = buildSections();
+      const docPayload = {
+        title: docTitle.trim() || (selectedClient ? `${selectedClient} - Requirements` : "Untitled Document"),
+        clientName: selectedClient || "",
+        company: client?.company || selectedClient || "",
+        email: client?.email || "",
+        phone: client?.phone || "",
+        industry: client?.industry || "",
+        city: client?.city || "",
+        softwareType: keyProducts[0] || "",
+        budget: paymentStructure || "",
+        startDate: startDate || "",
+        deliveryDate: deliveryDate || "",
+        sections,
+      };
+      editDoc(params.id, docPayload);
+      // Clear draft once saved to DB so next load comes from the server
+      localStorage.removeItem(DRAFT_KEY);
+    }
+    markSaved(sectionKey);
+    markClean(sectionKey);
+  };
+
+  const saveS1  = () => persistAndSave("s1",  "s1",  { docTitle, docDate, preparedBy, selectedClient, versionHistory });
+  const saveS2  = () => persistAndSave("s2",  "s2",  { businessType, targetAudience, keyProducts, businessGoals, keyChallenges, currentSystems });
+  const saveS35 = () => persistAndSave("s35", "s35", { detailedNotes, detailedNotesTitle, detailedNotesSubtitle, detailedNotesImages });
   const saveCustomSection = (id: string) => {
     const sec = customSections.find(s => s.id === id);
     if (!sec) return;
+    // Update the draft custom section entry
     const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
     const currentCustom: CustomSection[] = existing.sCustom?.sections ?? [];
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } })); } catch { /* quota */ }
+    // Persist full doc to DB in edit mode
+    if (isEditMode && params.id) {
+      editDoc(params.id, {
+        sections: buildSections(),
+        title: docTitle.trim() || (selectedClient ? `${selectedClient} - Requirements` : "Untitled Document"),
+        clientName: selectedClient || "",
+        company: client?.company || selectedClient || "",
+        email: client?.email || "",
+        phone: client?.phone || "",
+        industry: client?.industry || "",
+        city: client?.city || "",
+        softwareType: keyProducts[0] || "",
+        budget: paymentStructure || "",
+        startDate: startDate || "",
+        deliveryDate: deliveryDate || "",
+      });
+      localStorage.removeItem(DRAFT_KEY);
+    }
     markSaved(`sc_${id}`); markClean(`sc_${id}`);
   };
   const saveCustomSection2 = (id: string) => {
@@ -857,10 +917,27 @@ export default function NewDocument() {
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } })); } catch { /* quota */ }
+    if (isEditMode && params.id) {
+      editDoc(params.id, {
+        sections: buildSections(),
+        title: docTitle.trim() || (selectedClient ? `${selectedClient} - Requirements` : "Untitled Document"),
+        clientName: selectedClient || "",
+        company: client?.company || selectedClient || "",
+        email: client?.email || "",
+        phone: client?.phone || "",
+        industry: client?.industry || "",
+        city: client?.city || "",
+        softwareType: keyProducts[0] || "",
+        budget: paymentStructure || "",
+        startDate: startDate || "",
+        deliveryDate: deliveryDate || "",
+      });
+      localStorage.removeItem(DRAFT_KEY);
+    }
     markSaved(`sc2_${id}`); markClean(`sc2_${id}`);
   };
-  const saveS5  = () => { persist("s5",  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible }); markSaved("s5"); markClean("s5"); };
-  const saveS6  = () => { persist("s6",  { startDate, deliveryDate, milestones, publicVisible: s6PublicVisible }); markSaved("s6"); markClean("s6"); };
+  const saveS5  = () => persistAndSave("s5",  "s5",  { paymentStructure, additionalCosts, currency, lineItems, publicVisible: s5PublicVisible });
+  const saveS6  = () => persistAndSave("s6",  "s6",  { startDate, deliveryDate, milestones, publicVisible: s6PublicVisible });
 
   // ─── Drag-and-drop handlers ──────────────────────────────────────────────────
   const handleDragStart = (id: string, e: React.DragEvent) => {
