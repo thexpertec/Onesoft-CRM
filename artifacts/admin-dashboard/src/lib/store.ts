@@ -2266,11 +2266,20 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       .filter(it => it.itemType === "raw-material")
       .reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
     const poTotal = inventoryTotal + rmTotal;
+    // Look up the supplier's exact ledger account from CRM (works even if
+    // the contact was created under AR instead of AP)
+    const _suppNameLow = (order.supplier || "").toLowerCase();
+    const _crm = getCustomers();
+    const _suppContact = _crm.find(c =>
+      (c.name || "").toLowerCase() === _suppNameLow ||
+      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === _suppNameLow
+    );
     const je = autoPostPurchaseJE({
-      poNumber: order.poNumber,
-      supplier: order.supplier || "Supplier",
-      date:     today,
-      total:    poTotal,
+      poNumber:         order.poNumber,
+      supplier:         order.supplier || "Supplier",
+      date:             today,
+      total:            poTotal,
+      supplierLedgerId: _suppContact?.ledgerAccountId,
     });
     pos[i] = { ...pos[i], status: "Received", jeId: je?.id, updatedAt: new Date().toISOString() };
   } else {
@@ -5632,10 +5641,13 @@ export function autoPostPurchaseJE(params: {
   const s = getSettings();
 
   // ── Credit side: AP ───────────────────────────────────────────────────────
-  // Prefer supplier-specific ledger, then find sub-ledger by name, then AP_TRADE
+  // Prefer supplier-specific ledger, then find sub-ledger by name, then AP_TRADE.
+  // Also search AR_GROUP as a fallback — covers contacts that were set up as
+  // customers (AR ledger under 1130) but are also used as purchase suppliers.
   const apId = params.supplierLedgerId
     || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
     || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
+    || findSubLedgerForParty(params.supplier, SYS_ACCS.AR_GROUP)
     || resolveToLedger(s.accPurchasePayable)
     || resolveToLedger(SYS_ACCS.AP_TRADE)
     || SYS_ACCS.AP_GENERAL;

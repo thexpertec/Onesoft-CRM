@@ -1681,9 +1681,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       const cat = p?.category?.trim() || "Uncategorised";
                       _catMap.set(cat, (_catMap.get(cat) || 0) + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0));
                     }
+                    const _suppName    = (invoice!.customer || "").toLowerCase();
+                    const _crm         = getCustomers();
+                    const _suppContact = _crm.find(c =>
+                      (c.name || "").toLowerCase() === _suppName ||
+                      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === _suppName
+                    );
                     const _je = autoPostPurchaseJE({
                       poNumber: invoice!.invoiceNumber, supplier: invoice!.customer,
                       date: new Date().toISOString().slice(0, 10), total: _invTotal,
+                      supplierLedgerId: _suppContact?.ledgerAccountId,
                       categoryLines: Array.from(_catMap.entries()).map(([category, total]) => ({ category, total })),
                     });
                     updateInvoice(invoice!.id, {
@@ -1922,9 +1929,19 @@ export function InvoiceFormPage() {
     receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
     const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
       + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+    // Look up the supplier's exact ledger account ID from the CRM so the JE
+    // posts to their specific sub-ledger rather than the generic AP fallback —
+    // this works even if the contact was set up under AR instead of AP.
+    const supplierName = (inv.customer || "").toLowerCase();
+    const crm = getCustomers();
+    const supplierContact = crm.find(c =>
+      (c.name || "").toLowerCase() === supplierName ||
+      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === supplierName
+    );
     return autoPostPurchaseJE({
       poNumber: inv.invoiceNumber, supplier: inv.customer,
       date: new Date().toISOString().slice(0, 10), total,
+      supplierLedgerId: supplierContact?.ledgerAccountId,
       categoryLines: buildPurchaseCatLines(inv.items),
     });
   }, []);
