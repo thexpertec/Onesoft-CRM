@@ -338,6 +338,7 @@ function SaleCompleteModal({
 interface PaymentModalProps {
   saleNumber: string;
   total: number;
+  customer?: string;
   defaultPaymentMethod?: SalePayment;
   defaultNotes?: string;
   onConfirm: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
@@ -352,9 +353,15 @@ const PAY_METHOD_META: { method: SalePayment; icon: () => React.ReactNode; color
   { method: "Credit",          icon: () => <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
 ];
 
-function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
-  const [payAmount, setPayAmount] = useState("0");
-  const [payMethod, setPayMethod] = useState<SalePayment>(defaultPaymentMethod);
+function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
+  // Walk-in = no named customer selected
+  const isWalkIn = !customer.trim() || customer.trim().toLowerCase() === "walk-in";
+
+  const [payAmount, setPayAmount] = useState(() => isWalkIn ? total.toFixed(2) : "0");
+  const [payMethod, setPayMethod] = useState<SalePayment>(
+    // Walk-in customers cannot use Credit — reset to Cash if that was the default
+    isWalkIn && defaultPaymentMethod === "Credit" ? "Cash" : defaultPaymentMethod
+  );
   const [notes,     setNotes]     = useState(defaultNotes);
 
   const sym  = getSettingsCurrencySymbol();
@@ -362,6 +369,9 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaul
   const fmt  = (n: number) => `${sym}${n.toFixed(dp)}`;
   const paid = parseFloat(payAmount) || 0;
   const remaining = total - paid;
+
+  // For walk-ins: confirm is disabled unless the full amount is covered
+  const walkInUnderPaid = isWalkIn && paid < total - 0.005;
 
   const presets = [
     { label: "Exact", value: total.toFixed(dp) },
@@ -416,9 +426,17 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaul
             </div>
           ) : null}
 
+          {walkInUnderPaid && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 text-xs font-semibold text-red-600 dark:text-red-400">
+              Walk-in customers must pay the full amount.
+            </div>
+          )}
+
           <div className="flex gap-2 mt-auto">
-            <button onClick={() => onConfirm(payAmount, payMethod, notes)}
-              className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-200/60 dark:shadow-none">
+            <button
+              onClick={() => !walkInUnderPaid && onConfirm(payAmount, payMethod, notes)}
+              disabled={walkInUnderPaid}
+              className={`flex-1 h-11 rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all ${walkInUnderPaid ? "bg-gray-300 dark:bg-zinc-600 cursor-not-allowed shadow-none" : "bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200/60 dark:shadow-none"}`}>
               <Check size={16} /> Confirm Payment
             </button>
             <button onClick={onCancel}
@@ -433,7 +451,10 @@ function PaymentModal({ saleNumber, total, defaultPaymentMethod = "Cash", defaul
           <div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
             <div className="grid grid-cols-2 gap-2">
-              {PAY_METHOD_META.map(m => {
+              {PAY_METHOD_META
+                // Walk-in customers cannot use Credit — hide the button entirely
+                .filter(m => !(isWalkIn && m.method === "Credit"))
+                .map(m => {
                 const isSelected = payMethod === m.method;
                 return (
                   <button key={m.method} onClick={() => setPayMethod(m.method)}
@@ -2179,6 +2200,7 @@ function POSView({
       <PaymentModal
         saleNumber={sale.saleNumber}
         total={grandTotal}
+        customer={localMeta.customer ?? ""}
         defaultPaymentMethod={localMeta.paymentMethod}
         defaultNotes={localMeta.notes ?? ""}
         onConfirm={(amountPaid, paymentMethod, notes) => {
