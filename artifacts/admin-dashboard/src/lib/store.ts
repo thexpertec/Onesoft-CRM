@@ -6065,6 +6065,18 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     // Always sync global data (users, tenants, module groups)
     const globalData = await kvGetAll("global");
     if (globalData) {
+      // ── Snapshot critical platform keys BEFORE the sync loop overwrites them.
+      //    The self-heal below must compare the pre-sync local state (which may
+      //    include records written by createAdminUser / createTenant that haven't
+      //    landed on the server yet) against the server state.  Reading
+      //    localStorage AFTER _lsCache() runs would always return the server
+      //    value we just wrote, making the merge a permanent no-op and causing
+      //    newly created Manager / Admin users (and tenants) to vanish on reload.
+      const preSyncSnapshots: Record<string, string | null> = {};
+      for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
+        try { preSyncSnapshots[platKey] = localStorage.getItem(platKey); } catch { preSyncSnapshots[platKey] = null; }
+      }
+
       for (const [key, value] of Object.entries(globalData)) {
         if (value !== undefined && value !== null) {
           // Server is authoritative. Use _lsCache so next page load gets a
@@ -6080,7 +6092,9 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       //            local-only records back in, push merged result, and update
       //            in-memory + localStorage so this page load is correct too.
       for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
-        const rawLocal = (() => { try { return localStorage.getItem(platKey); } catch { return null; } })();
+        // Use the pre-sync snapshot — NOT a fresh localStorage.getItem() — so
+        // we see the locally-created records before the server value clobbered them.
+        const rawLocal = preSyncSnapshots[platKey];
 
         if (!(platKey in globalData)) {
           // Case 1: key missing from server entirely — push local up
