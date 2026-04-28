@@ -2745,12 +2745,27 @@ export default function SalesPage() {
       // Auto-post journal entry (only once — skip if already linked)
       let jeId: string | undefined = detailSale?.jeId;
       if (!jeId) {
-        const costTotal = allProducts.length > 0
-          ? localItems.reduce((sum, item) => {
-              const prod = findProductForItem(item, allProducts);
-              return sum + effectiveItemCost(item, prod) * (parseFloat(item.qty) || 0);
-            }, 0)
-          : 0;
+        // Always use a fresh product list so cost prices are up-to-date
+        const freshProds = getProducts();
+        // Build per-category breakdown for COGS and Inventory lines
+        const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+        for (const item of localItems) {
+          const prod   = findProductForItem(item, freshProds);
+          const qty    = parseFloat(item.qty) || 0;
+          const price  = parseFloat(item.unitPrice) || 0;
+          const disc   = parseFloat(item.discount) || 0;
+          const lineNet = qty * price - (item.discountType === "amt" ? Math.min(disc, price) * qty : qty * price * disc / 100);
+          const cost   = effectiveItemCost(item, prod) * qty;
+          const cat    = prod?.category?.trim() || "Uncategorised";
+          const prev   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
+          catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
+        }
+        const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
+          category,
+          subtotal:  parseFloat(v.subtotal.toFixed(2)),
+          costTotal: parseFloat(v.costTotal.toFixed(2)),
+        }));
+        const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
         const je = autoPostSaleJE({
           source:        "POS",
           reference:     detailSale?.saleNumber || "",
@@ -2761,6 +2776,7 @@ export default function SalesPage() {
           taxAmount,
           grandTotal:    grandTotal_,
           costTotal:     parseFloat(costTotal.toFixed(2)),
+          categoryLines,
         });
         if (je) jeId = je.id;
       }

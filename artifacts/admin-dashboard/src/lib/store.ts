@@ -3059,9 +3059,10 @@ function _deductFromStockBySku(
   reference: string,
   sourceType: string | undefined,
 ): number {
+  const skuLower = sku.toLowerCase();
   let remaining = qty;
   for (let i = 0; i < stocks.length && remaining > 0; i++) {
-    if (stocks[i].sku !== sku) continue;
+    if ((stocks[i].sku || "").toLowerCase() !== skuLower) continue;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, remaining);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
@@ -3086,9 +3087,10 @@ function _deductFromStockByName(
   reference: string,
   sourceType: string | undefined,
 ): number {
+  const nameLower = productName.toLowerCase();
   let remaining = qty;
   for (let i = 0; i < stocks.length && remaining > 0; i++) {
-    if (stocks[i].productName !== productName) continue;
+    if ((stocks[i].productName || "").toLowerCase() !== nameLower) continue;
     const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
     const deduct  = Math.min(current, remaining);
     stocks[i] = { ...stocks[i], quantity: String(current - deduct), updatedAt: new Date().toISOString() };
@@ -3246,29 +3248,47 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     if (qty <= 0) return;
 
     // Resolve effective SKU — item.sku may be blank if product has no SKU entered.
-    // Fall back to looking up the product by productId to get its sku.
+    // Priority: invoice item SKU → product's SKU from Products module (by productId, SKU, or name match).
+    // Using the canonical product SKU ensures POS deductions can always find the correct stock record.
     let effectiveSku = item.sku || "";
-    if (!effectiveSku && item.productId) {
-      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
+    let canonicalProd: typeof allProds[number] | undefined;
+    if (item.productId) {
+      canonicalProd = allProds.find(p => p.id === item.productId);
     }
+    if (!canonicalProd && effectiveSku) {
+      canonicalProd = allProds.find(p => p.sku?.toLowerCase() === effectiveSku.toLowerCase());
+    }
+    if (!canonicalProd && item.productName) {
+      canonicalProd = allProds.find(p => p.name?.toLowerCase() === item.productName.toLowerCase());
+    }
+    // Always prefer the canonical product's SKU so stock + POS stay in sync
+    if (!effectiveSku && canonicalProd?.sku) effectiveSku = canonicalProd.sku;
+    // Use canonical product name for storage (prevents duplicate records from name-casing variations)
+    const canonicalName = canonicalProd?.name || item.productName;
+
+    const skuLower  = effectiveSku.toLowerCase();
+    const nameLower = canonicalName.toLowerCase();
 
     // Prefer a "For Sale" record; fall back to any record matching SKU or productName
+    // All comparisons are case-insensitive to prevent duplicate records from casing differences.
     let i = effectiveSku
-      ? stocks.findIndex(s => s.sku === effectiveSku && s.stockType === "For Sale")
+      ? stocks.findIndex(s => (s.sku || "").toLowerCase() === skuLower && s.stockType === "For Sale")
       : -1;
-    if (i < 0 && effectiveSku) i = stocks.findIndex(s => s.sku === effectiveSku);
+    if (i < 0 && effectiveSku) i = stocks.findIndex(s => (s.sku || "").toLowerCase() === skuLower);
     // Last resort: match by productName when no SKU available
-    if (i < 0 && item.productName) {
-      i = stocks.findIndex(s => s.productName === item.productName && s.stockType === "For Sale");
-      if (i < 0) i = stocks.findIndex(s => s.productName === item.productName);
+    if (i < 0 && canonicalName) {
+      i = stocks.findIndex(s => (s.productName || "").toLowerCase() === nameLower && s.stockType === "For Sale");
+      if (i < 0) i = stocks.findIndex(s => (s.productName || "").toLowerCase() === nameLower);
     }
     // Skip only when we truly cannot identify the item
-    if (i < 0 && !effectiveSku && !item.productName) return;
+    if (i < 0 && !effectiveSku && !canonicalName) return;
 
     if (i >= 0) {
       if (alreadyReceived(stocks[i].id)) return; // duplicate guard — skip
       const current = Math.max(0, parseFloat(stocks[i].quantity) || 0);
-      stocks[i] = { ...stocks[i], quantity: String(current + qty), updatedAt: new Date().toISOString() };
+      // Backfill SKU on existing stock record if it was missing (enables future POS lookups by SKU)
+      const skuPatch = !stocks[i].sku && effectiveSku ? { sku: effectiveSku } : {};
+      stocks[i] = { ...stocks[i], ...skuPatch, quantity: String(current + qty), updatedAt: new Date().toISOString() };
       ledger.push({
         entityType: "product", entityId: stocks[i].id, entityName: stocks[i].productName,
         date: today, txType: "purchase-receipt", sourceType, reference,
@@ -3276,10 +3296,10 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
         unit: stocks[i].unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
       });
     } else {
-      // No stock record yet — create one with all required fields
+      // No stock record yet — create one using the canonical product name & SKU
       const newItem: StockItem = {
         id:           crypto.randomUUID(),
-        productName:  item.productName || effectiveSku,
+        productName:  canonicalName || effectiveSku,
         sku:          effectiveSku,
         store:        "Warehouse",
         stockType:    "For Sale",
