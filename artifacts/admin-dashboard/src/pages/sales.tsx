@@ -8,6 +8,7 @@ import {
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
+  getCashBankLedgers, Account,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -56,14 +57,14 @@ function saleDisplayStatus(sale: Sale): string {
 
 
 function getPaymentIcon(method: string): React.ReactNode {
-  switch (method) {
-    case "Cash":            return <Banknote size={12} className="text-emerald-500" />;
-    case "Card":            return <CreditCard size={12} className="text-blue-500" />;
-    case "Bank Transfer":   return <CreditCard size={12} className="text-violet-500" />;
-    case "Cheque":          return <Receipt size={12} className="text-gray-500" />;
-    case "Credit":          return <CreditCard size={12} className="text-orange-500" />;
-    default:                return null;
-  }
+  const m = (method || "").toLowerCase();
+  if (m === "credit")                        return <CreditCard size={12} className="text-orange-500" />;
+  if (m.includes("cash"))                    return <Banknote size={12} className="text-emerald-500" />;
+  if (m.includes("card"))                    return <CreditCard size={12} className="text-blue-500" />;
+  if (m.includes("cheque") || m.includes("check")) return <Receipt size={12} className="text-gray-500" />;
+  if (m.includes("wallet"))                  return <Wallet size={12} className="text-cyan-500" />;
+  // Default: bank icon for named bank accounts (HBL, MCB, etc.)
+  return <CreditCard size={12} className="text-violet-500" />;
 }
 
 const lineTotal = (item: SaleItem): number => {
@@ -345,23 +346,41 @@ interface PaymentModalProps {
   onCancel: () => void;
 }
 
-const PAY_METHOD_META: { method: SalePayment; icon: () => React.ReactNode; color: string; ring: string }[] = [
-  { method: "Cash",            icon: () => <Banknote  size={26} />, color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700", ring: "ring-emerald-500" },
-  { method: "Card",            icon: () => <CreditCard size={26} />, color: "text-blue-600    bg-blue-50     dark:bg-blue-950/40    border-blue-200    dark:border-blue-700",    ring: "ring-blue-500"    },
-  { method: "Bank Transfer",   icon: () => <CreditCard size={26} />, color: "text-violet-600  bg-violet-50   dark:bg-violet-950/40  border-violet-200  dark:border-violet-700",  ring: "ring-violet-500"  },
-  { method: "Cheque",          icon: () => <Receipt    size={26} />, color: "text-gray-600    bg-gray-50     dark:bg-zinc-800       border-gray-200    dark:border-zinc-700",     ring: "ring-gray-400"    },
-  { method: "Credit",          icon: () => <CreditCard size={26} />, color: "text-orange-600  bg-orange-50   dark:bg-orange-950/40  border-orange-200  dark:border-orange-700",  ring: "ring-orange-500"  },
+// Colour palette cycled across COA-based payment tiles
+const PAY_TILE_PALETTE = [
+  { color: "text-emerald-600 bg-emerald-50  dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-700", ring: "ring-emerald-500" },
+  { color: "text-blue-600    bg-blue-50     dark:bg-blue-950/40    border-blue-200    dark:border-blue-700",    ring: "ring-blue-500"    },
+  { color: "text-violet-600  bg-violet-50   dark:bg-violet-950/40  border-violet-200  dark:border-violet-700",  ring: "ring-violet-500"  },
+  { color: "text-amber-600   bg-amber-50    dark:bg-amber-950/40   border-amber-200   dark:border-amber-700",   ring: "ring-amber-500"   },
+  { color: "text-cyan-600    bg-cyan-50     dark:bg-cyan-950/40    border-cyan-200    dark:border-cyan-700",    ring: "ring-cyan-500"    },
+  { color: "text-rose-600    bg-rose-50     dark:bg-rose-950/40    border-rose-200    dark:border-rose-700",    ring: "ring-rose-500"    },
 ];
+
+function payTileIcon(name: string) {
+  const n = name.toLowerCase();
+  if (n.includes("cash")) return <Banknote size={26} />;
+  if (n.includes("wallet")) return <Wallet size={26} />;
+  return <CreditCard size={26} />;
+}
 
 function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
   // Walk-in = no named customer selected
   const isWalkIn = !customer.trim() || customer.trim().toLowerCase() === "walk-in";
 
+  // Load Cash & Bank ledger accounts from COA — these become the payment method tiles.
+  // Credit is excluded from POS entirely.
+  const cbLedgers: Account[] = useMemo(() => getCashBankLedgers(), []);
+
+  // Determine a valid initial payment method: prefer defaultPaymentMethod if it matches a COA account name,
+  // otherwise fall back to the first available account or "Cash".
+  const resolveDefault = (): SalePayment => {
+    if (!cbLedgers.length) return "Cash";
+    const match = cbLedgers.find(a => a.name.toLowerCase() === (defaultPaymentMethod || "").toLowerCase());
+    return match ? match.name : cbLedgers[0].name;
+  };
+
   const [payAmount, setPayAmount] = useState(() => isWalkIn ? total.toFixed(2) : "0");
-  const [payMethod, setPayMethod] = useState<SalePayment>(
-    // Walk-in customers cannot use Credit — reset to Cash if that was the default
-    isWalkIn && defaultPaymentMethod === "Credit" ? "Cash" : defaultPaymentMethod
-  );
+  const [payMethod, setPayMethod] = useState<SalePayment>(resolveDefault);
   const [notes,     setNotes]     = useState(defaultNotes);
 
   const sym  = getSettingsCurrencySymbol();
@@ -451,19 +470,22 @@ function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod =
           <div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</div>
             <div className="grid grid-cols-2 gap-2">
-              {PAY_METHOD_META
-                // Walk-in customers cannot use Credit — hide the button entirely
-                .filter(m => !(isWalkIn && m.method === "Credit"))
-                .map(m => {
-                const isSelected = payMethod === m.method;
+              {cbLedgers.length > 0 ? cbLedgers.map((acct, idx) => {
+                const palette = PAY_TILE_PALETTE[idx % PAY_TILE_PALETTE.length];
+                const isSelected = payMethod === acct.name;
                 return (
-                  <button key={m.method} onClick={() => setPayMethod(m.method)}
-                    className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${m.color} ${isSelected ? `${m.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
-                    {m.icon()}
-                    <span className="leading-tight text-center">{m.method}</span>
+                  <button key={acct.id} onClick={() => setPayMethod(acct.name)}
+                    className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] transition-all ${palette.color} ${isSelected ? `${palette.ring} ring-2 ring-offset-1 shadow-sm scale-[1.03]` : "opacity-70 hover:opacity-100 hover:scale-[1.01]"}`}>
+                    {payTileIcon(acct.name)}
+                    <span className="leading-tight text-center">{acct.name}</span>
                   </button>
                 );
-              })}
+              }) : (
+                // Fallback when no COA Cash & Bank accounts exist yet
+                <button className="col-span-2 flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 font-semibold text-[11px] text-emerald-600 bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500 ring-offset-1 shadow-sm scale-[1.03]">
+                  <Banknote size={26} /><span>Cash</span>
+                </button>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1.5 mt-auto">
@@ -2441,7 +2463,7 @@ export default function SalesPage() {
     { field: "balance",       label: `Balance (${sym})`,minW: 110, type: "readonly" },
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
     { field: "orderStage",    label: "Order Stage",     minW: 120, type: "readonly" },
-    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: [...SALE_PAYMENTS] },
+    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: (() => { const coa = getCashBankLedgers().map(a => a.name); return coa.length ? coa : [...SALE_PAYMENTS]; })() },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
   ], [sym, agentNameOpts]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
@@ -3188,7 +3210,12 @@ export default function SalesPage() {
               <select value={filterPayMode} onChange={e => setFilterPayMode(e.target.value)}
                 className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 <option value="">All Modes</option>
-                {SALE_PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                {(() => {
+                  // Combine COA Cash & Bank ledger names with any payment methods already on existing sales
+                  const coaNames = getCashBankLedgers().map(a => a.name);
+                  const inData   = [...new Set(rows.map(s => s.paymentMethod).filter(Boolean))];
+                  return [...new Set([...coaNames, ...inData])].map(p => <option key={p} value={p}>{p}</option>);
+                })()}
               </select>
             </div>
 

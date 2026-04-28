@@ -2296,7 +2296,9 @@ export const SALE_STATUSES  = ["Pending", "Draft", "Completed", "On Credit", "Re
 export type SaleStatus = typeof SALE_STATUSES[number];
 
 export const SALE_PAYMENTS  = ["Cash", "Card", "Bank Transfer", "Cheque", "Credit"] as const;
-export type SalePayment = typeof SALE_PAYMENTS[number];
+/** SalePayment is intentionally `string` so POS can store dynamic COA account names/IDs.
+ *  Legacy values ("Cash", "Card", "Bank Transfer", "Cheque", "Credit") are still valid. */
+export type SalePayment = string;
 
 export const ITEM_STATUSES = ["Reserved", "Delivered", "Pending"] as const;
 export type ItemStatus = typeof ITEM_STATUSES[number];
@@ -5433,6 +5435,30 @@ export function resolveToLedger(accountId: string | undefined): string | null {
   return child?.id ?? null;
 }
 
+/** Returns all active Ledger accounts that live under the Cash & Bank Accounts group (CB_GROUP).
+ *  These are the accounts shown as payment-method tiles on the POS payment modal. */
+export function getCashBankLedgers(): Account[] {
+  const accounts = getAccounts();
+  // Collect all descendant IDs of CB_GROUP (handles nested groups)
+  const cbDescendants = new Set<string>();
+  const addDescendants = (parentId: string) => {
+    for (const a of accounts) {
+      if (a.parentId === parentId && !cbDescendants.has(a.id)) {
+        cbDescendants.add(a.id);
+        addDescendants(a.id);
+      }
+    }
+  };
+  addDescendants(SYS_ACCS.CB_GROUP);
+  // Also include direct children of CB_GROUP and direct parent (self)
+  cbDescendants.add(SYS_ACCS.CB_GROUP);
+  return accounts.filter(a =>
+    a.accountType === "Ledger" &&
+    a.isActive !== false &&
+    (cbDescendants.has(a.id) || a.parentId === SYS_ACCS.CB_GROUP)
+  );
+}
+
 export function findSubLedgerForParty(partyName: string, parentGroupId: string): string | null {
   if (!partyName) return null;
   const lower = partyName.toLowerCase();
@@ -5512,7 +5538,6 @@ export function autoPostSaleJE(params: {
   //   "Credit" method  → always AR (explicit credit sale regardless of source).
   //   Outstanding bal  → AR whenever amountPaid < grandTotal (payment not yet received).
   const isCredit      = params.paymentMethod === "Credit";
-  const isCash        = params.paymentMethod === "Cash";
   const outstanding   = params.amountPaid !== undefined
                         ? params.grandTotal - params.amountPaid
                         : 0;
@@ -5522,17 +5547,41 @@ export function autoPostSaleJE(params: {
                         ? true                         // invoices always go through AR
                         : isCredit || isOutstanding;   // POS: only AR when credit / outstanding
 
+  // ── Resolve the payment-method debit account ─────────────────────────────
+  // Priority:
+  //   1. If payment method is a COA account ID that resolves to a Ledger → use it directly
+  //   2. If payment method matches a COA account name → use that account's ID
+  //   3. Legacy: "Cash" → configured cash account, "Card"/"Bank Transfer"/"Cheque" → bank account
+  const _allAccounts  = getAccounts();
+  const _resolvePayMethodLedger = (method: string): string | null => {
+    // Try direct ID lookup
+    const byId = _allAccounts.find(a => a.id === method && a.accountType === "Ledger" && a.isActive !== false);
+    if (byId) return byId.id;
+    // Try name lookup (case-insensitive) within Cash & Bank group descendants
+    const nameLower = method.toLowerCase();
+    const cbLedgers = getCashBankLedgers();
+    const byName = cbLedgers.find(a => a.name.toLowerCase() === nameLower);
+    if (byName) return byName.id;
+    return null;
+  };
+
   let debitAccId: string | null;
   if (useAR) {
     // Prefer per-customer AR sub-ledger; fall back to Trade Receivables ledger
     debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
               || resolveToLedger(s.accReceivable)
               || SYS_ACCS.AR_TRADE;
-  } else if (isCash) {
-    debitAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
   } else {
-    // Card / Bank Transfer / Cheque — use configured bank or fall back to Cash
-    debitAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    // Try to resolve payment method as a COA Cash & Bank ledger (new dynamic approach)
+    const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
+    if (dynLedger) {
+      debitAccId = dynLedger;
+    } else if (params.paymentMethod === "Cash") {
+      debitAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    } else {
+      // Card / Bank Transfer / Cheque / unknown — use configured bank or fall back to Cash
+      debitAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    }
   }
   if (!debitAccId) return null;
 
