@@ -896,21 +896,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
           {/* ── Section 2: Line Items (full width) ──────────────────────────── */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
-            {/* Table header */}
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700">
-              {/* Column labels */}
-              <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 flex-1 items-center">
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider">#</span>
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider pl-1">Product / Service</span>
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Unit Price</span>
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Qty</span>
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Discount</span>
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Sub Total</span>
-                <span />
-              </div>
-              {/* Pricing mode switcher — sale invoices only */}
+            {/* Table header — same grid template as item rows so columns always align */}
+            <div className={`grid ${invoiceType !== "purchase" ? "grid-cols-[28px_1fr_110px_80px_110px_100px_36px_156px]" : "grid-cols-[28px_1fr_110px_80px_110px_100px_36px]"} gap-0 px-4 py-2.5 bg-gray-800 dark:bg-zinc-950 border-b border-gray-700 dark:border-zinc-700 items-center`}>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider">#</span>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider pl-1">Product / Service</span>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Unit Price</span>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Qty</span>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-center">Discount</span>
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider text-right">Sub Total</span>
+              <span />
+              {/* Pricing mode switcher — occupies the 8th column for sale invoices so it
+                  never steals width from the flex-1 product column */}
               {invoiceType !== "purchase" && (
-                <div className="flex items-center gap-0.5 ml-4 bg-gray-700 dark:bg-zinc-800 rounded-lg p-0.5 shrink-0">
+                <div className="flex items-center justify-end gap-0.5 bg-gray-700 dark:bg-zinc-800 rounded-lg p-0.5">
                   <button
                     type="button"
                     onClick={() => setPricingMode("wholesale")}
@@ -948,7 +946,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               {items.map((item, idx) => (
                 <div key={item.id}>
                   {/* Item row */}
-                  <div className="grid grid-cols-[28px_1fr_110px_80px_110px_100px_36px] gap-0 px-4 py-3 items-center hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                  <div className={`grid ${invoiceType !== "purchase" ? "grid-cols-[28px_1fr_110px_80px_110px_100px_36px_156px]" : "grid-cols-[28px_1fr_110px_80px_110px_100px_36px]"} gap-0 px-4 py-3 items-center hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors`}>
                     {/* # */}
                     <span className="text-sm font-bold text-gray-500 dark:text-zinc-400">{idx + 1}</span>
                     {/* Product */}
