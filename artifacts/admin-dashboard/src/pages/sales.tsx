@@ -749,7 +749,7 @@ interface POSViewProps {
   onSetStatus: (status: SaleStatus) => void;
   onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
   onAcceptOrder?: () => void;
-  onAddCustomer: (name: string, phone: string, email: string, company?: string) => void;
+  onAddCustomer: (name: string, phone: string, city: string, company?: string) => void;
   tenantId: string | null;
 }
 
@@ -1014,7 +1014,7 @@ function POSView({
   const [qaName,    setQaName]    = useState("");
   const [qaCompany, setQaCompany] = useState("");
   const [qaPhone,   setQaPhone]   = useState("");
-  const [qaEmail,   setQaEmail]   = useState("");
+  const [qaCity,    setQaCity]    = useState("");
 
   const customerExists = customerComboOpts.some(
     o => o.value.toLowerCase() === localMeta.customer.toLowerCase().trim()
@@ -1023,13 +1023,13 @@ function POSView({
 
   const openQuickAdd = () => {
     setQaName(localMeta.customer.trim());
-    setQaCompany(""); setQaPhone(""); setQaEmail("");
+    setQaCompany(""); setQaPhone(""); setQaCity("");
     setQaOpen(true);
   };
 
   const confirmQuickAdd = () => {
     if (!qaName.trim()) return;
-    onAddCustomer(qaName.trim(), qaPhone.trim(), qaEmail.trim(), qaCompany.trim());
+    onAddCustomer(qaName.trim(), qaPhone.trim(), qaCity.trim(), qaCompany.trim());
     onMetaChange({ customer: qaName.trim() });
     onSaveMeta();
     setQaOpen(false);
@@ -2235,7 +2235,7 @@ function POSView({
 
     {/* ── Quick-add Customer Dialog ─────────────────────────────────────── */}
     <Dialog open={qaOpen} onOpenChange={v => !v && setQaOpen(false)}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus size={16} className="text-blue-600" /> Add New Customer
@@ -2250,14 +2250,14 @@ function POSView({
             <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Company</label>
             <Input value={qaCompany} onChange={e => setQaCompany(e.target.value)} placeholder="Company / organisation name" className="h-9 text-[13px]" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Phone</label>
               <Input value={qaPhone} onChange={e => setQaPhone(e.target.value)} placeholder="+44 7xxx xxxxxx" className="h-9 text-[13px]" />
             </div>
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">Email</label>
-              <Input value={qaEmail} onChange={e => setQaEmail(e.target.value)} placeholder="email@example.com" className="h-9 text-[13px]" />
+              <label className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1 block">City</label>
+              <Input value={qaCity} onChange={e => setQaCity(e.target.value)} placeholder="City" className="h-9 text-[13px]" />
             </div>
           </div>
         </div>
@@ -3026,10 +3026,10 @@ export default function SalesPage() {
           onSetStatus={setStatus}
           onComplete={handleComplete}
           onAcceptOrder={handleAcceptOrder}
-          onAddCustomer={(name, phone, email, company) => {
+          onAddCustomer={(name, phone, city, company) => {
             addCustomer({
-              name, phone, email,
-              company: company || "", industry: "", city: "", status: "Active",
+              name, phone, email: "",
+              company: company || "", industry: "", city: city || "", status: "Active",
               source: "direct", customerType: "POS Customer",
               customerSince: new Date().toISOString().slice(0, 10),
               totalValue: "0", currency: "GBP", notes: "", tags: [],
