@@ -637,11 +637,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             description: l.description, amount: parseFloat(l.amount) || 0,
             invoiceId: l.id,   // l.id == inv.id in computedApLines
           }));
-      // If bank total > invoices outstanding, append an advance credit line
-      if (payExcess > 0.001 && computedApLines[0]) {
-        const first = computedApLines[0];
+      // If bank total > invoices outstanding (including no-invoice case), append an advance credit line
+      if (payExcess > 0.001) {
+        const settings  = getSettings();
+        const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
+        const apAccId   = computedApLines[0]?.accountId ?? (findSubLedgerForParty(supplierName, SYS_ACCS.AP_TRADE) || groupApId);
+        const apAccName = computedApLines[0]?.accountName ?? (accounts.find(a => a.id === apAccId)?.name ?? "Trade Payables");
         invLines.push({
-          id: crypto.randomUUID(), accountId: first.accountId, accountName: first.accountName,
+          id: crypto.randomUUID(), accountId: apAccId, accountName: apAccName,
           description: `Advance Payment — ${supplierName}`,
           amount: parseFloat(payExcess.toFixed(2)),
           invoiceId: undefined,
@@ -677,11 +680,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
             description: l.description, amount: parseFloat(l.amount) || 0,
             invoiceId: l.id,   // l.id == inv.id in computedArLines
           }));
-      // If received > invoices outstanding, append an advance receipt line
-      if (recvExcess > 0.001 && computedArLines[0]) {
-        const first = computedArLines[0];
+      // If received > invoices outstanding (including no-invoice case), append an advance receipt line
+      if (recvExcess > 0.001) {
+        const settings  = getSettings();
+        const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
+        const arAccId   = computedArLines[0]?.accountId ?? (findSubLedgerForParty(buyerName, SYS_ACCS.AR_GROUP) || groupArId);
+        const arAccName = computedArLines[0]?.accountName ?? (accounts.find(a => a.id === arAccId)?.name ?? "Trade Receivables");
         invLines.push({
-          id: crypto.randomUUID(), accountId: first.accountId, accountName: first.accountName,
+          id: crypto.randomUUID(), accountId: arAccId, accountName: arAccName,
           description: `Advance Receipt — ${buyerName}`,
           amount: parseFloat(recvExcess.toFixed(2)),
           invoiceId: undefined,
@@ -730,14 +736,12 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
     if (!date) return "Date is required.";
     if (isNewPayment) {
       if (!supplierName) return "Please select a supplier.";
-      if (computedApLines.length === 0) return "No outstanding invoices found for this supplier.";
       const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
       if (validBank.length === 0) return "Please add at least one bank / cash payment line.";
       return null;
     }
     if (isNewReceipt) {
       if (!buyerName) return "Please select a buyer.";
-      if (computedArLines.length === 0) return "No outstanding invoices found for this buyer.";
       const validBank = recvBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
       if (validBank.length === 0) return "Please add at least one bank / cash account to receive payment into.";
       return null;

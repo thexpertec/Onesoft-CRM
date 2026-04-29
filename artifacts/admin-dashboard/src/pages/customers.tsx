@@ -721,6 +721,22 @@ export default function CustomersPage() {
                   </div>
                 ))}
               </div>
+              {/* Advance credit balance */}
+              {(viewCust.advanceCredit ?? 0) > 0.001 && (
+                <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">
+                      {(viewCust.customerRole ?? "Buyer") === "Supplier" ? "Advance Payments on Account" : "Advance Receipts on Account"}
+                    </p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 opacity-80">
+                      Credit balance from overpayments / advance transactions
+                    </p>
+                  </div>
+                  <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                    {formatAmount(viewCust.advanceCredit ?? 0, viewCust.currency || "GBP")}
+                  </span>
+                </div>
+              )}
               {(viewCust.billingAddress || viewCust.shippingAddress) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
