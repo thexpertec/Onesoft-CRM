@@ -510,7 +510,7 @@ interface VariantPickerDialogProps {
   priceMode: "retail" | "wholesale" | "clubcard";
   localItems: SaleItem[];
   onClose: () => void;
-  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => void;
+  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, costPrice: string) => void;
   onAddBase: (product: Product) => void;
 }
 
@@ -573,7 +573,8 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
     const sku = selected.sku || product.sku;
     const name = `${product.name} — ${variantLabel(selected)}`;
     const price = resolvedPrice(selected);
-    onAdd(sku, name, price, qty, product.unit || "pcs");
+    const variantCost = selected.costPrice ?? product.costPrice ?? "0";
+    onAdd(sku, name, price, qty, product.unit || "pcs", variantCost);
   };
 
   if (!product) return null;
@@ -2575,7 +2576,7 @@ export default function SalesPage() {
   }, [detailId, editSale]);
 
   // ── Add variant from picker ──
-  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => {
+  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, costPrice: string) => {
     setVariantPickerProduct(null);
     const current = localItemsRef.current;
     const settings = getSettings();
@@ -2592,6 +2593,7 @@ export default function SalesPage() {
         unitPrice: variantPrice,
         qty: String(qty),
         discountType: defaultDiscountType,
+        costPrice,
       };
       saveItems([...current, item]);
       toast({ title: `${variantName} added` });
@@ -2665,6 +2667,7 @@ export default function SalesPage() {
         discountType: defaultDiscountType,
         qty: isBogo ? "2" : "1",
         bogoApplied: isBogo || undefined,
+        costPrice: product.costPrice ?? "0",
       };
       saveItems([...current, item]);
       toast({ title: isBogo ? `${product.name} added — B1G1 applied` : `${product.name} added` });

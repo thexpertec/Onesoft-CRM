@@ -2568,6 +2568,7 @@ export type SaleItem = {
   itemStatus: ItemStatus;    // per-line delivery status
   bogoApplied?: boolean;     // Clubcard Buy-1-Get-1-Free applied; every 2nd unit is free
   variantLabel?: string;     // display label of the selected variant (e.g. "3500mAh") — UI only
+  costPrice?: string;        // cost price per unit locked at sale time — used for COGS JE entries
 };
 
 export type Sale = {
@@ -4626,6 +4627,12 @@ export function findProductForItem(it: SaleItem, prods: Product[]): Product | un
  * Falls back to parent product costPrice if no variant match or variant has no cost.
  */
 export function effectiveItemCost(it: SaleItem, prod: Product | undefined): number {
+  // 1. Use cost price locked at sale time (most reliable — not affected by product edits/deletions)
+  if (it.costPrice !== undefined && it.costPrice !== "") {
+    const lockedCost = parseFloat(it.costPrice);
+    if (!isNaN(lockedCost)) return lockedCost;
+  }
+  // 2. Fall back to live product lookup (legacy items without locked cost price)
   if (prod?.variants?.length && it.sku) {
     const variant = prod.variants.find(v => v.sku === it.sku);
     if (variant) {
