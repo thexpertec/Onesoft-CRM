@@ -2795,6 +2795,7 @@ export default function SalesPage() {
           costTotal: parseFloat(v.costTotal.toFixed(2)),
         }));
         const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
+        const paidNum = parseFloat(amountPaid || "0") || 0;
         const je = autoPostSaleJE({
           source:        "POS",
           reference:     detailSale?.saleNumber || "",
@@ -2806,6 +2807,7 @@ export default function SalesPage() {
           grandTotal:    grandTotal_,
           costTotal:     parseFloat(costTotal.toFixed(2)),
           categoryLines,
+          amountPaid:    paidNum,
         });
         if (je) jeId = je.id;
       }

@@ -1769,6 +1769,67 @@ export function backfillOpeningBalanceJEs(): void {
   }
 }
 
+/**
+ * One-time migration: find completed POS sales that have an outstanding balance
+ * (amountPaid < grandTotal) but whose journal entry debits a Cash/Bank account
+ * instead of the customer's AR sub-ledger.  Re-routes the debit to AR.
+ * Safe to call multiple times — skips sales whose JE already debits an AR account.
+ */
+export function backfillPOSCreditSaleJEs(): void {
+  const sales = getSales();
+  const entries = getJournalEntries();
+  const customers = getCustomers();
+
+  // Cash & Bank ledger IDs
+  const cbIds = new Set(getCashBankLedgers().map(a => a.id));
+
+  // AR ledger IDs — any account with subType "Receivable"
+  const arIds = new Set(
+    getAccounts().filter(a => a.accountType === "Ledger" && a.subType === "Receivable").map(a => a.id)
+  );
+  arIds.add(SYS_ACCS.AR_TRADE);
+
+  for (const sale of sales) {
+    if (sale.status !== "Completed") continue;
+    if (!sale.jeId) continue;
+
+    // Check for outstanding balance
+    const paid = parseFloat(sale.amountPaid || "0") || 0;
+    // We consider it outstanding if amountPaid is 0 or very small vs total
+    // Use the JE totalDebit as the proxy for grand total (avoids re-computing from items)
+    const je = entries.find(e => e.id === sale.jeId);
+    if (!je) continue;
+
+    const grandTotal = je.totalDebit;
+    if (grandTotal <= 0) continue;
+    if (paid >= grandTotal - 0.005) continue; // already fully paid
+
+    // Find the debit line — it should be pointing to Cash/Bank but shouldn't
+    const debitLineIdx = je.lines.findIndex(l => l.debit > 0);
+    if (debitLineIdx === -1) continue;
+    const debitLine = je.lines[debitLineIdx];
+
+    // Skip if it already debits an AR account
+    if (arIds.has(debitLine.ledgerId)) continue;
+    // Skip if it's not a Cash/Bank account (unexpected structure — leave alone)
+    if (!cbIds.has(debitLine.ledgerId)) continue;
+
+    // Find customer's AR sub-ledger
+    const customerName = sale.customer || "";
+    const customerRec = customers.find(c =>
+      c.name === customerName || (c.name + (c.company ? ` (${c.company})` : "")) === customerName
+    );
+    const arLedgerId = customerRec?.ledgerAccountId
+      || findSubLedgerForParty(customerName, SYS_ACCS.AR_GROUP)
+      || SYS_ACCS.AR_TRADE;
+
+    // Update the JE: swap the debit account from Cash/Bank to AR
+    const updatedLines = [...je.lines];
+    updatedLines[debitLineIdx] = { ...debitLine, ledgerId: arLedgerId };
+    updateJournalEntry(je.id, { lines: updatedLines });
+  }
+}
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
   // Auto-generate SKU if not provided — SKU is required on every product
   const sku = data.sku?.trim() || generateProductSku(data.name);
