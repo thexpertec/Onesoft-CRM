@@ -1,4 +1,4 @@
-import { kvPut, kvGetAll, kvGet } from "./api";
+import { kvPut, kvGetAll, kvGet, kvDeleteNamespace } from "./api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -947,7 +947,18 @@ export const updateProductCategory = (id: string, updates: Partial<Omit<ProductC
 };
 
 export const deleteProductCategory = (id: string): void => {
+  const cat = getProductCategories().find(c => c.id === id);
   setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
+  // Clear the deleted category from any products still referencing it,
+  // so products don't silently hold a dangling category ID.
+  if (cat) {
+    const affected = getProducts().filter(p => p.category === cat.name);
+    if (affected.length > 0) {
+      setStored(PRODUCTS_KEY, getProducts().map(p =>
+        p.category === cat.name ? { ...p, category: "", updatedAt: new Date().toISOString() } : p
+      ));
+    }
+  }
 };
 
 // ─── Product Groups / Menus ───────────────────────────────────────────────────
@@ -1265,12 +1276,23 @@ export const updateTenantAsync = async (
 
 export const deleteTenant = (id: string): void => {
   setGlobal(TENANTS_KEY, getTenants().filter(t => t.id !== id));
+  // Best-effort namespace purge — fire-and-forget is acceptable here because
+  // the tenant record itself is already gone from the authoritative list.
+  kvDeleteNamespace(`t:${id}`).catch(() => {});
 };
 
 /** Awaitable variant of deleteTenant. Resolves only after the server confirms
- *  the new list is persisted. Throws on failure so the UI can show an error. */
+ *  both the tenant list update AND the full namespace purge are persisted. */
 export const deleteTenantAsync = async (id: string): Promise<void> => {
   await setGlobalAsync(TENANTS_KEY, getTenants().filter(t => t.id !== id));
+  // Purge every key stored under this tenant's namespace from the database.
+  // This is the authoritative cleanup — the namespace delete is atomic on the server.
+  await kvDeleteNamespace(`t:${id}`);
+  // Also evict all in-memory cache entries for this tenant so stale data
+  // never bleeds into a subsequent session within the same browser tab.
+  for (const k of [..._memRaw.keys()]) {
+    if (k.startsWith(`t:${id}:`)) _memRaw.delete(k);
+  }
 };
 
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
@@ -1966,6 +1988,17 @@ export const deleteProduct = (id: string): void => {
   setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
   _removeProductLedgers(id);
+  // Clean up orphaned stock items and ledger entries for this product's SKUs.
+  // StockItem links to a product by SKU, not by product ID.
+  if (item) {
+    const skus = new Set<string>();
+    if (item.sku?.trim()) skus.add(item.sku.trim().toLowerCase());
+    item.variants?.forEach(v => { if (v.sku?.trim()) skus.add(v.sku.trim().toLowerCase()); });
+    if (skus.size > 0) {
+      setStored(STOCK_KEY, getStock().filter(s => !skus.has(s.sku?.trim().toLowerCase())));
+      setStored(LEDGER_KEY, getStockLedger().filter(e => !skus.has(e.entityId?.trim().toLowerCase())));
+    }
+  }
 };
 
 export const reorderProducts = (orderedIds: string[]): void => {
@@ -3725,16 +3758,19 @@ export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | 
 };
 
 export const deleteInvoice = (id: string): void => {
-  // Cascade: delete every voucher (and its JE) linked to this invoice
+  // Cascade: delete every voucher (and its JE) linked to this invoice.
   const linked = getRPVouchers().filter(v =>
     v.linkedInvoiceId === id ||
     (v.linkedInvoiceIds ?? []).includes(id) ||
     v.lines.some(l => l.invoiceId === id)
   );
-  for (const v of linked) {
-    if (v.journalEntryId) {
-      _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId));
-    }
+  // Collect all JE IDs to remove in one pass, then write JEs once.
+  // (Avoids N sequential _apiWrite calls that could race each other.)
+  const jeIdsToRemove = new Set(
+    linked.map(v => v.journalEntryId).filter((jid): jid is string => !!jid)
+  );
+  if (jeIdsToRemove.size > 0) {
+    _saveJournalEntries(getJournalEntries().filter(e => !jeIdsToRemove.has(e.id)));
   }
   _saveRPVouchers(getRPVouchers().filter(v => !linked.find(l => l.id === v.id)));
   setStored(INVOICES_KEY, getInvoices().filter(inv => inv.id !== id));
@@ -5548,8 +5584,9 @@ export function getAccounts(): Account[] {
 
 function _saveAccounts(accounts: Account[]): void {
   const sk = tenantKey(COA_KEY);
-  _lsSet(sk, accounts);
+  _lsCache(sk, accounts);   // memory + localStorage so warm-start reflects the change
   _apiWrite(sk, accounts);
+  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop */ }
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -6105,8 +6142,9 @@ export function getRPVouchers(): RPVoucher[] {
 
 function _saveRPVouchers(data: RPVoucher[]): void {
   const sk = tenantKey(RPV_KEY);
-  _lsSet(sk, data);
+  _lsCache(sk, data);   // memory + localStorage so warm-start reflects the change
   _apiWrite(sk, data);
+  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop */ }
 }
 
 function nextRPVoucherNumber(type: "receipt" | "payment"): string {
