@@ -1783,11 +1783,14 @@ export function backfillPOSCreditSaleJEs(): void {
   // Cash & Bank ledger IDs
   const cbIds = new Set(getCashBankLedgers().map(a => a.id));
 
-  // AR ledger IDs — any account with subType "Receivable"
-  const arIds = new Set(
-    getAccounts().filter(a => a.accountType === "Ledger" && a.subType === "Receivable").map(a => a.id)
+  // Contact sub-ledger IDs — any account with subType "Receivable" (buyer/AR) or "Payable" (supplier/AP).
+  // JEs that debit one of these are already correct and must not be re-routed.
+  const contactLedgerIds = new Set(
+    getAccounts()
+      .filter(a => a.accountType === "Ledger" && (a.subType === "Receivable" || a.subType === "Payable"))
+      .map(a => a.id)
   );
-  arIds.add(SYS_ACCS.AR_TRADE);
+  contactLedgerIds.add(SYS_ACCS.AR_TRADE);
 
   for (const sale of sales) {
     if (sale.status !== "Completed") continue;
@@ -1809,8 +1812,8 @@ export function backfillPOSCreditSaleJEs(): void {
     if (debitLineIdx === -1) continue;
     const debitLine = je.lines[debitLineIdx];
 
-    // Skip if it already debits an AR account
-    if (arIds.has(debitLine.ledgerId)) continue;
+    // Skip if it already debits a contact sub-ledger (AR/Receivable or AP/Payable) — correct
+    if (contactLedgerIds.has(debitLine.ledgerId)) continue;
     // Skip if it's not a Cash/Bank account (unexpected structure — leave alone)
     if (!cbIds.has(debitLine.ledgerId)) continue;
 
@@ -5537,7 +5540,10 @@ export function getJournalEntries(): JournalEntry[] {
 
 function _saveJournalEntries(entries: JournalEntry[]): void {
   const sk = tenantKey(JE_KEY);
-  _lsSet(sk, entries);
+  // Use _lsCache (memory + localStorage) so that JEs survive a page refresh
+  // in the warm-start window before the async syncAllFromServer completes,
+  // exactly the same way sales / customers / products are treated by setStored.
+  _lsCache(sk, entries);
   _apiWrite(sk, entries);
 }
 
