@@ -4921,12 +4921,47 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.OPENING_BAL_EQUITY, code: "5300", name: "Opening Balances",           head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Opening Balance",  description: "Contra account used for customer/supplier/staff opening balance journal entries" },
 ];
 
+// ── COA one-time migration tracking ──────────────────────────────────────────
+// Each structural migration is stamped here after it completes, keyed per
+// tenant. Once recorded, the migration never re-runs regardless of how many
+// times the app starts or how many logins occur.
+// Dynamic/data-driven maintenance (category ledger sync, backfills, etc.) is
+// intentionally NOT tracked here — those always run so they stay current.
+const COA_MIGRATIONS_KEY = "coa:migrations";
+
+function _getCoaMigrations(): Set<string> {
+  try {
+    const raw = _lsGet(tenantKey(COA_MIGRATIONS_KEY));
+    if (!raw) return new Set<string>();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set<string>(arr as string[]) : new Set<string>();
+  } catch { return new Set<string>(); }
+}
+
+function _saveCoaMigrations(done: Set<string>): void {
+  const sk = tenantKey(COA_MIGRATIONS_KEY);
+  _lsSet(sk, [...done]);
+  _apiWrite(sk, [...done]);
+}
+
 /**
  * Seeds system (default) accounts into the COA if they don't already exist,
- * then auto-populates the accounting settings mappings if not yet configured.
- * Safe to call multiple times — existing accounts/settings are never overwritten.
+ * applies one-time structural migrations, then keeps dynamic ledgers in sync.
+ *
+ * Call pattern:
+ *  - Initial account seeding: ALWAYS runs — idempotent (skips existing IDs).
+ *    Ensures new SYSTEM_ACCOUNTS entries added in future code releases are
+ *    automatically picked up by every tenant.
+ *  - Structural migrations (m02–m09): each runs EXACTLY ONCE per tenant,
+ *    tracked in COA_MIGRATIONS_KEY. Safe to call on every login/startup.
+ *  - Dynamic maintenance (category/contact ledger sync, backfills, settings):
+ *    ALWAYS runs — these react to live product/customer data changes and are
+ *    already idempotent (skip work when nothing has changed).
  */
 export function seedDefaultCoaAccounts(): void {
+  const done = _getCoaMigrations();
+  let migrationsChanged = false;
+
   const existing = (() => {
     try {
       const raw = _lsGet(tenantKey(COA_KEY));
@@ -4936,10 +4971,13 @@ export function seedDefaultCoaAccounts(): void {
 
   const existingIds = new Set(existing.map(a => a.id));
   const now = new Date().toISOString();
-  const toAdd: Account[] = [];
 
+  // ── Always: add any missing system accounts ──────────────────────────────────
+  // Runs every call but skips accounts that already exist. This ensures new
+  // SYSTEM_ACCOUNTS entries in future releases reach all existing tenants.
+  const toAdd: Account[] = [];
   for (const def of SYSTEM_ACCOUNTS) {
-    if (existingIds.has(def.id)) continue;   // already seeded
+    if (existingIds.has(def.id)) continue;
     toAdd.push({
       id:             def.id,
       code:           def.code,
@@ -4957,136 +4995,165 @@ export function seedDefaultCoaAccounts(): void {
     });
   }
 
-  // ── Migration: restructure existing accounts to IFRS-compliant hierarchy ────
-  // Detect old structure: sys-1000 (Current Assets) still has parentId = null
-  const needsMigration = existing.some(a => a.id === SYS_ACCS.CURRENT_ASSETS && a.parentId === null);
-  const migrations: Array<{ id: string; updates: Partial<Account> }> = needsMigration ? [
-    // Assets: wire Current Assets under the new Assets root
-    { id: SYS_ACCS.CURRENT_ASSETS, updates: { parentId: SYS_ACCS.ASSETS_ROOT, code: "1100" } },
-    { id: SYS_ACCS.AR_GROUP,       updates: { code: "1130" } },
-    { id: SYS_ACCS.CASH,           updates: { code: "1110" } },
-    { id: SYS_ACCS.INVENTORY,      updates: { code: "1140" } },
-    // Liabilities: wire Current Liabilities under the new Liabilities root
-    { id: SYS_ACCS.CURRENT_LIAB,   updates: { parentId: SYS_ACCS.LIAB_ROOT, code: "2100" } },
-    { id: SYS_ACCS.AP_GROUP,       updates: { code: "2110" } },
-    { id: SYS_ACCS.AP_TRADE,       updates: { code: "2111" } },
-    { id: SYS_ACCS.VAT_PAYABLE,    updates: { code: "2120" } },
-  ] : [];
-
   let workingAccounts = [...existing, ...toAdd];
+  let staticChanged = toAdd.length > 0;
 
-  if (migrations.length > 0) {
-    workingAccounts = workingAccounts.map(acc => {
-      const m = migrations.find(mg => mg.id === acc.id);
-      return m ? { ...acc, ...m.updates, updatedAt: new Date().toISOString() } : acc;
-    });
+  // ── m02: IFRS-compliant hierarchy restructure ────────────────────────────────
+  // Detect old structure: CURRENT_ASSETS still has parentId = null.
+  if (!done.has("m02")) {
+    const needsMigration = workingAccounts.some(a => a.id === SYS_ACCS.CURRENT_ASSETS && a.parentId === null);
+    if (needsMigration) {
+      const m02: Array<{ id: string; updates: Partial<Account> }> = [
+        { id: SYS_ACCS.CURRENT_ASSETS, updates: { parentId: SYS_ACCS.ASSETS_ROOT, code: "1100" } },
+        { id: SYS_ACCS.AR_GROUP,       updates: { code: "1130" } },
+        { id: SYS_ACCS.CASH,           updates: { code: "1110" } },
+        { id: SYS_ACCS.INVENTORY,      updates: { code: "1140" } },
+        { id: SYS_ACCS.CURRENT_LIAB,   updates: { parentId: SYS_ACCS.LIAB_ROOT, code: "2100" } },
+        { id: SYS_ACCS.AP_GROUP,       updates: { code: "2110" } },
+        { id: SYS_ACCS.AP_TRADE,       updates: { code: "2111" } },
+        { id: SYS_ACCS.VAT_PAYABLE,    updates: { code: "2120" } },
+      ];
+      workingAccounts = workingAccounts.map(acc => {
+        const mg = m02.find(x => x.id === acc.id);
+        return mg ? { ...acc, ...mg.updates, updatedAt: now } : acc;
+      });
+      staticChanged = true;
+    }
+    done.add("m02"); migrationsChanged = true;
   }
 
-  // ── Migrate sys-1200 name: "Cash in Hand" → "Cash" ───────────────────────────
-  workingAccounts = workingAccounts.map(a => {
-    if (a.id === SYS_ACCS.CASH && a.name === "Cash in Hand")
-      return { ...a, name: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() };
-    return a;
-  });
+  // ── m03: Rename Cash account "Cash in Hand" → "Cash" ────────────────────────
+  if (!done.has("m03")) {
+    const idx = workingAccounts.findIndex(a => a.id === SYS_ACCS.CASH && a.name === "Cash in Hand");
+    if (idx !== -1) {
+      workingAccounts[idx] = { ...workingAccounts[idx], name: "Cash", description: "Default cash account — physical cash on premises", updatedAt: now };
+      staticChanged = true;
+    }
+    done.add("m03"); migrationsChanged = true;
+  }
 
-  // ── Migrate CASH: re-parent from CURRENT_ASSETS → CB_GROUP ──────────────────
-  // If CB_GROUP was just added (or already exists) but CASH still points at
-  // CURRENT_ASSETS, move it under CB_GROUP and renumber its code.
-  if (workingAccounts.some(a => a.id === SYS_ACCS.CASH && a.parentId === SYS_ACCS.CURRENT_ASSETS)) {
-    workingAccounts = workingAccounts.map(a =>
-      a.id === SYS_ACCS.CASH && a.parentId === SYS_ACCS.CURRENT_ASSETS
-        ? { ...a, parentId: SYS_ACCS.CB_GROUP, code: "1111", updatedAt: new Date().toISOString() }
-        : a
+  // ── m04: Re-parent Cash from CURRENT_ASSETS → CB_GROUP ──────────────────────
+  if (!done.has("m04")) {
+    const idx = workingAccounts.findIndex(a => a.id === SYS_ACCS.CASH && a.parentId === SYS_ACCS.CURRENT_ASSETS);
+    if (idx !== -1) {
+      workingAccounts[idx] = { ...workingAccounts[idx], parentId: SYS_ACCS.CB_GROUP, code: "1111", updatedAt: now };
+      staticChanged = true;
+    }
+    done.add("m04"); migrationsChanged = true;
+  }
+
+  // ── m05: Remove default-seeded accounts now managed directly by the tenant ───
+  if (!done.has("m05")) {
+    const REMOVED_DEFAULTS = new Set<string>([
+      SYS_ACCS.BANK,       // added via Payment Accounts instead
+      SYS_ACCS.PPE,        // tenant-created
+      SYS_ACCS.ACCUM_DEPR, // tenant-created
+      SYS_ACCS.LT_LOANS,   // tenant-created as needed
+      SYS_ACCS.OFFICE_EXP, // tenant-created as needed
+      SYS_ACCS.UTILITIES,  // tenant-created as needed
+    ]);
+    const before = workingAccounts.length;
+    workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
+    if (workingAccounts.length !== before) staticChanged = true;
+    done.add("m05"); migrationsChanged = true;
+  }
+
+  // ── m06: Migrate account types Ledger → Group (7 accounts) ──────────────────
+  if (!done.has("m06")) {
+    const typeChanges: Array<{ id: string; description: string }> = [
+      { id: SYS_ACCS.OWNERS_CAPITAL, description: "Funds invested by owners / shareholders (subsidiary ledgers per owner)" },
+      { id: SYS_ACCS.AP_TRADE,       description: "Trade payables — subsidiary ledgers per supplier" },
+      { id: SYS_ACCS.INVENTORY,      description: "Stock & inventory value — subsidiary ledgers per product/category" },
+      { id: SYS_ACCS.ACCRUED_EXP,    description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
+      { id: SYS_ACCS.SALES_REVENUE,  description: "Revenue from product and service sales — subsidiary ledgers per product" },
+      { id: SYS_ACCS.OTHER_INCOME,   description: "Miscellaneous or non-operating income — subsidiary ledgers per income type" },
+      { id: SYS_ACCS.PURCHASE_EXP,   description: "Goods purchased for resale or use — subsidiary ledgers per product" },
+    ];
+    let anyChanged = false;
+    for (const tc of typeChanges) {
+      const idx = workingAccounts.findIndex(a => a.id === tc.id && a.accountType === "Ledger");
+      if (idx !== -1) {
+        workingAccounts[idx] = { ...workingAccounts[idx], accountType: "Group", description: tc.description, updatedAt: now };
+        anyChanged = true;
+      }
+    }
+    if (anyChanged) staticChanged = true;
+    done.add("m06"); migrationsChanged = true;
+  }
+
+  // ── m07: Seed default Cash payment account ───────────────────────────────────
+  if (!done.has("m07")) {
+    const existingPAs = getStored<{ id: string }>(PAYMENT_ACCOUNTS_KEY);
+    if (!existingPAs.some(p => p.id === SYS_PA_CASH)) {
+      const nowPA = new Date().toISOString();
+      const defaultCash: PaymentAccount = {
+        id:              SYS_PA_CASH,
+        accountTitle:    "Cash",
+        bankName:        "",
+        paymentMethod:   "Cash",
+        iban:            "",
+        description:     "Default cash account — physical cash on premises",
+        isActive:        true,
+        ledgerAccountId: SYS_ACCS.CASH,
+        createdAt:       nowPA,
+        updatedAt:       nowPA,
+      };
+      setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
+    }
+    done.add("m07"); migrationsChanged = true;
+  }
+
+  // ── m08: Rename Cash payment account "Cash in Hand" → "Cash" ─────────────────
+  if (!done.has("m08")) {
+    const cashPA = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).find(p => p.id === SYS_PA_CASH);
+    if (cashPA && cashPA.accountTitle === "Cash in Hand") {
+      const patched = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).map(p =>
+        p.id === SYS_PA_CASH
+          ? { ...p, accountTitle: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() }
+          : p
+      );
+      setStored(PAYMENT_ACCOUNTS_KEY, patched);
+    }
+    done.add("m08"); migrationsChanged = true;
+  }
+
+  // ── m09: Remove legacy per-product ledgers ───────────────────────────────────
+  // sr-prod-*, pur-prod-*, inv-prod-* superseded by per-category ledgers.
+  if (!done.has("m09")) {
+    const LEGACY_PROD_PREFIXES = ["sr-prod-", "pur-prod-", "inv-prod-"];
+    const before = workingAccounts.length;
+    workingAccounts = workingAccounts.filter(
+      a => !LEGACY_PROD_PREFIXES.some(pfx => a.id.startsWith(pfx))
     );
+    const removed = before - workingAccounts.length;
+    if (removed > 0) {
+      console.info(`[COA] m09: removed ${removed} legacy per-product ledger(s)`);
+      staticChanged = true;
+    }
+    done.add("m09"); migrationsChanged = true;
   }
 
-  // ── Remove default-seeded accounts that are now tenant-managed ───────────────
-  const REMOVED_DEFAULTS = new Set<string>([
-    SYS_ACCS.BANK,        // "Bank Account"        — user adds via Payment Accounts
-    SYS_ACCS.PPE,         // "Property, Plant & Equipment" — tenant-created
-    SYS_ACCS.ACCUM_DEPR,  // "Accumulated Depreciation"    — tenant-created
-    SYS_ACCS.LT_LOANS,   // "Long-term Loans"          — tenant-created as needed
-    SYS_ACCS.OFFICE_EXP, // "Office & Admin Expenses"  — tenant-created as needed
-    SYS_ACCS.UTILITIES,  // "Utility Bills"            — tenant-created as needed
-  ]);
-  workingAccounts = workingAccounts.filter(a => !REMOVED_DEFAULTS.has(a.id));
-
-  // ── Migrate sys-5100 from Ledger to Group (so owner subsidiary ledgers work) ─
-  const ownersCapitalIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OWNERS_CAPITAL && a.accountType === "Ledger");
-  if (ownersCapitalIdx !== -1) {
-    workingAccounts[ownersCapitalIdx] = {
-      ...workingAccounts[ownersCapitalIdx],
-      accountType: "Group",
-      description: "Funds invested by owners / shareholders (subsidiary ledgers per owner)",
-      updatedAt: new Date().toISOString(),
-    };
+  // ── Persist static migration results ────────────────────────────────────────
+  if (staticChanged) {
+    const sk = tenantKey(COA_KEY);
+    _lsSet(sk, workingAccounts);
+    _apiWrite(sk, workingAccounts);
+  }
+  if (migrationsChanged) {
+    _saveCoaMigrations(done);
   }
 
-  // ── Migrate sys-2101 (Trade Payables) from Ledger to Group ───────────────────
-  const apTradeIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.AP_TRADE && a.accountType === "Ledger");
-  if (apTradeIdx !== -1) {
-    workingAccounts[apTradeIdx] = {
-      ...workingAccounts[apTradeIdx],
-      accountType: "Group",
-      description: "Trade payables — subsidiary ledgers per supplier",
-      updatedAt: new Date().toISOString(),
-    };
-  }
+  // ════════════════════════════════════════════════════════════════════════════
+  // DYNAMIC MAINTENANCE — always runs, reacts to live product/customer data.
+  // Safe to run every login: each block is idempotent and skips work when the
+  // data is already up-to-date.
+  // ════════════════════════════════════════════════════════════════════════════
 
-  // ── Migrate sys-1300 (Inventory / Stock) from Ledger to Group ────────────────
-  const inventoryIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.INVENTORY && a.accountType === "Ledger");
-  if (inventoryIdx !== -1) {
-    workingAccounts[inventoryIdx] = {
-      ...workingAccounts[inventoryIdx],
-      accountType: "Group",
-      description: "Stock & inventory value — subsidiary ledgers per product/category",
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  // ── Migrate sys-2130 (Accrued Expenses) from Ledger to Group ─────────────────
-  const accruedExpIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.ACCRUED_EXP && a.accountType === "Ledger");
-  if (accruedExpIdx !== -1) {
-    workingAccounts[accruedExpIdx] = {
-      ...workingAccounts[accruedExpIdx],
-      accountType: "Group",
-      description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type",
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  // ── Migrate sys-3100 (Sales Revenue) from Ledger to Group ────────────────────
-  const salesRevIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.SALES_REVENUE && a.accountType === "Ledger");
-  if (salesRevIdx !== -1) {
-    workingAccounts[salesRevIdx] = {
-      ...workingAccounts[salesRevIdx],
-      accountType: "Group",
-      description: "Revenue from product and service sales — subsidiary ledgers per product",
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  // ── Migrate sys-3200 (Other Income) from Ledger to Group ─────────────────────
-  const otherIncomeIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.OTHER_INCOME && a.accountType === "Ledger");
-  if (otherIncomeIdx !== -1) {
-    workingAccounts[otherIncomeIdx] = {
-      ...workingAccounts[otherIncomeIdx],
-      accountType: "Group",
-      description: "Miscellaneous or non-operating income — subsidiary ledgers per income type",
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  // ── Migrate sys-4600 (Purchases) from Ledger to Group ────────────────────────
-  const purchaseExpIdx = workingAccounts.findIndex(a => a.id === SYS_ACCS.PURCHASE_EXP && a.accountType === "Ledger");
-  if (purchaseExpIdx !== -1) {
-    workingAccounts[purchaseExpIdx] = {
-      ...workingAccounts[purchaseExpIdx],
-      accountType: "Group",
-      description: "Goods purchased for resale or use — subsidiary ledgers per product",
-      updatedAt: new Date().toISOString(),
-    };
-  }
+  // Re-read after the static saves so dynamic work sees the latest COA state.
+  const latestAccounts = getAccounts();
+  const existingWorkingIds = new Set(latestAccounts.map(a => a.id));
+  let dynamicAccounts = [...latestAccounts];
+  let dynamicChanged = false;
 
   // ── Sync per-category COA ledgers ────────────────────────────────────────────
   // Each unique product category gets three shared ledgers:
@@ -5094,73 +5161,55 @@ export function seedDefaultCoaAccounts(): void {
   //   Category | Purchase  → Purchases (4600)
   //   Category | Inventory → Inventory / Stock (1140)
   const products = getProducts();
-  const existingWorkingIds = new Set(workingAccounts.map(a => a.id));
-
-  // ── Migrate: remove all old per-product ledgers (sr-prod-*, pur-prod-*, inv-prod-*)
-  // These are superseded by per-category ledgers. Remove them all.
-  const LEGACY_PROD_PREFIXES = ["sr-prod-", "pur-prod-", "inv-prod-"];
-  const beforeLegacyClean = workingAccounts.length;
-  workingAccounts = workingAccounts.filter(
-    a => !LEGACY_PROD_PREFIXES.some(pfx => a.id.startsWith(pfx))
-  );
-  const legacyRemoved = beforeLegacyClean - workingAccounts.length;
-  if (legacyRemoved > 0) {
-    console.info(`[COA] Migrated: removed ${legacyRemoved} old per-product ledger(s) → replaced by per-category ledgers`);
-  }
 
   // Collect unique categories from all products
   const uniqueCategories = [...new Set(products.map(p => p.category?.trim() || "Uncategorised"))];
 
-  const srChildren  = workingAccounts.filter(a => a.parentId === SYS_ACCS.SALES_REVENUE);
-  const purChildren = workingAccounts.filter(a => a.parentId === SYS_ACCS.PURCHASE_EXP);
-  const invChildren = workingAccounts.filter(a => a.parentId === SYS_ACCS.INVENTORY);
+  const srChildren  = dynamicAccounts.filter(a => a.parentId === SYS_ACCS.SALES_REVENUE);
+  const purChildren = dynamicAccounts.filter(a => a.parentId === SYS_ACCS.PURCHASE_EXP);
+  const invChildren = dynamicAccounts.filter(a => a.parentId === SYS_ACCS.INVENTORY);
 
   let nextSrCode  = srChildren.reduce((max, a)  => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 3100) + 1;
   let nextPurCode = purChildren.reduce((max, a) => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 4600) + 1;
   let nextInvCode = invChildren.reduce((max, a) => { const n = parseInt(a.code ?? "0", 10); return n > max ? n : max; }, 1140) + 1;
-
-  let categoryLedgersAdded = 0;
 
   for (const cat of uniqueCategories) {
     const slug   = _catSlug(cat);
     const srId   = `sr-cat-${slug}`;
     const purId  = `pur-cat-${slug}`;
     const invId  = `inv-cat-${slug}`;
-    const srName  = `${cat} | Revenue`;
-    const purName = `${cat} | Purchase`;
-    const invName = `${cat} | Inventory`;
 
     if (!existingWorkingIds.has(srId)) {
-      workingAccounts.push({
-        id: srId, code: String(nextSrCode++), name: srName,
+      dynamicAccounts.push({
+        id: srId, code: String(nextSrCode++), name: `${cat} | Revenue`,
         head: "Revenue / Income", accountType: "Ledger",
         parentId: SYS_ACCS.SALES_REVENUE, subType: "Sales",
         description: `Revenue account for the ${cat} category`,
         openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
       });
-      categoryLedgersAdded++;
+      dynamicChanged = true;
     }
 
     if (!existingWorkingIds.has(purId)) {
-      workingAccounts.push({
-        id: purId, code: String(nextPurCode++), name: purName,
+      dynamicAccounts.push({
+        id: purId, code: String(nextPurCode++), name: `${cat} | Purchase`,
         head: "Expense", accountType: "Ledger",
         parentId: SYS_ACCS.PURCHASE_EXP, subType: "Purchases",
         description: `Purchase account for the ${cat} category`,
         openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
       });
-      categoryLedgersAdded++;
+      dynamicChanged = true;
     }
 
     if (!existingWorkingIds.has(invId)) {
-      workingAccounts.push({
-        id: invId, code: String(nextInvCode++), name: invName,
+      dynamicAccounts.push({
+        id: invId, code: String(nextInvCode++), name: `${cat} | Inventory`,
         head: "Assets", accountType: "Ledger",
         parentId: SYS_ACCS.INVENTORY, subType: "Inventory",
         description: `Inventory account for the ${cat} category`,
         openingBalance: 0, paymentType: null, isActive: true, createdAt: now, updatedAt: now,
       });
-      categoryLedgersAdded++;
+      dynamicChanged = true;
     }
   }
 
@@ -5172,17 +5221,18 @@ export function seedDefaultCoaAccounts(): void {
   const activeCatSlugs = new Set(uniqueCategories.map(c => _catSlug(c)));
   const CAT_PREFIXES = ["sr-cat-", "pur-cat-", "inv-cat-"];
   const PROTECTED_IDS = new Set<string>([SYS_ACCS.GENERAL_SALES_REV, SYS_ACCS.GENERAL_INVENTORY]);
-  const beforeCatClean = workingAccounts.length;
-  workingAccounts = workingAccounts.filter(a => {
-    if (PROTECTED_IDS.has(a.id)) return true;      // always keep General fallback ledgers
+  const beforeCatClean = dynamicAccounts.length;
+  dynamicAccounts = dynamicAccounts.filter(a => {
+    if (PROTECTED_IDS.has(a.id)) return true;
     const pfx = CAT_PREFIXES.find(p => a.id.startsWith(p));
     if (!pfx) return true;
     const slug = a.id.slice(pfx.length);
     return activeCatSlugs.has(slug);
   });
-  const orphansRemoved = beforeCatClean - workingAccounts.length;
+  const orphansRemoved = beforeCatClean - dynamicAccounts.length;
   if (orphansRemoved > 0) {
     console.info(`[COA] Removed ${orphansRemoved} orphaned category ledger(s) — no products use those categories`);
+    dynamicChanged = true;
   }
 
   // ── Orphaned contact ledger cleanup ─────────────────────────────────────────
@@ -5192,25 +5242,25 @@ export function seedDefaultCoaAccounts(): void {
   const allCustomers = getStored<{ ledgerAccountId?: string }>(CUSTOMERS_KEY);
   const contactLedgerIds = new Set(allCustomers.map(c => c.ledgerAccountId).filter(Boolean) as string[]);
   const CONTACT_PARENT_IDS = new Set<string>([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
-  const beforeContactClean = workingAccounts.length;
-  workingAccounts = workingAccounts.filter(a => {
+  const beforeContactClean = dynamicAccounts.length;
+  dynamicAccounts = dynamicAccounts.filter(a => {
     if (a.accountType !== "Ledger") return true;
     if (!CONTACT_PARENT_IDS.has(a.parentId || "")) return true;
     return contactLedgerIds.has(a.id); // keep only if a customer still references it
   });
-  const contactOrphansRemoved = beforeContactClean - workingAccounts.length;
+  const contactOrphansRemoved = beforeContactClean - dynamicAccounts.length;
   if (contactOrphansRemoved > 0) {
     console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact ledger(s) — customers/suppliers no longer exist`);
+    dynamicChanged = true;
   }
 
-  if (toAdd.length > 0 || migrations.length > 0 || ownersCapitalIdx !== -1 || apTradeIdx !== -1 || inventoryIdx !== -1 || accruedExpIdx !== -1 || salesRevIdx !== -1 || otherIncomeIdx !== -1 || purchaseExpIdx !== -1 || categoryLedgersAdded > 0 || legacyRemoved > 0 || orphansRemoved > 0 || contactOrphansRemoved > 0) {
+  if (dynamicChanged) {
     const sk = tenantKey(COA_KEY);
-    _lsSet(sk, workingAccounts);
-    _apiWrite(sk, workingAccounts);
+    _lsSet(sk, dynamicAccounts);
+    _apiWrite(sk, dynamicAccounts);
   }
 
-  // ── Backfill subsidiary ledgers for existing entities ────────────────────────
-  // Customers → AR Group
+  // ── Always: backfill customer AR subsidiary ledgers ──────────────────────────
   const customers = getStored<{ id: string; name: string; company?: string; ledgerAccountId?: string }>(CUSTOMERS_KEY);
   let customersUpdated = false;
   const customersPatched = customers.map(c => {
@@ -5230,39 +5280,8 @@ export function seedDefaultCoaAccounts(): void {
     setStored(CUSTOMERS_KEY, customersPatched);
   }
 
-  // ── Seed default Cash in Hand payment account ────────────────────────────────
-  const existingPAs = getStored<{ id: string }>(PAYMENT_ACCOUNTS_KEY);
-  if (!existingPAs.some(p => p.id === SYS_PA_CASH)) {
-    const nowPA = new Date().toISOString();
-    const defaultCash: PaymentAccount = {
-      id:              SYS_PA_CASH,
-      accountTitle:    "Cash",
-      bankName:        "",
-      paymentMethod:   "Cash",
-      iban:            "",
-      description:     "Default cash account — physical cash on premises",
-      isActive:        true,
-      ledgerAccountId: SYS_ACCS.CASH,
-      createdAt:       nowPA,
-      updatedAt:       nowPA,
-    };
-    setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
-  }
-
-  // ── Migrate SYS_PA_CASH name: "Cash in Hand" → "Cash" ───────────────────────
-  const cashPA = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).find(p => p.id === SYS_PA_CASH);
-  if (cashPA && cashPA.accountTitle === "Cash in Hand") {
-    const patched = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY).map(p =>
-      p.id === SYS_PA_CASH
-        ? { ...p, accountTitle: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() }
-        : p
-    );
-    setStored(PAYMENT_ACCOUNTS_KEY, patched);
-  }
-
-  // ── Backfill: create COA ledgers for existing payment accounts (no ledgerAccountId OR linked account missing) ──
+  // ── Always: backfill COA ledgers for payment accounts missing one ────────────
   const allPAs = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
-  // Must fetch after the working-accounts save above so we see the latest COA state
   const existingCoaIds = new Set(getAccounts().map(a => a.id));
   const needsBackfill = allPAs.some(
     pa => pa.id !== SYS_PA_CASH && (!pa.ledgerAccountId || !existingCoaIds.has(pa.ledgerAccountId))
