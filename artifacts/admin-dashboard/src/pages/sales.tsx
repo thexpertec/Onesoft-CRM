@@ -510,7 +510,7 @@ interface VariantPickerDialogProps {
   priceMode: "retail" | "wholesale" | "clubcard";
   localItems: SaleItem[];
   onClose: () => void;
-  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => void;
+  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, productId: string, variantId: string) => void;
   onAddBase: (product: Product) => void;
 }
 
@@ -573,7 +573,7 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
     const sku = selected.sku || product.sku;
     const name = `${product.name} — ${variantLabel(selected)}`;
     const price = resolvedPrice(selected);
-    onAdd(sku, name, price, qty, product.unit || "pcs");
+    onAdd(sku, name, price, qty, product.unit || "pcs", product.id, selected.id);
   };
 
   if (!product) return null;
@@ -2575,7 +2575,7 @@ export default function SalesPage() {
   }, [detailId, editSale]);
 
   // ── Add variant from picker ──
-  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => {
+  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, productId: string, variantId: string) => {
     setVariantPickerProduct(null);
     const current = localItemsRef.current;
     const settings = getSettings();
@@ -2586,6 +2586,8 @@ export default function SalesPage() {
     } else {
       const item: SaleItem = {
         ...blankSaleItem(),
+        productId,
+        variantId,
         productName: variantName,
         sku: variantSku,
         unit,
@@ -2658,6 +2660,7 @@ export default function SalesPage() {
       const defaultDiscountType = settings.posDiscountType ?? "pct";
       const item: SaleItem = {
         ...blankSaleItem(),
+        productId: product.id,
         productName: product.name,
         sku: product.sku,
         unit: product.unit || "pcs",
@@ -2703,14 +2706,31 @@ export default function SalesPage() {
     // Auto-post JE for On Credit sales (only once)
     let jeId: string | undefined = detailSale?.jeId;
     if (status === "On Credit" && !jeId) {
-      const sub_     = saleTotal(localItems);
-      const taxPct_  = Math.max(0, parseFloat(localMeta.taxRate || "0") || 0);
-      const taxAmt_  = parseFloat((sub_ * taxPct_ / 100).toFixed(2));
-      const delAmt_  = parseFloat(localMeta.deliveryCharges || "0") || 0;
-      const costTotal = localItems.reduce((sum, item) => {
-        const prod = findProductForItem(item, allProducts);
-        return sum + effectiveItemCost(item, prod) * (parseFloat(item.qty) || 0);
-      }, 0);
+      const sub_    = saleTotal(localItems);
+      const taxPct_ = Math.max(0, parseFloat(localMeta.taxRate || "0") || 0);
+      const taxAmt_ = parseFloat((sub_ * taxPct_ / 100).toFixed(2));
+      const delAmt_ = parseFloat(localMeta.deliveryCharges || "0") || 0;
+      // Use fresh product list for accurate cost prices (same approach as handleComplete)
+      const freshProds = getProducts();
+      // Build per-category breakdown for COGS and Inventory lines
+      const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+      for (const item of localItems) {
+        const prod    = findProductForItem(item, freshProds);
+        const qty     = parseFloat(item.qty) || 0;
+        const price   = parseFloat(item.unitPrice) || 0;
+        const disc    = parseFloat(item.discount) || 0;
+        const lineNet = qty * price - (item.discountType === "amt" ? Math.min(disc, price) * qty : qty * price * disc / 100);
+        const cost    = effectiveItemCost(item, prod) * qty;
+        const cat     = prod?.category?.trim() || "Uncategorised";
+        const prev    = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
+        catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
+      }
+      const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
+        category,
+        subtotal:  parseFloat(v.subtotal.toFixed(2)),
+        costTotal: parseFloat(v.costTotal.toFixed(2)),
+      }));
+      const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
       const je = autoPostSaleJE({
         source:        "POS",
         reference:     detailSale?.saleNumber || "",
@@ -2721,6 +2741,7 @@ export default function SalesPage() {
         taxAmount:     taxAmt_,
         grandTotal:    parseFloat((sub_ + taxAmt_ + delAmt_).toFixed(2)),
         costTotal:     parseFloat(costTotal.toFixed(2)),
+        categoryLines,
       });
       if (je) jeId = je.id;
     }
