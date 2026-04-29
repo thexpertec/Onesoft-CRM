@@ -567,6 +567,61 @@ const CUSTOMERS_KEY = "admin-customers";
 export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY);
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
+/** Reference tag used to identify auto-generated opening-balance JEs. */
+const _OB_REF_PREFIX = "OB-";
+
+/**
+ * Post (or update) a "brought-forward" opening-balance journal entry for a
+ * customer/supplier ledger account.  Calling with amount=0 deletes any
+ * existing OB entry.  Safe to call multiple times — only one OB entry per
+ * ledger account is kept.
+ */
+function _upsertOpeningBalanceJE(
+  ledgerAccountId: string,
+  isSupplier: boolean,
+  amount: number,          // positive = Dr receivable / Cr payable (normal sign)
+  date: string,
+  entityName: string,
+): void {
+  const ref = `${_OB_REF_PREFIX}${ledgerAccountId}`;
+  const existing = getJournalEntries().find(e => e.reference === ref);
+
+  if (amount === 0) {
+    if (existing) deleteJournalEntry(existing.id);
+    return;
+  }
+
+  const absAmt = Math.abs(amount);
+  // For a buyer:    Dr customer ledger (receivable),  Cr Opening Balances equity
+  // For a supplier: Dr Opening Balances equity,        Cr supplier ledger (payable)
+  const lines: JournalEntryLine[] = isSupplier
+    ? [
+        { id: crypto.randomUUID(), ledgerId: SYS_ACCS.OPENING_BAL_EQUITY, narration: `Opening balance — ${entityName}`, debit: absAmt, credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: ledgerAccountId,              narration: `Opening balance — ${entityName}`, debit: 0,      credit: absAmt },
+      ]
+    : [
+        { id: crypto.randomUUID(), ledgerId: ledgerAccountId,              narration: `Opening balance — ${entityName}`, debit: absAmt, credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: SYS_ACCS.OPENING_BAL_EQUITY, narration: `Opening balance — ${entityName}`, debit: 0,      credit: absAmt },
+      ];
+
+  const jeData = {
+    date,
+    reference: ref,
+    description: `Opening Balance — ${entityName}`,
+    lines,
+    status: "posted" as const,
+    totalDebit:  absAmt,
+    totalCredit: absAmt,
+    isBalanced:  true,
+  };
+
+  if (existing) {
+    updateJournalEntry(existing.id, jeData);
+  } else {
+    createJournalEntry(jeData);
+  }
+}
+
 export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "updatedAt">): Customer => {
   const role        = data.customerRole ?? "Buyer";
   const isSupplier  = role === "Supplier";
@@ -590,6 +645,15 @@ export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "update
   };
   setStored(CUSTOMERS_KEY, [...getCustomers(), newCustomer]);
   addActivity({ action: "created", entity: "Customer", entityName: newCustomer.name, detail: newCustomer.company || undefined });
+
+  // Post opening balance JE if one was provided
+  if (newCustomer.openingBalance && newCustomer.openingBalance !== 0) {
+    const obDate = newCustomer.customerSince
+      ? newCustomer.customerSince
+      : new Date().toISOString().slice(0, 10);
+    _upsertOpeningBalanceJE(ledgerAccountId, isSupplier, newCustomer.openingBalance, obDate, displayName);
+  }
+
   return newCustomer;
 };
 
@@ -639,11 +703,24 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
     }
   }
 
-  customers[index] = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+  const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+  customers[index] = updated;
   setStored(CUSTOMERS_KEY, customers);
   const detail = updates.status ? `Status → ${updates.status}` : undefined;
-  addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Customer", entityName: customers[index].name, detail });
-  return customers[index];
+  addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Customer", entityName: updated.name, detail });
+
+  // Sync opening balance JE if it changed
+  if ("openingBalance" in updates && updated.ledgerAccountId) {
+    const newOB = updated.openingBalance ?? 0;
+    const isSupplier = (updated.customerRole ?? "Buyer") === "Supplier";
+    const displayName = updated.name + (updated.company ? ` (${updated.company})` : "");
+    const obDate = updated.customerSince
+      ? updated.customerSince
+      : updated.createdAt.slice(0, 10);
+    _upsertOpeningBalanceJE(updated.ledgerAccountId, isSupplier, newOB, obDate, displayName);
+  }
+
+  return updated;
 };
 
 /**
@@ -1669,6 +1746,27 @@ export function backfillMissingSKUs(): void {
     }
   }
   if (stockChanged) setStored(STOCK_KEY, stocks);
+}
+
+/**
+ * One-time migration: for every customer/supplier that has a non-zero
+ * openingBalance stored on their record but no corresponding journal entry,
+ * post the opening-balance JE automatically.
+ * Safe to call multiple times — skips any customer whose OB JE already exists.
+ */
+export function backfillOpeningBalanceJEs(): void {
+  const customers = getCustomers();
+  for (const c of customers) {
+    if (!c.openingBalance || c.openingBalance === 0) continue;
+    if (!c.ledgerAccountId) continue;
+    const ref = `${_OB_REF_PREFIX}${c.ledgerAccountId}`;
+    const alreadyExists = getJournalEntries().some(e => e.reference === ref);
+    if (alreadyExists) continue;
+    const isSupplier = (c.customerRole ?? "Buyer") === "Supplier";
+    const displayName = c.name + (c.company ? ` (${c.company})` : "");
+    const obDate = c.customerSince ?? c.createdAt.slice(0, 10);
+    _upsertOpeningBalanceJE(c.ledgerAccountId, isSupplier, c.openingBalance, obDate, displayName);
+  }
 }
 
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
@@ -4641,6 +4739,7 @@ export const SYS_ACCS = {
   EQUITY_GROUP:       "sys-5000",   // Capital & Equity root (5000)
   OWNERS_CAPITAL:     "sys-5100",   // Owner's Capital / Share Capital (5100)
   RETAINED_EARN:      "sys-5200",   // Retained Earnings (5200)
+  OPENING_BAL_EQUITY: "sys-5300",   // Opening Balances Equity (5300) — contra account for OB journal entries
 } as const;
 
 type SysAccDef = {
@@ -4702,6 +4801,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.EQUITY_GROUP,       code: "5000", name: "Capital & Equity",           head: "Equity",           accountType: "Group",  parentId: null,                         subType: "Equity",           description: "Owner's equity in the business" },
   { id: SYS_ACCS.OWNERS_CAPITAL,     code: "5100", name: "Owner's Capital",            head: "Equity",           accountType: "Group",  parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Capital",          description: "Funds invested by owners / shareholders (subsidiary ledgers per owner)" },
   { id: SYS_ACCS.RETAINED_EARN,      code: "5200", name: "Retained Earnings",          head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Retained",         description: "Accumulated profits retained in the business" },
+  { id: SYS_ACCS.OPENING_BAL_EQUITY, code: "5300", name: "Opening Balances",           head: "Equity",           accountType: "Ledger", parentId: SYS_ACCS.EQUITY_GROUP,        subType: "Opening Balance",  description: "Contra account used for customer/supplier/staff opening balance journal entries" },
 ];
 
 /**
