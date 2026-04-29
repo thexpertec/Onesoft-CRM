@@ -2817,17 +2817,19 @@ export default function SalesPage() {
         // ── Subsequent collection against an existing AR sale JE ────────────
         // The primary JE (Dr AR / Cr Revenue) already exists.
         // If new payment is being collected, post a cash-receipt JE:
-        //   Dr Cash/Bank | Cr AR
+        //   Dr Cash/Bank | Cr [Contact's sub-ledger]  (works for both buyers/AR and suppliers/AP)
         const additionalPaid = parseFloat((paidNum - prevPaid).toFixed(2));
         if (additionalPaid > 0.005) {
-          // Confirm the linked JE actually debits an AR account before posting receipt
+          // Confirm the linked JE debits a contact sub-ledger (Receivable OR Payable)
+          // before posting the receipt — avoids double-posting on fully-cash sales
           const linkedJE = getJournalEntries().find(e => e.id === jeId);
           if (linkedJE) {
-            const debitLine = linkedJE.lines.find(l => l.debit > 0);
-            const isARSale  = debitLine
-              ? (getAccounts().find(a => a.id === debitLine.ledgerId)?.subType === "Receivable")
-              : false;
-            if (isARSale) {
+            const debitLine    = linkedJE.lines.find(l => l.debit > 0);
+            const debitSubType = debitLine
+              ? (getAccounts().find(a => a.id === debitLine.ledgerId)?.subType ?? "")
+              : "";
+            const isContactLedger = debitSubType === "Receivable" || debitSubType === "Payable";
+            if (isContactLedger) {
               const outstanding = parseFloat((grandTotal_ - prevPaid).toFixed(2));
               const receiptAmt  = Math.min(additionalPaid, outstanding);
               if (receiptAmt > 0.005) {

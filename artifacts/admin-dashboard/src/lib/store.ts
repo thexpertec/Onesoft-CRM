@@ -5844,9 +5844,11 @@ export function autoPostSaleJE(params: {
 }
 
 /**
- * Posts a cash/bank receipt JE when a credit-sale invoice is subsequently paid.
- *   DR  Cash / Bank              = amount received
- *   CR  Accounts Receivable      = amount received  (reverses the accrual)
+ * Posts a cash/bank receipt JE when a credit-sale is subsequently paid.
+ * Works for both buyer (AR) and supplier (AP) sub-ledgers — the contact's
+ * own ledger is resolved via CRM lookup regardless of COA position.
+ *   DR  Cash / Bank               = amount received
+ *   CR  Contact's sub-ledger      = amount received  (reverses the accrual)
  */
 export function autoPostCashReceiptJE(params: {
   reference:     string;
@@ -5864,17 +5866,18 @@ export function autoPostCashReceiptJE(params: {
     ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
     : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH);
 
-  // AR credit account — same ledger the accrual JE debited
-  const arId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
-            || resolveToLedger(s.accReceivable)
-            || SYS_ACCS.AR_TRADE;
+  // Contact's sub-ledger — CRM-first lookup returns their ledgerAccountId regardless of
+  // whether it sits under AR (Receivable) or AP (Payable) in the COA
+  const contactLedgerId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+                       || resolveToLedger(s.accReceivable)
+                       || SYS_ACCS.AR_TRADE;
 
-  if (!cashId || !arId) return null;
+  if (!cashId || !contactLedgerId) return null;
 
   const narration = `Receipt – ${params.reference} – ${params.customer}`;
   const lines: JournalEntryLine[] = [
-    { id: crypto.randomUUID(), ledgerId: cashId, narration, debit: params.amount,  credit: 0 },
-    { id: crypto.randomUUID(), ledgerId: arId,   narration, debit: 0, credit: params.amount },
+    { id: crypto.randomUUID(), ledgerId: cashId,          narration, debit: params.amount,  credit: 0 },
+    { id: crypto.randomUUID(), ledgerId: contactLedgerId, narration, debit: 0, credit: params.amount },
   ];
 
   return createJournalEntry({
