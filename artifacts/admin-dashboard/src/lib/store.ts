@@ -1776,15 +1776,72 @@ export function backfillOpeningBalanceJEs(): void {
  * Safe to call multiple times — skips sales whose JE already debits an AR account.
  */
 export function backfillPOSCreditSaleJEs(): void {
-  const sales = getSales();
-  const entries = getJournalEntries();
   const customers = getCustomers();
+  const allProducts = getProducts();
 
-  // Cash & Bank ledger IDs
+  // ── Helper: compute grand total from a sale (mirrors saleTotalFull in sales.tsx) ──
+  const _lineTotal = (item: SaleItem): number => {
+    const q = parseFloat(item.qty) || 0, p = parseFloat(item.unitPrice) || 0;
+    if (item.bogoApplied) return Math.ceil(q / 2) * p;
+    const d = parseFloat(item.discount) || 0;
+    if (item.discountType === "amt") return Math.max(0, q * p - d);
+    return q * p * (1 - d / 100);
+  };
+  const _grandTotal = (sale: Sale): { subtotal: number; taxAmt: number; grandTotal: number; costTotal: number } => {
+    const items = sale.items ?? [];
+    const sub = items.reduce((s, i) => s + _lineTotal(i), 0);
+    const invDiscVal = parseFloat(sale.invoiceDiscount || "0") || 0;
+    const afterDisc = invDiscVal <= 0 ? sub
+      : sale.invoiceDiscountType === "amt" ? Math.max(0, sub - invDiscVal)
+      : sub * (1 - invDiscVal / 100);
+    const taxPct = (parseFloat(sale.taxRate || "0") || 0) / 100;
+    const taxAmt = parseFloat((afterDisc * taxPct).toFixed(2));
+    const delivery = parseFloat(sale.deliveryCharges || "0") || 0;
+    const costTotal = items.reduce((s, i) => {
+      const prod = allProducts.find(p => p.id === i.productId);
+      return s + effectiveItemCost(i, prod) * (parseFloat(i.qty) || 0);
+    }, 0);
+    return {
+      subtotal:  parseFloat(afterDisc.toFixed(2)),
+      taxAmt,
+      grandTotal: parseFloat((afterDisc + taxAmt + delivery).toFixed(2)),
+      costTotal:  parseFloat(costTotal.toFixed(2)),
+    };
+  };
+
+  // ── Part A: Create JEs for completed/credit sales that have none ─────────
+  for (const sale of getSales()) {
+    if (sale.status !== "Completed" && sale.status !== "On Credit") continue;
+    if (sale.jeId) continue; // already linked — handled in Part B
+
+    const items = sale.items ?? [];
+    if (items.length === 0) continue;
+
+    const { subtotal, taxAmt, grandTotal, costTotal } = _grandTotal(sale);
+    if (!(grandTotal > 0.005)) continue;
+
+    const amountPaid = parseFloat(sale.amountPaid || "0") || 0;
+    const je = autoPostSaleJE({
+      source:        "POS",
+      reference:     sale.saleNumber || "",
+      customer:      sale.customer || "Walk-in",
+      date:          sale.saleDate || new Date().toISOString().slice(0, 10),
+      paymentMethod: (sale.paymentMethod as SalePayment) || "Cash",
+      subtotal,
+      taxAmount:     taxAmt,
+      grandTotal,
+      costTotal,
+      amountPaid,
+    });
+    if (je) {
+      updateSale(sale.id, { jeId: je.id });
+    }
+  }
+
+  // ── Part B: Re-route existing JEs that debit Cash/Bank for credit sales ──
+  // (These were correctly created but the debit side points at Cash/Bank
+  //  instead of the customer's AR/AP sub-ledger.)
   const cbIds = new Set(getCashBankLedgers().map(a => a.id));
-
-  // Contact sub-ledger IDs — any account with subType "Receivable" (buyer/AR) or "Payable" (supplier/AP).
-  // JEs that debit one of these are already correct and must not be re-routed.
   const contactLedgerIds = new Set(
     getAccounts()
       .filter(a => a.accountType === "Ledger" && (a.subType === "Receivable" || a.subType === "Payable"))
@@ -1792,32 +1849,28 @@ export function backfillPOSCreditSaleJEs(): void {
   );
   contactLedgerIds.add(SYS_ACCS.AR_TRADE);
 
-  for (const sale of sales) {
+  // Re-read after Part A mutations so we see the freshly-linked jeIds
+  const freshEntries = getJournalEntries();
+
+  for (const sale of getSales()) {
     if (sale.status !== "Completed") continue;
     if (!sale.jeId) continue;
 
-    // Check for outstanding balance
     const paid = parseFloat(sale.amountPaid || "0") || 0;
-    // We consider it outstanding if amountPaid is 0 or very small vs total
-    // Use the JE totalDebit as the proxy for grand total (avoids re-computing from items)
-    const je = entries.find(e => e.id === sale.jeId);
+    const je = freshEntries.find(e => e.id === sale.jeId);
     if (!je) continue;
 
     const grandTotal = je.totalDebit ?? 0;
-    if (!(grandTotal > 0.005)) continue;          // handles 0, undefined, NaN, negative
-    if (paid >= grandTotal - 0.005) continue;     // already fully paid — skip
+    if (!(grandTotal > 0.005)) continue;
+    if (paid >= grandTotal - 0.005) continue; // fully paid — Cash debit is correct
 
-    // Find the debit line — it should be pointing to Cash/Bank but shouldn't
     const debitLineIdx = je.lines.findIndex(l => l.debit > 0);
     if (debitLineIdx === -1) continue;
     const debitLine = je.lines[debitLineIdx];
 
-    // Skip if it already debits a contact sub-ledger (AR/Receivable or AP/Payable) — correct
-    if (contactLedgerIds.has(debitLine.ledgerId)) continue;
-    // Skip if it's not a Cash/Bank account (unexpected structure — leave alone)
-    if (!cbIds.has(debitLine.ledgerId)) continue;
+    if (contactLedgerIds.has(debitLine.ledgerId)) continue; // already AR/AP — correct
+    if (!cbIds.has(debitLine.ledgerId)) continue;           // unexpected structure — leave alone
 
-    // Find customer's AR sub-ledger
     const customerName = sale.customer || "";
     const customerRec = customers.find(c =>
       c.name === customerName || (c.name + (c.company ? ` (${c.company})` : "")) === customerName
@@ -1826,7 +1879,6 @@ export function backfillPOSCreditSaleJEs(): void {
       || findSubLedgerForParty(customerName, SYS_ACCS.AR_GROUP)
       || SYS_ACCS.AR_TRADE;
 
-    // Update the JE: swap the debit account from Cash/Bank to AR
     const updatedLines = [...je.lines];
     updatedLines[debitLineIdx] = { ...debitLine, ledgerId: arLedgerId };
     updateJournalEntry(je.id, { lines: updatedLines });
@@ -5539,12 +5591,12 @@ export function getJournalEntries(): JournalEntry[] {
 }
 
 function _saveJournalEntries(entries: JournalEntry[]): void {
-  const sk = tenantKey(JE_KEY);
-  // Use _lsCache (memory + localStorage) so that JEs survive a page refresh
-  // in the warm-start window before the async syncAllFromServer completes,
-  // exactly the same way sales / customers / products are treated by setStored.
-  _lsCache(sk, entries);
-  _apiWrite(sk, entries);
+  // Use setStored so that:
+  //   1. _memRaw + localStorage are updated immediately (warm-start cache)
+  //   2. _apiWrite fires to persist to the server KV store
+  //   3. A "storage" event is dispatched so same-tab hooks (useJournalEntries)
+  //      refresh without requiring a page navigation or tab switch.
+  setStored(JE_KEY, entries);
 }
 
 export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">): JournalEntry {
@@ -6301,7 +6353,22 @@ function _dedupeByKey<T extends { createdAt?: string }>(
  * an inconsistency and PUSH local → server to heal it.  This guarantees the
  * tenant registry (and the like) eventually converges across every device.
  */
-const SELF_HEAL_GLOBAL_KEYS = ["admin-tenants", "admin-users"] as const;
+// Keys that must be self-healed in the global namespace (no tenant prefix).
+// This covers both platform keys (always global) AND business-data keys that live
+// in global when no tenant is active — so a mid-flight page refresh never clobbers
+// records that were written to memory/localStorage but whose _apiWrite hadn't
+// completed yet when syncAllFromServer read the server state.
+const SELF_HEAL_GLOBAL_KEYS = [
+  "admin-tenants",
+  "admin-users",
+  // Business data — live in global when no tenant is active
+  "admin-journal-entries",
+  "admin-sales",
+  "admin-customers",
+  "admin-invoices",
+  "admin-purchases",
+  "admin-payment-accounts",
+] as const;
 
 /**
  * Removes Journal Entries whose reference matches a receipt/payment voucher
