@@ -8,7 +8,7 @@ import {
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
-  getCashBankLedgers, Account,
+  getCashBankLedgers, Account, autoPostCashReceiptJE, getJournalEntries, getAccounts,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -2773,7 +2773,11 @@ export default function SalesPage() {
 
       // Auto-post journal entry (only once — skip if already linked)
       let jeId: string | undefined = detailSale?.jeId;
+      const prevPaid = parseFloat(detailSale?.amountPaid || "0") || 0;
+      const paidNum  = parseFloat(amountPaid || "0") || 0;
+
       if (!jeId) {
+        // ── First completion: post the primary sale JE ─────────────────────
         // Always use a fresh product list so cost prices are up-to-date
         const freshProds = getProducts();
         // Build per-category breakdown for COGS and Inventory lines
@@ -2795,7 +2799,6 @@ export default function SalesPage() {
           costTotal: parseFloat(v.costTotal.toFixed(2)),
         }));
         const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
-        const paidNum = parseFloat(amountPaid || "0") || 0;
         const je = autoPostSaleJE({
           source:        "POS",
           reference:     detailSale?.saleNumber || "",
@@ -2810,6 +2813,35 @@ export default function SalesPage() {
           amountPaid:    paidNum,
         });
         if (je) jeId = je.id;
+      } else {
+        // ── Subsequent collection against an existing AR sale JE ────────────
+        // The primary JE (Dr AR / Cr Revenue) already exists.
+        // If new payment is being collected, post a cash-receipt JE:
+        //   Dr Cash/Bank | Cr AR
+        const additionalPaid = parseFloat((paidNum - prevPaid).toFixed(2));
+        if (additionalPaid > 0.005) {
+          // Confirm the linked JE actually debits an AR account before posting receipt
+          const linkedJE = getJournalEntries().find(e => e.id === jeId);
+          if (linkedJE) {
+            const debitLine = linkedJE.lines.find(l => l.debit > 0);
+            const isARSale  = debitLine
+              ? (getAccounts().find(a => a.id === debitLine.ledgerId)?.subType === "Receivable")
+              : false;
+            if (isARSale) {
+              const outstanding = parseFloat((grandTotal_ - prevPaid).toFixed(2));
+              const receiptAmt  = Math.min(additionalPaid, outstanding);
+              if (receiptAmt > 0.005) {
+                autoPostCashReceiptJE({
+                  reference:     detailSale?.saleNumber || "",
+                  customer:      localMeta.customer || "Walk-in",
+                  date:          new Date().toISOString().slice(0, 10),
+                  amount:        receiptAmt,
+                  paymentMethod,
+                });
+              }
+            }
+          }
+        }
       }
 
       const completedSale = editSale(detailId, {

@@ -1800,9 +1800,9 @@ export function backfillPOSCreditSaleJEs(): void {
     const je = entries.find(e => e.id === sale.jeId);
     if (!je) continue;
 
-    const grandTotal = je.totalDebit;
-    if (grandTotal <= 0) continue;
-    if (paid >= grandTotal - 0.005) continue; // already fully paid
+    const grandTotal = je.totalDebit ?? 0;
+    if (!(grandTotal > 0.005)) continue;          // handles 0, undefined, NaN, negative
+    if (paid >= grandTotal - 0.005) continue;     // already fully paid — skip
 
     // Find the debit line — it should be pointing to Cash/Bank but shouldn't
     const debitLineIdx = je.lines.findIndex(l => l.debit > 0);
