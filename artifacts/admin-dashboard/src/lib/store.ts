@@ -5253,13 +5253,18 @@ export function seedDefaultCoaAccounts(): void {
     setStored(PAYMENT_ACCOUNTS_KEY, patched);
   }
 
-  // ── Backfill: create COA ledgers for existing payment accounts (no ledgerAccountId) ──
+  // ── Backfill: create COA ledgers for existing payment accounts (no ledgerAccountId OR linked account missing) ──
   const allPAs = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
-  const needsBackfill = allPAs.some(pa => !pa.ledgerAccountId && pa.id !== SYS_PA_CASH);
+  // Must fetch after the working-accounts save above so we see the latest COA state
+  const existingCoaIds = new Set(getAccounts().map(a => a.id));
+  const needsBackfill = allPAs.some(
+    pa => pa.id !== SYS_PA_CASH && (!pa.ledgerAccountId || !existingCoaIds.has(pa.ledgerAccountId))
+  );
   if (needsBackfill) _ensureCBGroup();
   let paUpdated = false;
   const pAsPatched = allPAs.map(pa => {
-    if (pa.ledgerAccountId) return pa;         // already linked
+    // Skip only when the PA already has a ledgerAccountId AND that COA account actually exists
+    if (pa.ledgerAccountId && existingCoaIds.has(pa.ledgerAccountId)) return pa;
     if (pa.id === SYS_PA_CASH) return pa;      // default cash uses sys-1200 directly, already set above
     const { name, subType } = _coaNameFromPA(pa);
     const lid = createAccount({
