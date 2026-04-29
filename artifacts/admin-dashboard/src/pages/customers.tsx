@@ -294,7 +294,10 @@ export default function CustomersPage() {
       const q = search.toLowerCase();
       const mQ = !q || [c.name, c.company, c.email, c.phone, c.industry, c.city, c.status, c.notes, ...(c.tags ?? [])].some(v => v?.toLowerCase().includes(q));
       const mS = statusFilter === "All" || c.status === statusFilter;
-      const mT = typeFilter   === "All" || (c.customerType ?? "Regular Customer") === typeFilter;
+      const mT = typeFilter === "All"
+        || (typeFilter === "Buyers"    && (c.customerRole ?? "Buyer") === "Buyer"   && (c.customerType ?? "Regular Customer") !== "POS Customer")
+        || (typeFilter === "Suppliers" && (c.customerRole ?? "Buyer") === "Supplier")
+        || (typeFilter === "POS Buyers" && (c.customerType ?? "Regular Customer") === "POS Customer");
       return mQ && mS && mT;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [customers, search, statusFilter, typeFilter]
@@ -515,8 +518,9 @@ export default function CustomersPage() {
               <SelectTrigger className="w-40 h-8 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Types</SelectItem>
-                <SelectItem value="Regular Customer">Regular Customer</SelectItem>
-                <SelectItem value="POS Customer">POS Customer</SelectItem>
+                <SelectItem value="Buyers">Buyers</SelectItem>
+                <SelectItem value="Suppliers">Suppliers</SelectItem>
+                <SelectItem value="POS Buyers">POS Buyers</SelectItem>
               </SelectContent>
             </Select>
             {/* Wrap text toggle */}
