@@ -555,6 +555,7 @@ export type Customer = {
   totalValue: string;
   currency: string;
   openingBalance?: number;   // Dr = positive (we owe them nothing, they owe us), Cr = negative
+  advanceCredit?: number;    // Overpayment credit balance — deducted from next outstanding
   notes: string;
   tags: string[];
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Receivable
@@ -6165,6 +6166,22 @@ export function deleteRPVoucher(id: string): void {
           _reverseInvoicePayment(line.invoiceId, line.amount, v.voucherNumber);
         }
       }
+      // Reverse any advance credit that was stored when posting
+      if (v.partyName) {
+        const bankLinesTotal = (v.bankLines || []).reduce((s, l) => s + l.amount, 0);
+        const invoiceApplied = v.lines.reduce((s, l) => s + (l.invoiceId ? l.amount : 0), 0);
+        const excess = bankLinesTotal - invoiceApplied;
+        if (excess > 0.01) {
+          const contact = getCustomers().find(c =>
+            c.name.toLowerCase() === v.partyName!.toLowerCase()
+          );
+          if (contact) {
+            updateCustomer(contact.id, {
+              advanceCredit: Math.max(0, (contact.advanceCredit || 0) - excess),
+            });
+          }
+        }
+      }
     }
   }
 
@@ -6307,6 +6324,20 @@ export function postRPVoucherJE(id: string): JournalEntry {
     for (const line of v.lines) {
       if (line.invoiceId) {
         _applyInvoicePayment(line.invoiceId, line.amount);
+      }
+    }
+    // Track advance credit when bank total exceeds invoices paid
+    if (v.partyName) {
+      const bankLinesTotal = (v.bankLines || []).reduce((s, l) => s + l.amount, 0);
+      const invoiceApplied = v.lines.reduce((s, l) => s + (l.invoiceId ? l.amount : 0), 0);
+      const excess = bankLinesTotal - invoiceApplied;
+      if (excess > 0.01) {
+        const contact = getCustomers().find(c =>
+          c.name.toLowerCase() === v.partyName!.toLowerCase()
+        );
+        if (contact) {
+          updateCustomer(contact.id, { advanceCredit: (contact.advanceCredit || 0) + excess });
+        }
       }
     }
   }

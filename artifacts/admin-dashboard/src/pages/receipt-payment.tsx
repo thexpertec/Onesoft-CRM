@@ -491,9 +491,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const isNewReceipt  = vtype === "receipt"  && !isEdit;
 
   // ─── Payment state ───────────────────────────────────────────────────────────
-  const [supplierName,   setSupplierName]   = useState<string>(initial?.partyName ?? "");
-  const [selectedInvIds, setSelectedInvIds] = useState<Set<string>>(new Set());
-  const [payBankLines,   setPayBankLines]   = useState<LineRow[]>(() =>
+  const [supplierName, setSupplierName] = useState<string>(initial?.partyName ?? "");
+  const [payBankLines, setPayBankLines] = useState<LineRow[]>(() =>
     initial?.bankLines?.length
       ? initial.bankLines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
       : [emptyLine()]
@@ -502,63 +501,62 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   // Show ALL CRM contacts — a contact might be tagged as Buyer in CRM but still used as a supplier
   const suppliers = useMemo<Customer[]>(() => getCustomers(), []);
 
+  // Supplier's advance credit balance (from prior overpayments)
+  const supplierAdvanceCredit = useMemo(() => {
+    if (!supplierName) return 0;
+    const contact = suppliers.find(s => s.name.toLowerCase() === supplierName.toLowerCase());
+    return contact?.advanceCredit || 0;
+  }, [suppliers, supplierName]);
+
+  // All purchase invoices for this supplier, sorted by invoice number (oldest first)
   const supplierInvoices = useMemo<Invoice[]>(() => {
     if (!isNewPayment || !supplierName) return [];
-    return getInvoices().filter(inv =>
-      inv.invoiceType === "purchase" &&
-      (inv.customer ?? "").toLowerCase() === supplierName.toLowerCase()
-    );
+    return getInvoices()
+      .filter(inv =>
+        inv.invoiceType === "purchase" &&
+        (inv.customer ?? "").toLowerCase() === supplierName.toLowerCase()
+      )
+      .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber, undefined, { numeric: true }));
   }, [supplierName, isNewPayment]);
 
-  // Select all invoices when the supplier or supplier invoice list changes
-  const invIdsKey = supplierInvoices.map(i => i.id).join(",");
-  useEffect(() => {
-    if (!isNewPayment) return;
-    setSelectedInvIds(new Set(supplierInvoices.map(i => i.id)));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invIdsKey, isNewPayment]);
-
+  // All supplier invoices → AP lines (no selection needed, always all)
   const computedApLines = useMemo<LineRow[]>(() => {
     if (!isNewPayment) return [];
     const settings  = getSettings();
     const groupApId = settings.accPurchasePayable || SYS_ACCS.AP_TRADE;
-    return supplierInvoices
-      .filter(inv => selectedInvIds.has(inv.id))
-      .map(inv => {
-        const apAccId = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AP_TRADE) || groupApId;
-        const apAcc   = accounts.find(a => a.id === apAccId);
-        const outstanding = invOutstanding(inv);
-        return {
-          id:          inv.id,
-          accountId:   apAccId,
-          accountName: apAcc?.name ?? "Trade Payables",
-          description: inv.invoiceNumber,
-          amount:      outstanding.toFixed(2),
-        };
-      });
-  }, [supplierInvoices, selectedInvIds, accounts, isNewPayment]);
+    return supplierInvoices.map(inv => {
+      const apAccId = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AP_TRADE) || groupApId;
+      const apAcc   = accounts.find(a => a.id === apAccId);
+      const outstanding = invOutstanding(inv);
+      return {
+        id:          inv.id,
+        accountId:   apAccId,
+        accountName: apAcc?.name ?? "Trade Payables",
+        description: inv.invoiceNumber,
+        amount:      outstanding.toFixed(2),
+      };
+    });
+  }, [supplierInvoices, accounts, isNewPayment]);
 
   const totalDue  = computedApLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
   const bankTotal = payBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
-  const overBank  = bankTotal > totalDue + 0.001;
+  const payExcess = bankTotal > totalDue + 0.001 ? bankTotal - totalDue : 0;
 
-  // Scale AP debit lines so they sum to bankTotal (partial-payment support)
-  const scaledApLines = useMemo<LineRow[]>(() => {
-    if (!isNewPayment || totalDue === 0 || bankTotal === 0) return computedApLines;
-    const payAmount = Math.min(bankTotal, totalDue);
-    const scale     = payAmount / totalDue;
-    return computedApLines.map(l => ({
-      ...l,
-      amount: ((parseFloat(l.amount) || 0) * scale).toFixed(2),
-    }));
-  }, [computedApLines, bankTotal, totalDue, isNewPayment]);
-
-  const remainingBalance = totalDue - Math.min(bankTotal, totalDue);
+  // Sequential allocation: pay invoices in invoice-number order (oldest first)
+  const sequentialApLines = useMemo<LineRow[]>(() => {
+    if (!isNewPayment || bankTotal === 0) return computedApLines;
+    let remaining = bankTotal;
+    return computedApLines.map(l => {
+      const outstanding = parseFloat(l.amount) || 0;
+      const paying = Math.min(outstanding, remaining);
+      remaining = Math.max(0, remaining - paying);
+      return { ...l, amount: paying.toFixed(2) };
+    });
+  }, [computedApLines, bankTotal, isNewPayment]);
 
   // ─── Receipt state (mirrors payment state with buyer / AR) ───────────────────
-  const [buyerName,            setBuyerName]            = useState<string>(initial?.partyName ?? "");
-  const [selectedReceiptInvIds,setSelectedReceiptInvIds] = useState<Set<string>>(new Set());
-  const [recvBankLines,        setRecvBankLines]        = useState<LineRow[]>(() =>
+  const [buyerName,    setBuyerName]    = useState<string>(initial?.partyName ?? "");
+  const [recvBankLines,setRecvBankLines] = useState<LineRow[]>(() =>
     initial?.bankLines?.length
       ? initial.bankLines.map(l => ({ id: l.id, accountId: l.accountId, accountName: l.accountName, description: l.description, amount: String(l.amount) }))
       : [emptyLine()]
@@ -567,60 +565,59 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   // Show ALL CRM contacts — a contact might be tagged as Supplier but also receive payments
   const buyers = useMemo<Customer[]>(() => getCustomers(), []);
 
-  // Sale invoices for the selected buyer that have an outstanding balance
+  // Buyer's advance credit balance (from prior overpayments)
+  const buyerAdvanceCredit = useMemo(() => {
+    if (!buyerName) return 0;
+    const contact = buyers.find(b => b.name.toLowerCase() === buyerName.toLowerCase());
+    return contact?.advanceCredit || 0;
+  }, [buyers, buyerName]);
+
+  // All sale invoices for the selected buyer, sorted by invoice number (oldest first)
   const buyerInvoices = useMemo<Invoice[]>(() => {
     if (!isNewReceipt || !buyerName) return [];
-    return getInvoices().filter(inv =>
-      inv.invoiceType !== "purchase" &&
-      inv.status !== "Cancelled" &&
-      (inv.customer ?? "").toLowerCase() === buyerName.toLowerCase()
-    );
+    return getInvoices()
+      .filter(inv =>
+        inv.invoiceType !== "purchase" &&
+        inv.status !== "Cancelled" &&
+        (inv.customer ?? "").toLowerCase() === buyerName.toLowerCase()
+      )
+      .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber, undefined, { numeric: true }));
   }, [buyerName, isNewReceipt]);
 
-  // Auto-select all buyer invoices when the buyer changes
-  const receiptInvIdsKey = buyerInvoices.map(i => i.id).join(",");
-  useEffect(() => {
-    if (!isNewReceipt) return;
-    setSelectedReceiptInvIds(new Set(buyerInvoices.map(i => i.id)));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [receiptInvIdsKey, isNewReceipt]);
-
-  // AR credit lines auto-generated from selected buyer invoices
+  // All buyer invoices → AR lines (no selection needed, always all)
   const computedArLines = useMemo<LineRow[]>(() => {
     if (!isNewReceipt) return [];
     const settings  = getSettings();
     const groupArId = settings.accReceivable || SYS_ACCS.AR_GROUP;
-    return buyerInvoices
-      .filter(inv => selectedReceiptInvIds.has(inv.id))
-      .map(inv => {
-        const arAccId  = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AR_GROUP) || groupArId;
-        const arAcc    = accounts.find(a => a.id === arAccId);
-        const outstanding = invOutstanding(inv);
-        return {
-          id:          inv.id,
-          accountId:   arAccId,
-          accountName: arAcc?.name ?? "Trade Receivables",
-          description: inv.invoiceNumber,
-          amount:      outstanding.toFixed(2),
-        };
-      });
-  }, [buyerInvoices, selectedReceiptInvIds, accounts, isNewReceipt]);
+    return buyerInvoices.map(inv => {
+      const arAccId  = findSubLedgerForParty(inv.customer ?? "", SYS_ACCS.AR_GROUP) || groupArId;
+      const arAcc    = accounts.find(a => a.id === arAccId);
+      const outstanding = invOutstanding(inv);
+      return {
+        id:          inv.id,
+        accountId:   arAccId,
+        accountName: arAcc?.name ?? "Trade Receivables",
+        description: inv.invoiceNumber,
+        amount:      outstanding.toFixed(2),
+      };
+    });
+  }, [buyerInvoices, accounts, isNewReceipt]);
 
-  const totalReceivable   = computedArLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
-  const recvBankTotal     = recvBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
-  const overRecvBank      = recvBankTotal > totalReceivable + 0.001;
-  const remainingReceiptBalance = totalReceivable - Math.min(recvBankTotal, totalReceivable);
+  const totalReceivable = computedArLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const recvBankTotal   = recvBankLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const recvExcess      = recvBankTotal > totalReceivable + 0.001 ? recvBankTotal - totalReceivable : 0;
 
-  // Scale AR credit lines proportionally when receiving partial payment
-  const scaledArLines = useMemo<LineRow[]>(() => {
-    if (!isNewReceipt || totalReceivable === 0 || recvBankTotal === 0) return computedArLines;
-    const recvAmount = Math.min(recvBankTotal, totalReceivable);
-    const scale      = recvAmount / totalReceivable;
-    return computedArLines.map(l => ({
-      ...l,
-      amount: ((parseFloat(l.amount) || 0) * scale).toFixed(2),
-    }));
-  }, [computedArLines, recvBankTotal, totalReceivable, isNewReceipt]);
+  // Sequential allocation: receive against invoices in invoice-number order (oldest first)
+  const sequentialArLines = useMemo<LineRow[]>(() => {
+    if (!isNewReceipt || recvBankTotal === 0) return computedArLines;
+    let remaining = recvBankTotal;
+    return computedArLines.map(l => {
+      const outstanding = parseFloat(l.amount) || 0;
+      const receiving   = Math.min(outstanding, remaining);
+      remaining = Math.max(0, remaining - receiving);
+      return { ...l, amount: receiving.toFixed(2) };
+    });
+  }, [computedArLines, recvBankTotal, isNewReceipt]);
 
   const setLine = (id: string, patch: Partial<LineRow>) =>
     setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
@@ -631,31 +628,65 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const buildPayload = (): Omit<RPVoucher, "id" | "voucherNumber" | "createdAt" | "updatedAt"> => {
     if (isNewPayment) {
       const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      // Lines for each invoice (sequential allocation, zero-amount lines excluded from JE)
+      const invLines: Array<{ id: string; accountId: string; accountName: string; description: string; amount: number; invoiceId?: string }> =
+        sequentialApLines
+          .filter(l => parseFloat(l.amount) > 0)
+          .map(l => ({
+            id: l.id, accountId: l.accountId, accountName: l.accountName,
+            description: l.description, amount: parseFloat(l.amount) || 0,
+            invoiceId: l.id,   // l.id == inv.id in computedApLines
+          }));
+      // If bank total > invoices outstanding, append an advance credit line
+      if (payExcess > 0.001 && computedApLines[0]) {
+        const first = computedApLines[0];
+        invLines.push({
+          id: crypto.randomUUID(), accountId: first.accountId, accountName: first.accountName,
+          description: `Advance Payment — ${supplierName}`,
+          amount: parseFloat(payExcess.toFixed(2)),
+          invoiceId: undefined,
+        });
+      }
       return {
-        voucherType:        "payment",
+        voucherType:         "payment",
         date,
-        partyName:          supplierName,
-        cashBankAccountId:  validBank[0]?.accountId   ?? "",
+        partyName:           supplierName,
+        cashBankAccountId:   validBank[0]?.accountId   ?? "",
         cashBankAccountName: validBank[0]?.accountName ?? "",
-        reference:          ref,
-        narration:          narr || `Payment to ${supplierName}`,
-        linkedInvoiceId:    undefined,
-        lines: scaledApLines.map((l, idx) => ({
-          id: l.id, accountId: l.accountId, accountName: l.accountName,
-          description: l.description, amount: parseFloat(l.amount) || 0,
-          invoiceId: supplierInvoices.filter(i => selectedInvIds.has(i.id))[idx]?.id,
-        })),
-        bankLines: validBank.map(l => ({
+        reference:           ref,
+        narration:           narr || `Payment to ${supplierName}`,
+        linkedInvoiceId:     undefined,
+        lines:               invLines,
+        bankLines:           validBank.map(l => ({
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
         })),
-        linkedInvoiceIds: supplierInvoices.filter(i => selectedInvIds.has(i.id)).map(i => i.id),
-        totalAmount: Math.min(bankTotal, totalDue),
-        status: "draft",
+        linkedInvoiceIds: supplierInvoices.map(i => i.id),
+        totalAmount:      bankTotal,
+        status:           "draft",
       };
     }
     if (isNewReceipt) {
       const validBank = recvBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
+      // Lines for each invoice (sequential allocation, zero-amount excluded from JE)
+      const invLines: Array<{ id: string; accountId: string; accountName: string; description: string; amount: number; invoiceId?: string }> =
+        sequentialArLines
+          .filter(l => parseFloat(l.amount) > 0)
+          .map(l => ({
+            id: l.id, accountId: l.accountId, accountName: l.accountName,
+            description: l.description, amount: parseFloat(l.amount) || 0,
+            invoiceId: l.id,   // l.id == inv.id in computedArLines
+          }));
+      // If received > invoices outstanding, append an advance receipt line
+      if (recvExcess > 0.001 && computedArLines[0]) {
+        const first = computedArLines[0];
+        invLines.push({
+          id: crypto.randomUUID(), accountId: first.accountId, accountName: first.accountName,
+          description: `Advance Receipt — ${buyerName}`,
+          amount: parseFloat(recvExcess.toFixed(2)),
+          invoiceId: undefined,
+        });
+      }
       return {
         voucherType:         "receipt",
         date,
@@ -665,20 +696,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
         reference:           ref,
         narration:           narr || `Receipt from ${buyerName}`,
         linkedInvoiceId:     undefined,
-        // lines = AR credit lines (cleared receivables) — scaled to bank total
-        lines: scaledArLines.map((l, idx) => ({
-          id: l.id, accountId: l.accountId, accountName: l.accountName,
-          description: l.description, amount: parseFloat(l.amount) || 0,
-          invoiceId: buyerInvoices.filter(i => selectedReceiptInvIds.has(i.id))[idx]?.id,
-        })),
-        // bankLines = cash/bank debit lines (money in)
-        bankLines: validBank.map(l => ({
+        lines:               invLines,
+        bankLines:           validBank.map(l => ({
           id: l.id, accountId: l.accountId, accountName: l.accountName,
           description: l.description, amount: parseFloat(l.amount) || 0,
         })),
-        linkedInvoiceIds: buyerInvoices.filter(i => selectedReceiptInvIds.has(i.id)).map(i => i.id),
-        totalAmount: Math.min(recvBankTotal, totalReceivable),
-        status: "draft",
+        linkedInvoiceIds: buyerInvoices.map(i => i.id),
+        totalAmount:      recvBankTotal,
+        status:           "draft",
       };
     }
     return {
@@ -705,18 +730,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
     if (!date) return "Date is required.";
     if (isNewPayment) {
       if (!supplierName) return "Please select a supplier.";
-      if (computedApLines.length === 0) return "Please select at least one invoice to pay.";
+      if (computedApLines.length === 0) return "No outstanding invoices found for this supplier.";
       const validBank = payBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
       if (validBank.length === 0) return "Please add at least one bank / cash payment line.";
-      if (overBank) return `Bank total (${fmtAmt(bankTotal, sym)}) exceeds total due (${fmtAmt(totalDue, sym)}).`;
       return null;
     }
     if (isNewReceipt) {
       if (!buyerName) return "Please select a buyer.";
-      if (computedArLines.length === 0) return "Please select at least one invoice to receive payment for.";
+      if (computedArLines.length === 0) return "No outstanding invoices found for this buyer.";
       const validBank = recvBankLines.filter(l => l.accountId && parseFloat(l.amount) > 0);
       if (validBank.length === 0) return "Please add at least one bank / cash account to receive payment into.";
-      if (overRecvBank) return `Bank total (${fmtAmt(recvBankTotal, sym)}) exceeds total receivable (${fmtAmt(totalReceivable, sym)}).`;
       return null;
     }
     if (!cbId) return `${vtype === "receipt" ? "Received Into" : "Paid From"} (Cash / Bank) account is required.`;
@@ -799,54 +822,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 />
               </div>
 
-              {/* 2 — Invoice capsule chips */}
-              {supplierName && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                      Purchase Invoices
-                    </label>
-                    {supplierInvoices.length > 0 && (
-                      <div className="flex gap-2 text-xs">
-                        <button type="button" onClick={() => setSelectedInvIds(new Set(supplierInvoices.map(i => i.id)))}
-                          className="text-primary hover:underline">Select All</button>
-                        <span className="text-border">|</span>
-                        <button type="button" onClick={() => setSelectedInvIds(new Set())}
-                          className="text-muted-foreground hover:underline">Clear</button>
-                      </div>
-                    )}
-                  </div>
-                  {supplierInvoices.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">No purchase invoices found for this supplier.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {supplierInvoices.map(inv => {
-                        const outstanding = invOutstanding(inv);
-                        const isSelected  = selectedInvIds.has(inv.id);
-                        return (
-                          <button key={inv.id} type="button"
-                            onClick={() => setSelectedInvIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(inv.id)) next.delete(inv.id); else next.add(inv.id);
-                              return next;
-                            })}
-                            className={`inline-flex flex-col items-start px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-                              isSelected
-                                ? "bg-rose-600 border-rose-600 text-white shadow-sm"
-                                : "bg-background border-border text-muted-foreground hover:border-rose-400 hover:text-foreground"
-                            }`}
-                          >
-                            <span className="font-semibold">{inv.invoiceNumber}</span>
-                            <span className="text-[10px] opacity-80">{sym}{outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 3 — Date + balance summary */}
+              {/* 2 — Date + balance summary */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
@@ -856,37 +832,49 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <div className="space-y-1.5">
                   <div>
                     <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                      Total Outstanding{selectedInvIds.size > 0 ? ` (${selectedInvIds.size} invoice${selectedInvIds.size !== 1 ? "s" : ""})` : ""}
+                      Total Outstanding{supplierInvoices.length > 0 ? ` (${supplierInvoices.length} invoice${supplierInvoices.length !== 1 ? "s" : ""})` : ""}
                     </label>
                     <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
                       {fmtAmt(totalDue, sym)}
                     </div>
                   </div>
+                  {supplierAdvanceCredit > 0.001 && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-emerald-700 dark:text-emerald-300 font-medium">Advance credit on account</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300">{fmtAmt(supplierAdvanceCredit, sym)}</span>
+                    </div>
+                  )}
                   {bankTotal > 0 && (
                     <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">You're paying</span>
-                      <span className="font-semibold text-foreground">{fmtAmt(Math.min(bankTotal, totalDue), sym)}</span>
+                      <span className="font-semibold text-foreground">{fmtAmt(bankTotal, sym)}</span>
                     </div>
                   )}
-                  {bankTotal > 0 && remainingBalance > 0.001 && (
+                  {bankTotal > 0 && totalDue > bankTotal + 0.001 && (
                     <div className="rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 flex items-center justify-between text-xs">
-                      <span className="text-blue-700 dark:text-blue-300 font-medium">Remaining balance</span>
-                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(remainingBalance, sym)}</span>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Still outstanding after payment</span>
+                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(totalDue - bankTotal, sym)}</span>
+                    </div>
+                  )}
+                  {payExcess > 0.001 && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-emerald-700 dark:text-emerald-300 font-medium">Advance credit will be added</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300">{fmtAmt(payExcess, sym)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 4 — AP debit lines (read-only, auto-generated) */}
+              {/* 3 — AP debit lines (read-only, auto-generated) */}
               {computedApLines.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                       Paid For — Payables (Debit Side, Auto-Generated)
                     </label>
-                    {bankTotal > 0 && remainingBalance > 0.001 && (
+                    {bankTotal > 0 && bankTotal < totalDue - 0.001 && (
                       <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                        Partial payment — amounts scaled to bank total
+                        Partial — oldest invoices paid first
                       </span>
                     )}
                   </div>
@@ -903,9 +891,9 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                       </thead>
                       <tbody>
                         {computedApLines.map((l, idx) => {
-                          const scaled = scaledApLines[idx];
+                          const sequential  = sequentialApLines[idx];
                           const outstanding = parseFloat(l.amount) || 0;
-                          const payingNow   = parseFloat(scaled?.amount ?? l.amount) || 0;
+                          const payingNow   = parseFloat(sequential?.amount ?? l.amount) || 0;
                           const isPartial   = Math.abs(payingNow - outstanding) > 0.001;
                           return (
                             <tr key={l.id} className="border-t border-border bg-muted/10">
@@ -924,8 +912,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                         <tr className="border-t-2 border-border bg-muted/30">
                           <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
                           <td className="px-3 py-2 text-right text-muted-foreground font-semibold text-sm">{fmtAmt(totalDue, sym)}</td>
-                          <td className={`px-3 py-2 text-right font-bold text-sm ${overBank ? "text-red-600 dark:text-red-400" : ""}`}>
-                            {fmtAmt(Math.min(bankTotal || totalDue, totalDue), sym)}
+                          <td className={`px-3 py-2 text-right font-bold text-sm ${payExcess > 0.001 ? "text-emerald-600 dark:text-emerald-400" : bankTotal > 0 && bankTotal < totalDue - 0.001 ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                            {fmtAmt(bankTotal || 0, sym)}
                           </td>
                         </tr>
                       </tfoot>
@@ -934,19 +922,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 </div>
               )}
 
-              {/* 5 — Multi-bank payment lines (credit side) */}
+              {/* 4 — Multi-bank payment lines (credit side) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                     Paid Via — Bank / Cash Accounts (Credit Side)
                   </label>
-                  <div className="flex items-center gap-2">
-                    {overBank && <span className="text-[10px] text-red-500 font-medium">⚠ Exceeds total due</span>}
-                    <button type="button" onClick={() => setPayBankLines(p => [...p, emptyLine()])}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline">
-                      <Plus className="h-3.5 w-3.5" /> Add Bank
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => setPayBankLines(p => [...p, emptyLine()])}
+                    className="flex items-center gap-1 text-xs text-primary hover:underline">
+                    <Plus className="h-3.5 w-3.5" /> Add Bank
+                  </button>
                 </div>
                 <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full text-sm">
@@ -981,9 +966,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                           <td className="px-2 py-1.5 text-right">
                             <input type="number" min="0" step="0.01" value={l.amount}
                               onChange={e => setPayBankLines(prev => prev.map(r => r.id === l.id ? { ...r, amount: e.target.value } : r))}
-                              className={`w-full rounded border px-2 py-1 text-sm bg-transparent outline-none text-right ${
-                                overBank ? "border-red-400 text-red-600" : "border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring"
-                              }`} />
+                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none text-right" />
                           </td>
                           <td className="px-1 py-1.5 text-center">
                             <button type="button"
@@ -998,7 +981,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                     <tfoot>
                       <tr className="border-t-2 border-border bg-muted/30">
                         <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Bank Total</td>
-                        <td className={`px-3 py-2 text-right font-bold ${overBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                        <td className={`px-3 py-2 text-right font-bold ${payExcess > 0.001 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
                           {fmtAmt(bankTotal, sym)}
                         </td>
                         <td />
@@ -1028,54 +1011,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 />
               </div>
 
-              {/* 2 — Invoice capsule chips */}
-              {buyerName && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
-                      Sale Invoices
-                    </label>
-                    {buyerInvoices.length > 0 && (
-                      <div className="flex gap-2 text-xs">
-                        <button type="button" onClick={() => setSelectedReceiptInvIds(new Set(buyerInvoices.map(i => i.id)))}
-                          className="text-primary hover:underline">Select All</button>
-                        <span className="text-border">|</span>
-                        <button type="button" onClick={() => setSelectedReceiptInvIds(new Set())}
-                          className="text-muted-foreground hover:underline">Clear</button>
-                      </div>
-                    )}
-                  </div>
-                  {buyerInvoices.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">No sale invoices found for this buyer.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {buyerInvoices.map(inv => {
-                        const outstanding = invOutstanding(inv);
-                        const isSelected  = selectedReceiptInvIds.has(inv.id);
-                        return (
-                          <button key={inv.id} type="button"
-                            onClick={() => setSelectedReceiptInvIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(inv.id)) next.delete(inv.id); else next.add(inv.id);
-                              return next;
-                            })}
-                            className={`inline-flex flex-col items-start px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-                              isSelected
-                                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                                : "bg-background border-border text-muted-foreground hover:border-emerald-400 hover:text-foreground"
-                            }`}
-                          >
-                            <span className="font-semibold">{inv.invoiceNumber}</span>
-                            <span className="text-[10px] opacity-80">{sym}{outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 3 — Date + balance summary */}
+              {/* 2 — Date + balance summary */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
@@ -1085,37 +1021,49 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <div className="space-y-1.5">
                   <div>
                     <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                      Total Outstanding{selectedReceiptInvIds.size > 0 ? ` (${selectedReceiptInvIds.size} invoice${selectedReceiptInvIds.size !== 1 ? "s" : ""})` : ""}
+                      Total Outstanding{buyerInvoices.length > 0 ? ` (${buyerInvoices.length} invoice${buyerInvoices.length !== 1 ? "s" : ""})` : ""}
                     </label>
                     <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm font-bold text-amber-700 dark:text-amber-300">
                       {fmtAmt(totalReceivable, sym)}
                     </div>
                   </div>
+                  {buyerAdvanceCredit > 0.001 && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-emerald-700 dark:text-emerald-300 font-medium">Advance credit on account</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300">{fmtAmt(buyerAdvanceCredit, sym)}</span>
+                    </div>
+                  )}
                   {recvBankTotal > 0 && (
                     <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">You're receiving</span>
-                      <span className="font-semibold text-foreground">{fmtAmt(Math.min(recvBankTotal, totalReceivable), sym)}</span>
+                      <span className="font-semibold text-foreground">{fmtAmt(recvBankTotal, sym)}</span>
                     </div>
                   )}
-                  {recvBankTotal > 0 && remainingReceiptBalance > 0.001 && (
+                  {recvBankTotal > 0 && totalReceivable > recvBankTotal + 0.001 && (
                     <div className="rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 flex items-center justify-between text-xs">
-                      <span className="text-blue-700 dark:text-blue-300 font-medium">Due balance remaining</span>
-                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(remainingReceiptBalance, sym)}</span>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Still outstanding after receipt</span>
+                      <span className="font-bold text-blue-700 dark:text-blue-300">{fmtAmt(totalReceivable - recvBankTotal, sym)}</span>
+                    </div>
+                  )}
+                  {recvExcess > 0.001 && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 flex items-center justify-between text-xs">
+                      <span className="text-emerald-700 dark:text-emerald-300 font-medium">Advance credit will be added</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300">{fmtAmt(recvExcess, sym)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 4 — AR credit lines (read-only, auto-generated) */}
+              {/* 3 — AR credit lines (read-only, auto-generated) */}
               {computedArLines.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                       Clearing — Receivables (Credit Side, Auto-Generated)
                     </label>
-                    {recvBankTotal > 0 && remainingReceiptBalance > 0.001 && (
+                    {recvBankTotal > 0 && recvBankTotal < totalReceivable - 0.001 && (
                       <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                        Partial payment — amounts scaled to received total
+                        Partial — oldest invoices cleared first
                       </span>
                     )}
                   </div>
@@ -1132,9 +1080,9 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                       </thead>
                       <tbody>
                         {computedArLines.map((l, idx) => {
-                          const scaled       = scaledArLines[idx];
+                          const sequential   = sequentialArLines[idx];
                           const outstanding  = parseFloat(l.amount) || 0;
-                          const receivingNow = parseFloat(scaled?.amount ?? l.amount) || 0;
+                          const receivingNow = parseFloat(sequential?.amount ?? l.amount) || 0;
                           const isPartial    = Math.abs(receivingNow - outstanding) > 0.001;
                           return (
                             <tr key={l.id} className="border-t border-border bg-muted/10">
@@ -1153,8 +1101,8 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                         <tr className="border-t-2 border-border bg-muted/30">
                           <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
                           <td className="px-3 py-2 text-right text-muted-foreground font-semibold text-sm">{fmtAmt(totalReceivable, sym)}</td>
-                          <td className={`px-3 py-2 text-right font-bold text-sm ${overRecvBank ? "text-red-600 dark:text-red-400" : ""}`}>
-                            {fmtAmt(Math.min(recvBankTotal || totalReceivable, totalReceivable), sym)}
+                          <td className={`px-3 py-2 text-right font-bold text-sm ${recvExcess > 0.001 ? "text-emerald-600 dark:text-emerald-400" : recvBankTotal > 0 && recvBankTotal < totalReceivable - 0.001 ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                            {fmtAmt(recvBankTotal || 0, sym)}
                           </td>
                         </tr>
                       </tfoot>
@@ -1163,19 +1111,16 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 </div>
               )}
 
-              {/* 5 — Multi-bank receive lines (debit side) */}
+              {/* 4 — Multi-bank receive lines (debit side) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                     Received Into — Bank / Cash Accounts (Debit Side)
                   </label>
-                  <div className="flex items-center gap-2">
-                    {overRecvBank && <span className="text-[10px] text-red-500 font-medium">⚠ Exceeds total receivable</span>}
-                    <button type="button" onClick={() => setRecvBankLines(p => [...p, emptyLine()])}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline">
-                      <Plus className="h-3.5 w-3.5" /> Add Bank
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => setRecvBankLines(p => [...p, emptyLine()])}
+                    className="flex items-center gap-1 text-xs text-primary hover:underline">
+                    <Plus className="h-3.5 w-3.5" /> Add Bank
+                  </button>
                 </div>
                 <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full text-sm">
@@ -1210,9 +1155,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                           <td className="px-2 py-1.5 text-right">
                             <input type="number" min="0" step="0.01" value={l.amount}
                               onChange={e => setRecvBankLines(prev => prev.map(r => r.id === l.id ? { ...r, amount: e.target.value } : r))}
-                              className={`w-full rounded border px-2 py-1 text-sm bg-transparent outline-none text-right ${
-                                overRecvBank ? "border-red-400 text-red-600" : "border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring"
-                              }`} />
+                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none text-right" />
                           </td>
                           <td className="px-1 py-1.5 text-center">
                             <button type="button"
@@ -1227,7 +1170,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                     <tfoot>
                       <tr className="border-t-2 border-border bg-muted/30">
                         <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Bank Total</td>
-                        <td className={`px-3 py-2 text-right font-bold ${overRecvBank ? "text-red-600 dark:text-red-400" : ""}`}>
+                        <td className={`px-3 py-2 text-right font-bold ${recvExcess > 0.001 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
                           {fmtAmt(recvBankTotal, sym)}
                         </td>
                         <td />
