@@ -1798,7 +1798,7 @@ export function backfillPOSCreditSaleJEs(): void {
     const taxAmt = parseFloat((afterDisc * taxPct).toFixed(2));
     const delivery = parseFloat(sale.deliveryCharges || "0") || 0;
     const costTotal = items.reduce((s, i) => {
-      const prod = allProducts.find(p => p.id === i.productId);
+      const prod = findProductForItem(i, allProducts);
       return s + effectiveItemCost(i, prod) * (parseFloat(i.qty) || 0);
     }, 0);
     return {
@@ -2316,9 +2316,9 @@ export type PurchaseOrderStatus = "Draft" | "Sent" | "Confirmed" | "Received" | 
 export type PurchaseOrderItem = {
   id:          string;
   itemType?:   "product" | "raw-material";  // defaults to "product"
-  productId?:  string;   // linked Product id
   rmId?:       string;   // linked RawMaterial id
   productName: string;
+  sku?:        string;   // THE canonical identifier — matches Product/variant SKU
   qty:         string;
   unit:        string;
   unitPrice:   string;
@@ -2445,7 +2445,8 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       }
     } else {
       // ── Route to Product / StockItem ────────────────────────────────────────
-      let pi = item.productId ? allProducts.findIndex(p => p.id === item.productId) : -1;
+      // SKU is the canonical identifier — try SKU first, fall back to name
+      let pi = item.sku ? allProducts.findIndex(p => p.sku?.toLowerCase() === item.sku.toLowerCase()) : -1;
       if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
       const product = pi >= 0 ? allProducts[pi] : undefined;
 
@@ -2556,7 +2557,7 @@ export type SaleItem = {
   id: string;
   productName: string;       // locked — sourced from Products master (primary / English name)
   localName?: string;        // locked — sourced from Products master (local / Urdu / Arabic name)
-  sku: string;               // locked — sourced from Products master
+  sku: string;               // THE canonical identifier — unique across products AND variants
   qty: string;
   unit: string;
   unitPrice: string;
@@ -2565,9 +2566,7 @@ export type SaleItem = {
   notes: string;
   itemStatus: ItemStatus;    // per-line delivery status
   bogoApplied?: boolean;     // Clubcard Buy-1-Get-1-Free applied; every 2nd unit is free
-  productId?: string;        // linked Product.id — used for variant lookup
-  variantId?: string;        // selected ProductVariant.id
-  variantLabel?: string;     // display label of the selected variant (e.g. "3500mAh")
+  variantLabel?: string;     // display label of the selected variant (e.g. "3500mAh") — UI only
 };
 
 export type Sale = {
@@ -3359,33 +3358,30 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
   const today  = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
-  // Lazy parent-SKU cache: productId → parent product's SKU
-  let _parentSkuCache: Map<string, string> | null = null;
+  // Lazy variant-SKU → parent-product-SKU cache (for variant fallback deduction)
+  let _variantParentCache: Map<string, string> | null = null;
   const ensureCache = () => {
-    if (!_parentSkuCache) {
-      _parentSkuCache = new Map();
-      getProducts().forEach(p => { if (p.sku) _parentSkuCache!.set(p.id, p.sku); });
+    if (!_variantParentCache) {
+      _variantParentCache = new Map();
+      getProducts().forEach(p => {
+        p.variants?.forEach(v => {
+          if (v.sku && p.sku) _variantParentCache!.set(v.sku.toLowerCase(), p.sku);
+        });
+      });
     }
   };
   const parentSkuFor = (item: SaleItem): string | null => {
-    if (!item.variantId || !item.productId) return null;
+    if (!item.sku) return null;
     ensureCache();
-    return _parentSkuCache!.get(item.productId) ?? null;
+    return _variantParentCache!.get(item.sku.trim().toLowerCase()) ?? null;
   };
 
   saleItems.forEach(item => {
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Resolve effective SKU for this line item.
-    // • For plain products: item.sku (auto-generated or manually entered).
-    // • If blank, look up current product SKU by productId.
-    // • For variant lines: item.sku is the variant SKU (e.g. "A", "B", "C").
-    let effectiveSku = item.sku || "";
-    if (!effectiveSku && item.productId) {
-      ensureCache();
-      effectiveSku = _parentSkuCache!.get(item.productId) ?? "";
-    }
+    // SKU is the canonical identifier — item.sku may be a variant SKU or product SKU.
+    const effectiveSku = item.sku || "";
 
     let remaining = qty;
 
@@ -3397,9 +3393,9 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
     // Step 2 — Variant fallback: stock may have been received under the PARENT
     // product's SKU rather than the individual variant SKU (happens when purchase
     // invoices use only the parent product, not per-variant lines).
-    if (remaining > 0 && item.variantId) {
+    if (remaining > 0 && effectiveSku) {
       const parentSku = parentSkuFor(item);
-      if (parentSku && parentSku !== effectiveSku) {
+      if (parentSku && parentSku.toLowerCase() !== effectiveSku.trim().toLowerCase()) {
         remaining = _deductFromStockBySku(parentSku, remaining, stocks, ledger, today, reference, sourceType);
       }
     }
@@ -3434,11 +3430,8 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Resolve effective SKU — fall back to productId lookup
-    let effectiveSku = item.sku || "";
-    if (!effectiveSku && item.productId) {
-      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
-    }
+    // SKU is the canonical identifier — item.sku may be a variant SKU or product SKU.
+    const effectiveSku = item.sku || "";
 
     // Step 1 — Restore to stock record keyed by item's own SKU (case-insensitive, trimmed)
     const effSkuLower = effectiveSku.trim().toLowerCase();
@@ -3446,10 +3439,10 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
     if (found >= 0) { restoreInto(found, qty); return; }
 
     // Step 2 — Variant fallback: stock may be under parent product's SKU
-    if (item.variantId && item.productId) {
-      const parentSku = allProds.find(p => p.id === item.productId)?.sku ?? "";
-      if (parentSku && parentSku !== effectiveSku) {
-        const parentSkuLower = parentSku.trim().toLowerCase();
+    if (effectiveSku) {
+      const parentProd = allProds.find(p => p.variants?.some(v => v.sku?.toLowerCase() === effSkuLower));
+      if (parentProd?.sku && parentProd.sku.toLowerCase() !== effSkuLower) {
+        const parentSkuLower = parentProd.sku.trim().toLowerCase();
         found = stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === parentSkuLower);
         if (found >= 0) { restoreInto(found, qty); return; }
       }
@@ -3480,15 +3473,11 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Resolve effective SKU — item.sku may be blank if product has no SKU entered.
-    // Priority: invoice item SKU → product's SKU from Products module (by productId, SKU, or name match).
-    // Using the canonical product SKU ensures POS deductions can always find the correct stock record.
+    // Resolve effective SKU — SKU is the canonical identifier.
+    // Priority: item.sku → canonical product SKU by SKU match → by name match.
     let effectiveSku = item.sku || "";
     let canonicalProd: typeof allProds[number] | undefined;
-    if (item.productId) {
-      canonicalProd = allProds.find(p => p.id === item.productId);
-    }
-    if (!canonicalProd && effectiveSku) {
+    if (effectiveSku) {
       canonicalProd = allProds.find(p => p.sku?.toLowerCase() === effectiveSku.toLowerCase());
     }
     if (!canonicalProd && item.productName) {
@@ -3567,11 +3556,8 @@ export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void
     const qty = parseFloat(item.qty) || 0;
     if (qty <= 0) return;
 
-    // Resolve effective SKU — mirror the same logic used when receiving
-    let effectiveSku = item.sku || "";
-    if (!effectiveSku && item.productId) {
-      effectiveSku = allProds.find(p => p.id === item.productId)?.sku || "";
-    }
+    // Resolve effective SKU — SKU is the canonical identifier
+    const effectiveSku = item.sku || "";
 
     // Mirror the same lookup priority used when receiving
     let i = effectiveSku
@@ -4617,27 +4603,34 @@ export function getInvoiceProductName(p: Pick<Product, "name" | "localName">): s
 
 /**
  * Find the parent product for a sale/invoice line item.
- * Prefers productId match (most accurate), then falls back to SKU then name.
+ * SKU is the canonical identifier. Tries direct product SKU first, then variant SKU,
+ * then falls back to name for legacy records.
  */
 export function findProductForItem(it: SaleItem, prods: Product[]): Product | undefined {
-  if (it.productId) {
-    const byId = prods.find(p => p.id === it.productId);
-    if (byId) return byId;
+  if (it.sku) {
+    // Direct product SKU match
+    const byProductSku = prods.find(p => p.sku === it.sku);
+    if (byProductSku) return byProductSku;
+    // Variant SKU match — item.sku may be a variant's own SKU; return the parent product
+    const byVariantSku = prods.find(p => p.variants?.some(v => v.sku === it.sku));
+    if (byVariantSku) return byVariantSku;
   }
-  return prods.find(p => (it.sku && p.sku === it.sku) || p.name === it.productName);
+  // Fallback: name match (for legacy records with no SKU)
+  return prods.find(p => p.name === it.productName);
 }
 
 /**
  * Resolve the unit cost for a sale line item, respecting variant-level costPrice.
- * When a variant was sold (variantId is set), the variant's own costPrice takes
- * priority over the parent product's costPrice. Falls back gracefully if either
- * the variant or its costPrice is absent.
+ * Uses item.sku to identify the exact variant sold (SKU is the canonical identifier).
+ * Falls back to parent product costPrice if no variant match or variant has no cost.
  */
 export function effectiveItemCost(it: SaleItem, prod: Product | undefined): number {
-  if (it.variantId && prod?.variants?.length) {
-    const variant = prod.variants.find(v => v.id === it.variantId);
-    const vCost = parseFloat(variant?.costPrice ?? "");
-    if (!isNaN(vCost) && vCost > 0) return vCost;
+  if (prod?.variants?.length && it.sku) {
+    const variant = prod.variants.find(v => v.sku === it.sku);
+    if (variant) {
+      const vCost = parseFloat(variant.costPrice ?? "");
+      if (!isNaN(vCost) && vCost > 0) return vCost;
+    }
   }
   return parseFloat(prod?.costPrice ?? "0") || 0;
 }

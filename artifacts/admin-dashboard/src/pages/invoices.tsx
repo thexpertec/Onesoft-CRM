@@ -536,25 +536,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     })),
   [products]);
 
-  // Map product.id → variants (keyed by id so it works regardless of display-name locale setting)
-  const productVariantsMap = useMemo(() => {
-    const map = new Map<string, ProductVariant[]>();
-    products.forEach(p => {
-      if (p.variants && p.variants.length > 0) map.set(p.id, p.variants);
-    });
-    return map;
-  }, [products]);
-
-  // Resolve variants for a line item — prefer productId lookup, fall back to name match
+  // Resolve variants for a line item — SKU is the canonical identifier
   const variantsForItem = useCallback((item: SaleItem): ProductVariant[] => {
-    if (item.productId) {
-      const v = productVariantsMap.get(item.productId);
-      if (v) return v;
+    if (item.sku) {
+      // Check if item.sku matches a direct product SKU
+      const byProductSku = products.find(p => p.sku === item.sku);
+      if (byProductSku?.variants?.length) return byProductSku.variants;
+      // Check if item.sku matches a variant's SKU — return parent's variants
+      const byVariantSku = products.find(p => p.variants?.some(v => v.sku === item.sku));
+      if (byVariantSku?.variants?.length) return byVariantSku.variants;
     }
-    // Fallback: match by raw name or display name (for items loaded before productId was saved)
+    // Fallback: name match (for legacy records with no SKU)
     const p = products.find(pr => pr.name === item.productName || getInvoiceProductName(pr) === item.productName);
     return p?.variants ?? [];
-  }, [productVariantsMap, products]);
+  }, [products]);
   const customerOpts = useMemo<ComboOption[]>(() => {
     const mapped = customers.map(c => ({
       value: c.name,
@@ -625,8 +620,6 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             sku: p.sku,
             unit: p.unit,
             unitPrice: getAutoPrice(p),
-            productId: p.id,
-            variantId: undefined,
             variantLabel: undefined,
           }
         : i
@@ -644,7 +637,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || "";
     setItems(prev => prev.map(i =>
       i.id === itemId
-        ? { ...i, sku: v.sku ?? i.sku, unitPrice: getVariantPrice(v), variantId: v.id, variantLabel: label }
+        ? { ...i, sku: v.sku ?? i.sku, unitPrice: getVariantPrice(v), variantLabel: label }
         : i
     ));
   }, [getVariantPrice]);
@@ -652,12 +645,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const clearVariant = useCallback((itemId: string) => {
     setItems(prev => prev.map(i => {
       if (i.id !== itemId) return i;
-      const p = i.productId ? products.find(pr => pr.id === i.productId) : undefined;
+      // Find parent product by checking whose variant SKU matches this item's SKU
+      const parentProd = products.find(p => p.variants?.some(v => v.sku === i.sku));
       return {
         ...i,
-        sku: p?.sku ?? i.sku,
-        unitPrice: p ? getAutoPrice(p) : i.unitPrice,
-        variantId: undefined,
+        sku: parentProd?.sku ?? "",
+        unitPrice: parentProd ? getAutoPrice(parentProd) : i.unitPrice,
         variantLabel: undefined,
       };
     }));
@@ -972,8 +965,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </div>
                     {/* Unit Price — locked when product has variants and none is selected */}
                     {(() => {
-                      const hasVariants = (variantsForItem(item)?.length ?? 0) > 0;
-                      const needsPick   = hasVariants && !item.variantId;
+                      const variants    = variantsForItem(item);
+                      const hasVariants = variants.length > 0;
+                      const needsPick   = hasVariants && !variants.some(v => v.sku === item.sku);
                       return (
                         <div className="px-1">
                           <input type="number" min="0" step="0.01"
@@ -1028,15 +1022,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   {(() => {
                     const allVariants = variantsForItem(item);
                     if (!allVariants || allVariants.length === 0) return null;
-                    // Variant IDs already claimed by OTHER rows of the same product
-                    const takenByOthers = new Set(
-                      items
-                        .filter(i => i.id !== item.id && i.productId === item.productId && i.variantId)
-                        .map(i => i.variantId as string)
+                    // Find the parent product for this item (to identify sibling rows)
+                    const parentProd = products.find(p =>
+                      p.sku === item.sku || p.variants?.some(v => v.sku === item.sku)
                     );
-                    // Show: this item's own selected variant (so it appears highlighted) + any not yet taken
-                    const visibleVariants = allVariants.filter(v => v.id === item.variantId || !takenByOthers.has(v.id));
-                    const noneSelected = !item.variantId;
+                    // Variant SKUs already claimed by OTHER rows of the same parent product
+                    const takenByOthers = new Set(
+                      parentProd ? items
+                        .filter(i => i.id !== item.id && parentProd.variants?.some(v => v.sku === i.sku))
+                        .map(i => i.sku)
+                      : []
+                    );
+                    // Show: this item's own selected variant + any not yet taken
+                    const visibleVariants = allVariants.filter(v => v.sku === item.sku || !takenByOthers.has(v.sku));
+                    const noneSelected = !allVariants.some(v => v.sku === item.sku);
                     return (
                       <div className={`mx-4 mb-2 mt-0.5 flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors ${
                         noneSelected
@@ -1054,8 +1053,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           </span>
                         ) : (
                           visibleVariants.map(v => {
-                            const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || v.id;
-                            const isSelected = item.variantId === v.id;
+                            const label = Object.entries(v.attributes ?? {}).map(([k, val]) => `${k}: ${val}`).join(" · ") || v.sku || "";
+                            const isSelected = item.sku === v.sku;
                             const price = getVariantPrice(v);
                             return (
                               <button
@@ -1306,8 +1305,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
             /** Find the specific variant selected on this line item (if any). */
             const findVariant = (it: SaleItem): ProductVariant | undefined => {
-              if (!it.variantId) return undefined;
-              return variantsForItem(it).find(v => v.id === it.variantId);
+              if (!it.sku) return undefined;
+              return variantsForItem(it).find(v => v.sku === it.sku);
             };
 
             /**

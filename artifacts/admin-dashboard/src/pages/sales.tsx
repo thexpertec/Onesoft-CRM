@@ -510,7 +510,7 @@ interface VariantPickerDialogProps {
   priceMode: "retail" | "wholesale" | "clubcard";
   localItems: SaleItem[];
   onClose: () => void;
-  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, productId: string, variantId: string) => void;
+  onAdd: (variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => void;
   onAddBase: (product: Product) => void;
 }
 
@@ -573,7 +573,7 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
     const sku = selected.sku || product.sku;
     const name = `${product.name} — ${variantLabel(selected)}`;
     const price = resolvedPrice(selected);
-    onAdd(sku, name, price, qty, product.unit || "pcs", product.id, selected.id);
+    onAdd(sku, name, price, qty, product.unit || "pcs");
   };
 
   if (!product) return null;
@@ -2575,7 +2575,7 @@ export default function SalesPage() {
   }, [detailId, editSale]);
 
   // ── Add variant from picker ──
-  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string, productId: string, variantId: string) => {
+  const handleAddVariant = useCallback((variantSku: string, variantName: string, variantPrice: string, qty: number, unit: string) => {
     setVariantPickerProduct(null);
     const current = localItemsRef.current;
     const settings = getSettings();
@@ -2586,8 +2586,6 @@ export default function SalesPage() {
     } else {
       const item: SaleItem = {
         ...blankSaleItem(),
-        productId,
-        variantId,
         productName: variantName,
         sku: variantSku,
         unit,
@@ -2660,7 +2658,6 @@ export default function SalesPage() {
       const defaultDiscountType = settings.posDiscountType ?? "pct";
       const item: SaleItem = {
         ...blankSaleItem(),
-        productId: product.id,
         productName: product.name,
         sku: product.sku,
         unit: product.unit || "pcs",
