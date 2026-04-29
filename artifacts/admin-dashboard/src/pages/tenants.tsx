@@ -551,9 +551,13 @@ export default function TenantsPage() {
   }
 
   function handleSwitch(tenant: Tenant) {
-    switchTenant(tenant.id);
-    navigate("/");
-    toast({ title: `Switched to ${tenant.name}`, description: "You are now viewing this tenant's data." });
+    // Open the tenant dashboard in a new tab with ?tenant=<id> so the new tab
+    // auto-switches to that tenant's namespace on load.
+    const url = new URL(window.location.href);
+    url.pathname = "/admin-dashboard/";
+    url.search   = `?tenant=${encodeURIComponent(tenant.id)}`;
+    window.open(url.toString(), "_blank");
+    toast({ title: `Opening ${tenant.name} in a new tab…` });
   }
 
   function handleSeedCOA(tenant: Tenant) {

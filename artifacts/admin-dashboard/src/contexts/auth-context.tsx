@@ -181,8 +181,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userId  = localStorage.getItem(AUTH_USER_ID);
     if (!isAuth || !userId) return;
 
-    const tenantId = localStorage.getItem(TENANT_KEY);
-    const resolvedTenantId = tenantId === "" ? null : (tenantId ?? null);
+    // Check for ?tenant=<id> URL param — used when opening a tenant in a new tab.
+    // We store it in sessionStorage (per-tab) so the original tab's localStorage
+    // is never overwritten, and the new tab survives a page refresh.
+    const SESSION_TENANT_KEY = "onesoft_tab_tenant";
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantParam = urlParams.get("tenant");
+    let resolvedTenantId: string | null;
+    if (tenantParam) {
+      // URL param takes priority — store per-tab, clean up the URL
+      sessionStorage.setItem(SESSION_TENANT_KEY, tenantParam);
+      resolvedTenantId = tenantParam;
+      setActiveTenant(tenantParam);
+      setCurrentTenantId(tenantParam);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else {
+      // Check per-tab sessionStorage override first (survives F5 refresh of tab)
+      const tabTenant = sessionStorage.getItem(SESSION_TENANT_KEY);
+      if (tabTenant) {
+        resolvedTenantId = tabTenant;
+        setActiveTenant(tabTenant);
+        setCurrentTenantId(tabTenant);
+      } else {
+        const tenantId = localStorage.getItem(TENANT_KEY);
+        resolvedTenantId = tenantId === "" ? null : (tenantId ?? null);
+      }
+    }
 
     setIsSyncing(true);
     syncAllFromServer(resolvedTenantId).finally(() => {
@@ -385,6 +409,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveTenant(tenantId);
     setCurrentTenantId(tenantId);
     localStorage.setItem(TENANT_KEY, tenantId ?? "");
+    // Clear the per-tab sessionStorage override so normal localStorage takes over
+    sessionStorage.removeItem("onesoft_tab_tenant");
 
     // Sync that tenant's data from DB
     if (tenantId) {
