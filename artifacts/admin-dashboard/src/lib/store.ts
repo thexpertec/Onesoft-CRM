@@ -6429,9 +6429,66 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       const ns = `t:${tenantId}`;
       const tenantData = await kvGetAll(ns);
       if (tenantData) {
+        // ── Snapshot critical per-tenant arrays BEFORE the sync loop overwrites them.
+        // This lets us detect records that were written locally (via _lsCache) but
+        // whose _apiWrite hadn't landed on the server yet when the page was refreshed —
+        // a common race: write succeeds in-memory, browser is refreshed mid-flight,
+        // the page's syncAllFromServer sees the pre-write server state and wipes the
+        // just-created records. We merge them back and push to server to heal.
+        const SELF_HEAL_TENANT_KEYS = [
+          JE_KEY,      // Journal Entries  (most critical — auto-posted by POS)
+          SALES_KEY,   // POS / draft sales
+          CUSTOMERS_KEY,
+          "admin-invoices",
+          "admin-purchases",
+          "admin-payment-accounts",
+        ] as const;
+        const tenantPreSync: Record<string, string | null> = {};
+        for (const tKey of SELF_HEAL_TENANT_KEYS) {
+          const lsKey = `t:${tenantId}:${tKey}`;
+          try { tenantPreSync[tKey] = localStorage.getItem(lsKey); } catch { tenantPreSync[tKey] = null; }
+        }
+
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
             _lsCache(`t:${tenantId}:${key}`, value);
+          }
+        }
+
+        // ── Self-heal for tenant arrays ─────────────────────────────────────
+        // Case 1: key missing from server → push entire local array up.
+        // Case 2: server has the key but local has MORE items (write was in-flight
+        //         at refresh time) → merge local-only records back, push merged.
+        for (const tKey of SELF_HEAL_TENANT_KEYS) {
+          const rawLocal = tenantPreSync[tKey];
+          const lsKey    = `t:${tenantId}:${tKey}`;
+
+          if (!(tKey in tenantData)) {
+            // Case 1: key missing from server entirely — push local up
+            if (!rawLocal) continue;
+            try {
+              const parsed = JSON.parse(rawLocal);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                console.info(`[sync] Self-heal tenant(missing): "${tKey}" (${parsed.length} items) → server`);
+                kvPut(ns, tKey, parsed).catch(() => {});
+              }
+            } catch { /* malformed */ }
+          } else {
+            // Case 2: key exists on server — check if local had items server is missing
+            if (!rawLocal) continue;
+            try {
+              const localArr  = JSON.parse(rawLocal) as Array<{ id?: string }>;
+              const serverVal = tenantData[tKey];
+              const serverArr = Array.isArray(serverVal) ? (serverVal as Array<{ id?: string }>) : [];
+              const serverIds = new Set(serverArr.map(x => x.id).filter(Boolean));
+              const localOnly = localArr.filter(x => x.id && !serverIds.has(x.id));
+              if (localOnly.length > 0) {
+                const merged = [...serverArr, ...localOnly];
+                console.info(`[sync] Self-heal tenant(merge): "${tKey}" server ${serverArr.length}, +${localOnly.length} local-only → ${merged.length}`);
+                _lsCache(lsKey, merged);           // fix this page-load immediately
+                kvPut(ns, tKey, merged).catch(() => {}); // push merged to server
+              }
+            } catch { /* malformed — ignore */ }
           }
         }
       }
