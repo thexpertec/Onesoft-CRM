@@ -146,6 +146,9 @@ export default function Login() {
           "Invalid username or password."
         );
       }
+    } catch (err) {
+      setError("Sign in failed — please check your connection and try again.");
+      console.error("[login] unexpected error:", err);
     } finally { setLoading(false); }
   };
 
