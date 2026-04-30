@@ -272,24 +272,24 @@ export default function ProductsPage() {
 
   // ── Column visibility ──────────────────────────────────────────────────────
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
-    try { return new Set<string>(JSON.parse(localStorage.getItem("products-hidden-cols") || "[]")); }
+    try { return new Set<string>(JSON.parse(sessionStorage.getItem("products-hidden-cols") || "[]")); }
     catch { return new Set<string>(); }
   });
   const [wrapText, setWrapText] = useState<boolean>(() => {
-    try { return localStorage.getItem("products-wrap-text") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("products-wrap-text") === "true"; } catch { return false; }
   });
   const toggleWrap = () => setWrapText(v => {
     const next = !v;
-    try { localStorage.setItem("products-wrap-text", String(next)); } catch {}
+    try { sessionStorage.setItem("products-wrap-text", String(next)); } catch {}
     return next;
   });
 
   const [statsOpen, setStatsOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem("products-stats-open") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("products-stats-open") === "true"; } catch { return false; }
   });
   const toggleStats = () => setStatsOpen(v => {
     const next = !v;
-    try { localStorage.setItem("products-stats-open", String(next)); } catch {}
+    try { sessionStorage.setItem("products-stats-open", String(next)); } catch {}
     return next;
   });
 
@@ -307,7 +307,7 @@ export default function ProductsPage() {
     setHiddenCols(prev => {
       const next = new Set(prev);
       if (next.has(field)) next.delete(field); else next.add(field);
-      try { localStorage.setItem("products-hidden-cols", JSON.stringify([...next])); } catch { /* quota — in-memory state still correct */ }
+      try { sessionStorage.setItem("products-hidden-cols", JSON.stringify([...next])); } catch { /* quota — in-memory state still correct */ }
       return next;
     });
   };
@@ -1251,7 +1251,7 @@ export default function ProductsPage() {
                 <div className="px-3 py-1.5 flex items-center justify-between border-b border-gray-100 dark:border-border">
                   <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Show / Hide Columns</span>
                   {hiddenCols.size > 0 && (
-                    <button onClick={() => { setHiddenCols(new Set()); localStorage.removeItem("products-hidden-cols"); }}
+                    <button onClick={() => { setHiddenCols(new Set()); sessionStorage.removeItem("products-hidden-cols"); }}
                       className="text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold">Reset</button>
                   )}
                 </div>

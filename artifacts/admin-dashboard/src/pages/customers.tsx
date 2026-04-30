@@ -238,11 +238,11 @@ export default function CustomersPage() {
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
   const [showImport,   setShowImport]   = useState(false);
   const [wrapText,     setWrapText]     = useState<boolean>(() => {
-    try { return localStorage.getItem("customers-wrap-text") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("customers-wrap-text") === "true"; } catch { return false; }
   });
   const toggleWrap = () => setWrapText(v => {
     const next = !v;
-    try { localStorage.setItem("customers-wrap-text", String(next)); } catch {}
+    try { sessionStorage.setItem("customers-wrap-text", String(next)); } catch {}
     return next;
   });
 

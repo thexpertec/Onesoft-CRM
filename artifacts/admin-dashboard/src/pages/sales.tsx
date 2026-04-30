@@ -2374,11 +2374,11 @@ export default function SalesPage() {
   const [filterPayMode,  setFilterPayMode]  = useState("");
   const [filterPayStatus,setFilterPayStatus]= useState("");
   const [wrapText,       setWrapText]       = useState<boolean>(() => {
-    try { return localStorage.getItem("sales-wrap-text") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("sales-wrap-text") === "true"; } catch { return false; }
   });
   const toggleWrap = () => setWrapText(v => {
     const next = !v;
-    try { localStorage.setItem("sales-wrap-text", String(next)); } catch {}
+    try { sessionStorage.setItem("sales-wrap-text", String(next)); } catch {}
     return next;
   });
 
@@ -2533,7 +2533,7 @@ export default function SalesPage() {
   }, []);
 
   const openDetail = (id: string) => {
-    // Try current React state first; fall back to a fresh localStorage read
+    // Try current React state first; fall back to a fresh in-memory read
     // for a just-created sale that hasn't propagated to state yet.
     const sale = sales.find(s => s.id === id) ?? getSales().find(s => s.id === id);
     if (!sale) { setDetailId(id); return; }

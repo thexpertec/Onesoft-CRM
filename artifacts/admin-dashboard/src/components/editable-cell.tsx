@@ -259,7 +259,7 @@ export function ExcelGridShell({
 
   const [widths, setWidths] = useState<Record<string, number>>(() => {
     const stored: Record<string, number> = storageKey
-      ? (() => { try { return JSON.parse(localStorage.getItem(storageKey) ?? "{}"); } catch { return {}; } })()
+      ? (() => { try { return JSON.parse(sessionStorage.getItem(storageKey) ?? "{}"); } catch { return {}; } })()
       : {};
     const result: Record<string, number> = {};
     cols.forEach(c => { result[c.field] = stored[c.field] ?? c.minW; });
@@ -281,7 +281,7 @@ export function ExcelGridShell({
     };
 
     const onUp = () => {
-      if (storageKey) try { localStorage.setItem(storageKey, JSON.stringify(widthsRef.current)); } catch { /* quota */ }
+      if (storageKey) try { sessionStorage.setItem(storageKey, JSON.stringify(widthsRef.current)); } catch { /* quota */ }
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";

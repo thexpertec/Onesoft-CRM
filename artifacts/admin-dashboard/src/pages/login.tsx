@@ -117,8 +117,14 @@ export default function Login() {
   const [demoTenants,  setDemoTenants]  = useState<Tenant[]>([]);
   const [featureTick,  setFeatureTick]  = useState(0);
 
-  useEffect(() => {
+  const refreshDemos = () =>
     setDemoTenants(getTenants().filter(t => t.isDemo && isTenantDataSeeded(t.id)));
+
+  useEffect(() => {
+    refreshDemos();
+    window.addEventListener("onesoft:data-synced", refreshDemos);
+    return () => window.removeEventListener("onesoft:data-synced", refreshDemos);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

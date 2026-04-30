@@ -427,23 +427,22 @@ export default function TenantsPage() {
 
   function handleLoadDemo() {
     setDemoLoading(true);
-    setTimeout(() => {
-      try {
-        const tenantId = seedDemoTenant();
+    seedDemoTenant()
+      .then(tenantId => {
         reload();
         toast({
           title: "Demo data loaded!",
           description: `Premier Furnishings Ltd. is ready. Switch to it below to explore all modules.`,
         });
-        // Auto-switch into the demo tenant
         switchTenant(tenantId);
         navigate("/");
-      } catch (e) {
+      })
+      .catch(e => {
         toast({ title: "Seed failed", description: String(e), variant: "destructive" });
-      } finally {
+      })
+      .finally(() => {
         setDemoLoading(false);
-      }
-    }, 50);
+      });
   }
 
   function handleClearDemo() {

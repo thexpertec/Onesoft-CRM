@@ -141,12 +141,22 @@ export function clearActivities(): void {
 // Architecture:
 // _memRaw (in-memory Map) — PRIMARY fast store, no quota, lives for the tab session.
 // PostgreSQL KV (via API server) — DURABLE persistent store, source of truth.
-// localStorage — READ-ONLY warm-start cache: populated by syncAllFromServer so the
-//   next page load renders quickly before the async server sync completes.
-//   Mutations NEVER write to localStorage — only server + memory.
+//
+// Data flow: login → syncAllFromServer → _memRaw populated from DB.
+// All mutations write to _memRaw immediately and fire _apiWrite to persist to DB.
+// No localStorage is used for business data.
 
 /** Raw JSON cache — no browser quota limit, survives within the tab session. */
 const _memRaw = new Map<string, string>();
+
+/** Returns true when the in-memory cache holds at least one key for the given tenant namespace. */
+export function isTenantCached(tenantId: string): boolean {
+  const prefix = `t:${tenantId}:`;
+  for (const k of _memRaw.keys()) {
+    if (k.startsWith(prefix)) return true;
+  }
+  return false;
+}
 
 /**
  * Tracks every in-flight _apiWrite promise by storageKey (most recent write
@@ -155,33 +165,22 @@ const _memRaw = new Map<string, string>();
  */
 const _pendingWrites = new Map<string, Promise<void>>();
 
-/**
- * Read: in-memory first (fastest), then localStorage warm-start cache.
- * localStorage is only populated by syncAllFromServer, never by mutations.
- */
+/** Read from in-memory cache. Returns null if not yet synced from server. */
 function _lsGet(storageKey: string): string | null {
-  if (_memRaw.has(storageKey)) return _memRaw.get(storageKey)!;
-  try { return localStorage.getItem(storageKey); } catch { return null; }
+  return _memRaw.get(storageKey) ?? null;
 }
 
-/**
- * Mutation write: in-memory only. Server persistence is handled by _apiWrite.
- * Does NOT write to localStorage — server is the durable store.
- */
+/** Write to in-memory cache only. Server persistence is handled by _apiWrite. */
 function _lsSet(storageKey: string, data: unknown): void {
   _memRaw.set(storageKey, JSON.stringify(data));
 }
 
-/**
- * Sync-cache write: called only by syncAllFromServer to update the warm-start
- * localStorage cache so future page loads render quickly before the server sync.
- */
+/** Cache write: updates in-memory so the rest of the app sees the change immediately. */
 function _lsCache(storageKey: string, data: unknown): void {
   _memRaw.set(storageKey, JSON.stringify(data));
-  try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch { /* quota — skip cache, server is authoritative */ }
 }
 
-/** Remove from in-memory cache. localStorage cache will be corrected on next sync. */
+/** Remove from in-memory cache. */
 function _lsRemove(storageKey: string): void {
   _memRaw.delete(storageKey);
 }
@@ -230,13 +229,11 @@ function getStored<T>(key: string): T[] {
   return [];
 }
 
-/** Tenant-namespaced write: memory + localStorage cache + server. */
+/** Tenant-namespaced write: memory + server. */
 function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
-  _lsCache(sk, data);   // update _memRaw AND localStorage so warm-start is immediately correct
+  _lsCache(sk, data);   // update _memRaw immediately so rest of app sees the change
   _apiWrite(sk, data);  // persist to server (tracked by _pendingWrites)
-  // Notify same-tab listeners (browser storage event only fires in other tabs)
-  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop in non-browser env */ }
 }
 
 /** Platform-level read (always unprefixed — for users & tenants registry). */
@@ -253,7 +250,7 @@ function getGlobal<T>(key: string): T[] {
 
 /** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
-  _lsCache(key, data);  // write to _memRaw + localStorage immediately (warm-start cache)
+  _lsCache(key, data);  // write to _memRaw immediately
   // Fire-and-forget; awaitable variant available via setGlobalAsync below
   _apiWrite(key, data).catch(() => { /* error already logged */ });
 }
@@ -322,7 +319,7 @@ export const updateDoc = (id: string, updates: Partial<Omit<RequirementDoc, "id"
 export const deleteDoc = (id: string): void => {
   setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
 };
-/** Force-push all localStorage docs to the API server (rescue docs created before sync existed). */
+/** Force-push in-memory docs to the API server (manual repair / recovery tool). */
 export const syncDocsToApi = (): void => {
   const docs = getDocs();
   if (docs.length > 0) _apiWrite(tenantKey(DOCS_KEY), docs);
@@ -1386,9 +1383,8 @@ export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "upda
     updatedAt: new Date().toISOString(),
   };
   const updated = [...getAdminUsers(), newUser];
-  // Use _lsCache (memory + localStorage) immediately for this tab session,
-  // then push to server via setGlobalAsync so the write is durable before
-  // the next page load's syncAllFromServer can overwrite localStorage.
+  // Update in-memory cache immediately so the rest of the app sees the new
+  // user; then persist to server via setGlobalAsync for durability.
   _lsCache(USERS_KEY, updated);
   setGlobalAsync(USERS_KEY, updated).catch(err =>
     console.error("[users] Failed to persist new user to server:", err)
@@ -2010,9 +2006,8 @@ export const reorderProducts = (orderedIds: string[]): void => {
 };
 
 /**
- * Bulk import helper — does ONE localStorage read + ONE write for the entire
+ * Bulk import helper — does ONE in-memory read + ONE write for the entire
  * batch instead of N individual read→append→write cycles.
- * This avoids the ~5 MB localStorage quota that blocks single-row imports at ~600 rows.
  */
 export const bulkImportProducts = async (
   toCreate: Omit<Product, "id" | "createdAt" | "updatedAt">[],
@@ -5584,9 +5579,8 @@ export function getAccounts(): Account[] {
 
 function _saveAccounts(accounts: Account[]): void {
   const sk = tenantKey(COA_KEY);
-  _lsCache(sk, accounts);   // memory + localStorage so warm-start reflects the change
+  _lsCache(sk, accounts);
   _apiWrite(sk, accounts);
-  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop */ }
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -5653,11 +5647,7 @@ export function getJournalEntries(): JournalEntry[] {
 }
 
 function _saveJournalEntries(entries: JournalEntry[]): void {
-  // Use setStored so that:
-  //   1. _memRaw + localStorage are updated immediately (warm-start cache)
-  //   2. _apiWrite fires to persist to the server KV store
-  //   3. A "storage" event is dispatched so same-tab hooks (useJournalEntries)
-  //      refresh without requiring a page navigation or tab switch.
+  // setStored: updates _memRaw immediately + fires _apiWrite to persist to server.
   setStored(JE_KEY, entries);
 }
 
@@ -6094,7 +6084,7 @@ export function autoPostPurchaseJE(params: {
 
 /**
  * On login, fetch all stored data for the given namespace from PostgreSQL
- * and hydrate localStorage so the rest of the app works as normal.
+ * and hydrate the in-memory cache (_memRaw) so the rest of the app works as normal.
  *
  * Called by auth-context after a successful login.
  */
@@ -6142,9 +6132,8 @@ export function getRPVouchers(): RPVoucher[] {
 
 function _saveRPVouchers(data: RPVoucher[]): void {
   const sk = tenantKey(RPV_KEY);
-  _lsCache(sk, data);   // memory + localStorage so warm-start reflects the change
+  _lsCache(sk, data);
   _apiWrite(sk, data);
-  try { window.dispatchEvent(new StorageEvent("storage", { key: sk, storageArea: localStorage })); } catch { /* noop */ }
 }
 
 function nextRPVoucherNumber(type: "receipt" | "payment"): string {
@@ -6442,28 +6431,7 @@ function _dedupeByKey<T extends { createdAt?: string }>(
   return seen.size < items.length ? Array.from(seen.values()) : items;
 }
 
-/**
- * Platform-level keys that MUST live on the server. If the sync response is
- * missing one of these but the local cache has data for it, we treat that as
- * an inconsistency and PUSH local → server to heal it.  This guarantees the
- * tenant registry (and the like) eventually converges across every device.
- */
-// Keys that must be self-healed in the global namespace (no tenant prefix).
-// This covers both platform keys (always global) AND business-data keys that live
-// in global when no tenant is active — so a mid-flight page refresh never clobbers
-// records that were written to memory/localStorage but whose _apiWrite hadn't
-// completed yet when syncAllFromServer read the server state.
-const SELF_HEAL_GLOBAL_KEYS = [
-  "admin-tenants",
-  "admin-users",
-  // Business data — live in global when no tenant is active
-  "admin-journal-entries",
-  "admin-sales",
-  "admin-customers",
-  "admin-invoices",
-  "admin-purchases",
-  "admin-payment-accounts",
-] as const;
+// (self-heal constants removed — no localStorage means no pre-sync snapshot needed)
 
 /**
  * Removes Journal Entries whose reference matches a receipt/payment voucher
@@ -6510,212 +6478,92 @@ export function purgeOrphanedVoucherJEs(): number {
   return _purgeOrphanedVoucherJEs(tenantId, true /* write to DB */);
 }
 
+/**
+ * Pull all data from the PostgreSQL KV store into the in-memory cache.
+ * The server is the single source of truth — no localStorage involved.
+ *
+ * Flow:
+ *  1. Drain any pending in-flight writes so the server holds the freshest state.
+ *  2. Fetch global keys (users, tenants) → write into _memRaw.
+ *  3. If a tenant is active, fetch tenant-scoped keys → write into _memRaw.
+ *  4. Run lightweight data-quality passes (orphan-JE purge, dedup).
+ *  5. Fire "onesoft:data-synced" so all hooks re-render with fresh data.
+ */
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
-    // ── Drain pending writes FIRST ───────────────────────────────────────────
-    // Any fire-and-forget _apiWrite (delete, update, create) that hasn't
-    // landed on the server yet would cause the subsequent kvGetAll to return
-    // stale data — which would then overwrite _memRaw and resurrect records
-    // the user just deleted.  Settling all pending promises here guarantees
-    // the server holds the freshest state before we read from it.
+    // Step 1 — Drain pending writes so we read the server's freshest state.
     if (_pendingWrites.size > 0) {
       await Promise.allSettled([..._pendingWrites.values()]);
     }
 
-    // Always sync global data (users, tenants, module groups)
+    // Step 2 — Global data (users, tenants, module groups, platform config).
     const globalData = await kvGetAll("global");
     if (globalData) {
-      // ── Snapshot critical platform keys BEFORE the sync loop overwrites them.
-      //    The self-heal below must compare the pre-sync local state (which may
-      //    include records written by createAdminUser / createTenant that haven't
-      //    landed on the server yet) against the server state.  Reading
-      //    localStorage AFTER _lsCache() runs would always return the server
-      //    value we just wrote, making the merge a permanent no-op and causing
-      //    newly created Manager / Admin users (and tenants) to vanish on reload.
-      const preSyncSnapshots: Record<string, string | null> = {};
-      for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
-        try { preSyncSnapshots[platKey] = localStorage.getItem(platKey); } catch { preSyncSnapshots[platKey] = null; }
-      }
-
       for (const [key, value] of Object.entries(globalData)) {
         if (value !== undefined && value !== null) {
-          // Server is authoritative. Use _lsCache so next page load gets a
-          // warm-start from localStorage without needing to wait for the server.
           _lsCache(key, value);
-        }
-      }
-
-      // ── Self-heal: critical platform keys must always converge on the server.
-      //    Case 1: key is MISSING from server — push entire local array up.
-      //    Case 2: key EXISTS on server but local has MORE items (fire-and-forget
-      //            write hadn't completed before the last sync) — merge the
-      //            local-only records back in, push merged result, and update
-      //            in-memory + localStorage so this page load is correct too.
-      for (const platKey of SELF_HEAL_GLOBAL_KEYS) {
-        // Use the pre-sync snapshot — NOT a fresh localStorage.getItem() — so
-        // we see the locally-created records before the server value clobbered them.
-        const rawLocal = preSyncSnapshots[platKey];
-
-        if (!(platKey in globalData)) {
-          // Case 1: key missing from server entirely — push local up
-          if (!rawLocal) continue;
-          try {
-            const parsed = JSON.parse(rawLocal);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              console.info(`[sync] Self-heal(missing): pushing local "${platKey}" (${parsed.length} items) up to server`);
-              kvPut("global", platKey, parsed).catch(() => {});
-            }
-          } catch { /* malformed */ }
-        } else {
-          // Case 2: key exists on server — check if local has items server is missing
-          if (!rawLocal) continue;
-          try {
-            const localArr  = JSON.parse(rawLocal) as Array<{ id?: string }>;
-            const serverVal = globalData[platKey];
-            const serverArr = Array.isArray(serverVal) ? (serverVal as Array<{ id?: string }>) : [];
-            const serverIds = new Set(serverArr.map(x => x.id).filter(Boolean));
-            const localOnly = localArr.filter(x => x.id && !serverIds.has(x.id));
-            if (localOnly.length > 0) {
-              const merged = [...serverArr, ...localOnly];
-              console.info(`[sync] Self-heal(merge): "${platKey}" — server had ${serverArr.length}, local had ${localOnly.length} extra. Merged to ${merged.length}.`);
-              _lsCache(platKey, merged);   // fix this page load immediately
-              kvPut("global", platKey, merged).catch(() => {}); // push merged to server
-            }
-          } catch { /* malformed — ignore */ }
         }
       }
     }
 
-    // Sync tenant-scoped data when a tenant is active
+    // Step 3 — Tenant-scoped data.
     if (tenantId) {
       const ns = `t:${tenantId}`;
       const tenantData = await kvGetAll(ns);
       if (tenantData) {
-        // ── Snapshot critical per-tenant arrays BEFORE the sync loop overwrites them.
-        // This lets us detect records that were written locally (via _lsCache) but
-        // whose _apiWrite hadn't landed on the server yet when the page was refreshed —
-        // a common race: write succeeds in-memory, browser is refreshed mid-flight,
-        // the page's syncAllFromServer sees the pre-write server state and wipes the
-        // just-created records. We merge them back and push to server to heal.
-        const SELF_HEAL_TENANT_KEYS = [
-          JE_KEY,      // Journal Entries  (most critical — auto-posted by POS)
-          SALES_KEY,   // POS / draft sales
-          CUSTOMERS_KEY,
-          "admin-invoices",
-          "admin-purchases",
-          "admin-payment-accounts",
-        ] as const;
-        const tenantPreSync: Record<string, string | null> = {};
-        for (const tKey of SELF_HEAL_TENANT_KEYS) {
-          const lsKey = `t:${tenantId}:${tKey}`;
-          try { tenantPreSync[tKey] = localStorage.getItem(lsKey); } catch { tenantPreSync[tKey] = null; }
-        }
-
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
             _lsCache(`t:${tenantId}:${key}`, value);
           }
         }
+      }
 
-        // ── Self-heal for tenant arrays ─────────────────────────────────────
-        // Case 1: key missing from server → push entire local array up.
-        // Case 2: server has the key but local has MORE items (write was in-flight
-        //         at refresh time) → merge local-only records back, push merged.
-        for (const tKey of SELF_HEAL_TENANT_KEYS) {
-          const rawLocal = tenantPreSync[tKey];
-          const lsKey    = `t:${tenantId}:${tKey}`;
+      // Step 4a — Remove orphaned voucher Journal Entries.
+      _purgeOrphanedVoucherJEs(tenantId, true);
+    }
 
-          if (!(tKey in tenantData)) {
-            // Case 1: key missing from server entirely — push local up
-            if (!rawLocal) continue;
-            try {
-              const parsed = JSON.parse(rawLocal);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.info(`[sync] Self-heal tenant(missing): "${tKey}" (${parsed.length} items) → server`);
-                kvPut(ns, tKey, parsed).catch(() => {});
-              }
-            } catch { /* malformed */ }
-          } else {
-            // Case 2: key exists on server — check if local had items server is missing
-            if (!rawLocal) continue;
-            try {
-              const localArr  = JSON.parse(rawLocal) as Array<{ id?: string }>;
-              const serverVal = tenantData[tKey];
-              const serverArr = Array.isArray(serverVal) ? (serverVal as Array<{ id?: string }>) : [];
-              const serverIds = new Set(serverArr.map(x => x.id).filter(Boolean));
-              const localOnly = localArr.filter(x => x.id && !serverIds.has(x.id));
-              if (localOnly.length > 0) {
-                const merged = [...serverArr, ...localOnly];
-                console.info(`[sync] Self-heal tenant(merge): "${tKey}" server ${serverArr.length}, +${localOnly.length} local-only → ${merged.length}`);
-                _lsCache(lsKey, merged);           // fix this page-load immediately
-                kvPut(ns, tKey, merged).catch(() => {}); // push merged to server
-              }
-            } catch { /* malformed — ignore */ }
+    // Step 4b — Deduplicate products and stock items.
+    const prodsKey = tenantId ? `t:${tenantId}:${PRODUCTS_KEY}` : PRODUCTS_KEY;
+    const prodsRaw = _memRaw.get(prodsKey);
+    if (prodsRaw) {
+      try {
+        const prods = JSON.parse(prodsRaw) as Product[];
+        if (Array.isArray(prods)) {
+          const clean = _dedupeByKey(prods, p => ((p as Product).name || "").trim().toLowerCase());
+          if (clean !== prods) {
+            console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length}`);
+            _lsCache(prodsKey, clean);
+            kvPut(tenantId ? `t:${tenantId}` : "global", PRODUCTS_KEY, clean).catch(() => {});
           }
         }
-      }
-
-      // ── Auto-heal: remove orphaned voucher Journal Entries ─────────────────
-      // JEs whose reference matches a voucher number (RV-/PV-) but the voucher
-      // no longer exists are "orphans" — left behind by pre-cascade deletes.
-      // Purge them and persist back to DB so the fix survives next refresh.
-      _purgeOrphanedVoucherJEs(tenantId, true /* persist to DB */);
+      } catch { /* malformed */ }
     }
 
-    // ── Auto-repair: deduplicate products and stock by name ─────────────────
-    {
-      const prodsStorageKey = tenantId ? `t:${tenantId}:${PRODUCTS_KEY}` : PRODUCTS_KEY;
-      const prodsRaw = _memRaw.get(prodsStorageKey);
-      if (prodsRaw) {
-        try {
-          const prods = JSON.parse(prodsRaw) as Product[];
-          if (Array.isArray(prods)) {
-            const clean = _dedupeByKey(
-              prods,
-              p => ((p as Product).name || "").trim().toLowerCase(),
-            );
-            if (clean !== prods) {
-              console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length}`);
-              _lsCache(prodsStorageKey, clean);
-              const dedupeNs = tenantId ? `t:${tenantId}` : "global";
-              kvPut(dedupeNs, PRODUCTS_KEY, clean).catch(() => {});
-            }
+    const stockKey = tenantId ? `t:${tenantId}:${STOCK_KEY}` : STOCK_KEY;
+    const stockRaw = _memRaw.get(stockKey);
+    if (stockRaw) {
+      try {
+        const items = JSON.parse(stockRaw) as StockItem[];
+        if (Array.isArray(items)) {
+          const clean = _dedupeByKey(items, s => [
+            ((s as StockItem).productName || "").trim().toLowerCase(),
+            ((s as StockItem).sku || "").trim().toLowerCase(),
+            ((s as StockItem).store || ""),
+            ((s as StockItem).stockType || ""),
+          ].join("|"));
+          if (clean !== items) {
+            console.info(`[sync] Auto-dedup stock: ${items.length} → ${clean.length}`);
+            _lsCache(stockKey, clean);
+            kvPut(tenantId ? `t:${tenantId}` : "global", STOCK_KEY, clean).catch(() => {});
           }
-        } catch { /* malformed JSON — leave as-is */ }
-      }
-
-      const stockStorageKey = tenantId ? `t:${tenantId}:${STOCK_KEY}` : STOCK_KEY;
-      const stockRaw = _memRaw.get(stockStorageKey);
-      if (stockRaw) {
-        try {
-          const items = JSON.parse(stockRaw) as StockItem[];
-          if (Array.isArray(items)) {
-            const clean = _dedupeByKey(
-              items,
-              s => [
-                ((s as StockItem).productName || "").trim().toLowerCase(),
-                ((s as StockItem).sku || "").trim().toLowerCase(),
-                ((s as StockItem).store || ""),
-                ((s as StockItem).stockType || ""),
-              ].join("|"),
-            );
-            if (clean !== items) {
-              console.info(`[sync] Auto-dedup stock: ${items.length} → ${clean.length}`);
-              _lsCache(stockStorageKey, clean);
-              const dedupeNs = tenantId ? `t:${tenantId}` : "global";
-              kvPut(dedupeNs, STOCK_KEY, clean).catch(() => {});
-            }
-          }
-        } catch { /* malformed JSON */ }
-      }
+        }
+      } catch { /* malformed */ }
     }
   } catch {
-    // Network unavailable — in-memory cache / localStorage data will be used as fallback
+    // Network unavailable — in-memory cache from previous writes is used as fallback.
   }
 
-  // Notify all data hooks that the server sync has completed so they can re-read
-  // their slice of _memRaw. This is critical on page refresh, where hooks mount
-  // before the async sync finishes and would otherwise show stale data.
+  // Step 5 — Notify all data hooks so they re-render with the fresh server data.
   try {
     window.dispatchEvent(new CustomEvent("onesoft:data-synced"));
   } catch { /* SSR guard */ }

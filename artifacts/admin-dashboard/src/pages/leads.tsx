@@ -1119,11 +1119,11 @@ export default function Leads() {
 
   // ── Wrap text ─────────────────────────────────────────────────────────────
   const [wrapText, setWrapText] = useState<boolean>(() => {
-    try { return localStorage.getItem("leads-wrap-text") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("leads-wrap-text") === "true"; } catch { return false; }
   });
   const toggleWrap = () => setWrapText(v => {
     const next = !v;
-    try { localStorage.setItem("leads-wrap-text", String(next)); } catch {}
+    try { sessionStorage.setItem("leads-wrap-text", String(next)); } catch {}
     return next;
   });
 
@@ -1131,7 +1131,7 @@ export default function Leads() {
   const COL_WIDTHS_KEY = "onesoft-col-widths:leads";
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     const stored: Record<string, number> = (() => {
-      try { return JSON.parse(localStorage.getItem(COL_WIDTHS_KEY) ?? "{}"); } catch { return {}; }
+      try { return JSON.parse(sessionStorage.getItem(COL_WIDTHS_KEY) ?? "{}"); } catch { return {}; }
     })();
     const result: Record<string, number> = {};
     COLS.forEach(c => { result[c.field] = stored[c.field] ?? c.minW; });
@@ -1148,7 +1148,7 @@ export default function Leads() {
       setColWidths(prev => ({ ...prev, [field]: newW }));
     };
     const onUp = () => {
-      try { localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidthsRef.current)); } catch {}
+      try { sessionStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidthsRef.current)); } catch {}
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";

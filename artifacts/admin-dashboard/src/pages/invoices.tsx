@@ -2022,7 +2022,7 @@ export function InvoiceFormPage() {
   }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock, postSaleJE]);
 
   const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
-    // Read directly from localStorage for the freshest state — React state may be stale
+    // Read directly from in-memory cache for the freshest state — React state may be stale
     // if the user clicks multiple status buttons in rapid succession.
     const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
@@ -2148,7 +2148,7 @@ export function InvoiceFormPage() {
     newTotalPaid: string,
     newStatus: InvoiceStatus
   ) => {
-    // Read from localStorage for freshest state — React state may lag behind
+    // Read from in-memory cache for freshest state — React state may lag behind
     const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
 
@@ -2268,11 +2268,11 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<"All" | InvoiceStatus>("All");
   const [search,       setSearch]       = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [wrapText,     setWrapText]     = useState<boolean>(() => {
-    try { return localStorage.getItem("invoices-wrap-text") === "true"; } catch { return false; }
+    try { return sessionStorage.getItem("invoices-wrap-text") === "true"; } catch { return false; }
   });
   const toggleWrap = () => setWrapText(v => {
     const next = !v;
-    try { localStorage.setItem("invoices-wrap-text", String(next)); } catch {}
+    try { sessionStorage.setItem("invoices-wrap-text", String(next)); } catch {}
     return next;
   });
 

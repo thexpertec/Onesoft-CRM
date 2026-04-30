@@ -7,14 +7,17 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## Artifacts
 
 - **requirement-doc** (`artifacts/requirement-doc/`): Customer Requirement Collection Document — a beautiful, view-only single-page React + Vite frontend. No backend. Served at `/`.
-- **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. Data uses **write-through cache**: every save goes to both localStorage (fast sync read) AND PostgreSQL (persistent backup via API server). On login, all data is hydrated from PostgreSQL into localStorage. Auth via sessionStorage. Served at `/admin-dashboard/`.
+- **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. Data storage: **PostgreSQL only** — no localStorage for business data. Every mutation writes to `_memRaw` (in-memory Map, tab-scoped) immediately and fires `_apiWrite` to persist to PostgreSQL via the API server. On login, `syncAllFromServer` hydrates `_memRaw` from the DB. Auth state (login, tenant, impersonation) uses **sessionStorage** (per-tab, no cross-tab bleed). UI-only preferences (theme, document drafts, form layout modes) remain in localStorage. Served at `/admin-dashboard/`.
 - **api-server** (`artifacts/api-server/`): Express 5 API server. Provides `/api/kv/:namespace/:key` REST endpoints (GET/PUT/DELETE) backed by PostgreSQL `kv_store` table. Served at `/api`. No auth on API — it is internal only.
 - **customer-portal** (`artifacts/customer-portal/`): Tenant-based customer self-service portal served at `/customer-portal/`. Customers log in with email + phone number (matched against the tenant's `admin-customers` KV data). Pages: Dashboard (stats + recent orders), Orders (full list + search), Order Detail (line items, totals, delivery status), Profile (read-only info). Tenant identified via `?t=<tenantId>` URL param or typed at login. No separate backend — reads directly from the shared KV API (`t:{tenantId}/admin-customers`, `t:{tenantId}/admin-sales`, `t:{tenantId}/admin-settings`).
 - **tenant-store** (`artifacts/tenant-store/`): Tenant-facing e-commerce storefront. Minimal, tech-industry focused React + Vite app served at `/tenant-store/`. Reads products from `/api/kv/{namespace}/admin-products` (namespace = `t:{tenantId}` for tenant-specific, or `global` for superadmin). Cart stored in `onesoft-store-cart` localStorage key. Tenant ID passed via `?tenant=` URL param. Pages: Home, Shop, Product Detail, Category. Features: search, filter by category/brand/price, sort, cart drawer, mobile responsive.
 
 ### Admin Dashboard — Routes & Data
 
-| Route | Page | localStorage key |
+All data is stored in PostgreSQL KV store (`kv_store` table) and mirrored in `_memRaw` (in-memory Map).
+Global keys (users, tenants) use namespace `global`. Tenant-scoped keys use `t:{tenantId}:{key}`.
+
+| Route | Page | KV key |
 |---|---|---|
 | `/stock` | All Stock (All / For Sale / Not For Sale / Business Asset / Low Stock) | `admin-stock` |
 | `/stock/holds` | Stock Holds — reserved (Not For Sale) items by customer | `admin-stock` |
@@ -28,7 +31,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | `/customers` | Customer management (city + area/region fields) | `admin-customers` |
 | `/suppliers` | Supplier management (city + area/region fields) | `admin-suppliers` |
 | `/documents` | Requirement documents | `admin-req-docs` |
-| `/users` | User management (superadmin) | `admin-users` |
+| `/users` | User management (superadmin) | `admin-users` (global) |
 | `/tenants` | Tenant management (superadmin) — create/edit/delete client orgs, switch views | `admin-tenants` (global) |
 | `/module-groups` | Module Group management (superadmin) — define feature sets for tenant plans | `admin-module-groups` (global) |
 | `/settings` | App settings — company profile, financial, POS defaults, data management | `admin-settings` |

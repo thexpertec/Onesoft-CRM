@@ -14,7 +14,7 @@ async function apiFetch(url: string, options?: RequestInit) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   } catch (e) {
-    // Silently swallow network errors — localStorage is the fallback cache
+    // Silently swallow network errors — in-memory cache is the fallback
     console.warn("[api]", url, e);
     return null;
   }
