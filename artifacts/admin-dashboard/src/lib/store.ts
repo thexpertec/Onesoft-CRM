@@ -5266,22 +5266,33 @@ export function seedDefaultCoaAccounts(): void {
     dynamicChanged = true;
   }
 
-  // ── Orphaned contact ledger cleanup ─────────────────────────────────────────
-  // Accounts under AP_TRADE (Trade Payables) or AR_GROUP (Accounts Receivable)
-  // with accountType "Ledger" are auto-created per-customer/supplier.
-  // If the customer/contact no longer exists, remove the orphaned ledger.
+  // ── Orphaned contact & commission ledger cleanup ─────────────────────────────
+  // Ledger accounts under AP_TRADE, AR_GROUP, or COMMISSION_GROUP are auto-created
+  // per-contact (customer/supplier) or per-agent. If the referenced entity no longer
+  // exists in THIS tenant, remove the orphaned ledger.
+  // This also heals contamination: if accounts from another tenant's data made it
+  // into this tenant's COA via a seeding bug, they'll be cleaned up here because
+  // the agents/customers they reference don't exist in this tenant.
   const allCustomers = getStored<{ ledgerAccountId?: string }>(CUSTOMERS_KEY);
   const contactLedgerIds = new Set(allCustomers.map(c => c.ledgerAccountId).filter(Boolean) as string[]);
+
+  const allAgents = getStored<{ ledgerAccountId?: string }>(SALES_AGENTS_KEY);
+  const agentLedgerIds = new Set(allAgents.map(a => a.ledgerAccountId).filter(Boolean) as string[]);
+
   const CONTACT_PARENT_IDS = new Set<string>([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
   const beforeContactClean = dynamicAccounts.length;
   dynamicAccounts = dynamicAccounts.filter(a => {
     if (a.accountType !== "Ledger") return true;
-    if (!CONTACT_PARENT_IDS.has(a.parentId || "")) return true;
-    return contactLedgerIds.has(a.id); // keep only if a customer still references it
+    const parentId = a.parentId || "";
+    // Contact (AR/AP) ledgers — keep only if a customer/supplier still references it
+    if (CONTACT_PARENT_IDS.has(parentId)) return contactLedgerIds.has(a.id);
+    // Commission ledgers — keep only if a sales agent in THIS tenant still references it
+    if (parentId === SYS_ACCS.COMMISSION_GROUP) return agentLedgerIds.has(a.id);
+    return true;
   });
   const contactOrphansRemoved = beforeContactClean - dynamicAccounts.length;
   if (contactOrphansRemoved > 0) {
-    console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact ledger(s) — customers/suppliers no longer exist`);
+    console.info(`[COA] Removed ${contactOrphansRemoved} orphaned contact/commission ledger(s)`);
     dynamicChanged = true;
   }
 

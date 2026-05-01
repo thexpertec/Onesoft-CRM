@@ -251,6 +251,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (tenant) {
       if (tenant.status === "suspended") return false;
 
+      // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
+      // If this is done after the sync/seed, _activeTenantId is still null and the COA
+      // gets written to the global (superadmin) namespace, contaminating it.
+      setActiveTenant(tenant.id);
+
       // Sync tenant-specific data from DB
       setIsSyncing(true);
       try {
@@ -261,7 +266,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const tenantUser = tenantToAdminUser(tenant);
-      setActiveTenant(tenant.id);
       setActivityUser(tenantUser.fullName || tenantUser.username);
       sessionStorage.setItem(AUTH_KEY,     "true");
       sessionStorage.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
@@ -316,6 +320,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const origUserId = sessionStorage.getItem(AUTH_USER_ID) ?? "";
     sessionStorage.setItem(IMPERSONATE_KEY, origUserId);
 
+    // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
+    setActiveTenant(tenantId);
+
     // Sync tenant-specific data
     setIsSyncing(true);
     try {
@@ -327,7 +334,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (as === "admin") {
       const tenantUser = tenantToAdminUser(tenant);
-      setActiveTenant(tenantId);
       setActivityUser(tenantUser.fullName || tenantUser.username);
       sessionStorage.setItem(AUTH_USER_ID, `tenant:${tenantId}`);
       sessionStorage.setItem(TENANT_KEY, tenantId);
