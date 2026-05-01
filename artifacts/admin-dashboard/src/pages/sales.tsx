@@ -2755,8 +2755,18 @@ export default function SalesPage() {
     const isFresh    = currentId !== null && currentId === freshSaleIdRef.current;
 
     if (isFresh) {
-      // New sale that was never completed — discard entirely, never appears in the list
-      removeSale(currentId!);
+      // New sale that was never completed — discard entirely, never appears in the list.
+      // Wrap in try/catch defensively: removeSale now throws if any financial record
+      // exists (a fresh draft never has one, so this normally succeeds silently).
+      try {
+        removeSale(currentId!);
+      } catch (err) {
+        toast({
+          title: "Cannot discard",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      }
     } else {
       saveMeta();
     }
@@ -3590,7 +3600,20 @@ export default function SalesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (deleteId) { removeSale(deleteId); toast({ title: "Sale deleted" }); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => {
+              if (!deleteId) return;
+              try {
+                removeSale(deleteId);
+                toast({ title: "Sale deleted" });
+              } catch (err) {
+                toast({
+                  title: "Cannot delete",
+                  description: err instanceof Error ? err.message : String(err),
+                  variant: "destructive",
+                });
+              }
+              setDeleteId(null);
+            }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

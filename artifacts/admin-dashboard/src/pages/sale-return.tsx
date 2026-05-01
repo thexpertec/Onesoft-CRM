@@ -558,7 +558,17 @@ export default function SaleReturnPage() {
   }, [returns, search]);
 
   const handleDelete = (id: string) => {
-    deleteSaleReturn(id);
+    try {
+      deleteSaleReturn(id);
+    } catch (err) {
+      toast({
+        title: "Cannot delete",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+      setDeleteId(null);
+      return;
+    }
     refresh();
     setDeleteId(null);
     toast({ title: "Sale Return deleted" });

@@ -2226,6 +2226,17 @@ export function InvoiceFormPage() {
 
   const handleDelete = useCallback((id: string) => {
     const inv = getInvoices().find(i => i.id === id);
+    try {
+      removeInvoice(id);
+    } catch (err) {
+      toast({
+        title: "Cannot delete",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+      return;
+    }
+    // Only roll back stock AFTER the invoice was successfully removed.
     if (inv?.stockDeducted) {
       if (inv.invoiceType === "purchase") {
         reverseStockForPurchase(inv.items, inv.invoiceNumber);
@@ -2233,7 +2244,6 @@ export function InvoiceFormPage() {
         restoreStockForSale(inv.items, inv.invoiceNumber);
       }
     }
-    removeInvoice(id);
     toast({ title: "Invoice deleted", variant: "destructive" });
     const backUrl = inv?.invoiceType === "purchase" ? "/invoices?type=purchase" : "/invoices";
     navigate(backUrl);

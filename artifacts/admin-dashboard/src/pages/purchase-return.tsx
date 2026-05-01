@@ -486,7 +486,16 @@ export default function PurchaseReturnPage() {
 
   const handleDelete = (pr: PurchaseReturn) => {
     if (!confirm(`Delete ${pr.returnNumber}? This cannot be undone.`)) return;
-    deletePurchaseReturn(pr.id);
+    try {
+      deletePurchaseReturn(pr.id);
+    } catch (err) {
+      toast({
+        title: "Cannot delete",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: `${pr.returnNumber} deleted` });
     reload();
   };

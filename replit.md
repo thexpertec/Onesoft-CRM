@@ -80,6 +80,20 @@ System account ID constants live in `SYS_ACCS` (see `store.ts`). New root IDs: `
 
 Default credentials: superadmin `admin` / `Onesoft@2024` (sessionStorage key `onesoft-admin-auth`)
 
+### Delete restrictions (financial integrity guards)
+
+To preserve double-entry book integrity, the following records cannot be deleted while any payment, journal entry, or DR/CR ledger reference still exists. The store layer throws a descriptive `Error`, and every UI delete callsite catches it and shows a destructive toast titled "Cannot delete" with the error message. Implemented in `src/lib/store.ts` as `_saleFinancialBlockers`, `_invoiceFinancialBlockers`, `_purchaseOrderFinancialBlockers`, `_customerFinancialBlockers`, plus `_jesReferencingToken` and `_rpVouchersReferencingToken` (bounded-token regex matching, no false positives between e.g. `SAL-…-0001` and `SAL-…-00010`).
+
+| Entity | Blocking conditions |
+|---|---|
+| Sale (POS or list) | `amountPaid > 0`, JE references `saleNumber` or `sale.jeId`, RP voucher references it, or sale return exists |
+| Invoice (sale or purchase) | `amountPaid > 0`, non-empty `paymentHistory`, JE references `invoiceNumber` or `inv.jeId`, or RP voucher links via `linkedInvoiceId`/`linkedInvoiceIds`/`lines[].invoiceId` |
+| Purchase Order | status is `Received`, JE references `poNumber` or `po.jeId`, or RP voucher references it |
+| Customer / Supplier | any sale, invoice, PO (suppliers), RP voucher, or JE line on `customer.ledgerAccountId` |
+| Sale Return / Purchase Return | linked JE (by `jeId` or `returnNumber`) |
+
+`deleteInvoice` no longer cascades into vouchers/JEs — it now refuses outright, matching the user's "delete the underlying records first" requirement.
+
 ### Multi-tenant & Module Groups System
 
 - **Multi-tenant storage**: Superadmin data uses unprefixed keys. Tenant data uses `t:{tenantId}:{baseKey}` prefix. Global platform keys (users, tenants, module-groups) always unprefixed.

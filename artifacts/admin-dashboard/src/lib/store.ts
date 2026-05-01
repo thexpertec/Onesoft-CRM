@@ -732,8 +732,158 @@ export function customerLedgerHasEntries(ledgerAccountId: string | undefined): b
   );
 }
 
+// ─── Delete-restriction helpers ───────────────────────────────────────────────
+// These check for "in use" / "has financial impact" state that would corrupt
+// the books if the parent record were removed. Each returns a list of
+// human-readable blocker strings; if non-empty, the caller throws and the UI
+// surfaces the message in a toast so the user knows what to clean up first.
+//
+// Module-level `const` arrow functions — they are only INVOKED at runtime
+// after every other store binding (getSales, getInvoices, getRPVouchers,
+// getJournalEntries, getPurchaseOrders, getSaleReturns) is initialized, so the
+// forward references are safe.
+
+/** Bounded substring match: `token` must appear in `text` with non-alphanumeric
+ *  characters (or string boundaries) on either side. Prevents false positives
+ *  like "SAL-202604-0001" accidentally matching "SAL-202604-00010". */
+function _includesTokenBounded(text: string | undefined | null, token: string): boolean {
+  if (!text || !token) return false;
+  const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^A-Za-z0-9])${esc}([^A-Za-z0-9]|$)`).test(text);
+}
+
+/** RP vouchers whose lines, narration, or reference contain `token`. */
+function _rpVouchersReferencingToken(token: string): RPVoucher[] {
+  if (!token) return [];
+  return getRPVouchers().filter(v =>
+    v.lines.some(l => _includesTokenBounded(l.description, token)) ||
+    (v.bankLines ?? []).some(l => _includesTokenBounded(l.description, token)) ||
+    _includesTokenBounded(v.narration, token) ||
+    _includesTokenBounded(v.reference, token)
+  );
+}
+
+/** Journal entries whose `reference` or any line narration contain `token`,
+ *  plus the entry directly referenced by `jeId` if present. */
+function _jesReferencingToken(token: string, jeId?: string): JournalEntry[] {
+  const all = getJournalEntries();
+  const matched = new Map<string, JournalEntry>();
+  if (jeId) {
+    const e = all.find(x => x.id === jeId);
+    if (e) matched.set(e.id, e);
+  }
+  if (token) {
+    for (const e of all) {
+      if (matched.has(e.id)) continue;
+      if (_includesTokenBounded(e.reference, token)) { matched.set(e.id, e); continue; }
+      if (e.lines.some(l => _includesTokenBounded(l.narration, token))) matched.set(e.id, e);
+    }
+  }
+  return Array.from(matched.values());
+}
+
+function _saleFinancialBlockers(sale: Sale): string[] {
+  const blockers: string[] = [];
+  const paid = parseFloat(sale.amountPaid ?? "0") || 0;
+  if (paid > 0) blockers.push(`payment of ${paid.toFixed(2)} recorded`);
+  const jes = _jesReferencingToken(sale.saleNumber, sale.jeId);
+  if (jes.length) {
+    const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
+    blockers.push(`${jes.length} journal entry record(s) (${sample})`);
+  }
+  const vs = _rpVouchersReferencingToken(sale.saleNumber);
+  if (vs.length) {
+    const sample = vs.map(v => v.voucherNumber).slice(0, 2).join(", ");
+    blockers.push(`${vs.length} payment voucher(s) (${sample})`);
+  }
+  const returns = getSaleReturns().filter(r => r.originalSaleId === sale.id);
+  if (returns.length) {
+    const sample = returns.map(r => r.returnNumber).slice(0, 2).join(", ");
+    blockers.push(`${returns.length} sale return(s) (${sample})`);
+  }
+  return blockers;
+}
+
+function _invoiceFinancialBlockers(inv: Invoice): string[] {
+  const blockers: string[] = [];
+  const paid = parseFloat(inv.amountPaid ?? "0") || 0;
+  if (paid > 0) blockers.push(`payment of ${paid.toFixed(2)} recorded`);
+  if ((inv.paymentHistory ?? []).length) {
+    blockers.push(`${inv.paymentHistory.length} payment record(s) in history`);
+  }
+  const jes = _jesReferencingToken(inv.invoiceNumber, inv.jeId);
+  if (jes.length) {
+    const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
+    blockers.push(`${jes.length} journal entry record(s) (${sample})`);
+  }
+  const vs = getRPVouchers().filter(v =>
+    v.linkedInvoiceId === inv.id ||
+    (v.linkedInvoiceIds ?? []).includes(inv.id) ||
+    v.lines.some(l => l.invoiceId === inv.id)
+  );
+  if (vs.length) {
+    const sample = vs.map(v => v.voucherNumber).slice(0, 2).join(", ");
+    blockers.push(`${vs.length} payment voucher(s) (${sample})`);
+  }
+  return blockers;
+}
+
+function _purchaseOrderFinancialBlockers(po: PurchaseOrder): string[] {
+  const blockers: string[] = [];
+  if (po.status === "Received") blockers.push("status is Received (stock has been added)");
+  const jes = _jesReferencingToken(po.poNumber, po.jeId);
+  if (jes.length) {
+    const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
+    blockers.push(`${jes.length} journal entry record(s) (${sample})`);
+  }
+  const vs = _rpVouchersReferencingToken(po.poNumber);
+  if (vs.length) {
+    const sample = vs.map(v => v.voucherNumber).slice(0, 2).join(", ");
+    blockers.push(`${vs.length} payment voucher(s) (${sample})`);
+  }
+  return blockers;
+}
+
+function _customerFinancialBlockers(c: Customer): string[] {
+  const blockers: string[] = [];
+  const name = c.name;
+  const isSupplier = c.customerRole === "Supplier";
+
+  const sales = getSales().filter(s => s.customer === name);
+  if (sales.length) blockers.push(`${sales.length} sale(s)`);
+
+  const invoices = getInvoices().filter(i => i.customer === name || i.customerId === c.id);
+  if (invoices.length) blockers.push(`${invoices.length} invoice(s)`);
+
+  if (isSupplier) {
+    const pos = getPurchaseOrders().filter(p => p.supplier === name);
+    if (pos.length) blockers.push(`${pos.length} purchase order(s)`);
+  }
+
+  const vouchers = getRPVouchers().filter(v => v.partyName === name);
+  if (vouchers.length) blockers.push(`${vouchers.length} payment voucher(s)`);
+
+  if (c.ledgerAccountId) {
+    const lid = c.ledgerAccountId;
+    const jeLines = getJournalEntries().filter(e => e.lines.some(l => l.ledgerId === lid));
+    if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this party's ledger`);
+  }
+
+  return blockers;
+}
+
+const _formatBlockerError = (label: string, name: string, blockers: string[]): string =>
+  `Cannot delete ${label} "${name}": ${blockers.join("; ")}. Remove the linked records first.`;
+
 export const deleteCustomer = (id: string): void => {
   const customer = getCustomers().find(c => c.id === id);
+  if (customer) {
+    const blockers = _customerFinancialBlockers(customer);
+    if (blockers.length) {
+      const label = customer.customerRole === "Supplier" ? "supplier" : "customer";
+      throw new Error(_formatBlockerError(label, customer.name, blockers));
+    }
+  }
   setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
   // Remove the linked COA ledger (soft-fail if it has posted journal entries)
   if (customer?.ledgerAccountId) {
@@ -2458,6 +2608,10 @@ export const updatePurchaseOrder = (
 
 export const deletePurchaseOrder = (id: string): void => {
   const item = getPurchaseOrders().find(p => p.id === id);
+  if (item) {
+    const blockers = _purchaseOrderFinancialBlockers(item);
+    if (blockers.length) throw new Error(_formatBlockerError("purchase order", item.poNumber, blockers));
+  }
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Order", entityName: item?.poNumber || id });
 };
@@ -2716,6 +2870,10 @@ export const updateSale = (id: string, updates: Partial<Omit<Sale, "id" | "saleN
 
 export const deleteSale = (id: string): void => {
   const sale = getSales().find(s => s.id === id);
+  if (sale) {
+    const blockers = _saleFinancialBlockers(sale);
+    if (blockers.length) throw new Error(_formatBlockerError("sale", sale.saleNumber, blockers));
+  }
   setStored(SALES_KEY, getSales().filter(s => s.id !== id));
   addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
 };
@@ -2807,6 +2965,15 @@ export const updateSaleReturn = (id: string, updates: Partial<Omit<SaleReturn, "
 
 export const deleteSaleReturn = (id: string): void => {
   const sr = getSaleReturns().find(r => r.id === id);
+  if (sr) {
+    const blockers: string[] = [];
+    const jes = _jesReferencingToken(sr.returnNumber, sr.jeId);
+    if (jes.length) {
+      const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
+      blockers.push(`${jes.length} journal entry record(s) (${sample})`);
+    }
+    if (blockers.length) throw new Error(_formatBlockerError("sale return", sr.returnNumber, blockers));
+  }
   setStored(SR_KEY, getSaleReturns().filter(r => r.id !== id));
   addActivity({ action: "deleted", entity: "Sale Return", entityName: sr?.returnNumber || id });
 };
@@ -2890,6 +3057,15 @@ export const updatePurchaseReturn = (
 
 export const deletePurchaseReturn = (id: string): void => {
   const pr = getPurchaseReturns().find(r => r.id === id);
+  if (pr) {
+    const blockers: string[] = [];
+    const jes = _jesReferencingToken(pr.returnNumber, pr.jeId);
+    if (jes.length) {
+      const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
+      blockers.push(`${jes.length} journal entry record(s) (${sample})`);
+    }
+    if (blockers.length) throw new Error(_formatBlockerError("purchase return", pr.returnNumber, blockers));
+  }
   setStored(PR_KEY, getPurchaseReturns().filter(r => r.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Return", entityName: pr?.returnNumber || id });
 };
@@ -3852,22 +4028,16 @@ export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | 
 };
 
 export const deleteInvoice = (id: string): void => {
-  // Cascade: delete every voucher (and its JE) linked to this invoice.
-  const linked = getRPVouchers().filter(v =>
-    v.linkedInvoiceId === id ||
-    (v.linkedInvoiceIds ?? []).includes(id) ||
-    v.lines.some(l => l.invoiceId === id)
-  );
-  // Collect all JE IDs to remove in one pass, then write JEs once.
-  // (Avoids N sequential _apiWrite calls that could race each other.)
-  const jeIdsToRemove = new Set(
-    linked.map(v => v.journalEntryId).filter((jid): jid is string => !!jid)
-  );
-  if (jeIdsToRemove.size > 0) {
-    _saveJournalEntries(getJournalEntries().filter(e => !jeIdsToRemove.has(e.id)));
+  const inv = getInvoices().find(i => i.id === id);
+  if (inv) {
+    const blockers = _invoiceFinancialBlockers(inv);
+    if (blockers.length) {
+      const label = inv.invoiceType === "purchase" ? "purchase invoice" : "invoice";
+      throw new Error(_formatBlockerError(label, inv.invoiceNumber, blockers));
+    }
   }
-  _saveRPVouchers(getRPVouchers().filter(v => !linked.find(l => l.id === v.id)));
-  setStored(INVOICES_KEY, getInvoices().filter(inv => inv.id !== id));
+  setStored(INVOICES_KEY, getInvoices().filter(i => i.id !== id));
+  addActivity({ action: "deleted", entity: "Invoice", entityName: inv?.invoiceNumber || id });
 };
 
 // ─── Sales Agents ─────────────────────────────────────────────────────────────

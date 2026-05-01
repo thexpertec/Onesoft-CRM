@@ -377,7 +377,17 @@ export default function CustomersPage() {
   const handleDelete = () => {
     if (!deleteId) return;
     const c = customers.find(x => x.id === deleteId);
-    removeCustomer(deleteId);
+    try {
+      removeCustomer(deleteId);
+    } catch (err) {
+      toast({
+        title: "Cannot delete",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+      setDeleteId(null);
+      return;
+    }
     if (viewCust?.id === deleteId) setViewCust(null);
     toast({ title: "Customer removed", description: `${c?.name} deleted.` });
     setDeleteId(null);
