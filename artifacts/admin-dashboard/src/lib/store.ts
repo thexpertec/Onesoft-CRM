@@ -2043,6 +2043,28 @@ export const bulkImportProducts = async (
   const now      = new Date().toISOString();
   const today    = now.slice(0, 10);
 
+  // Defense-in-depth: cost price is required on every product, including bulk
+  // imports. Validate up-front so we either accept the whole batch or fail
+  // with a precise per-row error message.
+  const costErrors: string[] = [];
+  toCreate.forEach((data, i) => {
+    try { _validateCostPrice(data.costPrice, data.name); }
+    catch (err) { costErrors.push(`New row ${i + 1} (${data.name || "unnamed"}): ${err instanceof Error ? err.message : String(err)}`); }
+  });
+  toUpdate.forEach(({ id, data }, i) => {
+    const orig = idxMap.get(id) !== undefined ? existing[idxMap.get(id)!] : undefined;
+    if (!orig) return; // updates for missing ids are silently skipped below
+    const effectiveCost = data.costPrice !== undefined ? data.costPrice : orig.costPrice;
+    const effectiveName = data.name ?? orig.name;
+    try { _validateCostPrice(effectiveCost, effectiveName); }
+    catch (err) { costErrors.push(`Update row ${i + 1} (${effectiveName || id}): ${err instanceof Error ? err.message : String(err)}`); }
+  });
+  if (costErrors.length) {
+    const summary = costErrors.slice(0, 5).join("; ");
+    const more    = costErrors.length > 5 ? ` (+${costErrors.length - 5} more)` : "";
+    throw new Error(`Bulk import rejected — ${costErrors.length} row(s) missing/invalid cost price. ${summary}${more}`);
+  }
+
   // Apply updates in-place
   const updated: Product[] = [];
   for (const { id, data } of toUpdate) {

@@ -655,7 +655,7 @@ export default function ProductsPage() {
     { field: "department",  label: "Department",         minW: 140, type: "select", options: deptOptions.length ? deptOptions : undefined },
     { field: "unit",          label: "Unit",                 minW: 120, type: "select", options: unitOptions.length ? unitOptions : undefined },
     { field: "purchasePrice",   label: `Purchase (${sym})`,         minW: 120, type: "text"     },
-    { field: "costPrice",       label: `Cost (${sym})`,             minW: 110, type: "text"     },
+    { field: "costPrice",       label: `Cost (${sym}) *`,           minW: 110, type: "text"     },
     { field: "price",           label: `Retail Price (${sym})`,     minW: 125, type: "text"     },
     { field: "retailProfit",    label: `Retail Profit (${sym})`,    minW: 125, type: "readonly" },
     { field: "wholesalePrice",  label: `Wholesale (${sym})`,        minW: 120, type: "text"     },
@@ -901,6 +901,19 @@ export default function ProductsPage() {
 
   const commitNewRow = () => {
     if (!newRow?.name.trim()) { toast({ title: "Product name is required", variant: "destructive" }); setNewRowActive(0); return; }
+    // Cost price is required (drives COGS journal entries)
+    const costRaw = (newRow?.costPrice ?? "").trim();
+    const costNum = parseFloat(costRaw);
+    if (!costRaw || !Number.isFinite(costNum) || costNum <= 0) {
+      toast({
+        title: "Cost price is required",
+        description: "Cost drives COGS journal entries. Enter a positive cost before saving.",
+        variant: "destructive",
+      });
+      const costColIdx = visibleCols.findIndex(c => c.field === "costPrice" && c.type !== "readonly");
+      if (costColIdx >= 0) setNewRowActive(costColIdx);
+      return;
+    }
     try {
       addProduct({
         name: newRow.name, localName: newRow.localName || undefined,
@@ -1107,6 +1120,8 @@ export default function ProductsPage() {
               </ol>
               <p className="text-[11px] text-muted-foreground/70 pt-1">
                 CSV columns in order: <span className="font-mono">name · sku · brand · category · unit · purchasePrice · costPrice · price · status · description</span>
+                <br />
+                <span className="text-rose-600 dark:text-rose-400">Required:</span> <span className="font-mono">name</span> and <span className="font-mono">costPrice</span> (cost drives COGS journal entries).
               </p>
             </div>
 
