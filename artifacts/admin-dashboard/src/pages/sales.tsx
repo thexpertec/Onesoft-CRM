@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useSearch } from "wouter";
-import { useSales, useCustomers, useStock } from "@/hooks/use-data";
+import { useSales, useCustomers, useStock, useSaleReturns } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment,
@@ -19,7 +19,7 @@ import {
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
   LayoutGrid, List, RefreshCw, Globe,
-  CheckCircle2, Circle, Clock, XCircle, Truck, DollarSign,
+  CheckCircle2, Circle, Clock, XCircle, Truck, DollarSign, Undo2,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -2338,6 +2338,19 @@ export default function SalesPage() {
   const isNewSale = location.includes("/new");
   const { sales, addSale, editSale, removeSale, refresh } = useSales();
   const { customers, addCustomer } = useCustomers();
+  const { saleReturns } = useSaleReturns();
+  /** Map: saleId → { count, qty } summarising returns against that sale.
+   *  Drives the "Returned" badge on the sales list so users can see at-a-
+   *  glance which sales have any return activity. */
+  const returnsBySaleId = useMemo(() => {
+    const m = new Map<string, { count: number; qty: number }>();
+    for (const r of saleReturns) {
+      const prev = m.get(r.originalSaleId) ?? { count: 0, qty: 0 };
+      const qty  = r.items.reduce((s, i) => s + (parseFloat(i.qty) || 0), 0);
+      m.set(r.originalSaleId, { count: prev.count + 1, qty: prev.qty + qty });
+    }
+    return m;
+  }, [saleReturns]);
   const { isAuthenticated, currentTenantId, can } = useAuth();
   const { toast } = useToast();
 
@@ -3444,8 +3457,20 @@ export default function SalesPage() {
                         )}
                       </div>
                     ) : c.field === "status" && !isA ? (
-                      <div className={`w-full flex items-center px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
+                      <div className={`w-full flex items-center gap-1 px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>
                         <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${STATUS_BG[rawVal as SaleStatus] ?? ""}`}>{rawVal}</span>
+                        {(() => {
+                          const ret = returnsBySaleId.get(sale.id);
+                          if (!ret) return null;
+                          return (
+                            <span
+                              title={`${ret.count} return${ret.count > 1 ? "s" : ""} · ${Number.isInteger(ret.qty) ? ret.qty : ret.qty.toFixed(1)} item${ret.qty !== 1 ? "s" : ""} returned`}
+                              className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300"
+                            >
+                              <Undo2 size={9} /> Returned
+                            </span>
+                          );
+                        })()}
                       </div>
                     ) : c.field === "paymentMethod" && !isA ? (
                       <div className={`w-full flex items-center gap-1.5 px-3 cursor-pointer ${wrapText ? "py-2" : "h-full"}`}>

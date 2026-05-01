@@ -94,6 +94,25 @@ To preserve double-entry book integrity, the following records cannot be deleted
 
 `deleteInvoice` no longer cascades into vouchers/JEs — it now refuses outright, matching the user's "delete the underlying records first" requirement.
 
+### Reverse cascade — JE removal unwinds linked records
+
+When `deleteJournalEntry(id)` runs, the store now scans every record that points at that JE via `jeId` and resets the financial state so the source record reflects "payment removed":
+
+| Record | Effect on JE removal |
+|---|---|
+| Sale | `jeId` cleared, `amountPaid="0"`, `paidAt=""`; status reverts `Completed`/`On Credit` → `Pending` |
+| Invoice | `jeId`/`jeUsesAR` cleared, `amountPaid="0"`, `paidAt=""`, `paymentHistory=[]`; status reverts `Paid`/`Partial` → `Sent` |
+| Purchase Order | `jeId` cleared (stock receipt is left intact) |
+| Sale Return | `jeId` cleared, status `posted` → `draft` |
+| Purchase Return | `jeId` cleared, status `posted` → `draft` |
+| RP Voucher | (existing behaviour) reset to draft, linked invoice payments reversed |
+
+This complements the deletion blockers above: blockers prevent users from deleting the *source* record while a JE still exists; the reverse-cascade lets users delete the *JE* and have the source automatically return to its pre-payment state. Stock movements are not touched — those are handled separately via stock adjustments.
+
+### Sale-return visibility on the sales list
+
+`sales.tsx` consumes the new `useSaleReturns()` hook and builds a `Map<saleId → {count, qty}>`. When a sale has any returns, a small rose-coloured "↩ Returned" pill is rendered next to its Status badge with a tooltip showing return count and total returned quantity. The hook follows the same `useStoreEffect` pattern as all other data hooks: the badge re-evaluates on mount and on `storage` / `onesoft:data-synced` events. In practice it appears when the user navigates back to the Sales list after creating a Sale Return (re-mount), which matches the rest of the app's data-flow conventions — there is no in-page live update channel for `setStored` writes.
+
 ### Multi-tenant & Module Groups System
 
 - **Multi-tenant storage**: Superadmin data uses unprefixed keys. Tenant data uses `t:{tenantId}:{baseKey}` prefix. Global platform keys (users, tenants, module-groups) always unprefixed.

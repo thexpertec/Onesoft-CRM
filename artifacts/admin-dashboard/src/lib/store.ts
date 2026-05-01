@@ -5944,7 +5944,7 @@ export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntr
 }
 
 export function deleteJournalEntry(id: string): void {
-  // Find any voucher that references this JE and reset it back to draft
+  // ── 1. Voucher relinking (existing behaviour) ───────────────────────────
   const linked = getRPVouchers().find(v => v.journalEntryId === id);
   if (linked && linked.status === "posted") {
     // Reverse invoice payment before unposting
@@ -5965,6 +5965,106 @@ export function deleteJournalEntry(id: string): void {
         : v
     ));
   }
+
+  // ── 2. Unwind any sale / invoice / PO / sale-return / purchase-return ──
+  //     that points at this JE. The JE represents the payment / posting
+  //     entry; removing it means the source record is no longer paid /
+  //     posted, so reset its payment status accordingly. We do NOT touch
+  //     stock — that is a separate concern handled by stock adjustments.
+  const now = new Date().toISOString();
+
+  // Sales — Completed/On Credit revert to Pending; payment cleared.
+  const sales = getSales();
+  let salesChanged = false;
+  for (let i = 0; i < sales.length; i++) {
+    if (sales[i].jeId !== id) continue;
+    const s = sales[i];
+    const newStatus: SaleStatus =
+      s.status === "Completed" || s.status === "On Credit" ? "Pending" : s.status;
+    sales[i] = {
+      ...s,
+      jeId:       undefined,
+      amountPaid: "0",
+      paidAt:     "",
+      status:     newStatus,
+      updatedAt:  now,
+    };
+    salesChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Sale", entityName: s.saleNumber,
+      detail: "JE removed → marked Unpaid",
+    });
+  }
+  if (salesChanged) setStored(SALES_KEY, sales);
+
+  // Invoices — Paid/Partial revert to Sent; payment + history cleared.
+  const invoices = getInvoices();
+  let invoicesChanged = false;
+  for (let i = 0; i < invoices.length; i++) {
+    if (invoices[i].jeId !== id) continue;
+    const inv = invoices[i];
+    const newStatus: InvoiceStatus =
+      inv.status === "Paid" || inv.status === "Partial" ? "Sent" : inv.status;
+    invoices[i] = {
+      ...inv,
+      jeId:           undefined,
+      jeUsesAR:       undefined,
+      amountPaid:     "0",
+      paidAt:         "",
+      paymentHistory: [],
+      status:         newStatus,
+      updatedAt:      now,
+    };
+    invoicesChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Invoice", entityName: inv.invoiceNumber,
+      detail: "JE removed → marked Unpaid",
+    });
+  }
+  if (invoicesChanged) setStored(INVOICES_KEY, invoices);
+
+  // Purchase Orders — clear the JE link only (stock stays received).
+  const pos = getPurchaseOrders();
+  let posChanged = false;
+  for (let i = 0; i < pos.length; i++) {
+    if (pos[i].jeId !== id) continue;
+    pos[i] = { ...pos[i], jeId: undefined, updatedAt: now };
+    posChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Purchase Order", entityName: pos[i].poNumber,
+      detail: "JE removed",
+    });
+  }
+  if (posChanged) setStored(PURCHASE_ORDERS_KEY, pos);
+
+  // Sale Returns — posted → draft, JE cleared.
+  const srs = getSaleReturns();
+  let srsChanged = false;
+  for (let i = 0; i < srs.length; i++) {
+    if (srs[i].jeId !== id) continue;
+    srs[i] = { ...srs[i], jeId: undefined, status: "draft", updatedAt: now };
+    srsChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Sale Return", entityName: srs[i].returnNumber,
+      detail: "JE removed → reverted to draft",
+    });
+  }
+  if (srsChanged) setStored(SR_KEY, srs);
+
+  // Purchase Returns — posted → draft, JE cleared.
+  const prs = getPurchaseReturns();
+  let prsChanged = false;
+  for (let i = 0; i < prs.length; i++) {
+    if (prs[i].jeId !== id) continue;
+    prs[i] = { ...prs[i], jeId: undefined, status: "draft", updatedAt: now };
+    prsChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Purchase Return", entityName: prs[i].returnNumber,
+      detail: "JE removed → reverted to draft",
+    });
+  }
+  if (prsChanged) setStored(PR_KEY, prs);
+
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
 }
 

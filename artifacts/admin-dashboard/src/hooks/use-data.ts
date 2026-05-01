@@ -21,6 +21,7 @@ import {
   getDesignations, createDesignation, updateDesignation, deleteDesignation,
   getStock, createStockItem, updateStockItem, deleteStockItem,
   getSales, createSale, updateSale, deleteSale,
+  getSaleReturns, SaleReturn,
   getInvoices, createInvoice, updateInvoice, deleteInvoice,
   getAccounts, createAccount, updateAccount, deleteAccount,
   getJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry,
@@ -289,6 +290,14 @@ export function useSales() {
   const editSale   = (id: string, u: Parameters<typeof updateSale>[1])   => { const s = updateSale(id, u); fetch(); return s; };
   const removeSale = (id: string)                                         => { deleteSale(id);              fetch(); };
   return { sales, addSale, editSale, removeSale, refresh: fetch };
+}
+
+/** Read-only hook over sale returns — refreshes on cross-tab writes and post-sync. */
+export function useSaleReturns() {
+  const [saleReturns, setSaleReturns] = useState<SaleReturn[]>([]);
+  const fetch = useCallback(() => setSaleReturns(getSaleReturns()), []);
+  useStoreEffect(fetch);
+  return { saleReturns, refresh: fetch };
 }
 
 export function useStock() {
