@@ -222,6 +222,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Login ──────────────────────────────────────────────────────────────────
   const login = async (username: string, password: string): Promise<boolean> => {
+    // SECURITY: clear any tab-scoped tenant override from a previous session
+    // before authenticating. Without this, a refresh after a fresh login in
+    // the same tab could re-apply the prior session's tenant context and
+    // surface the wrong tenant's data.
+    sessionStorage.removeItem("onesoft_tab_tenant");
+
     // First sync global data from the DB so we have the latest users/tenants
     setIsSyncing(true);
     try {
@@ -400,6 +406,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.removeItem(AUTH_KEY);
     sessionStorage.removeItem(AUTH_USER_ID);
     sessionStorage.removeItem(TENANT_KEY);
+    sessionStorage.removeItem("onesoft_tab_tenant");
     setCurrentUser(null);
     setCurrentTenantId(null);
   };

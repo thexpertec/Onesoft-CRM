@@ -74,8 +74,52 @@ clearDemoData();
 // ─── Multi-tenant storage namespace ───────────────────────────────────────────
 let _activeTenantId: string | null = null;
 
+/**
+ * Whitelist of keys that legitimately live in the unprefixed `global`
+ * namespace and must remain readable from any session (platform-level data).
+ * Every other key is treated as tenant-business data and is therefore
+ * purged from the in-memory cache whenever the active tenant changes,
+ * preventing one tenant's session from accidentally surfacing data that
+ * was loaded from the global namespace (or from a previously-active tenant).
+ */
+const PLATFORM_GLOBAL_KEYS: ReadonlySet<string> = new Set([
+  "admin-tenants",        // TENANTS_KEY  — cross-tenant tenant registry
+  "admin-users",          // USERS_KEY    — superadmin / platform users
+  "admin-module-groups",  // MODULE_GROUPS_KEY — platform RBAC config
+]);
+
+/** True when `key` belongs in the global namespace under any session. */
+function isPlatformGlobalKey(key: string): boolean {
+  return PLATFORM_GLOBAL_KEYS.has(key);
+}
+
+/**
+ * Evict every cache entry that does NOT belong to the current scope.
+ * - When `id` is a tenant ID: keep only the platform globals + entries with
+ *   prefix `t:{id}:`. Drop unprefixed business data and any entries for
+ *   other tenants.
+ * - When `id` is null (superadmin): keep platform globals + unprefixed
+ *   business data. Drop every `t:{anyId}:` entry.
+ */
+function _purgeForeignCacheEntries(id: string | null): void {
+  const myPrefix = id === null ? null : `t:${id}:`;
+  for (const k of [..._memRaw.keys()]) {
+    if (k.startsWith("t:")) {
+      // Tenant-prefixed key: keep only when it matches the active tenant.
+      if (myPrefix === null || !k.startsWith(myPrefix)) _memRaw.delete(k);
+    } else {
+      // Unprefixed key: always keep platform globals; otherwise drop when a
+      // tenant is active (legacy business data must never leak into a
+      // tenant session).
+      if (myPrefix !== null && !isPlatformGlobalKey(k)) _memRaw.delete(k);
+    }
+  }
+}
+
 export function setActiveTenant(id: string | null): void {
+  if (_activeTenantId === id) return;
   _activeTenantId = id;
+  _purgeForeignCacheEntries(id);
 }
 
 export function getActiveTenantId(): string | null {
@@ -6877,12 +6921,17 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     }
 
     // Step 2 — Global data (users, tenants, module groups, platform config).
+    // SECURITY: when a tenant is active, only load PLATFORM-essential keys
+    // from the global namespace. Legacy business-data keys (admin-sales,
+    // admin-customers, …) that may exist there from earlier single-tenant
+    // versions of the app must not pollute the cache for a tenant session
+    // and must never surface to that tenant's UI.
     const globalData = await kvGetAll("global");
     if (globalData) {
       for (const [key, value] of Object.entries(globalData)) {
-        if (value !== undefined && value !== null) {
-          _lsCache(key, value);
-        }
+        if (value === undefined || value === null) continue;
+        if (tenantId !== null && !isPlatformGlobalKey(key)) continue;
+        _lsCache(key, value);
       }
     }
 

@@ -116,6 +116,10 @@ This complements the deletion blockers above: blockers prevent users from deleti
 ### Multi-tenant & Module Groups System
 
 - **Multi-tenant storage**: Superadmin data uses unprefixed keys. Tenant data uses `t:{tenantId}:{baseKey}` prefix. Global platform keys (users, tenants, module-groups) always unprefixed.
+- **Strict tenant isolation** (`store.ts`):
+  - `PLATFORM_GLOBAL_KEYS` whitelist defines the only keys that may legitimately live in the unprefixed `global` namespace: `admin-tenants`, `admin-users`, `admin-module-groups`. Every other key is treated as tenant-business data.
+  - `setActiveTenant(id)` purges every `_memRaw` entry that does not belong to the new scope on every tenant switch (including login, logout, impersonation, exit-impersonation, and superadmin tenant switching). This prevents prior-session bytes from leaking into the next session within the same browser tab.
+  - `syncAllFromServer(tenantId)` only loads keys from the `global` namespace into the cache when `tenantId === null` (superadmin) OR the key is in `PLATFORM_GLOBAL_KEYS`. Legacy single-tenant business data that may still exist in `global` (admin-sales, admin-customers, admin-products, …) is therefore never surfaced to a tenant session, even if `_activeTenantId` were ever transiently null.
 - **Module Groups**: Each group defines a set of allowed module IDs (crm_leads, crm_customers, crm_suppliers, products, stock, purchases, sales, documents, hrm_staff, hrm_roles, hrm_org, media, settings). A tenant can be assigned a module group to restrict their nav.
 - **HRM Org** (`/hrm-org`): Departments & Designations page with two inline Excel-style grids — add/edit/delete departments (with staff and designation counts) and designations (with department select and Job Description dialog). Data stored in localStorage via `store.ts` using `Department` and `Designation` types.
 - **Nav enforcement**: When superadmin is in "view as tenant" mode (amber banner), or a tenant user is logged in, the top nav is filtered to only show modules allowed by the tenant's module group. Superadmin admin-only items (Tenants, Module Groups, Admin Accounts) always remain accessible.
