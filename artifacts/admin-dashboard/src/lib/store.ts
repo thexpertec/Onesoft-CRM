@@ -1904,7 +1904,25 @@ export function backfillPOSCreditSaleJEs(): void {
   }
 }
 
+/**
+ * Cost price is required on every product because it drives COGS journal
+ * entries. A missing or non-positive cost would silently leak inventory
+ * value into Revenue/AR. Throws a user-friendly error when invalid.
+ */
+const _validateCostPrice = (costPrice: string | undefined, productName: string): void => {
+  const raw = (costPrice ?? "").trim();
+  if (!raw) {
+    throw new Error(`Cost price is required for "${productName || "this product"}". Cost drives COGS journal entries and cannot be empty.`);
+  }
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`Cost price for "${productName || "this product"}" must be a positive number (got "${raw}").`);
+  }
+};
+
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
+  // Cost price is required to support correct COGS posting
+  _validateCostPrice(data.costPrice, data.name);
   // Auto-generate SKU if not provided — SKU is required on every product
   const sku = data.sku?.trim() || generateProductSku(data.name);
   if (sku !== data.sku?.trim()) {
@@ -1940,6 +1958,13 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   const items = getProducts();
   const i = items.findIndex(p => p.id === id);
   if (i === -1) throw new Error("Product not found");
+  // Cost price is required. Validate the EFFECTIVE post-update value so
+  // (a) edits that try to clear cost are rejected, and
+  // (b) legacy products that were saved before this rule cannot be edited
+  //     without first supplying a cost.
+  const effectiveCost = updates.costPrice !== undefined ? updates.costPrice : items[i].costPrice;
+  const effectiveName = updates.name ?? items[i].name;
+  _validateCostPrice(effectiveCost, effectiveName);
   // Auto-generate SKU if neither the update nor the existing record has one
   if (!updates.sku?.trim() && !items[i].sku?.trim()) {
     updates = { ...updates, sku: generateProductSku(updates.name ?? items[i].name) };

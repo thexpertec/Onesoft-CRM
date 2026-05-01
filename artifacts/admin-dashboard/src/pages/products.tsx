@@ -183,6 +183,17 @@ function parseCSV(text: string): ImportRow[] {
       row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci].trim() : "";
     });
     if (!row.name.trim()) row._error = "Name is required";
+    if (!row._error) {
+      const costRaw = (row.costPrice ?? "").trim();
+      if (!costRaw) {
+        row._error = "Cost price is required (drives COGS)";
+      } else {
+        const cost = parseFloat(costRaw);
+        if (!Number.isFinite(cost) || cost <= 0) {
+          row._error = `Cost price must be a positive number (got "${costRaw}")`;
+        }
+      }
+    }
     const validStatuses = ["Active", "Inactive", "Draft"];
     if (row.status && !validStatuses.includes(row.status)) row.status = "Active";
     const validConditions = ["New", "Used", "Fresh", "Refurbished", "Damaged"];
