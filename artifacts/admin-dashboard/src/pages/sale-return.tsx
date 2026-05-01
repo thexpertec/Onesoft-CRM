@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -199,8 +199,20 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   const [date, setDate]                   = useState(today());
   const [submitting, setSubmitting]       = useState(false);
 
-  const sales = useMemo(() => getSales().filter(s => s.status === "Completed" || s.status === "Draft"), []);
-  const products = useMemo(() => getProducts(), []);
+  // Re-read from store whenever data syncs from the server. Without this, opening
+  // the "New Return" sheet right after a fresh page load (before sync completes)
+  // would show "No sales found" even though the sale exists in the DB.
+  const [sales, setSales]       = useState<Sale[]>(() =>
+    getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+  const [products, setProducts] = useState(() => getProducts());
+  useEffect(() => {
+    const refresh = () => {
+      setSales(getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+      setProducts(getProducts());
+    };
+    window.addEventListener("onesoft:data-synced", refresh);
+    return () => window.removeEventListener("onesoft:data-synced", refresh);
+  }, []);
   const sym = getSettingsCurrencySymbol();
 
   const filteredSales = useMemo(() => {
@@ -281,6 +293,27 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
         sr.returnNumber
       );
 
+      // Build per-category breakdown so the return JE mirrors the original sale
+      // (per-category Revenue and Inventory ledgers are properly reversed).
+      const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+      for (const it of effectiveItems) {
+        const prod  = products.find(p => p.sku === it.sku);
+        const qty   = parseFloat(it.qty)       || 0;
+        const price = parseFloat(it.unitPrice) || 0;
+        const disc  = parseFloat(it.discount)  || 0;
+        const lineNet = qty * price * (1 - disc / 100);
+        const cp    = parseFloat(it.costPrice || "0") || 0;
+        const cost  = qty * cp;
+        const cat   = prod?.category?.trim() || "Uncategorised";
+        const prev  = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
+        catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
+      }
+      const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
+        category,
+        subtotal:  parseFloat(v.subtotal.toFixed(2)),
+        costTotal: parseFloat(v.costTotal.toFixed(2)),
+      }));
+
       // Post JE
       const je = autoPostSaleReturnJE({
         returnNumber:  sr.returnNumber,
@@ -292,6 +325,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
         taxAmount:     0,
         grandTotal,
         costTotal,
+        categoryLines,
       });
 
       if (je) {
@@ -505,6 +539,12 @@ export default function SaleReturnPage() {
   const sym = getSettingsCurrencySymbol();
 
   const refresh = () => setReturns(getSaleReturns());
+
+  // Re-pull from the store after server data sync completes (e.g. page reload).
+  useEffect(() => {
+    window.addEventListener("onesoft:data-synced", refresh);
+    return () => window.removeEventListener("onesoft:data-synced", refresh);
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return returns;

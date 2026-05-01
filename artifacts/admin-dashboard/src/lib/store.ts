@@ -2848,11 +2848,17 @@ export const deletePurchaseReturn = (id: string): void => {
 };
 
 /**
- * Auto-posts a reversal journal entry for a Sale Return.
- *   DR  Sales Revenue           = grandTotal  (reverses the revenue)
- *   CR  Cash / Bank / AR        = grandTotal  (refund outflow)
- *   DR  Inventory / Stock       = costTotal   (restores inventory value)
- *   CR  Cost of Goods Sold      = costTotal   (reverses COGS)
+ * Posts a Sale Return JE that perfectly mirrors `autoPostSaleJE` (reversed).
+ *
+ * Original sale posts (per category):
+ *   DR  Cash/Bank/AR (per-customer)    = grandTotal
+ *     CR  sr-cat-{cat} / General Sales Revenue = subtotal
+ *     CR  VAT Payable                          = taxAmount
+ *   DR  COGS                                   = costTotal
+ *     CR  inv-cat-{cat} / General Inventory    = costTotal
+ *
+ * Sale return reverses every leg with matching ledger resolution so balances
+ * on per-category and per-customer sub-ledgers are properly restored.
  */
 export function autoPostSaleReturnJE(params: {
   returnNumber:  string;
@@ -2860,77 +2866,123 @@ export function autoPostSaleReturnJE(params: {
   customer:      string;
   date:          string;
   refundMethod:  SalePayment;
-  subtotal:      number;
-  taxAmount:     number;
-  grandTotal:    number;
-  costTotal?:    number;
+  subtotal:      number;     // net of tax
+  taxAmount:     number;     // VAT being refunded
+  grandTotal:    number;     // subtotal + taxAmount
+  costTotal?:    number;     // total cost of goods being returned
+  /** Per-category breakdown — drives per-category Revenue and Inventory reversal lines */
+  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
 }): JournalEntry | null {
   const s = getSettings();
-  if (!s.accSalesRevenue) return null;
+
+  // ── Credit side: who gets refunded? ──────────────────────────────────────
+  // Mirror of autoPostSaleJE's debit-side logic:
+  //   - "Credit" refund → CR per-customer AR sub-ledger (reverses the original AR debit)
+  //   - "Cash" / Card / Bank Transfer / Cheque → CR the matching Cash & Bank ledger
+  //     (resolved via COA name/id first, then settings fallback).
+  const _allAccounts = getAccounts();
+  const _resolvePayMethodLedger = (method: string): string | null => {
+    const byId = _allAccounts.find(a => a.id === method && a.accountType === "Ledger" && a.isActive !== false);
+    if (byId) return byId.id;
+    const nameLower = method.toLowerCase();
+    const cbLedgers = getCashBankLedgers();
+    const byName = cbLedgers.find(a => a.name.toLowerCase() === nameLower);
+    if (byName) return byName.id;
+    return null;
+  };
 
   const isCredit = params.refundMethod === "Credit";
-  const isCash   = params.refundMethod === "Cash";
-  let creditAccId: string;
+  let creditAccId: string | null;
   if (isCredit) {
-    if (!s.accReceivable) return null;
-    creditAccId = s.accReceivable;
-  } else if (isCash) {
-    if (!s.accCash) return null;
-    creditAccId = s.accCash;
+    // Per-customer AR sub-ledger if it exists, else Trade Receivables, else system AR
+    creditAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+               || resolveToLedger(s.accReceivable)
+               || SYS_ACCS.AR_TRADE;
   } else {
-    if (!s.accBank) return null;
-    creditAccId = s.accBank;
+    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
+    if (dynLedger) {
+      creditAccId = dynLedger;
+    } else if (params.refundMethod === "Cash") {
+      creditAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    } else {
+      creditAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    }
   }
+  if (!creditAccId) return null;
+
+  // ── Resolved fallback IDs — always valid Ledger targets ─────────────────
+  const _generalRevId = resolveToLedger(s.accSalesRevenue) ?? SYS_ACCS.GENERAL_SALES_REV;
+  const _generalInvId = resolveToLedger(s.accInventory)    ?? SYS_ACCS.GENERAL_INVENTORY;
+  const _cogsId       = resolveToLedger(s.accCogs)         ?? SYS_ACCS.COGS;
+  const _vatId        = resolveToLedger(s.accVatPayable)   ?? s.accVatPayable ?? null;
 
   const narration = `Sale Return ${params.returnNumber} – ${params.customer} (orig: ${params.originalRef})`;
+  const catLines  = params.categoryLines ?? [];
   const costTotal = params.costTotal ?? 0;
 
+  // ── Credit refund (mirrors original sale's debit) ────────────────────────
   const lines: JournalEntryLine[] = [
-    {
-      id:        crypto.randomUUID(),
-      ledgerId:  s.accSalesRevenue,
-      narration: `Revenue reversal – ${params.returnNumber}`,
-      debit:     params.grandTotal,
-      credit:    0,
-    },
-    {
-      id:        crypto.randomUUID(),
-      ledgerId:  creditAccId,
-      narration,
-      debit:     0,
-      credit:    params.grandTotal,
-    },
+    { id: crypto.randomUUID(), ledgerId: creditAccId, narration, debit: 0, credit: params.grandTotal },
   ];
 
-  if (params.taxAmount > 0 && s.accVatPayable) {
-    lines.push({
-      id:        crypto.randomUUID(),
-      ledgerId:  s.accVatPayable,
+  // ── Revenue reversal (DR) — per-category where possible ─────────────────
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.subtotal <= 0) continue;
+      const slug = (cl.category || "uncategorised").trim().toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catRevId  = `sr-cat-${slug}`;
+      const revLedger = _allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
+                          ? catRevId
+                          : _generalRevId;
+      lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
+        narration: `Revenue reversal – ${params.returnNumber} – ${cl.category}`,
+        debit: cl.subtotal, credit: 0 });
+    }
+  } else {
+    // No breakdown — reverse the full subtotal against general revenue
+    if (params.subtotal > 0) {
+      lines.push({ id: crypto.randomUUID(), ledgerId: _generalRevId,
+        narration: `Revenue reversal – ${params.returnNumber}`,
+        debit: params.subtotal, credit: 0 });
+    }
+  }
+
+  // ── VAT reversal (DR) ────────────────────────────────────────────────────
+  if (params.taxAmount > 0 && _vatId) {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _vatId,
       narration: `VAT reversal – ${params.returnNumber}`,
-      debit:     params.taxAmount,
-      credit:    0,
-    });
+      debit: params.taxAmount, credit: 0 });
   }
 
-  if (costTotal > 0 && s.accCogs && s.accInventory) {
-    lines.push({
-      id:        crypto.randomUUID(),
-      ledgerId:  s.accInventory,
+  // ── COGS reversal (CR) + Inventory restore (DR) — per-category ───────────
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.costTotal <= 0) continue;
+      const slug = (cl.category || "uncategorised").trim().toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catInvId  = `inv-cat-${slug}`;
+      const invLedger = _allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                          ? catInvId
+                          : _generalInvId;
+      lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+        narration: `Inventory restore – ${params.returnNumber} – ${cl.category}`,
+        debit: cl.costTotal, credit: 0 });
+      lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
+        narration: `COGS reversal – ${params.returnNumber} – ${cl.category}`,
+        debit: 0, credit: cl.costTotal });
+    }
+  } else if (costTotal > 0) {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _generalInvId,
       narration: `Inventory restore – ${params.returnNumber}`,
-      debit:     costTotal,
-      credit:    0,
-    });
-    lines.push({
-      id:        crypto.randomUUID(),
-      ledgerId:  s.accCogs,
+      debit: costTotal, credit: 0 });
+    lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
       narration: `COGS reversal – ${params.returnNumber}`,
-      debit:     0,
-      credit:    costTotal,
-    });
+      debit: 0, credit: costTotal });
   }
 
-  const totalDebit  = parseFloat((params.grandTotal + costTotal).toFixed(2));
-  const totalCredit = parseFloat((params.grandTotal + costTotal).toFixed(2));
+  const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
+  const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
 
   return createJournalEntry({
     date:        params.date,
@@ -2940,7 +2992,7 @@ export function autoPostSaleReturnJE(params: {
     status:      "posted",
     totalDebit,
     totalCredit,
-    isBalanced:  true,
+    isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
 }
 
