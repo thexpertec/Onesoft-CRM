@@ -351,7 +351,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/attendance", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/attendance", "/sales-agents", "/agent-performance"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
@@ -507,7 +507,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     hrm_staff:           ["View Staff",     "Add Staff",    "Edit Staff",    "Delete Staff",    "Manage Staff"],
     hrm_roles:           ["View Roles",     "Add Roles",    "Edit Roles",    "Delete Roles",    "Manage Roles"],
     hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
-    hrm_recruitment:     ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_salary:          ["View Staff",     "Manage Staff", "View Payroll",  "Manage Payroll"],
     hrm_attendance:      ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     // Accounting
@@ -567,7 +566,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-staff":            "hrm_staff",
     "l-roles":            "hrm_roles",
     "l-hrm-org":          "hrm_org",
-    "l-recruitment":      "hrm_recruitment",
     "l-salary":           "hrm_salary",
     "l-attendance":       "hrm_attendance",
     "l-products":      "products",
@@ -619,7 +617,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",                href: "/staff",        icon: Users2,    desc: "Employees by dept & designation"     }] : []),
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
-    ...(isModuleAllowed("hrm_recruitment") ? [{ label: "Recruitment",          href: "/recruitment",  icon: Briefcase, desc: "Job postings, applicants & interviews" }] : []),
     ...(isModuleAllowed("hrm_salary")       ? [{ label: "Salary Management",    href: "/salary",       icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
     ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",           href: "/attendance",   icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
@@ -629,7 +626,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // ── HRM mega-menu columns (dynamic, permission-gated) ─────────────────────
   const hrmPeopleLinks = [
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",       href: "/staff",       icon: Users2,    desc: "Employee records & departments"      }] : []),
-    ...(isModuleAllowed("hrm_recruitment") ? [{ label: "Recruitment", href: "/recruitment", icon: Briefcase, desc: "Job postings, applicants & interviews" }] : []),
   ];
   const hrmStructureLinks = [
     ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                href: "/roles",   icon: KeyRound,  desc: "Permission roles & access control"  }] : []),
@@ -644,7 +640,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { label: "Agent Performance", href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
   ];
   const hrmMegaCols: MegaColumn[] = [
-    ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",            href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff & recruitment",     links: hrmPeopleLinks    }] : []),
+    ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",            href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff management",     links: hrmPeopleLinks    }] : []),
     ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",         href: "/roles",        icon: KeyRound,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org chart",       links: hrmStructureLinks }] : []),
     ...(hrmPayrollLinks.length   > 0 ? [{ label: "Payroll & Attend.", href: "/salary",       icon: Wallet,    color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-950/40",   desc: "Payroll & time tracking", links: hrmPayrollLinks   }] : []),
     ...(hrmSalesTeamLinks.length > 0 ? [{ label: "Sales Team",        href: "/sales-agents", icon: BarChart3, color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/40",     desc: "Agents & performance",    links: hrmSalesTeamLinks }] : []),
@@ -1120,11 +1116,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <HrmTab href="/staff" icon={Users2} label="Staff"
                   active={location === "/staff" || location.startsWith("/staff/")} />
               )}
-              {isModuleAllowed("hrm_recruitment") && (
-                <HrmTab href="/recruitment" icon={Briefcase} label="Recruitment"
-                  active={location === "/recruitment"} />
-              )}
-
               {/* ── Structure ── */}
               {(isModuleAllowed("hrm_roles") || isModuleAllowed("hrm_org")) && <HrmTabDivider />}
               {isModuleAllowed("hrm_roles") && (
