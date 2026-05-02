@@ -3,8 +3,8 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getSales, getSaleReturns, createSaleReturn, updateSaleReturn, deleteSaleReturn,
-  restoreStockForSale, autoPostSaleReturnJE,
-  type Sale, type SaleReturn, type SaleReturnItem, type SalePayment, SALE_PAYMENTS,
+  restoreStockForSale, autoPostSaleReturnJE, getPaymentAccounts,
+  type Sale, type SaleReturn, type SaleReturnItem, type SalePayment,
   getProducts,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -18,14 +18,30 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Undo2, Plus, Search, Trash2, Eye, Printer, CheckCircle2,
   ShoppingBag, ChevronRight, AlertCircle, Package, X, ExternalLink,
 } from "lucide-react";
 
 const dp = getSettingsDecimalPlaces();
+
+/** Build refund method options from live Payment Accounts so the dropdown
+ *  stays in sync with whatever Cash & Bank accounts are configured. */
+function getSaleRefundOptions(): { value: string; label: string }[] {
+  const accounts = getPaymentAccounts().filter(a => a.isActive !== false);
+  if (accounts.length === 0) {
+    // Fallback when no payment accounts are configured yet
+    return [
+      { value: "Cash",          label: "Cash" },
+      { value: "Bank Transfer", label: "Bank Transfer" },
+      { value: "Card",          label: "Card" },
+      { value: "Cheque",        label: "Cheque" },
+    ];
+  }
+  return accounts.map(a => ({
+    value: a.accountTitle,
+    label: a.bankName ? `${a.accountTitle} (${a.bankName})` : a.accountTitle,
+  }));
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -193,7 +209,10 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   const [saleSearch, setSaleSearch]       = useState("");
   const [selectedSale, setSelectedSale]   = useState<Sale | null>(null);
   const [returnItems, setReturnItems]     = useState<SaleReturnItem[]>([]);
-  const [refundMethod, setRefundMethod]   = useState<SalePayment>("Cash");
+  const refundMethodOptions = useMemo(() => getSaleRefundOptions(), []);
+  const [refundMethod, setRefundMethod]   = useState<SalePayment>(
+    () => getSaleRefundOptions()[0]?.value ?? "Cash"
+  );
   const [reason, setReason]               = useState("");
   const [notes, setNotes]                 = useState("");
   const [date, setDate]                   = useState(today());
@@ -415,16 +434,15 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Refund Method</label>
-              <Select value={refundMethod} onValueChange={v => setRefundMethod(v as SalePayment)}>
-                <SelectTrigger className="mt-1 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SALE_PAYMENTS.map(p => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={refundMethod}
+                onChange={e => setRefundMethod(e.target.value)}
+                className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {refundMethodOptions.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
             <div className="col-span-2">
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason</label>

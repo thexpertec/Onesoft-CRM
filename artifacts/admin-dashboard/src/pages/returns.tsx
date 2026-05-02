@@ -6,7 +6,7 @@ import {
   restoreStockForSale, autoPostSaleReturnJE,
   getInvoices, getPurchaseReturns, createPurchaseReturn, deletePurchaseReturn,
   deductStockForSale, getPaymentAccounts, getProducts,
-  type Sale, type SaleReturn, type SaleReturnItem, type SalePayment, SALE_PAYMENTS,
+  type Sale, type SaleReturn, type SaleReturnItem, type SalePayment,
   type Invoice, type PurchaseReturn, type PurchaseReturnItem,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -51,6 +51,24 @@ function calcPurchaseItems(items: PurchaseReturnItem[]) {
   }, 0);
 }
 
+/** Options for sale returns — all active payment accounts (Cash & Bank COA). */
+function getSaleRefundOptions(): { value: string; label: string }[] {
+  const accounts = getPaymentAccounts().filter(a => a.isActive !== false);
+  if (accounts.length === 0) {
+    return [
+      { value: "Cash",          label: "Cash" },
+      { value: "Bank Transfer", label: "Bank Transfer" },
+      { value: "Card",          label: "Card" },
+      { value: "Cheque",        label: "Cheque" },
+    ];
+  }
+  return accounts.map(a => ({
+    value: a.accountTitle,
+    label: a.bankName ? `${a.accountTitle} (${a.bankName})` : a.accountTitle,
+  }));
+}
+
+/** Options for purchase returns — payment accounts + special supplier entries. */
 function getCreditMethodOptions(): { value: string; label: string }[] {
   const accounts = getPaymentAccounts().filter(a => a.isActive !== false);
   return [
@@ -295,7 +313,10 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
   const [saleSearch, setSaleSearch]       = useState("");
   const [selectedSale, setSelectedSale]   = useState<Sale | null>(null);
   const [returnItems, setReturnItems]     = useState<SaleReturnItem[]>([]);
-  const [refundMethod, setRefundMethod]   = useState<SalePayment>("Cash");
+  const saleRefundOptions = useMemo(() => getSaleRefundOptions(), []);
+  const [refundMethod, setRefundMethod]   = useState<SalePayment>(
+    () => getSaleRefundOptions()[0]?.value ?? "Cash"
+  );
   const [reason, setReason]               = useState("");
   const [notes, setNotes]                 = useState("");
   const [date, setDate]                   = useState(today());
@@ -476,12 +497,15 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Refund Method</label>
-              <Select value={refundMethod} onValueChange={v => setRefundMethod(v as SalePayment)}>
-                <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SALE_PAYMENTS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <select
+                value={refundMethod}
+                onChange={e => setRefundMethod(e.target.value)}
+                className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {saleRefundOptions.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
             <div className="col-span-2">
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason</label>
