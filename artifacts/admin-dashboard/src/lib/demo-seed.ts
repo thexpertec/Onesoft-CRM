@@ -188,6 +188,26 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
     { id: "dp-rm-008", rmCode: "RM-008", name: "Gas Lift Cylinder",      unit: "pcs", currentStock: "125",  costPerUnit: "7.20",  notes: "Class 4 gas cylinder 150mm stroke. Tested to 1 million cycles.",        createdAt: iso(78), updatedAt: iso(12) },
   ]);
 
+  // ── 10b. SALARY ALLOWANCE CATEGORIES ──────────────────────────────────────
+  put("admin-hrm-salary-allowance-cats", [
+    { id: "dp-alw-001", name: "House Rent Allowance",   accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-alw-002", name: "Transport Allowance",    accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-alw-003", name: "Medical Allowance",      accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-alw-004", name: "Meal Allowance",         accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-alw-005", name: "Performance Bonus",      accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-alw-006", name: "Overtime Allowance",     accountGroupId: "", accountGroupName: "Salary Expense", createdAt: iso(85), updatedAt: iso(0) },
+  ]);
+
+  // ── 10c. SALARY DEDUCTION CATEGORIES ──────────────────────────────────────
+  put("admin-hrm-salary-deduction-cats", [
+    { id: "dp-ded-001", name: "Income Tax",             accountGroupId: "", accountGroupName: "Tax Payable",    type: "Tax",   createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-ded-002", name: "National Insurance",     accountGroupId: "", accountGroupName: "Tax Payable",    type: "Tax",   createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-ded-003", name: "Pension Contribution",   accountGroupId: "", accountGroupName: "Liability",      type: "Asset", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-ded-004", name: "Loan Repayment",         accountGroupId: "", accountGroupName: "Liability",      type: "Asset", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-ded-005", name: "Absence Deduction",      accountGroupId: "", accountGroupName: "Salary Expense", type: "Other", createdAt: iso(85), updatedAt: iso(0) },
+    { id: "dp-ded-006", name: "Late Arrival Deduction", accountGroupId: "", accountGroupName: "Salary Expense", type: "Other", createdAt: iso(85), updatedAt: iso(0) },
+  ]);
+
   // ── 11. STOCK ──────────────────────────────────────────────────────────────
   put("admin-stock", [
     { id: "dp-stk-001", productName: "Executive Office Chair",     sku: "EXC-CHAIR-001", store: "Warehouse",     stockType: "For Sale",       quantity: "84",  minLevel: "20", unit: "pcs", holdCustomer: "", holdReason: "", notes: "Main warehouse — Bay 3A",        createdAt: iso(60), updatedAt: iso(2)  },

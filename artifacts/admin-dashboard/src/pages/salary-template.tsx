@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import {
   Plus, Trash2, Pencil, ArrowLeft, FileText,
-  ChevronRight, Save, ListOrdered,
+  ChevronRight, Save, ListOrdered, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSalaryTemplates, useStaff, useSalaryAllowanceCategories, useSalaryDeductionCategories } from "@/hooks/use-data";
-import { getDesignations, getSettings, SalaryTemplate, SalaryTemplateItem } from "@/lib/store";
+import { getDesignations, SalaryTemplate, SalaryTemplateItem } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -139,8 +139,7 @@ export default function SalaryTemplatePage() {
   const allowanceTypes = useMemo(() => allowanceCats.map(c => c.name), [allowanceCats]);
   const deductionTypes = useMemo(() => deductionCats.map(c => c.name), [deductionCats]);
 
-  const settings = getSettings();
-  const sym      = getSettingsCurrencySymbol(settings);
+  const sym      = getSettingsCurrencySymbol();
   const designations = getDesignations();
 
   // Filter staff by selected designation
@@ -160,7 +159,11 @@ export default function SalaryTemplatePage() {
 
   function openNew() {
     setEditId(null);
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      allowances: allowanceTypes.length > 0 ? [newItem()] : [],
+      deductions: deductionTypes.length > 0 ? [newItem()] : [],
+    });
     setView("form");
   }
 
@@ -548,7 +551,13 @@ export default function SalaryTemplatePage() {
                 )}
               </div>
 
-              {form.allowances.length === 0 && (
+              {allowanceTypes.length === 0 && (
+                <div className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2.5">
+                  <Info size={12} className="mt-0.5 shrink-0" />
+                  <span>No allowance types configured. Go to <strong>Salary Allowances</strong> to add categories first.</span>
+                </div>
+              )}
+              {allowanceTypes.length > 0 && form.allowances.length === 0 && (
                 <p className="text-xs text-muted-foreground italic py-1">No allowances added yet.</p>
               )}
 
@@ -641,7 +650,13 @@ export default function SalaryTemplatePage() {
 
               <div className="border-t border-dashed border-border pt-1" />
 
-              {form.deductions.length === 0 && (
+              {deductionTypes.length === 0 && (
+                <div className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2.5">
+                  <Info size={12} className="mt-0.5 shrink-0" />
+                  <span>No deduction types configured. Go to <strong>Salary Deductions</strong> to add categories first.</span>
+                </div>
+              )}
+              {deductionTypes.length > 0 && form.deductions.length === 0 && (
                 <p className="text-xs text-muted-foreground italic py-1">No fixed deductions added yet.</p>
               )}
 
