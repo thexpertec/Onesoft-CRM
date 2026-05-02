@@ -3163,12 +3163,16 @@ export function autoPostSaleReturnJE(params: {
   };
 
   const isCredit = params.refundMethod === "Credit";
-  // Walk-in detection — mirrors autoPostSaleJE: always use 1130-000 as the transit AR leg.
+  // Resolve any dedicated AR sub-ledger for this customer (null if none exists).
+  // Any customer with a named sub-ledger (Walk-in 1130-000, Buyer 1 1130-001, …) should
+  // have their return routed through that AR account so the return appears in the customer's
+  // ledger report — identical transit pattern to autoPostSaleJE for Walk-in sales.
   const _retCustomerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
-  const isRetWalkIn      = _retCustomerArId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
+  const hasRetArSubLedger = !!_retCustomerArId;
   let creditAccId: string | null;
-  if (isCredit || isRetWalkIn) {
-    // Per-customer AR sub-ledger (1130-000 for walk-in); fall back to Trade Receivables
+  if (isCredit || hasRetArSubLedger) {
+    // Named AR sub-ledger → always credit it first (transit); cash clearing added below.
+    // Falls back to Trade Receivables for customers without a dedicated sub-ledger.
     creditAccId = _retCustomerArId
                || resolveToLedger(s.accReceivable)
                || SYS_ACCS.AR_TRADE;
@@ -3255,10 +3259,13 @@ export function autoPostSaleReturnJE(params: {
       debit: 0, credit: costTotal });
   }
 
-  // ── Walk-in immediate cash transit reversal ───────────────────────────────
-  // Mirrors the transit posted by autoPostSaleJE: DR 1130-000 / CR Cash
-  // so the AR transit is properly reversed and cash is paid out.
-  if (isRetWalkIn && !isCredit) {
+  // ── Named-customer cash transit reversal ─────────────────────────────────
+  // For any customer with a dedicated AR sub-ledger (Walk-in, Buyer 1, …): the
+  // primary credit above went to the AR account.  For non-credit refund methods
+  // (Cash, Card, Bank Transfer) we now add the clearing pair so cash actually
+  // leaves the business and the AR returns to zero — making the return visible
+  // in the customer's ledger report.
+  if (hasRetArSubLedger && !isCredit) {
     const dynLedger = _resolvePayMethodLedger(params.refundMethod);
     const pmCashId  = dynLedger
                    || (params.refundMethod === "Cash"
