@@ -1076,6 +1076,58 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       </div>
                     );
                   })()}
+                  {/* Unit conversion strip — purchase invoices only */}
+                  {invoiceType === "purchase" && item.productName && (() => {
+                    const factor    = parseFloat(item.conversionFactor || "") || 1;
+                    const rawQty    = parseFloat(item.qty) || 0;
+                    const stockQty  = rawQty * factor;
+                    const baseUnit  = item.unit || "units";
+                    const hasConv   = !!(item.purchaseUnit && item.purchaseUnit.trim() && factor > 1);
+                    return (
+                      <div className="mx-4 mb-2 mt-0.5 flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg border border-purple-200/60 dark:border-purple-700/30 bg-purple-50/40 dark:bg-purple-950/20">
+                        <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 shrink-0 uppercase tracking-wide">
+                          Unit Conversion
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Purchase unit label */}
+                          <input
+                            type="text"
+                            value={item.purchaseUnit || ""}
+                            onChange={e => updateItem(item.id, "purchaseUnit", e.target.value)}
+                            placeholder={baseUnit}
+                            title="Purchase unit (e.g. Box, Carton, Dozen)"
+                            className="w-20 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-700/50 bg-white dark:bg-zinc-800 text-xs text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-purple-400 outline-none placeholder:text-gray-400"
+                          />
+                          <span className="text-xs text-purple-500 dark:text-purple-400 font-bold">×</span>
+                          {/* Conversion factor */}
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.conversionFactor || ""}
+                            onChange={e => updateItem(item.id, "conversionFactor", e.target.value)}
+                            placeholder="1"
+                            title="How many stock units per purchase unit (e.g. 12 for 1 Box = 12 pcs)"
+                            className="w-16 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-700/50 bg-white dark:bg-zinc-800 text-xs text-center text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-purple-400 outline-none"
+                          />
+                          {hasConv && (
+                            <>
+                              <span className="text-xs text-purple-500 dark:text-purple-400">=</span>
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                {Number.isInteger(stockQty) ? stockQty : stockQty.toFixed(2)} {baseUnit}
+                              </span>
+                              <span className="text-[10px] text-gray-500 dark:text-gray-400">added to stock</span>
+                            </>
+                          )}
+                          {!hasConv && (
+                            <span className="text-[10px] text-gray-400 dark:text-zinc-500 italic">
+                              Enter purchase unit &amp; factor — e.g. Box × 12 = 12 {baseUnit} in stock
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* Add item after this row */}
                   <button onClick={() => {
                     const newItem = blankItem();

@@ -2846,6 +2846,9 @@ export type SaleItem = {
   bogoApplied?: boolean;     // Clubcard Buy-1-Get-1-Free applied; every 2nd unit is free
   variantLabel?: string;     // display label of the selected variant (e.g. "3500mAh") — UI only
   costPrice?: string;        // cost price per unit locked at sale time — used for COGS JE entries
+  // Unit conversion — purchase invoices only
+  purchaseUnit?: string;     // label of the unit you buy in (e.g. "Box") — different from stock/sale unit
+  conversionFactor?: string; // how many stock units per purchase unit (e.g. "12" → 1 Box = 12 pcs)
 };
 
 export type Sale = {
@@ -3850,8 +3853,12 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     reference && existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "purchase-receipt");
 
   items.forEach(item => {
-    const qty = parseFloat(item.qty) || 0;
-    if (qty <= 0) return;
+    const rawQty = parseFloat(item.qty) || 0;
+    if (rawQty <= 0) return;
+    // Apply unit conversion: if the item was purchased in a different unit (e.g. Box),
+    // multiply by the conversion factor to get the stock quantity in the base/sale unit.
+    const factor = Math.max(1, parseFloat(item.conversionFactor || "") || 1);
+    const qty    = rawQty * factor;
 
     // Resolve effective SKU — SKU is the canonical identifier.
     // Priority: item.sku → canonical product SKU by SKU match → by name match.
@@ -3933,8 +3940,11 @@ export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
   items.forEach(item => {
-    const qty = parseFloat(item.qty) || 0;
-    if (qty <= 0) return;
+    const rawQty = parseFloat(item.qty) || 0;
+    if (rawQty <= 0) return;
+    // Mirror the same conversion factor used when receiving stock
+    const factor = Math.max(1, parseFloat(item.conversionFactor || "") || 1);
+    const qty    = rawQty * factor;
 
     // Resolve effective SKU — SKU is the canonical identifier
     const effectiveSku = item.sku || "";
