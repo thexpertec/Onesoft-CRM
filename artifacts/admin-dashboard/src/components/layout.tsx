@@ -247,10 +247,11 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
     color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
     desc: "Core accounting records",
     links: [
-      { label: "Chart of Accounts", href: "/chart-of-accounts",  icon: BookOpen,      desc: "Account hierarchy & ledgers"  },
-      { label: "Journal Entry",     href: "/journal-entry",      icon: ClipboardList, desc: "Double-entry bookkeeping"     },
-      { label: "Receipt & Payment", href: "/receipt-payment",    icon: CreditCard,    desc: "Cash & bank transactions"     },
-      { label: "Cash & Bank Accounts", href: "/payment-accounts", icon: CreditCard, desc: "Bank & payment method setup" },
+      { label: "Chart of Accounts",   href: "/chart-of-accounts",    icon: BookOpen,      desc: "Account hierarchy & ledgers"  },
+      { label: "Journal Entry",       href: "/journal-entry",        icon: ClipboardList, desc: "Double-entry bookkeeping"     },
+      { label: "Receipt & Payment",   href: "/receipt-payment",      icon: CreditCard,    desc: "Cash & bank transactions"     },
+      { label: "Transaction History", href: "/transaction-history",  icon: FileText,      desc: "All transactions in one view" },
+      { label: "Cash & Bank Accounts", href: "/payment-accounts",   icon: CreditCard,    desc: "Bank & payment method setup"  },
     ],
   },
   {
@@ -329,7 +330,7 @@ const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns"
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/expense-report", "/income-report", "/payment-accounts"];
+const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
 const REPAIR_ROUTES        = ["/repair", "/repair-report"];
 
 const QUICK_ADD: SubItem[] = [
@@ -1146,8 +1147,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <SectionLabel label="Accounts" />
                   {isModuleAllowed("accounting_coa")      && <NavLink href="/chart-of-accounts" icon={BookOpen}        label="Chart of Accounts" />}
                   {isModuleAllowed("accounting_journal")  && <NavLink href="/journal-entry"     icon={ClipboardList}   label="Journal Entry" />}
-                  {isModuleAllowed("accounting_receipts") && <NavLink href="/receipt-payment"   icon={CreditCard}      label="Receipt & Payment" />}
-                  {isModuleAllowed("accounting_balance")  && <NavLink href="/balance-sheet"     icon={LayoutDashboard} label="Balance Sheet" />}
+                  {isModuleAllowed("accounting_receipts") && <NavLink href="/receipt-payment"       icon={CreditCard}      label="Receipt & Payment" />}
+                  {isModuleAllowed("accounting_receipts") && <NavLink href="/transaction-history"  icon={FileText}        label="Transaction History" />}
+                  {isModuleAllowed("accounting_balance")  && <NavLink href="/balance-sheet"        icon={LayoutDashboard} label="Balance Sheet" />}
                   {isModuleAllowed("accounting_pls")      && <NavLink href="/pls-report"        icon={TrendingUp}      label="P&L Statement" />}
                   {isModuleAllowed("accounting_trial")    && <NavLink href="/trial-balance"     icon={Scale}           label="Trial Balance" />}
                   {isModuleAllowed("accounting_trial6")   && <NavLink href="/trial-balance-6col" icon={Scale}           label="6-Col Trial Balance" />}

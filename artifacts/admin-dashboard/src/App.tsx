@@ -58,6 +58,7 @@ import TrialBalance6ColPage from "@/pages/trial-balance-6col";
 import ExpenseReportPage from "@/pages/expense-report";
 import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
+import TransactionHistoryPage from "@/pages/transaction-history";
 import SaleReturnPage from "@/pages/sale-return";
 import PurchaseReturnPage from "@/pages/purchase-return";
 import ReturnsPage from "@/pages/returns";
@@ -206,6 +207,7 @@ function Router() {
               <Route path="/income-report" component={IncomeReportPage} />
               <Route path="/expense-report" component={ExpenseReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
+              <Route path="/transaction-history" component={TransactionHistoryPage} />
               <Route path="/payment-accounts" component={PaymentAccountsPage} />
               <Route path="/returns" component={ReturnsPage} />
               <Route path="/sale-return" component={SaleReturnPage} />
