@@ -134,10 +134,12 @@ type NavItem = {
   key: string; href?: string; label: string; icon: React.ElementType;
   items?: SubItem[] | null; isMega?: boolean;
 };
+type MegaLink   = { label: string; href: string; icon: React.ElementType; desc?: string; agentHide?: boolean };
 type MegaColumn = {
   label: string; href: string; icon: React.ElementType;
   color: string; bg: string; desc: string;
-  links: { label: string; href: string; icon: React.ElementType; desc?: string }[];
+  links: MegaLink[];
+  agentHide?: boolean;   // hide the entire column for Sales Agents
 };
 
 // ─── CRM mega-menu columns ────────────────────────────────────────────────────
@@ -181,7 +183,7 @@ const SALES_COLUMNS: MegaColumn[] = [
     links: [
       { label: "All Sales",    href: "/sales",       icon: Receipt, desc: "View all transactions"  },
       { label: "New Sale",     href: "/sales/new",   icon: Plus,    desc: "Open POS terminal"      },
-      { label: "Sale Returns", href: "/sale-return", icon: Undo2,   desc: "Refunds & credit notes" },
+      { label: "Sale Returns", href: "/sale-return", icon: Undo2,   desc: "Refunds & credit notes", agentHide: true },
     ],
   },
   {
@@ -190,14 +192,15 @@ const SALES_COLUMNS: MegaColumn[] = [
     desc: "Bills & purchase orders",
     links: [
       { label: "Sales Invoices",    href: "/invoices",               icon: FileText,     desc: "Invoice management"          },
-      { label: "Calc Invoice",      href: "/calc-invoice",           icon: Calculator,   desc: "Calculation-based invoicing" },
-      { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Stock & vendor invoices"     },
+      { label: "Calc Invoice",      href: "/calc-invoice",           icon: Calculator,   desc: "Calculation-based invoicing", agentHide: true },
+      { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Stock & vendor invoices",     agentHide: true },
     ],
   },
   {
     label: "Returns", href: "/returns", icon: Undo2,
     color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950/40",
     desc: "Sale & purchase returns",
+    agentHide: true,
     links: [
       { label: "All Returns",      href: "/returns",         icon: Undo2,        desc: "Sale & purchase returns" },
       { label: "Sale Returns",     href: "/sale-return",     icon: ShoppingBag,  desc: "Refunds & credit notes" },
@@ -929,11 +932,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         style={{ minWidth: `${cfg.columns.length * 210}px` }}
                       >
                         {/* Column grid */}
+                        {(() => {
+                          const visibleCols = isSalesAgent
+                            ? cfg.columns.filter(col => !col.agentHide)
+                            : cfg.columns;
+                          return (
                         <div
                           className="grid divide-x divide-gray-100 dark:divide-border"
-                          style={{ gridTemplateColumns: `repeat(${cfg.columns.length}, minmax(0, 1fr))` }}
+                          style={{ gridTemplateColumns: `repeat(${visibleCols.length}, minmax(0, 1fr))` }}
                         >
-                          {cfg.columns.map(col => (
+                          {visibleCols.map(col => (
                             <div key={col.label} className="p-5">
                               {/* Column header */}
                               <div className="flex items-center gap-2.5 mb-3">
@@ -952,7 +960,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                               </div>
                               {/* Sub-links */}
                               <div className="space-y-0.5">
-                                {col.links.map(link => (
+                                {(isSalesAgent ? col.links.filter(l => !l.agentHide) : col.links).map(link => (
                                   <Link
                                     key={link.label}
                                     href={link.href}
@@ -971,6 +979,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                             </div>
                           ))}
                         </div>
+                          );
+                        })()}
                         {/* Footer */}
                         <div className="px-5 py-2.5 bg-gray-50 dark:bg-muted/40 border-t border-gray-100 dark:border-border flex items-center justify-between">
                           <span className="text-[11px] text-gray-400 dark:text-muted-foreground">{cfg.footerText}</span>
