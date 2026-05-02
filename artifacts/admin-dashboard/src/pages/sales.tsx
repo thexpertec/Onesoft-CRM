@@ -4,11 +4,11 @@ import { useSales, useCustomers, useStock, useSaleReturns } from "@/hooks/use-da
 import { useAuth } from "@/contexts/auth-context";
 import {
   Sale, SaleItem, SaleStatus, SalePayment,
-  SALE_STATUSES, SALE_PAYMENTS,
+  SALE_STATUSES,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
-  getCashBankLedgers, Account, autoPostCashReceiptJE, getJournalEntries, getAccounts,
+  getCashBankLedgers, getPaymentAccounts, Account, autoPostCashReceiptJE, getJournalEntries, getAccounts,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -146,9 +146,12 @@ const DELIVERY_STATUS_COLOR: Record<string, string> = {
   Pending: "#9ca3af", Processing: "#f59e0b", Shipped: "#3b82f6", Delivered: "#10b981",
 };
 
+const defaultPayMethod = (): string =>
+  getPaymentAccounts().find(a => a.isActive !== false)?.accountTitle ?? "Cash";
+
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
-  customer: "Walk-in", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
+  customer: "Walk-in", status: "Draft", paymentMethod: defaultPayMethod(), notes: "", items: [],
   taxRate: "0", amountPaid: "0", paidAt: "", stockDeducted: false,
   saleMode: "Retail", deliveryStatus: "Pending",
   deliveryCharges: "0", invoiceDiscount: "0", invoiceDiscountType: "pct",
@@ -157,7 +160,7 @@ const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"
 
 const blankNewRow = (): Record<string, string> => ({
   saleDate: new Date().toISOString().slice(0, 10),
-  customer: "", status: "Draft", paymentMethod: "Cash", notes: "",
+  customer: "", status: "Draft", paymentMethod: defaultPayMethod(), notes: "",
 });
 
 // ─── Category colour palette (cycles) ────────────────────────────────────────
@@ -2477,7 +2480,7 @@ export default function SalesPage() {
     { field: "balance",       label: `Balance (${sym})`,minW: 110, type: "readonly" },
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
     { field: "orderStage",    label: "Order Stage",     minW: 120, type: "readonly" },
-    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: (() => { const coa = getCashBankLedgers().map(a => a.name); return coa.length ? coa : [...SALE_PAYMENTS]; })() },
+    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: (() => { const pa = getPaymentAccounts().filter(a => a.isActive !== false).map(a => a.accountTitle); return pa.length ? pa : getCashBankLedgers().map(a => a.name); })() },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
   ], [sym, agentNameOpts]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
@@ -3054,7 +3057,7 @@ export default function SalesPage() {
     const sale = addSale({
       saleDate: newRow.saleDate || new Date().toISOString().slice(0, 10),
       customer: newRow.customer, status: (newRow.status as SaleStatus) || "Draft",
-      paymentMethod: (newRow.paymentMethod as SalePayment) || "Cash",
+      paymentMethod: (newRow.paymentMethod as SalePayment) || defaultPayMethod(),
       notes: newRow.notes, items: [], taxRate: "0", amountPaid: "0",
       paidAt: "", stockDeducted: false,
     });
