@@ -7476,3 +7476,88 @@ export const updateSalaryTemplate = (
 export const deleteSalaryTemplate = (id: string): void => {
   setStored(SALARY_TEMPLATE_KEY, getSalaryTemplates().filter(t => t.id !== id));
 };
+
+// ─── Salary Allowance Categories ──────────────────────────────────────────────
+
+export type SalaryAllowanceCategory = {
+  id:               string;
+  name:             string;   // e.g. "House Rent"
+  accountGroupId:   string;   // ID from chart of accounts
+  accountGroupName: string;   // denormalised label for display
+  createdAt:        string;
+  updatedAt:        string;
+};
+
+const SALARY_ALLOWANCE_CAT_KEY = "admin-hrm-salary-allowance-cats";
+
+export const getSalaryAllowanceCategories = (): SalaryAllowanceCategory[] =>
+  getStored<SalaryAllowanceCategory>(SALARY_ALLOWANCE_CAT_KEY);
+
+export const createSalaryAllowanceCategory = (
+  data: Omit<SalaryAllowanceCategory, "id" | "createdAt" | "updatedAt">
+): SalaryAllowanceCategory => {
+  const item: SalaryAllowanceCategory = {
+    ...data, id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  setStored(SALARY_ALLOWANCE_CAT_KEY, [...getSalaryAllowanceCategories(), item]);
+  return item;
+};
+
+export const updateSalaryAllowanceCategory = (
+  id: string, updates: Partial<Omit<SalaryAllowanceCategory, "id" | "createdAt">>
+): SalaryAllowanceCategory => {
+  const items = getSalaryAllowanceCategories();
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Allowance category not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SALARY_ALLOWANCE_CAT_KEY, items);
+  return items[i];
+};
+
+export const deleteSalaryAllowanceCategory = (id: string): void => {
+  setStored(SALARY_ALLOWANCE_CAT_KEY, getSalaryAllowanceCategories().filter(x => x.id !== id));
+};
+
+// ─── Salary Deduction Categories ──────────────────────────────────────────────
+
+export type SalaryDeductionCategory = {
+  id:               string;
+  name:             string;   // e.g. "Income Tax"
+  accountGroupId:   string;
+  accountGroupName: string;
+  type:             string;   // "Tax" | "Asset" | "Other"
+  createdAt:        string;
+  updatedAt:        string;
+};
+
+const SALARY_DEDUCTION_CAT_KEY = "admin-hrm-salary-deduction-cats";
+
+export const getSalaryDeductionCategories = (): SalaryDeductionCategory[] =>
+  getStored<SalaryDeductionCategory>(SALARY_DEDUCTION_CAT_KEY);
+
+export const createSalaryDeductionCategory = (
+  data: Omit<SalaryDeductionCategory, "id" | "createdAt" | "updatedAt">
+): SalaryDeductionCategory => {
+  const item: SalaryDeductionCategory = {
+    ...data, id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  setStored(SALARY_DEDUCTION_CAT_KEY, [...getSalaryDeductionCategories(), item]);
+  return item;
+};
+
+export const updateSalaryDeductionCategory = (
+  id: string, updates: Partial<Omit<SalaryDeductionCategory, "id" | "createdAt">>
+): SalaryDeductionCategory => {
+  const items = getSalaryDeductionCategories();
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Deduction category not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SALARY_DEDUCTION_CAT_KEY, items);
+  return items[i];
+};
+
+export const deleteSalaryDeductionCategory = (id: string): void => {
+  setStored(SALARY_DEDUCTION_CAT_KEY, getSalaryDeductionCategories().filter(x => x.id !== id));
+};

@@ -37,6 +37,8 @@ import {
   SalarySlip, getSalarySlips, createSalarySlip, updateSalarySlip, deleteSalarySlip,
   AttendanceRecord, getAttendanceRecords, upsertAttendance, bulkUpsertAttendance, deleteAttendanceRecord,
   SalaryTemplate, getSalaryTemplates, createSalaryTemplate, updateSalaryTemplate, deleteSalaryTemplate,
+  SalaryAllowanceCategory, getSalaryAllowanceCategories, createSalaryAllowanceCategory, updateSalaryAllowanceCategory, deleteSalaryAllowanceCategory,
+  SalaryDeductionCategory, getSalaryDeductionCategories, createSalaryDeductionCategory, updateSalaryDeductionCategory, deleteSalaryDeductionCategory,
 } from "@/lib/store";
 
 /**
@@ -512,4 +514,24 @@ export function useSalaryTemplates() {
   const edit   = (id: string, u: Parameters<typeof updateSalaryTemplate>[1])     => { const t = updateSalaryTemplate(id, u); fetch(); return t; };
   const remove = (id: string)                                                      => { deleteSalaryTemplate(id);              fetch(); };
   return { templates, add, edit, remove, refresh: fetch };
+}
+
+export function useSalaryAllowanceCategories() {
+  const [cats, setCats] = useState<SalaryAllowanceCategory[]>([]);
+  const fetch = useCallback(() => setCats(getSalaryAllowanceCategories()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createSalaryAllowanceCategory>[0])             => { const c = createSalaryAllowanceCategory(d);    fetch(); return c; };
+  const edit   = (id: string, u: Parameters<typeof updateSalaryAllowanceCategory>[1]) => { const c = updateSalaryAllowanceCategory(id, u); fetch(); return c; };
+  const remove = (id: string)                                                           => { deleteSalaryAllowanceCategory(id);              fetch(); };
+  return { cats, add, edit, remove, refresh: fetch };
+}
+
+export function useSalaryDeductionCategories() {
+  const [cats, setCats] = useState<SalaryDeductionCategory[]>([]);
+  const fetch = useCallback(() => setCats(getSalaryDeductionCategories()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createSalaryDeductionCategory>[0])             => { const c = createSalaryDeductionCategory(d);    fetch(); return c; };
+  const edit   = (id: string, u: Parameters<typeof updateSalaryDeductionCategory>[1]) => { const c = updateSalaryDeductionCategory(id, u); fetch(); return c; };
+  const remove = (id: string)                                                           => { deleteSalaryDeductionCategory(id);              fetch(); };
+  return { cats, add, edit, remove, refresh: fetch };
 }
