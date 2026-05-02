@@ -351,7 +351,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/attendance", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/attendance", "/sales-agents", "/agent-performance"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
@@ -567,6 +567,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-roles":            "hrm_roles",
     "l-hrm-org":          "hrm_org",
     "l-salary":           "hrm_salary",
+    "l-salary-template":  "hrm_salary",
     "l-attendance":       "hrm_attendance",
     "l-products":      "products",
     "l-categories":    "products",
@@ -617,8 +618,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",                href: "/staff",        icon: Users2,    desc: "Employees by dept & designation"     }] : []),
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
-    ...(isModuleAllowed("hrm_salary")       ? [{ label: "Salary Management",    href: "/salary",       icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
-    ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",           href: "/attendance",   icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
+    ...(isModuleAllowed("hrm_salary")       ? [{ label: "Salary Management",    href: "/salary",          icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
+    ...(isModuleAllowed("hrm_salary")       ? [{ label: "Salary Templates",     href: "/salary-template", icon: FileText,       desc: "Role-based salary structures"         }] : []),
+    ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",           href: "/attendance",      icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
   ];
@@ -632,8 +634,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org", icon: Building2, desc: "Org chart & job descriptions"        }] : []),
   ];
   const hrmPayrollLinks = [
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management", href: "/salary",     icon: Wallet,         desc: "Payroll, slips & JE posting"    }] : []),
-    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",        href: "/attendance", icon: CalendarCheck2, desc: "Daily & bulk attendance marking" }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management", href: "/salary",          icon: Wallet,         desc: "Payroll, slips & JE posting"    }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Templates",  href: "/salary-template", icon: FileText,       desc: "Role-based salary structures"   }] : []),
+    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",        href: "/attendance",      icon: CalendarCheck2, desc: "Daily & bulk attendance marking" }] : []),
   ];
   const hrmSalesTeamLinks = [
     { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
@@ -1132,6 +1135,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {isModuleAllowed("hrm_salary") && (
                 <HrmTab href="/salary" icon={Wallet} label="Payroll"
                   active={location === "/salary"} />
+              )}
+              {isModuleAllowed("hrm_salary") && (
+                <HrmTab href="/salary-template" icon={FileText} label="Salary Templates"
+                  active={location === "/salary-template"} />
               )}
               {isModuleAllowed("hrm_attendance") && (
                 <HrmTab href="/attendance" icon={CalendarCheck2} label="Attendance"

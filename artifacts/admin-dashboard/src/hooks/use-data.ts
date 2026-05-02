@@ -36,6 +36,7 @@ import {
   City, Area, PaymentAccount,
   SalarySlip, getSalarySlips, createSalarySlip, updateSalarySlip, deleteSalarySlip,
   AttendanceRecord, getAttendanceRecords, upsertAttendance, bulkUpsertAttendance, deleteAttendanceRecord,
+  SalaryTemplate, getSalaryTemplates, createSalaryTemplate, updateSalaryTemplate, deleteSalaryTemplate,
 } from "@/lib/store";
 
 /**
@@ -501,4 +502,14 @@ export function useAttendance() {
   const bulkUpsert = (d: Parameters<typeof bulkUpsertAttendance>[0]) => { const r = bulkUpsertAttendance(d); fetch(); return r; };
   const remove     = (id: string)                                     => { deleteAttendanceRecord(id);        fetch(); };
   return { records, upsert, bulkUpsert, remove, refresh: fetch };
+}
+
+export function useSalaryTemplates() {
+  const [templates, setTemplates] = useState<SalaryTemplate[]>([]);
+  const fetch = useCallback(() => setTemplates(getSalaryTemplates()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createSalaryTemplate>[0])                 => { const t = createSalaryTemplate(d);    fetch(); return t; };
+  const edit   = (id: string, u: Parameters<typeof updateSalaryTemplate>[1])     => { const t = updateSalaryTemplate(id, u); fetch(); return t; };
+  const remove = (id: string)                                                      => { deleteSalaryTemplate(id);              fetch(); };
+  return { templates, add, edit, remove, refresh: fetch };
 }

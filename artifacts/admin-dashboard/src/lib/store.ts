@@ -7420,3 +7420,59 @@ export const bulkUpsertAttendance = (
 export const deleteAttendanceRecord = (id: string): void => {
   setStored(ATTENDANCE_KEY, getAttendanceRecords().filter(r => r.id !== id));
 };
+
+// ─── Salary Templates ─────────────────────────────────────────────────────────
+
+export type SalaryTemplateItem = {
+  id:     string;
+  type:   string;
+  amount: number;
+};
+
+export type SalaryTemplate = {
+  id:                    string;
+  designation:           string;   // role / designation label
+  staffId:               string;   // empty string = template applies to the role broadly
+  basicSalary:           number;
+  overtimeRatePerHour:   number;
+  perLeaveDeduction:     number;
+  perShortLeaveDeduction: number;
+  allowances:            SalaryTemplateItem[];
+  deductions:            SalaryTemplateItem[];
+  createdAt:             string;
+  updatedAt:             string;
+};
+
+const SALARY_TEMPLATE_KEY = "admin-hrm-salary-templates";
+
+export const getSalaryTemplates = (): SalaryTemplate[] =>
+  getStored<SalaryTemplate>(SALARY_TEMPLATE_KEY);
+
+export const createSalaryTemplate = (
+  data: Omit<SalaryTemplate, "id" | "createdAt" | "updatedAt">
+): SalaryTemplate => {
+  const item: SalaryTemplate = {
+    ...data,
+    id:        crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(SALARY_TEMPLATE_KEY, [...getSalaryTemplates(), item]);
+  return item;
+};
+
+export const updateSalaryTemplate = (
+  id: string,
+  updates: Partial<Omit<SalaryTemplate, "id" | "createdAt">>
+): SalaryTemplate => {
+  const items = getSalaryTemplates();
+  const i = items.findIndex(t => t.id === id);
+  if (i === -1) throw new Error("Salary template not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(SALARY_TEMPLATE_KEY, items);
+  return items[i];
+};
+
+export const deleteSalaryTemplate = (id: string): void => {
+  setStored(SALARY_TEMPLATE_KEY, getSalaryTemplates().filter(t => t.id !== id));
+};

@@ -30,6 +30,7 @@ import StaffNewPage from "@/pages/staff-new";
 import HrmRolesPage from "@/pages/hrm-roles";
 import HrmOrgPage from "@/pages/hrm-org";
 import SalaryPage from "@/pages/salary";
+import SalaryTemplatePage from "@/pages/salary-template";
 import AttendancePage from "@/pages/attendance";
 import CustomersPage from "@/pages/customers";
 import CustomerNewPage from "@/pages/customer-new";
@@ -197,6 +198,7 @@ function Router() {
               <Route path="/roles" component={HrmRolesPage} />
               <Route path="/hrm-org" component={HrmOrgPage} />
               <Route path="/salary" component={SalaryPage} />
+              <Route path="/salary-template" component={SalaryTemplatePage} />
               <Route path="/attendance" component={AttendancePage} />
               <Route path="/users" component={UsersPage} />
               <Route path="/tenants" component={TenantsPage} />
