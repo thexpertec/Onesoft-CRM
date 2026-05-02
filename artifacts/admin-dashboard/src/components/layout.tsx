@@ -40,6 +40,27 @@ import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { LoginAsDialog } from "@/components/login-as-dialog";
 
+// ─── HRM sub-tab helpers ─────────────────────────────────────────────────────
+
+function HrmTab({ href, icon: Icon, label, active }: {
+  href: string; icon: React.ElementType; label: string; active: boolean;
+}) {
+  return (
+    <Link href={href} className={`flex items-center gap-1.5 px-3 h-full text-[11px] font-medium whitespace-nowrap border-b-2 transition-all flex-shrink-0 ${
+      active
+        ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+        : "border-transparent text-gray-500 dark:text-muted-foreground hover:text-gray-700 dark:hover:text-foreground hover:bg-gray-50 dark:hover:bg-muted/40"
+    }`}>
+      <Icon size={11} />
+      {label}
+    </Link>
+  );
+}
+
+function HrmTabDivider() {
+  return <div className="mx-2 h-4 w-px bg-gray-200 dark:bg-border self-center flex-shrink-0" />;
+}
+
 // ─── Activity Log helpers ─────────────────────────────────────────────────────
 const LAST_SEEN_KEY = "onesoft-activity-last-seen";
 
@@ -609,7 +630,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ] : []),
   ];
 
-  const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, items: hrmItems };
+  // ── HRM mega-menu columns (dynamic, permission-gated) ─────────────────────
+  const hrmPeopleLinks = [
+    ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",       href: "/staff",       icon: Users2,    desc: "Employee records & departments"      }] : []),
+    ...(isModuleAllowed("hrm_recruitment") ? [{ label: "Recruitment", href: "/recruitment", icon: Briefcase, desc: "Job postings, applicants & interviews" }] : []),
+  ];
+  const hrmStructureLinks = [
+    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                href: "/roles",   icon: KeyRound,  desc: "Permission roles & access control"  }] : []),
+    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org", icon: Building2, desc: "Org chart & job descriptions"        }] : []),
+  ];
+  const hrmPayrollLinks = [
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management", href: "/salary",     icon: Wallet,         desc: "Payroll, slips & JE posting"    }] : []),
+    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",        href: "/attendance", icon: CalendarCheck2, desc: "Daily & bulk attendance marking" }] : []),
+  ];
+  const hrmSalesTeamLinks = [
+    { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
+    { label: "Agent Performance", href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
+  ];
+  const hrmAdminLinks: MegaLink[] = (!isStaff && isSuperAdmin && !currentTenantId) ? [
+    { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System user accounts"  },
+    { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
+    { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
+  ] : [];
+  const hrmMegaCols: MegaColumn[] = [
+    ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",              href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff & recruitment",     links: hrmPeopleLinks    }] : []),
+    ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",           href: "/roles",        icon: KeyRound,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org chart",       links: hrmStructureLinks }] : []),
+    ...(hrmPayrollLinks.length   > 0 ? [{ label: "Payroll & Attend.",   href: "/salary",       icon: Wallet,    color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-950/40",   desc: "Payroll & time tracking", links: hrmPayrollLinks   }] : []),
+    ...(hrmSalesTeamLinks.length > 0 ? [{ label: "Sales Team",          href: "/sales-agents", icon: BarChart3, color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/40",     desc: "Agents & performance",    links: hrmSalesTeamLinks }] : []),
+    ...(hrmAdminLinks.length     > 0 ? [{ label: "Administration",      href: "/users",        icon: Shield,    color: "text-rose-500",    bg: "bg-rose-50 dark:bg-rose-950/40",       desc: "System admin settings",   links: hrmAdminLinks     }] : []),
+  ];
+
+  const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, isMega: true };
 
   // Filter top-level nav by module access (maintains original order)
   const navItems: NavItem[] = [
@@ -673,6 +724,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       columns: ACCOUNTS_COLUMNS,
       footerText: "Double-entry bookkeeping & financial statements",
       footerHref: "/chart-of-accounts", footerLabel: "Open accounts",
+    },
+    hrm: {
+      columns: hrmMegaCols,
+      footerText: "Manage your entire workforce in one place",
+      footerHref: "/staff", footerLabel: "View HRM",
     },
   };
 
@@ -1050,6 +1106,67 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
           </div>
         </div>)}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            ROW 3 — HRM contextual sub-tab strip
+        ═══════════════════════════════════════════════════════════════ */}
+        {isHrmActive && !isManager && (
+          <div className="hidden md:block border-t border-gray-100 dark:border-border bg-gray-50/40 dark:bg-muted/20">
+            <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-stretch h-[34px] overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+
+              {/* ── People ── */}
+              {isModuleAllowed("hrm_staff") && (
+                <HrmTab href="/staff" icon={Users2} label="Staff"
+                  active={location === "/staff" || location.startsWith("/staff/")} />
+              )}
+              {isModuleAllowed("hrm_recruitment") && (
+                <HrmTab href="/recruitment" icon={Briefcase} label="Recruitment"
+                  active={location === "/recruitment"} />
+              )}
+
+              {/* ── Structure ── */}
+              {(isModuleAllowed("hrm_roles") || isModuleAllowed("hrm_org")) && <HrmTabDivider />}
+              {isModuleAllowed("hrm_roles") && (
+                <HrmTab href="/roles" icon={KeyRound} label="Roles"
+                  active={location === "/roles"} />
+              )}
+              {isModuleAllowed("hrm_org") && (
+                <HrmTab href="/hrm-org" icon={Building2} label="Org & Designations"
+                  active={location === "/hrm-org"} />
+              )}
+
+              {/* ── Payroll & Attendance ── */}
+              {(isModuleAllowed("hrm_salary") || isModuleAllowed("hrm_attendance")) && <HrmTabDivider />}
+              {isModuleAllowed("hrm_salary") && (
+                <HrmTab href="/salary" icon={Wallet} label="Payroll"
+                  active={location === "/salary"} />
+              )}
+              {isModuleAllowed("hrm_attendance") && (
+                <HrmTab href="/attendance" icon={CalendarCheck2} label="Attendance"
+                  active={location === "/attendance"} />
+              )}
+
+              {/* ── Sales Team ── */}
+              <HrmTabDivider />
+              <HrmTab href="/sales-agents"      icon={Users2}    label="Sales Agents"
+                active={location === "/sales-agents"} />
+              <HrmTab href="/agent-performance" icon={BarChart3} label="Performance"
+                active={location === "/agent-performance"} />
+
+              {/* ── Admin (superadmin only) ── */}
+              {!isStaff && isSuperAdmin && !currentTenantId && <>
+                <HrmTabDivider />
+                <HrmTab href="/users"         icon={Shield}          label="Accounts"
+                  active={location === "/users"} />
+                <HrmTab href="/tenants"       icon={Globe}           label="Tenants"
+                  active={location === "/tenants"} />
+                <HrmTab href="/module-groups" icon={LayoutDashboard} label="Module Groups"
+                  active={location === "/module-groups"} />
+              </>}
+
+            </div>
+          </div>
+        )}
 
       </div>
 
