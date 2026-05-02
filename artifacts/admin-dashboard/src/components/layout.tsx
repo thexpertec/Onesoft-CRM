@@ -31,6 +31,7 @@ import {
   getActivities, clearActivities, ActivityEntry, ActivityAction,
   getSettings,
 } from "@/lib/store";
+import { getPresetById } from "@/lib/ui-presets";
 import {
   QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS,
   LEFT_ACTIONS_REGISTRY, DEFAULT_LEFT_QUICK_ACTIONS,
@@ -420,16 +421,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [openMega]);
 
-  // ── Font-size injection ───────────────────────────────────────────────────
+  // ── Font-size + accent-colour injection ──────────────────────────────────
   useEffect(() => {
-    function applyFontSizes() {
-      const s = getSettings();
+    function applyUIAppearance() {
+      const s    = getSettings();
+      const root = document.documentElement;
+
+      // ── Accent colour from active preset ──────────────────────────────────
+      const preset = s.uiPreset ? getPresetById(s.uiPreset) : null;
+      if (preset) {
+        const isDark  = root.classList.contains("dark");
+        const primary = isDark ? preset.primaryDark : preset.primaryLight;
+        root.style.setProperty("--primary",                    primary);
+        root.style.setProperty("--ring",                       primary);
+        root.style.setProperty("--sidebar-primary",            primary);
+        root.style.setProperty("--sidebar-ring",               primary);
+        root.style.setProperty("--chart-1",                    primary);
+        root.style.setProperty("--primary-foreground",         "0 0% 100%");
+        root.style.setProperty("--sidebar-primary-foreground", "0 0% 100%");
+      } else {
+        root.style.removeProperty("--primary");
+        root.style.removeProperty("--ring");
+        root.style.removeProperty("--sidebar-primary");
+        root.style.removeProperty("--sidebar-ring");
+        root.style.removeProperty("--chart-1");
+        root.style.removeProperty("--primary-foreground");
+        root.style.removeProperty("--sidebar-primary-foreground");
+      }
+
+      // ── Font sizes ────────────────────────────────────────────────────────
       const head   = s.fontHeadRow  ?? 12;
       const data   = s.fontDataRow  ?? 13;
       const btn    = s.fontButton   ?? 13;
       const tag    = s.fontTag      ?? 11;
       const filter = s.fontFilter   ?? 12;
-      const root = document.documentElement;
       root.style.setProperty("--admin-font-head",   `${head}px`);
       root.style.setProperty("--admin-font-data",   `${data}px`);
       root.style.setProperty("--admin-font-btn",    `${btn}px`);
@@ -453,9 +478,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         `#admin-app .admin-filter, #admin-app .admin-filter * { font-size: var(--admin-font-filter) !important; }`,
       ].join("\n");
     }
-    applyFontSizes();
-    window.addEventListener("admin-settings-changed", applyFontSizes);
-    return () => window.removeEventListener("admin-settings-changed", applyFontSizes);
+    applyUIAppearance();
+    window.addEventListener("admin-settings-changed", applyUIAppearance);
+    return () => window.removeEventListener("admin-settings-changed", applyUIAppearance);
   }, []);
 
   // Close on route change

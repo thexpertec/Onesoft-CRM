@@ -4775,6 +4775,8 @@ export type AppSettings = {
   quickActionsRight?: { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
   // ── Left sidebar quick-action customisation ──
   quickActionsLeft?:  { id: string; visible: boolean }[]; // ordered list, undefined = use built-in defaults
+  // ── Appearance preset ──
+  uiPreset?:       string;   // active preset ID (see lib/ui-presets.ts); undefined = fully custom
   // ── Font sizes (px) ──
   fontHeadRow?:    number;   // table/grid column header font size (default 12)
   fontDataRow?:    number;   // table/grid data row font size (default 13)
@@ -4952,6 +4954,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showPosProfit:        true,
   posProductView:       "image",
   crmFormMode:          "dialog",
+  uiPreset:             "classic",
   fontHeadRow:          12,
   fontDataRow:          13,
   fontButton:           13,

@@ -7,7 +7,7 @@ import {
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
   PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer, Pencil, ExternalLink,
-  Plus, CreditCard,
+  Plus, CreditCard, Moon, Sun, ChevronUp, Sliders,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import {
   clearAccountingLedger, clearAllStoredModules,
   getStoredModuleSnapshot, restoreStoredModuleSnapshot,
 } from "@/lib/store";
+import { useTheme } from "@/components/theme-provider";
+import { UI_PRESETS, SCALE_LABELS, getPresetFonts, type UiPreset } from "@/lib/ui-presets";
 import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
 import {
@@ -51,7 +53,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[
   { id: "financial",  label: "Financial",          icon: DollarSign,     desc: "Currency, VAT & fiscal year"          },
   { id: "pos",        label: "POS & Sales",        icon: ShoppingBag,    desc: "Receipt, payment & tax defaults"      },
   { id: "accounting", label: "Accounting Links",   icon: BookOpen,       desc: "Map COA accounts to POS & Invoices"   },
-  { id: "interface",  label: "Interface",          icon: LayoutTemplate, desc: "Sidebar shortcuts & quick actions"    },
+  { id: "interface",  label: "Interface",          icon: LayoutTemplate, desc: "Appearance presets & quick actions"   },
   { id: "print",          label: "Print Templates",    icon: FileText, desc: "Header & footer for printed docs"     },
   { id: "invoice_labels", label: "Invoice Labels",     icon: Pencil,   desc: "Customise text labels on invoices"    },
   { id: "legal",          label: "Legal Documents",    icon: Scale,    desc: "Terms, conditions & privacy policy"   },
@@ -580,7 +582,9 @@ export default function SettingsPage() {
   const { isSuperAdmin, currentTenant } = useAuth();
   const { toast } = useToast();
   const { accounts } = useAccounts();
+  const { setTheme } = useTheme();
   const [, navigate] = useLocation();
+  const [fineTuneOpen, setFineTuneOpen] = useState(false);
 
   // Ledger accounts only (for accounting mappings)
   const ledgerAccounts = accounts.filter(a => a.accountType === "Ledger" && a.isActive !== false);
@@ -1553,59 +1557,223 @@ export default function SettingsPage() {
             {tab === "interface" && (
               <div className="space-y-10">
 
-                {/* ── Font Sizes ───────────────────────────────────────────── */}
+                {/* ── Appearance Presets ───────────────────────────────────── */}
                 <div>
                   <SectionHeader
-                    title="Font Sizes"
-                    desc="Control text size for each UI element category. Changes apply immediately across the dashboard."
+                    title="Appearance Presets"
+                    desc="One click applies a complete look — light or dark mode, font scale, and accent colour — across the whole dashboard."
                   />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {([
-                      { key: "fontHeadRow" as const, label: "Header Row",  desc: "Column headers in tables & grids",    min: 8, max: 20, def: 12 },
-                      { key: "fontDataRow" as const, label: "Data Row",    desc: "Data cells in tables & grids",        min: 8, max: 20, def: 13 },
-                      { key: "fontButton"  as const, label: "Button",      desc: "Text inside all buttons",             min: 8, max: 20, def: 13 },
-                      { key: "fontTag"     as const, label: "Tag / Badge",  desc: "Status pills, count badges & tags",   min: 7, max: 18, def: 11 },
-                      { key: "fontFilter"  as const, label: "Filter Bar",   desc: "Toolbar, filter & search bar text",   min: 8, max: 20, def: 12 },
-                    ] as const).map(({ key, label, desc, min, max, def }) => {
-                      const val = (form[key] as number | undefined) ?? def;
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {UI_PRESETS.map((preset: UiPreset) => {
+                      const isActive  = (form.uiPreset ?? "classic") === preset.id;
+                      const fonts     = getPresetFonts(preset);
+                      const isDark    = preset.mode === "dark";
                       return (
-                        <div key={key} className="rounded-xl border border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/40 p-4 flex flex-col gap-3">
-                          <div>
-                            <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground leading-tight">{label}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={val <= min}
-                              onClick={() => set(key, Math.max(min, val - 1) as AppSettings[typeof key])}
-                              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
-                            >−</button>
-                            <div className="flex-1 text-center">
-                              <span className="text-[17px] font-bold font-mono text-gray-900 dark:text-gray-100">{val}</span>
-                              <span className="text-[11px] text-gray-400 ml-0.5">px</span>
-                            </div>
-                            <button
-                              type="button"
-                              disabled={val >= max}
-                              onClick={() => set(key, Math.min(max, val + 1) as AppSettings[typeof key])}
-                              className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
-                            >+</button>
-                          </div>
-                          <div className="h-8 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
-                            <span style={{ fontSize: `${val}px` }} className="text-gray-600 dark:text-gray-300 select-none">Sample text {val}px</span>
-                          </div>
-                          {val !== def && (
-                            <button
-                              type="button"
-                              onClick={() => set(key, def as AppSettings[typeof key])}
-                              className="text-[11px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 text-center transition-colors"
-                            >Reset to default ({def}px)</button>
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            const f = getPresetFonts(preset);
+                            set("uiPreset",      preset.id);
+                            set("fontHeadRow",   f.head);
+                            set("fontDataRow",   f.data);
+                            set("fontButton",    f.btn);
+                            set("fontTag",       f.tag);
+                            set("fontFilter",    f.filter);
+                            setTheme(preset.mode);
+                            const next: AppSettings = {
+                              ...getSettings(),
+                              uiPreset:    preset.id,
+                              fontHeadRow: f.head,
+                              fontDataRow: f.data,
+                              fontButton:  f.btn,
+                              fontTag:     f.tag,
+                              fontFilter:  f.filter,
+                            };
+                            saveSettings(next);
+                            window.dispatchEvent(new Event("admin-settings-changed"));
+                            toast({ title: `${preset.name} theme applied`, description: preset.desc });
+                          }}
+                          className={[
+                            "relative text-left rounded-2xl border-2 p-5 flex flex-col gap-3 transition-all",
+                            "hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                            isActive
+                              ? "border-primary bg-primary/5 dark:bg-primary/10 shadow-sm"
+                              : "border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/40 hover:border-gray-300 dark:hover:border-zinc-600",
+                          ].join(" ")}
+                        >
+                          {isActive && (
+                            <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check size={11} strokeWidth={3} className="text-white" />
+                            </span>
                           )}
-                        </div>
+
+                          {/* Mini preview */}
+                          <div
+                            className="rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700 h-[72px] flex flex-col"
+                            style={{ background: isDark ? "hsl(222 47% 8%)" : "hsl(210 20% 98%)" }}
+                          >
+                            {/* Fake sidebar + header strip */}
+                            <div className="flex h-full">
+                              <div
+                                className="w-6 h-full flex-shrink-0"
+                                style={{ background: `hsl(${preset.primaryLight})` , opacity: isDark ? 0.85 : 1 }}
+                              />
+                              <div className="flex-1 flex flex-col">
+                                <div
+                                  className="h-4 border-b flex items-center px-2 gap-1"
+                                  style={{
+                                    background: isDark ? "hsl(222 47% 10%)" : "hsl(0 0% 100%)",
+                                    borderColor: isDark ? "hsl(217 33% 20%)" : "hsl(214 32% 91%)",
+                                  }}
+                                >
+                                  <div className="rounded-sm h-1.5 flex-1" style={{ background: isDark ? "hsl(217 33% 25%)" : "hsl(214 32% 88%)" }} />
+                                  <div
+                                    className="rounded-sm h-1.5 w-5"
+                                    style={{ background: `hsl(${preset.primaryLight})` }}
+                                  />
+                                </div>
+                                <div className="flex-1 p-1.5 flex flex-col gap-1">
+                                  {[...Array(2)].map((_, i) => (
+                                    <div key={i} className="flex gap-1">
+                                      {[...Array(3)].map((_, j) => (
+                                        <div
+                                          key={j}
+                                          className="rounded-sm h-1.5"
+                                          style={{
+                                            flex: [3, 2, 1][j],
+                                            background: i === 0
+                                              ? (isDark ? "hsl(217 33% 30%)" : "hsl(214 32% 85%)")
+                                              : (isDark ? "hsl(217 33% 22%)" : "hsl(214 32% 92%)"),
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Preset info */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-[13px] font-semibold text-gray-900 dark:text-foreground leading-tight">{preset.name}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{preset.desc}</p>
+                            </div>
+                          </div>
+
+                          {/* Tags row */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={[
+                              "inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full",
+                              isDark
+                                ? "bg-zinc-700/60 text-zinc-300"
+                                : "bg-gray-100 text-gray-600",
+                            ].join(" ")}>
+                              {isDark ? <Moon size={9} /> : <Sun size={9} />}
+                              {isDark ? "Dark" : "Light"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-700/60 text-gray-600 dark:text-zinc-300">
+                              {SCALE_LABELS[preset.scale]}
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
+                              style={{ background: preset.accentSwatch }}
+                            >
+                              {preset.accentName}
+                            </span>
+                          </div>
+
+                          {/* Font sizes preview */}
+                          <div className="flex items-end gap-3 pt-0.5">
+                            {(["head", "data", "btn"] as const).map(k => (
+                              <div key={k} className="flex flex-col items-center gap-0.5">
+                                <span
+                                  className="font-semibold leading-none text-gray-700 dark:text-gray-300"
+                                  style={{ fontSize: `${fonts[k === "head" ? "head" : k === "data" ? "data" : "btn"]}px` }}
+                                >
+                                  Aa
+                                </span>
+                                <span className="text-[9px] text-muted-foreground">{k === "head" ? "Header" : k === "data" ? "Row" : "Button"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </button>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* ── Fine-tune Font Sizes (collapsible) ───────────────────── */}
+                <div className="rounded-xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFineTuneOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sliders size={15} className="text-muted-foreground" />
+                      <span className="text-[13px] font-semibold text-gray-800 dark:text-foreground">Fine-tune Font Sizes</span>
+                      <span className="text-[11px] text-muted-foreground">Override individual sizes after choosing a preset</span>
+                    </div>
+                    {fineTuneOpen
+                      ? <ChevronUp size={15} className="text-muted-foreground" />
+                      : <ChevronDown size={15} className="text-muted-foreground" />}
+                  </button>
+
+                  {fineTuneOpen && (
+                    <div className="border-t border-gray-100 dark:border-zinc-800 p-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {([
+                          { key: "fontHeadRow" as const, label: "Header Row",  desc: "Column headers in tables & grids",  min: 8, max: 20, def: 12 },
+                          { key: "fontDataRow" as const, label: "Data Row",    desc: "Data cells in tables & grids",      min: 8, max: 20, def: 13 },
+                          { key: "fontButton"  as const, label: "Button",      desc: "Text inside all buttons",           min: 8, max: 20, def: 13 },
+                          { key: "fontTag"     as const, label: "Tag / Badge", desc: "Status pills, count badges & tags", min: 7, max: 18, def: 11 },
+                          { key: "fontFilter"  as const, label: "Filter Bar",  desc: "Toolbar, filter & search bar text", min: 8, max: 20, def: 12 },
+                        ] as const).map(({ key, label, desc, min, max, def }) => {
+                          const val = (form[key] as number | undefined) ?? def;
+                          return (
+                            <div key={key} className="rounded-xl border border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/40 p-4 flex flex-col gap-3">
+                              <div>
+                                <p className="text-[13px] font-semibold text-gray-800 dark:text-foreground leading-tight">{label}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={val <= min}
+                                  onClick={() => { set(key, Math.max(min, val - 1) as AppSettings[typeof key]); set("uiPreset", undefined); }}
+                                  className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
+                                >−</button>
+                                <div className="flex-1 text-center">
+                                  <span className="text-[17px] font-bold font-mono text-gray-900 dark:text-gray-100">{val}</span>
+                                  <span className="text-[11px] text-gray-400 ml-0.5">px</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={val >= max}
+                                  onClick={() => { set(key, Math.min(max, val + 1) as AppSettings[typeof key]); set("uiPreset", undefined); }}
+                                  className="w-8 h-8 rounded-lg border border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-[15px] transition-colors select-none"
+                                >+</button>
+                              </div>
+                              <div className="h-8 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
+                                <span style={{ fontSize: `${val}px` }} className="text-gray-600 dark:text-gray-300 select-none">Sample text {val}px</span>
+                              </div>
+                              {val !== def && (
+                                <button
+                                  type="button"
+                                  onClick={() => { set(key, def as AppSettings[typeof key]); set("uiPreset", undefined); }}
+                                  className="text-[11px] text-primary hover:text-primary/80 text-center transition-colors"
+                                >Reset to default ({def}px)</button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-gray-100 dark:border-border" />
