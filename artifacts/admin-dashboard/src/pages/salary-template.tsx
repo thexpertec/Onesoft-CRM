@@ -55,7 +55,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   designation:            "",
-  staffId:                "",
+  staffId:                "__all__",
   basicSalary:            "",
   overtimeRatePerHour:    "",
   perLeaveDeduction:      "",
@@ -178,7 +178,7 @@ export default function SalaryTemplatePage() {
     setEditId(t.id);
     setForm({
       designation:            t.designation,
-      staffId:                t.staffId,
+      staffId:                t.staffId || "__all__",
       basicSalary:            t.basicSalary           ? String(t.basicSalary)           : "",
       overtimeRatePerHour:    t.overtimeRatePerHour   ? String(t.overtimeRatePerHour)   : "",
       perLeaveDeduction:      t.perLeaveDeduction     ? String(t.perLeaveDeduction)     : "",
@@ -209,7 +209,7 @@ export default function SalaryTemplatePage() {
 
     const payload = {
       designation:            form.designation,
-      staffId:                form.staffId,
+      staffId:                form.staffId === "__all__" ? "" : form.staffId,
       basicSalary:            parseFloat(form.basicSalary)            || 0,
       overtimeRatePerHour:    parseFloat(form.overtimeRatePerHour)    || 0,
       perLeaveDeduction:      parseFloat(form.perLeaveDeduction)      || 0,
@@ -440,7 +440,7 @@ export default function SalaryTemplatePage() {
                 <Select
                   value={form.designation}
                   onValueChange={v =>
-                    setForm(f => ({ ...f, designation: v, staffId: "" }))
+                    setForm(f => ({ ...f, designation: v, staffId: "__all__" }))
                   }
                 >
                   <SelectTrigger className="h-10">
@@ -476,7 +476,7 @@ export default function SalaryTemplatePage() {
                     <SelectValue placeholder="All staff in role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All staff in role</SelectItem>
+                    <SelectItem value="__all__">All staff in role</SelectItem>
                     {filteredStaff.map(s => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
