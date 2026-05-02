@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { useSearch } from "wouter";
 import { createPortal } from "react-dom";
 import {
-  Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown,
+  Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown, ChevronUp,
   Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil, ShieldAlert,
 } from "lucide-react";
 import { useAccounts } from "@/hooks/use-data";
@@ -186,6 +186,9 @@ export default function JournalEntryPage() {
 
   const ledgers = useMemo(() => accounts.filter(a => a.accountType === "Ledger" && a.isActive), [accounts]);
 
+  // ── Form collapsed state (collapsed by default) ───────────────────────────
+  const [formOpen, setFormOpen] = useState(false);
+
   // ── Entry header state ────────────────────────────────────────────────────
   const [date, setDate]        = useState(today);
   const [reference, setRef]    = useState(() => nextRef([]));
@@ -217,6 +220,7 @@ export default function JournalEntryPage() {
           }))
         : Array.from({ length: 10 }, emptyRow),
     );
+    setFormOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -344,11 +348,35 @@ export default function JournalEntryPage() {
         {/* ── Entry form card ─────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
 
-          {/* Editing mode banner */}
-          {editingEntryId && (() => {
+          {/* Collapsible header — always visible */}
+          <button
+            type="button"
+            onClick={() => setFormOpen(o => !o)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-zinc-800/60 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <Plus size={14} className={`transition-transform ${formOpen ? "rotate-45" : ""} text-blue-600`} />
+              <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">
+                {editingEntryId
+                  ? `Editing: ${entries.find(e => e.id === editingEntryId)?.reference ?? "entry"}`
+                  : "New Journal Entry"}
+              </span>
+              {!formOpen && (
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  — click to expand
+                </span>
+              )}
+            </div>
+            {formOpen
+              ? <ChevronUp size={14} className="text-gray-400 shrink-0" />
+              : <ChevronDown size={14} className="text-gray-400 shrink-0" />}
+          </button>
+
+          {/* Editing mode banner — only shown when expanded */}
+          {formOpen && editingEntryId && (() => {
             const orig = entries.find(e => e.id === editingEntryId);
             return (
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-t border-b border-amber-200 dark:border-amber-800">
                 <Pencil size={12} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
                 <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
                   Editing: {orig?.reference ?? "entry"}
@@ -365,6 +393,9 @@ export default function JournalEntryPage() {
               </div>
             );
           })()}
+
+          {/* Collapsible body */}
+          {formOpen && (<>
 
           {/* Entry metadata row */}
           <div className="grid grid-cols-3 gap-0 border-b border-gray-100 dark:border-zinc-800">
@@ -605,6 +636,7 @@ export default function JournalEntryPage() {
               </button>
             </div>
           </div>
+          </>)}
         </div>
 
         {/* ── Saved Entries ────────────────────────────────────────────────── */}
