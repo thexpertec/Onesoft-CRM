@@ -33,6 +33,9 @@ import SalaryPage from "@/pages/salary";
 import SalaryTemplatePage from "@/pages/salary-template";
 import SalaryAllowancesPage from "@/pages/salary-allowances";
 import SalaryDeductionsPage from "@/pages/salary-deductions";
+import AdvanceSalaryPage from "@/pages/advance-salary";
+import MyApplicationPage from "@/pages/my-application";
+import ManageApplicationPage from "@/pages/manage-application";
 import AttendancePage from "@/pages/attendance";
 import CustomersPage from "@/pages/customers";
 import CustomerNewPage from "@/pages/customer-new";
@@ -203,6 +206,9 @@ function Router() {
               <Route path="/salary-template" component={SalaryTemplatePage} />
               <Route path="/salary-allowances" component={SalaryAllowancesPage} />
               <Route path="/salary-deductions" component={SalaryDeductionsPage} />
+              <Route path="/advance-salary" component={AdvanceSalaryPage} />
+              <Route path="/my-application" component={MyApplicationPage} />
+              <Route path="/manage-application" component={ManageApplicationPage} />
               <Route path="/attendance" component={AttendancePage} />
               <Route path="/users" component={UsersPage} />
               <Route path="/tenants" component={TenantsPage} />

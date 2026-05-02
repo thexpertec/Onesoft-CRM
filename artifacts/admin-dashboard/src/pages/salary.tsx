@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import {
   Wallet, Users, DollarSign, CheckCircle2, Clock, Plus, Trash2,
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { useSalarySlips, useStaff, usePaymentAccounts } from "@/hooks/use-data";
+import { useSalarySlips, useStaff, usePaymentAccounts, useSalaryTemplates } from "@/hooks/use-data";
 import {
   SalarySlip, SalarySlipItem, SalarySlipStatus,
   getSettings, postSalaryPaymentJE, getPaymentAccounts,
@@ -261,6 +261,7 @@ export default function SalaryPage() {
   const { slips, add: addSlip, edit: editSlip, remove: removeSlip } = useSalarySlips();
   const { staff } = useStaff();
   const { accounts: paymentAccounts } = usePaymentAccounts();
+  const { templates: salaryTemplates } = useSalaryTemplates();
   const sym = getSettingsCurrencySymbol();
 
   // ── Period state ───────────────────────────────────────────────────────────
@@ -279,7 +280,8 @@ export default function SalaryPage() {
   const [paySlipId,     setPaySlipId]     = useState<string | null>(null);
   const [printSlip,     setPrintSlip]     = useState<SalarySlip | null>(null);
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
-  const [generateOpen,  setGenerateOpen]  = useState(false);
+  const [generateOpen,          setGenerateOpen]          = useState(false);
+  const [generateStaffOpen,     setGenerateStaffOpen]     = useState(false);
 
   // ── Slip for editing ───────────────────────────────────────────────────────
   const editTarget = useMemo(() => slips.find(s => s.id === editSlipId) ?? null, [slips, editSlipId]);
@@ -409,6 +411,9 @@ export default function SalaryPage() {
           </Select>
           <Button size="sm" variant="outline" onClick={handleExportCSV} className="gap-1.5 h-8">
             <Download size={13} /> Export
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setGenerateStaffOpen(true)} className="gap-1.5 h-8">
+            <Plus size={13} /> Generate for Staff
           </Button>
           <Button size="sm" onClick={() => setGenerateOpen(true)} className="gap-1.5 h-8">
             <FileSpreadsheet size={13} /> Generate Payroll
@@ -642,6 +647,23 @@ export default function SalaryPage() {
           </table>
         </div>
       </div>
+
+      {/* ── Generate for Staff Dialog ────────────────────────────────────────── */}
+      {generateStaffOpen && (
+        <GenerateForStaffDialog
+          period={period}
+          staff={staff}
+          periodSlips={periodSlips}
+          salaryTemplates={salaryTemplates}
+          paymentAccounts={paymentAccounts}
+          onSave={(data) => {
+            addSlip(data);
+            setGenerateStaffOpen(false);
+            toast({ title: "Slip Generated", description: `Salary slip for ${data.staffName} (${periodLabel(period)}) created.` });
+          }}
+          onClose={() => setGenerateStaffOpen(false)}
+        />
+      )}
 
       {/* ── Generate Payroll Dialog ──────────────────────────────────────────── */}
       <AlertDialog open={generateOpen} onOpenChange={setGenerateOpen}>
@@ -938,6 +960,191 @@ function PayDialog({
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             <CheckCircle2 size={14} /> Confirm Payment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Generate for Staff Dialog (template-based) ───────────────────────────────
+type GenStaffData = Omit<SalarySlip, "id" | "grossSalary" | "netSalary" | "createdAt" | "updatedAt">;
+
+function GenerateForStaffDialog({
+  period,
+  staff,
+  periodSlips,
+  salaryTemplates,
+  paymentAccounts,
+  onSave,
+  onClose,
+}: {
+  period: string;
+  staff: ReturnType<typeof useStaff>["staff"];
+  periodSlips: SalarySlip[];
+  salaryTemplates: ReturnType<typeof useSalaryTemplates>["templates"];
+  paymentAccounts: ReturnType<typeof usePaymentAccounts>["accounts"];
+  onSave: (data: GenStaffData) => void;
+  onClose: () => void;
+}) {
+  const sym = getSettingsCurrencySymbol();
+
+  const activeStaffWithoutSlip = useMemo(() => {
+    const existingIds = new Set(periodSlips.map(s => s.staffId));
+    return staff.filter(s => s.status === "Active" && !existingIds.has(s.id));
+  }, [staff, periodSlips]);
+
+  const [selectedStaffId, setSelectedStaffId] = useState(activeStaffWithoutSlip[0]?.id ?? "");
+  const [basic,           setBasic]           = useState(0);
+  const [allowances,      setAllowances]      = useState<SalarySlipItem[]>([]);
+  const [deductions,      setDeductions]      = useState<SalarySlipItem[]>([]);
+  const [notes,           setNotes]           = useState("");
+
+  const selectedStaff = useMemo(
+    () => staff.find(s => s.id === selectedStaffId) ?? null,
+    [staff, selectedStaffId]
+  );
+
+  const matchingTemplate = useMemo(() => {
+    if (!selectedStaff) return null;
+    return (
+      salaryTemplates.find(t => t.staffId === selectedStaff.id) ??
+      salaryTemplates.find(t => t.designation === selectedStaff.designation) ??
+      null
+    );
+  }, [selectedStaff, salaryTemplates]);
+
+  useEffect(() => {
+    if (!selectedStaff) { setBasic(0); setAllowances([]); setDeductions([]); return; }
+    if (matchingTemplate) {
+      setBasic(matchingTemplate.basicSalary);
+      setAllowances(matchingTemplate.allowances.map(a => ({ label: a.type, amount: a.amount })));
+      setDeductions(matchingTemplate.deductions.map(d => ({ label: d.type, amount: d.amount })));
+    } else {
+      setBasic(selectedStaff.basicSalary ?? 0);
+      const allow = selectedStaff.allowances ?? 0;
+      const deduct = selectedStaff.deductions ?? 0;
+      setAllowances(allow > 0 ? [{ label: "Allowances", amount: allow }] : []);
+      setDeductions(deduct > 0 ? [{ label: "Deductions", amount: deduct }] : []);
+    }
+  }, [selectedStaff, matchingTemplate]);
+
+  const grossSalary = basic + allowances.reduce((s, a) => s + (a.amount || 0), 0);
+  const netSalary   = grossSalary - deductions.reduce((s, d) => s + (d.amount || 0), 0);
+
+  function handleSave() {
+    if (!selectedStaff) return;
+    onSave({
+      staffId:     selectedStaff.id,
+      staffName:   selectedStaff.name,
+      department:  selectedStaff.department ?? "",
+      designation: selectedStaff.designation ?? "",
+      period,
+      salaryType:  selectedStaff.salaryType ?? "Monthly",
+      basicSalary: basic,
+      allowances,
+      deductions,
+      status:      "Draft",
+      notes,
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus size={15} className="text-primary" /> Generate Salary Slip — {periodLabel(period)}
+          </DialogTitle>
+          <DialogDescription>Generate a single staff salary slip, pre-filled from their salary template.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+          {/* Staff selector */}
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground mb-1 block">Staff Member</label>
+            {activeStaffWithoutSlip.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground rounded-lg border p-3 bg-muted/30">
+                All active staff already have slips for {periodLabel(period)}.
+              </p>
+            ) : (
+              <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                <SelectTrigger className="h-8 text-[13px]"><SelectValue placeholder="Select staff…" /></SelectTrigger>
+                <SelectContent>
+                  {activeStaffWithoutSlip.map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                      {s.designation && <span className="text-muted-foreground ml-1.5 text-[11px]">({s.designation})</span>}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {matchingTemplate && (
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                <CheckCircle2 size={11} /> Pre-filled from salary template ({matchingTemplate.designation})
+              </p>
+            )}
+          </div>
+
+          {/* Basic Salary */}
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground mb-1 block">Basic Salary</label>
+            <Input
+              type="number" min="0"
+              className="h-8 text-[13px]"
+              value={basic === 0 ? "" : basic}
+              onChange={e => setBasic(parseFloat(e.target.value) || 0)}
+            />
+          </div>
+
+          {/* Allowances */}
+          <ItemList label="Allowances" items={allowances} onChange={setAllowances} accent="emerald" />
+
+          {/* Deductions */}
+          <ItemList label="Deductions" items={deductions} onChange={setDeductions} accent="red" />
+
+          {/* Summary */}
+          <div className="rounded-lg border p-3 space-y-1.5 text-[13px] bg-muted/20">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Basic Salary</span>
+              <span>{sym}{basic.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+              <span>+ Allowances</span>
+              <span>+{sym}{allowances.reduce((s, a) => s + (a.amount || 0), 0).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-red-600 dark:text-red-400">
+              <span>− Deductions</span>
+              <span>-{sym}{deductions.reduce((s, d) => s + (d.amount || 0), 0).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between font-bold border-t pt-1.5 text-primary">
+              <span>Net Salary</span>
+              <span>{sym}{netSalary.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground mb-1 block">Notes</label>
+            <textarea
+              rows={2}
+              className="w-full border rounded-md px-3 py-2 text-[13px] bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Optional notes…"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSave}
+            disabled={!selectedStaffId || activeStaffWithoutSlip.length === 0}
+            className="gap-1.5"
+          >
+            <FileSpreadsheet size={13} /> Generate
           </Button>
         </DialogFooter>
       </DialogContent>

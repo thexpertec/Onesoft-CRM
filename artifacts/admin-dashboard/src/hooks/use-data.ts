@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
+  AdvanceSalary, getAdvanceSalaries, createAdvanceSalary, updateAdvanceSalary, deleteAdvanceSalary,
   getCities, createCity, updateCity, deleteCity,
   getAreas, createArea, updateArea, deleteArea,
   getPaymentAccounts, createPaymentAccount, updatePaymentAccount, deletePaymentAccount,
@@ -534,4 +535,14 @@ export function useSalaryDeductionCategories() {
   const edit   = (id: string, u: Parameters<typeof updateSalaryDeductionCategory>[1]) => { const c = updateSalaryDeductionCategory(id, u); fetch(); return c; };
   const remove = (id: string)                                                           => { deleteSalaryDeductionCategory(id);              fetch(); };
   return { cats, add, edit, remove, refresh: fetch };
+}
+
+export function useAdvanceSalaries() {
+  const [records, setRecords] = useState<AdvanceSalary[]>([]);
+  const fetch = useCallback(() => setRecords(getAdvanceSalaries()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createAdvanceSalary>[0])                 => { const r = createAdvanceSalary(d);    fetch(); return r; };
+  const edit   = (id: string, u: Parameters<typeof updateAdvanceSalary>[1])     => { const r = updateAdvanceSalary(id, u); fetch(); return r; };
+  const remove = (id: string)                                                     => { deleteAdvanceSalary(id);              fetch(); };
+  return { records, add, edit, remove, refresh: fetch };
 }

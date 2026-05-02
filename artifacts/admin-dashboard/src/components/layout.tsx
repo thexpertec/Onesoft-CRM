@@ -8,7 +8,7 @@ import {
   ShoppingCart, ShoppingBag, Users2, KeyRound, Building2, Receipt,
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
-  Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
+  Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2, Banknote,
   MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2,
 } from "lucide-react";
 import {
@@ -624,6 +624,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Role-based salary structures"         }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Allowances",  href: "/salary-allowances", icon: TrendingUp,     desc: "Allowance categories & account groups"}] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Deductions",  href: "/salary-deductions", icon: TrendingDown,   desc: "Deduction categories & types"         }] : []),
+    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Advance Salary",     href: "/advance-salary",    icon: Banknote,       desc: "Staff advance salary payments"        }] : []),
+    ...(isModuleAllowed("hrm_salary")      ? [{ label: "My Application",     href: "/my-application",    icon: FileText,       desc: "My advance salary requests"           }] : []),
+    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Manage Applications",href: "/manage-application",icon: ClipboardList,  desc: "Review & approve applications"        }] : []),
     ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",         href: "/attendance",        icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
@@ -638,11 +641,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org", icon: Building2, desc: "Org chart & job descriptions"        }] : []),
   ];
   const hrmPayrollLinks = [
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management", href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Templates",  href: "/salary-template",   icon: FileText,       desc: "Role-based salary structures"          }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Allowances",        href: "/salary-allowances", icon: TrendingUp,     desc: "Allowance categories & account groups"  }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Deductions",        href: "/salary-deductions", icon: TrendingDown,   desc: "Deduction categories & types"          }] : []),
-    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",        href: "/attendance",        icon: CalendarCheck2, desc: "Daily & bulk attendance marking"       }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",   href: "/salary",             icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Templates",   href: "/salary-template",    icon: FileText,       desc: "Role-based salary structures"          }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Allowances",         href: "/salary-allowances",  icon: TrendingUp,     desc: "Allowance categories & account groups"  }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Deductions",         href: "/salary-deductions",  icon: TrendingDown,   desc: "Deduction categories & types"          }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Advance Salary",     href: "/advance-salary",     icon: Banknote,       desc: "Staff advance salary payments"         }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "My Application",     href: "/my-application",     icon: FileText,       desc: "My advance salary requests"            }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Manage Applications",href: "/manage-application", icon: ClipboardList,  desc: "Review & approve applications"         }] : []),
+    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",         href: "/attendance",         icon: CalendarCheck2, desc: "Daily & bulk attendance marking"       }] : []),
   ];
   const hrmSalesTeamLinks = [
     { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },

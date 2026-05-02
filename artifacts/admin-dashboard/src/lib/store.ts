@@ -7561,3 +7561,58 @@ export const updateSalaryDeductionCategory = (
 export const deleteSalaryDeductionCategory = (id: string): void => {
   setStored(SALARY_DEDUCTION_CAT_KEY, getSalaryDeductionCategories().filter(x => x.id !== id));
 };
+
+// ─── Advance Salary ───────────────────────────────────────────────────────────
+
+export type AdvanceSalaryStatus = "Pending" | "Approved" | "Rejected" | "Paid";
+
+export type AdvanceSalary = {
+  id:               string;
+  staffId:          string;
+  staffName:        string;
+  staffRole:        string;   // designation / role
+  amount:           number;
+  deductMonth:      string;   // "YYYY-MM" — month from which deducted
+  payVia:           "Cash" | "Bank";
+  paymentAccountId?: string;
+  status:           AdvanceSalaryStatus;
+  appliedOn:        string;   // ISO date when applied
+  notes?:           string;
+  approvedBy?:      string;
+  createdAt:        string;
+  updatedAt:        string;
+};
+
+const ADVANCE_SALARY_KEY = "admin-hrm-advance-salary";
+
+export const getAdvanceSalaries = (): AdvanceSalary[] =>
+  getStored<AdvanceSalary>(ADVANCE_SALARY_KEY);
+
+export const createAdvanceSalary = (
+  data: Omit<AdvanceSalary, "id" | "createdAt" | "updatedAt">
+): AdvanceSalary => {
+  const item: AdvanceSalary = {
+    ...data,
+    id:        crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  setStored(ADVANCE_SALARY_KEY, [...getAdvanceSalaries(), item]);
+  return item;
+};
+
+export const updateAdvanceSalary = (
+  id: string,
+  updates: Partial<Omit<AdvanceSalary, "id" | "createdAt">>
+): AdvanceSalary => {
+  const items = getAdvanceSalaries();
+  const i = items.findIndex(x => x.id === id);
+  if (i === -1) throw new Error("Advance salary record not found");
+  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  setStored(ADVANCE_SALARY_KEY, items);
+  return items[i];
+};
+
+export const deleteAdvanceSalary = (id: string): void => {
+  setStored(ADVANCE_SALARY_KEY, getAdvanceSalaries().filter(x => x.id !== id));
+};
