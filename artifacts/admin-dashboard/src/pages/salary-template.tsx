@@ -14,31 +14,11 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useSalaryTemplates, useStaff } from "@/hooks/use-data";
+import { useSalaryTemplates, useStaff, useSalaryAllowanceCategories, useSalaryDeductionCategories } from "@/hooks/use-data";
 import { getDesignations, getSettings, SalaryTemplate, SalaryTemplateItem } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const ALLOWANCE_TYPES = [
-  "Transport Allowance",
-  "Housing Allowance",
-  "Medical Allowance",
-  "Food Allowance",
-  "Mobile Allowance",
-  "Internet Allowance",
-  "Performance Bonus",
-  "Other",
-];
-
-const DEDUCTION_TYPES = [
-  "Income Tax",
-  "Provident Fund",
-  "Loan Repayment",
-  "Advance Recovery",
-  "Insurance",
-  "Other",
-];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,13 +55,14 @@ function fmt(n: number, sym: string) {
 // ─── Dynamic line-item row ─────────────────────────────────────────────────────
 
 function LineRow({
-  item, types, sym, onChange, onRemove,
+  item, types, emptyHint, sym, onChange, onRemove,
 }: {
-  item:     SalaryTemplateItem;
-  types:    string[];
-  sym:      string;
-  onChange: (id: string, field: "type" | "amount", val: string | number) => void;
-  onRemove: (id: string) => void;
+  item:      SalaryTemplateItem;
+  types:     string[];
+  emptyHint: string;
+  sym:       string;
+  onChange:  (id: string, field: "type" | "amount", val: string | number) => void;
+  onRemove:  (id: string) => void;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -93,9 +74,13 @@ function LineRow({
           <SelectValue placeholder="Select type" />
         </SelectTrigger>
         <SelectContent>
-          {types.map(t => (
-            <SelectItem key={t} value={t}>{t}</SelectItem>
-          ))}
+          {types.length === 0 ? (
+            <SelectItem value="__none__" disabled>{emptyHint}</SelectItem>
+          ) : (
+            types.map(t => (
+              <SelectItem key={t} value={t}>{t}</SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
       <div className="relative w-36 shrink-0">
@@ -145,9 +130,14 @@ export default function SalaryTemplatePage() {
   const [form,     setForm]     = useState<FormState>(EMPTY_FORM);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { templates, add, edit: editTemplate, remove } = useSalaryTemplates();
+  const { templates, add, edit: editTemplate, remove }  = useSalaryTemplates();
   const { staff: allStaff }                             = useStaff();
+  const { cats: allowanceCats }                         = useSalaryAllowanceCategories();
+  const { cats: deductionCats }                         = useSalaryDeductionCategories();
   const { toast }                                       = useToast();
+
+  const allowanceTypes = useMemo(() => allowanceCats.map(c => c.name), [allowanceCats]);
+  const deductionTypes = useMemo(() => deductionCats.map(c => c.name), [deductionCats]);
 
   const settings = getSettings();
   const sym      = getSettingsCurrencySymbol(settings);
@@ -567,7 +557,8 @@ export default function SalaryTemplatePage() {
                   <LineRow
                     key={a.id}
                     item={a}
-                    types={ALLOWANCE_TYPES}
+                    types={allowanceTypes}
+                    emptyHint="No categories — add in Salary Allowances"
                     sym={sym}
                     onChange={updateAllowance}
                     onRemove={id => setForm(f => ({ ...f, allowances: f.allowances.filter(x => x.id !== id) }))}
@@ -659,7 +650,8 @@ export default function SalaryTemplatePage() {
                   <LineRow
                     key={d.id}
                     item={d}
-                    types={DEDUCTION_TYPES}
+                    types={deductionTypes}
+                    emptyHint="No categories — add in Salary Deductions"
                     sym={sym}
                     onChange={updateDeduction}
                     onRemove={id => setForm(f => ({ ...f, deductions: f.deductions.filter(x => x.id !== id) }))}
