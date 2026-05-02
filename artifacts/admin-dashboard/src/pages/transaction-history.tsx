@@ -19,6 +19,18 @@ const fmt = (n: number) => `${sym}${Math.abs(n).toLocaleString(undefined, { mini
 const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
 
+/**
+ * Format reference for display.  Auto-generated OB-{uuid} references contain
+ * the raw ledger account UUID and look noisy in tables. Shorten them to the
+ * leading 8 chars, e.g.  OB-c38b1454-ac1a-4b7f-aef4-c40d360332a4 → OB-c38b1454
+ */
+const UUID_RE = /^([A-Z]{2,4})-([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function formatRef(ref: string): string {
+  if (!ref) return "—";
+  const m = ref.match(UUID_RE);
+  return m ? `${m[1]}-${m[2]}` : ref;
+}
+
 // ─── Unified row ──────────────────────────────────────────────────────────────
 
 type TxnType =
@@ -270,7 +282,7 @@ export default function TransactionHistoryPage() {
   const exportCsv = () => {
     const hdr = ["Date","Type","Reference","Party","Payment Account","Debit","Credit","Status","Notes"];
     const lines = rows.map(r =>
-      [r.date, r.type, r.reference, r.party, r.payAccount,
+      [r.date, r.type, formatRef(r.reference), r.party, r.payAccount,
        r.debit.toFixed(dp), r.credit.toFixed(dp), r.status, r.notes]
         .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
@@ -497,8 +509,8 @@ export default function TransactionHistoryPage() {
                         </td>
 
                         {/* Reference */}
-                        <td className="px-3 py-2.5 font-mono font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
-                          {row.reference}
+                        <td className="px-3 py-2.5 font-mono font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap" title={row.reference}>
+                          {formatRef(row.reference)}
                         </td>
 
                         {/* Party */}
