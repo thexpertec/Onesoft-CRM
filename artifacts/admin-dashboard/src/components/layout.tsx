@@ -703,7 +703,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isAdminActive         = ADMIN_ROUTES.some(r         => location === r || location.startsWith(r));
 
   // Mega menu column configs keyed by nav item key
-  const MEGA_CONFIGS: Record<string, { columns: MegaColumn[]; footerText: string; footerHref: string; footerLabel: string }> = {
+  const MEGA_CONFIGS: Record<string, { columns: MegaColumn[]; footerText: string; footerHref: string; footerLabel: string; rightAlign?: boolean }> = {
     crm: {
       columns: allowedCrmColumns,
       footerText: "Manage all your CRM records in one place",
@@ -728,6 +728,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       columns: hrmMegaCols,
       footerText: "Manage your entire workforce in one place",
       footerHref: "/staff", footerLabel: "View HRM",
+      rightAlign: true,
     },
   };
 
@@ -990,7 +991,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
                     {isThisMegaOpen && (
                       <div
-                        className="absolute top-full left-0 z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden"
+                        className={`absolute top-full z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden ${"rightAlign" in cfg && cfg.rightAlign ? "right-0" : "left-0"}`}
                         style={{ minWidth: `${cfg.columns.length * 210}px` }}
                       >
                         {/* Column grid */}
