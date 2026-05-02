@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
   Tag, Plus, FolderOpen, Search, Trash2, ChevronRight, ChevronDown,
-  Save, X, Package, Pencil, GitBranch, FileText, FolderTree,
+  Save, X, Package, Pencil, GitBranch, FileText, FolderTree, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,6 +141,38 @@ export default function CategoriesPage() {
     const all = buildFlatRows(categories, null, 0, collapsedIds);
     return matchedIds ? all.filter(r => matchedIds.has(r.id)) : all;
   }, [categories, collapsedIds, matchedIds]);
+
+  // ── CSV Export ─────────────────────────────────────────────────────────────
+  const exportCsv = useCallback(() => {
+    const levelLabel = (cat: ProductCategory): string => {
+      const d = getDepth(categories, cat.id);
+      return d === 0 ? "Category" : d === 1 ? "Sub-category" : "Sub-sub-category";
+    };
+    const rows = buildFlatRows(categories, null, 0, new Set()).map(row => ({
+      level:       levelLabel(row),
+      name:        row.name,
+      path:        getPath(categories, row.id),
+      description: row.description || "",
+      color:       row.color || "",
+      parent:      row.parentId ? (categories.find(c => c.id === row.parentId)?.name || "") : "",
+      created:     format(new Date(row.createdAt), "yyyy-MM-dd"),
+    }));
+    const headers = ["Level", "Name", "Full Path", "Description", "Color", "Parent", "Created"];
+    const lines   = rows.map(r =>
+      [r.level, r.name, r.path, r.description, r.color, r.parent, r.created]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const csv  = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `categories-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: `${rows.length} categories exported to CSV.` });
+  }, [categories, toast]);
 
   // ── Open the dialog at a particular target ─────────────────────────────────
   // Rules:
@@ -547,6 +579,16 @@ export default function CategoriesPage() {
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search categories..." className="pl-8 h-8 text-[13px]" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 text-[12px]"
+          onClick={exportCsv}
+          disabled={categories.length === 0}
+          data-testid="btn-export-categories"
+        >
+          <Download size={12} /> Export CSV
+        </Button>
         {orphans.length > 0 && can("Delete Categories") && (
           <Button
             size="sm"
