@@ -3163,10 +3163,13 @@ export function autoPostSaleReturnJE(params: {
   };
 
   const isCredit = params.refundMethod === "Credit";
+  // Walk-in detection — mirrors autoPostSaleJE: always use 1130-000 as the transit AR leg.
+  const _retCustomerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
+  const isRetWalkIn      = _retCustomerArId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
   let creditAccId: string | null;
-  if (isCredit) {
-    // Per-customer AR sub-ledger if it exists, else Trade Receivables, else system AR
-    creditAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+  if (isCredit || isRetWalkIn) {
+    // Per-customer AR sub-ledger (1130-000 for walk-in); fall back to Trade Receivables
+    creditAccId = _retCustomerArId
                || resolveToLedger(s.accReceivable)
                || SYS_ACCS.AR_TRADE;
   } else {
@@ -3250,6 +3253,23 @@ export function autoPostSaleReturnJE(params: {
     lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
       narration: `COGS reversal – ${params.returnNumber}`,
       debit: 0, credit: costTotal });
+  }
+
+  // ── Walk-in immediate cash transit reversal ───────────────────────────────
+  // Mirrors the transit posted by autoPostSaleJE: DR 1130-000 / CR Cash
+  // so the AR transit is properly reversed and cash is paid out.
+  if (isRetWalkIn && !isCredit) {
+    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
+    const pmCashId  = dynLedger
+                   || (params.refundMethod === "Cash"
+                       ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
+                       : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH));
+    lines.push({ id: crypto.randomUUID(), ledgerId: creditAccId!,
+      narration: `AR transit cleared – ${params.returnNumber} – ${params.customer}`,
+      debit: params.grandTotal, credit: 0 });
+    lines.push({ id: crypto.randomUUID(), ledgerId: pmCashId,
+      narration: `Cash refund – ${params.returnNumber} – ${params.customer}`,
+      debit: 0, credit: params.grandTotal });
   }
 
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
@@ -6291,10 +6311,17 @@ export function autoPostSaleJE(params: {
                         ? params.grandTotal - params.amountPaid
                         : 0;
   const isOutstanding = outstanding > 0.005; // > half-cent to avoid float noise
-  // Invoice-source JEs are always accrual (AR debit) unless it's a POS sale paid in full
+
+  // Walk-in customer detection — always route through dedicated AR ledger (1130-000)
+  // so every anonymous POS sale (cash or credit) appears in the Walk-in Customer ledger.
+  const _customerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
+  const isWalkIn      = _customerArId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
+
+  // Invoice-source JEs are always accrual (AR debit) unless it's a POS sale paid in full.
+  // Walk-in POS sales always use AR (even cash) so the transit shows in 1130-000.
   const useAR         = params.source === "Invoice"
-                        ? true                         // invoices always go through AR
-                        : isCredit || isOutstanding;   // POS: only AR when credit / outstanding
+                        ? true
+                        : isCredit || isOutstanding || isWalkIn;
 
   // ── Resolve the payment-method debit account ─────────────────────────────
   // Priority:
@@ -6316,8 +6343,8 @@ export function autoPostSaleJE(params: {
 
   let debitAccId: string | null;
   if (useAR) {
-    // Prefer per-customer AR sub-ledger; fall back to Trade Receivables ledger
-    debitAccId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+    // Prefer per-customer AR sub-ledger (pre-resolved above); fall back to Trade Receivables
+    debitAccId = _customerArId
               || resolveToLedger(s.accReceivable)
               || SYS_ACCS.AR_TRADE;
   } else {
@@ -6399,6 +6426,24 @@ export function autoPostSaleJE(params: {
       lines.push({ id: crypto.randomUUID(), ledgerId: _generalInvId,
         narration: `Inventory reduction – ${params.reference}`, debit: 0, credit: costTotal });
     }
+  }
+
+  // ── Walk-in immediate cash transit ───────────────────────────────────────
+  // For Walk-in POS cash sales paid in full on the spot: the AR debit above
+  // (DR 1130-000) is immediately cleared by DR Cash / CR 1130-000 so the
+  // account shows the sale transit without leaving a false outstanding balance.
+  if (isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice") {
+    const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
+    const pmCashId  = dynLedger
+                   || (params.paymentMethod === "Cash"
+                       ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
+                       : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH));
+    lines.push({ id: crypto.randomUUID(), ledgerId: pmCashId,
+      narration: `Cash receipt – ${params.reference} – ${params.customer}`,
+      debit: params.grandTotal, credit: 0 });
+    lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId!,
+      narration: `AR transit cleared – ${params.reference} – ${params.customer}`,
+      debit: 0, credit: params.grandTotal });
   }
 
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
