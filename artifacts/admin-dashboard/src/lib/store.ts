@@ -1693,6 +1693,8 @@ export type Product = {
   openingStock?: string;     // Initial stock quantity when product is created
   stockAlertValue?: string;  // Low-stock alert threshold (triggers alert when stock falls below)
   description: string;
+  metaTitle?: string;        // SEO meta title (shown in browser tab / search results)
+  metaDescription?: string;  // SEO meta description (shown in search result snippets)
   status: ProductStatus;
   condition?: ProductCondition; // Physical condition of the product
   thumbnail?: string;

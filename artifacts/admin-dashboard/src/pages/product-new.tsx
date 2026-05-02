@@ -22,6 +22,7 @@ type FormFields = {
   clubcardPrice: string;
   commissionPct: string; openingStock: string; stockAlertValue: string;
   status: string; condition: string; description: string;
+  metaTitle: string; metaDescription: string;
 };
 
 const BLANK = (): FormFields => ({
@@ -30,6 +31,7 @@ const BLANK = (): FormFields => ({
   purchasePrice: "", costPrice: "", price: "", wholesalePrice: "", clubcardPrice: "",
   commissionPct: "", openingStock: "", stockAlertValue: "",
   status: "Active", condition: "", description: "",
+  metaTitle: "", metaDescription: "",
 });
 
 const Divider = ({ label }: { label: string }) => (
@@ -246,7 +248,9 @@ export default function ProductNewPage() {
         stockAlertValue: form.stockAlertValue || undefined,
         status: (form.status as Product["status"]) || "Active",
         condition: (form.condition as Product["condition"]) || undefined,
-        description: form.description,
+        description:     form.description,
+        metaTitle:       form.metaTitle || undefined,
+        metaDescription: form.metaDescription || undefined,
         productAttributes: selectedAttrName ? [selectedAttrName] : undefined,
         variants: variants.length ? variants : undefined,
         thumbnail: thumbnail || undefined,
@@ -800,6 +804,47 @@ export default function ProductNewPage() {
             <textarea value={form.description} onChange={e => patch("description", e.target.value)}
               placeholder="Optional product description, features, specifications…" rows={3}
               className="w-full px-3 py-2.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
+          </div>
+
+          <Divider label="SEO" />
+
+          <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              These fields control how this product appears in search engine results (Google, Bing, etc.) and browser tabs on the store.
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[12px] font-semibold text-foreground">Meta Title</label>
+                <span className={`text-[10px] tabular-nums ${form.metaTitle.length > 60 ? "text-amber-500" : "text-muted-foreground"}`}>
+                  {form.metaTitle.length}/60
+                </span>
+              </div>
+              <Input
+                value={form.metaTitle}
+                onChange={e => patch("metaTitle", e.target.value)}
+                placeholder={form.name || "e.g. Oak Dining Table — Free Delivery | YourStore"}
+                className="h-9 text-sm"
+                maxLength={80}
+              />
+              <p className="text-[10px] text-muted-foreground">Recommended: 50–60 characters. Defaults to the product name if left blank.</p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[12px] font-semibold text-foreground">Meta Description</label>
+                <span className={`text-[10px] tabular-nums ${form.metaDescription.length > 160 ? "text-amber-500" : "text-muted-foreground"}`}>
+                  {form.metaDescription.length}/160
+                </span>
+              </div>
+              <textarea
+                value={form.metaDescription}
+                onChange={e => patch("metaDescription", e.target.value)}
+                placeholder="A brief, compelling summary of this product for search engines…"
+                rows={3}
+                maxLength={200}
+                className="w-full px-3 py-2.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+              <p className="text-[10px] text-muted-foreground">Recommended: 120–160 characters. Shown below the page title in search results.</p>
+            </div>
           </div>
         </div>
 
