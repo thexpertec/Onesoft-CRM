@@ -351,7 +351,8 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/attendance", "/users", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/attendance", "/sales-agents", "/agent-performance"];
+const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
@@ -623,11 +624,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",           href: "/attendance",   icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
-    ...(!isStaff && isSuperAdmin && !currentTenantId ? [
-      { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System users"          },
-      { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
-      { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
-    ] : []),
   ];
 
   // ── HRM mega-menu columns (dynamic, permission-gated) ─────────────────────
@@ -647,17 +643,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance", href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
   ];
-  const hrmAdminLinks: MegaLink[] = (!isStaff && isSuperAdmin && !currentTenantId) ? [
-    { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System user accounts"  },
-    { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
-    { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
-  ] : [];
   const hrmMegaCols: MegaColumn[] = [
-    ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",              href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff & recruitment",     links: hrmPeopleLinks    }] : []),
-    ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",           href: "/roles",        icon: KeyRound,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org chart",       links: hrmStructureLinks }] : []),
-    ...(hrmPayrollLinks.length   > 0 ? [{ label: "Payroll & Attend.",   href: "/salary",       icon: Wallet,    color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-950/40",   desc: "Payroll & time tracking", links: hrmPayrollLinks   }] : []),
-    ...(hrmSalesTeamLinks.length > 0 ? [{ label: "Sales Team",          href: "/sales-agents", icon: BarChart3, color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/40",     desc: "Agents & performance",    links: hrmSalesTeamLinks }] : []),
-    ...(hrmAdminLinks.length     > 0 ? [{ label: "Administration",      href: "/users",        icon: Shield,    color: "text-rose-500",    bg: "bg-rose-50 dark:bg-rose-950/40",       desc: "System admin settings",   links: hrmAdminLinks     }] : []),
+    ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",            href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff & recruitment",     links: hrmPeopleLinks    }] : []),
+    ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",         href: "/roles",        icon: KeyRound,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org chart",       links: hrmStructureLinks }] : []),
+    ...(hrmPayrollLinks.length   > 0 ? [{ label: "Payroll & Attend.", href: "/salary",       icon: Wallet,    color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-950/40",   desc: "Payroll & time tracking", links: hrmPayrollLinks   }] : []),
+    ...(hrmSalesTeamLinks.length > 0 ? [{ label: "Sales Team",        href: "/sales-agents", icon: BarChart3, color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/40",     desc: "Agents & performance",    links: hrmSalesTeamLinks }] : []),
   ];
 
   const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, isMega: true };
@@ -687,6 +677,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       }
     }),
     ...(hrmItems.length > 0 ? [HRM_NAV] : []),
+    ...(!isStaff && isSuperAdmin && !currentTenantId ? [{
+      key: "sysadmin", label: "Admin", icon: Shield,
+      items: [
+        { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System user accounts"  },
+        { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
+        { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
+      ] as SubItem[],
+    }] : []),
   ];
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
@@ -702,6 +700,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r   => location === r || location.startsWith(r));
   const isAccountsActive      = ACCOUNTS_ROUTES.some(r      => location === r || location.startsWith(r));
   const isRepairActive        = REPAIR_ROUTES.some(r        => location === r || location.startsWith(r));
+  const isAdminActive         = ADMIN_ROUTES.some(r         => location === r || location.startsWith(r));
 
   // Mega menu column configs keyed by nav item key
   const MEGA_CONFIGS: Record<string, { columns: MegaColumn[]; footerText: string; footerHref: string; footerLabel: string }> = {
@@ -956,6 +955,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 item.key === "investments"   ? isInvestmentsActive :
                 item.key === "accounts"      ? isAccountsActive :
                 item.key === "repair"        ? isRepairActive :
+                item.key === "sysadmin"      ? isAdminActive :
                 location === item.href || (item.href && item.href !== "/" && location.startsWith(item.href));
 
               const isThisMegaOpen = openMega === item.key;
