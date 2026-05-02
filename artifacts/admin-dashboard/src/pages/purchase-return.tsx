@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getInvoices, getPurchaseReturns, createPurchaseReturn, updatePurchaseReturn, deletePurchaseReturn,
-  deductStockForSale,
+  deductStockForSale, getPaymentAccounts,
   type Invoice, type PurchaseReturn, type PurchaseReturnItem,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -25,8 +25,22 @@ const dp = getSettingsDecimalPlaces();
 const fmt = (n: number) => `${getSettingsCurrencySymbol()}${n.toFixed(dp)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
-const REFUND_METHODS = ["Bank Transfer", "Supplier Credit", "Cash", "Cheque", "Adjustment"] as const;
-type RefundMethod = typeof REFUND_METHODS[number];
+/** Build the dynamic credit method list from real payment accounts + special options.
+ *  Each payment account created in Settings → Payment Accounts has its own COA ledger,
+ *  so the dropdown stays in sync with what's actually configured.
+ */
+function getCreditMethodOptions(): { value: string; label: string }[] {
+  const accounts = getPaymentAccounts().filter(a => a.isActive !== false);
+  const accountOptions = accounts.map(a => ({
+    value: a.accountTitle,
+    label: a.bankName ? `${a.accountTitle} (${a.bankName})` : a.accountTitle,
+  }));
+  return [
+    ...accountOptions,
+    { value: "Supplier Credit", label: "Supplier Credit" },
+    { value: "Adjustment",      label: "Adjustment" },
+  ];
+}
 
 function calcItems(items: PurchaseReturnItem[]) {
   return items.reduce((s, i) => {
@@ -179,7 +193,12 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
   const [search, setSearch]             = useState("");
   const [selectedInv, setSelectedInv]   = useState<Invoice | null>(null);
   const [returnItems, setReturnItems]   = useState<PurchaseReturnItem[]>([]);
-  const [refundMethod, setRefundMethod] = useState<RefundMethod>("Supplier Credit");
+
+  const creditMethodOptions = useMemo(() => getCreditMethodOptions(), []);
+  const [refundMethod, setRefundMethod] = useState<string>(
+    () => getCreditMethodOptions()[0]?.value ?? "Supplier Credit"
+  );
+
   const [reason, setReason]             = useState("");
   const [notes, setNotes]               = useState("");
   const [date, setDate]                 = useState(today());
@@ -350,10 +369,12 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Credit Method</label>
               <select
                 value={refundMethod}
-                onChange={e => setRefundMethod(e.target.value as RefundMethod)}
+                onChange={e => setRefundMethod(e.target.value)}
                 className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {REFUND_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                {creditMethodOptions.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
               </select>
             </div>
             <div className="col-span-2">
