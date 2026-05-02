@@ -692,7 +692,7 @@ export default function Dashboard() {
           <QuickTile href="/leads"     icon={Users}        label="Leads"     count={leads.length}          sub={`${activeLeads} active`}  color="bg-blue-500"    testId="tile-leads" />
           <QuickTile href="/customers" icon={UserCheck}    label="Customers" count={customers.length}      sub={`${activeCustomers} active`} color="bg-cyan-500" testId="tile-customers" />
           <QuickTile href="/products"  icon={Package}      label="Products"  count={products.length}       color="bg-indigo-500" />
-          <QuickTile href="/stock"     icon={Boxes}        label="Stock"     count={stock.length}          sub={lowStockItems.length > 0 ? `${lowStockItems.length} low` : undefined} color={lowStockItems.length > 0 ? "bg-amber-500" : "bg-slate-500"} />
+          <QuickTile href="/stock-ledger" icon={Boxes}        label="Stock"     count={stock.length}          sub={lowStockItems.length > 0 ? `${lowStockItems.length} low` : undefined} color={lowStockItems.length > 0 ? "bg-amber-500" : "bg-slate-500"} />
           <QuickTile href="/purchases" icon={ShoppingCart} label="Purchases" count={purchaseOrders.length} sub={`${pendingPOs.length} pending`} color="bg-rose-500" />
           <QuickTile href="/sales"     icon={Receipt}      label="Sales"     count={sales.length}          sub={`${completedSales.length} completed`} color="bg-emerald-500" testId="tile-sales" />
           <QuickTile href="/staff"     icon={Users2}       label="Staff"     count={staff.length}          color="bg-teal-500" />
@@ -1215,7 +1215,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
                   <AlertTriangle size={15} className={lowStockItems.length > 0 ? "text-amber-500" : "text-muted-foreground"} /> Stock Alerts
                 </CardTitle>
-                <Link href="/stock">
+                <Link href="/stock-ledger">
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
                     Stock <ArrowRight size={12} />
                   </Button>

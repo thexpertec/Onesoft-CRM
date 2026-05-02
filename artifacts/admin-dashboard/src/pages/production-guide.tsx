@@ -230,7 +230,7 @@ export default function ProductionGuidePage() {
               { label: "product lines", value: d.stock.length },
             ]}
             actions={[
-              { label: "View Stock", href: "/stock", primary: true },
+              { label: "View Stock", href: "/stock-ledger", primary: true },
               { label: "Make a Sale", href: "/sales/new" },
             ]}
             isLast
