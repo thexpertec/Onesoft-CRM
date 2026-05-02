@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2,
-  MapPin, BarChart3, Wrench, Scale, Briefcase,
+  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -330,7 +330,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/users", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/attendance", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
@@ -487,6 +487,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_recruitment:     ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_salary:          ["View Staff",     "Manage Staff", "View Payroll",  "Manage Payroll"],
+    hrm_attendance:      ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     // Accounting
     accounting_coa:      ["View Chart of Accounts","Add Chart of Accounts","Edit Chart of Accounts","Delete Chart of Accounts","View Accounts","Manage Accounts"],
     accounting_journal:  ["View Journal",   "Add Journal",  "Edit Journal",  "Delete Journal",  "View Accounts","Manage Accounts"],
@@ -546,6 +547,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-hrm-org":          "hrm_org",
     "l-recruitment":      "hrm_recruitment",
     "l-salary":           "hrm_salary",
+    "l-attendance":       "hrm_attendance",
     "l-products":      "products",
     "l-categories":    "products",
     "l-brands":        "products",
@@ -596,7 +598,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
     ...(isModuleAllowed("hrm_recruitment") ? [{ label: "Recruitment",          href: "/recruitment",  icon: Briefcase, desc: "Job postings, applicants & interviews" }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",    href: "/salary",       icon: Wallet,    desc: "Payroll, slips & JE posting"          }] : []),
+    ...(isModuleAllowed("hrm_salary")       ? [{ label: "Salary Management",    href: "/salary",       icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
+    ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",           href: "/attendance",   icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
     ...(!isStaff && isSuperAdmin && !currentTenantId ? [

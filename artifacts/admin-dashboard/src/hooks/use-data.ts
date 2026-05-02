@@ -491,3 +491,13 @@ export function useSalarySlips() {
   const remove = (id: string)                                                  => { deleteSalarySlip(id);              fetch(); };
   return { slips, add, edit, remove, refresh: fetch };
 }
+
+export function useAttendance() {
+  const [records, setRecords] = useState<import("@/lib/store").AttendanceRecord[]>([]);
+  const fetch = useCallback(() => setRecords(import_store.getAttendanceRecords()), []);
+  useStoreEffect(fetch);
+  const upsert      = (d: Parameters<typeof import_store.upsertAttendance>[0])      => { const r = import_store.upsertAttendance(d);      fetch(); return r; };
+  const bulkUpsert  = (d: Parameters<typeof import_store.bulkUpsertAttendance>[0])  => { const r = import_store.bulkUpsertAttendance(d);  fetch(); return r; };
+  const remove      = (id: string)                                                   => { import_store.deleteAttendanceRecord(id);          fetch(); };
+  return { records, upsert, bulkUpsert, remove, refresh: fetch };
+}

@@ -1209,7 +1209,7 @@ export type ModuleId =
   | "sales" | "invoices" | "sale_return" | "calc_invoice"
   | "sales_agents" | "agent_performance" | "areas"
   // HRM
-  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_recruitment" | "hrm_salary"
+  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_recruitment" | "hrm_salary" | "hrm_attendance"
   // Products organisation
   | "products_departments"
   // Accounting
@@ -1266,6 +1266,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "hrm_org",         label: "Departments & Designations",  desc: "Org chart & job descriptions",          group: "HRM", href: "/hrm-org"     },
   { id: "hrm_recruitment", label: "Recruitment",                 desc: "Job postings, applicants & interviews", group: "HRM", href: "/recruitment" },
   { id: "hrm_salary",      label: "Salary Management",           desc: "Payroll, salary slips & JE posting",   group: "HRM", href: "/salary"      },
+  { id: "hrm_attendance",  label: "Attendance",                  desc: "Daily attendance & bulk marking",      group: "HRM", href: "/attendance"  },
 
   // ── Accounting ────────────────────────────────────────────────────────────
   { id: "accounting_coa",      label: "Chart of Accounts",  desc: "Account structure & COA",           group: "Accounting",    href: "/chart-of-accounts" },
@@ -7373,3 +7374,50 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
   });
   return je;
 }
+
+// ─── Attendance Management ────────────────────────────────────────────────────
+
+export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Leave";
+export const ATTENDANCE_STATUSES: AttendanceStatus[] = ["Present", "Absent", "Late", "Half Day", "Leave"];
+
+export type AttendanceRecord = {
+  id:         string;
+  staffId:    string;
+  staffName:  string;
+  department: string;
+  date:       string;   // YYYY-MM-DD
+  status:     AttendanceStatus;
+  checkIn?:   string;   // HH:MM (24h)
+  checkOut?:  string;   // HH:MM (24h)
+  notes?:     string;
+  createdAt:  string;
+  updatedAt:  string;
+};
+
+const ATTENDANCE_KEY = "admin-hrm-attendance";
+
+export const getAttendanceRecords = (): AttendanceRecord[] => getStored<AttendanceRecord>(ATTENDANCE_KEY);
+
+export const upsertAttendance = (
+  data: Omit<AttendanceRecord, "id" | "createdAt" | "updatedAt">
+): AttendanceRecord => {
+  const all = getAttendanceRecords();
+  const existing = all.find(r => r.staffId === data.staffId && r.date === data.date);
+  const now = new Date().toISOString();
+  if (existing) {
+    const updated = { ...existing, ...data, updatedAt: now };
+    setStored(ATTENDANCE_KEY, all.map(r => r.id === existing.id ? updated : r));
+    return updated;
+  }
+  const record: AttendanceRecord = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+  setStored(ATTENDANCE_KEY, [...all, record]);
+  return record;
+};
+
+export const bulkUpsertAttendance = (
+  records: Omit<AttendanceRecord, "id" | "createdAt" | "updatedAt">[]
+): AttendanceRecord[] => records.map(upsertAttendance);
+
+export const deleteAttendanceRecord = (id: string): void => {
+  setStored(ATTENDANCE_KEY, getAttendanceRecords().filter(r => r.id !== id));
+};
