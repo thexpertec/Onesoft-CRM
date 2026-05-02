@@ -48,6 +48,7 @@ Accounts are seeded by `seedDefaultCoaAccounts()` (called on every login). The m
     1110  Cash
     1120  Bank
     1130  Accounts Receivable (group)
+      1130-000  Walk-in Customer  [SYSTEM — sys-walkin-ar, cannot be deleted]
     1131  Trade Receivables
     1140  Inventory
   1200  Non-Current Assets
@@ -77,6 +78,14 @@ Accounts are seeded by `seedDefaultCoaAccounts()` (called on every login). The m
 ```
 
 System account ID constants live in `SYS_ACCS` (see `store.ts`). New root IDs: `ASSETS_ROOT="sys-1000r"`, `NON_CURRENT_ASSETS="sys-1200g"`, `LIAB_ROOT="sys-2000r"`, `NON_CURRENT_LIAB="sys-2200g"`.
+
+### Walk-in Customer (anonymous POS sales)
+
+- `SYS_ACCS.WALK_IN_CUSTOMER_AR = "sys-walkin-ar"` — COA Ledger account `1130-000 Walk-in Customer`, child of AR Group (1130). Seeded by `SYSTEM_ACCOUNTS`.
+- `SYS_WALKIN_CUSTOMER_ID = "sys-walkin-customer"` — Customer record with `name="Walk-in"`, `customerType="POS Customer"`, `ledgerAccountId="sys-walkin-ar"`. Seeded by COA migration **m10** on first login.
+- `blankSale()` defaults `customer: "Walk-in"` so every new POS session starts with Walk-in pre-filled.
+- `findSubLedgerForParty("Walk-in", AR_GROUP)` finds the Customer record by name, returns `sys-walkin-ar` — all JEs for anonymous sales debit account `1130-000` instead of the generic `1131 Trade Receivables`.
+- **Protected from deletion**: `deleteCustomer` throws if `id === SYS_WALKIN_CUSTOMER_ID`; the delete button is hidden in the customers table row and detail panel for this record; `isSystemAccount("sys-walkin-ar")` returns `true` so the COA account is also protected.
 
 Default credentials: superadmin `admin` / `Onesoft@2024` (sessionStorage key `onesoft-admin-auth`)
 

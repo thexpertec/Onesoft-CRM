@@ -148,7 +148,7 @@ const DELIVERY_STATUS_COLOR: Record<string, string> = {
 
 const blankSale = (): Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt"> => ({
   saleDate: new Date().toISOString().slice(0, 10),
-  customer: "", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
+  customer: "Walk-in", status: "Draft", paymentMethod: "Cash", notes: "", items: [],
   taxRate: "0", amountPaid: "0", paidAt: "", stockDeducted: false,
   saleMode: "Retail", deliveryStatus: "Pending",
   deliveryCharges: "0", invoiceDiscount: "0", invoiceDiscountType: "pct",

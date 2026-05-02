@@ -466,6 +466,8 @@ const PAYMENT_ACCOUNTS_KEY = "admin-payment-accounts";
 
 /** Stable ID for the built-in default Cash in Hand account — cannot be deleted or edited. */
 export const SYS_PA_CASH = "sys-pa-cash";
+/** Stable ID for the system-seeded "Walk-in" Customer record. */
+export const SYS_WALKIN_CUSTOMER_ID = "sys-walkin-customer";
 
 export const getPaymentAccounts = (): PaymentAccount[] => getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
 
@@ -920,6 +922,8 @@ const _formatBlockerError = (label: string, name: string, blockers: string[]): s
   `Cannot delete ${label} "${name}": ${blockers.join("; ")}. Remove the linked records first.`;
 
 export const deleteCustomer = (id: string): void => {
+  if (id === SYS_WALKIN_CUSTOMER_ID)
+    throw new Error("The Walk-in Customer is a system record and cannot be deleted.");
   const customer = getCustomers().find(c => c.id === id);
   if (customer) {
     const blockers = _customerFinancialBlockers(customer);
@@ -5163,8 +5167,9 @@ export const SYS_ACCS = {
   ASSETS_ROOT:        "sys-1000r",  // root Assets group (1000)
   CURRENT_ASSETS:     "sys-1000",   // Current Assets group (1100) — child of ASSETS_ROOT
   CB_GROUP:           "sys-1150",   // Cash & Bank Accounts GROUP (1150) — parent for payment accounts
-  AR_GROUP:           "sys-1100",   // Accounts Receivable GROUP (1130) — parent for per-customer ledgers
-  AR_TRADE:           "sys-1101",   // Trade Receivables LEDGER (1131)
+  AR_GROUP:              "sys-1100",      // Accounts Receivable GROUP (1130) — parent for per-customer ledgers
+  AR_TRADE:              "sys-1101",      // Trade Receivables LEDGER (1131)
+  WALK_IN_CUSTOMER_AR:   "sys-walkin-ar", // Walk-in Customer Receivable LEDGER (1130-000) — anonymous POS sales
   CASH:               "sys-1200",   // Cash in Hand (1110)
   BANK:               "sys-1210",   // Bank Account (1120)
   INVENTORY:          "sys-1300",   // Inventory / Stock (1140)
@@ -5218,8 +5223,9 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CURRENT_ASSETS,     code: "1100", name: "Current Assets",             head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.ASSETS_ROOT,         subType: "Current Asset",    description: "Assets expected to be realised within 12 months" },
   { id: SYS_ACCS.CB_GROUP,           code: "1110", name: "Cash & Bank Accounts",       head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Current Asset",    description: "All cash, bank and wallet payment accounts" },
   { id: SYS_ACCS.CASH,               code: "1111", name: "Cash",                       head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.CB_GROUP,            subType: "Cash",             description: "Default cash account — physical cash on premises" },
-  { id: SYS_ACCS.AR_GROUP,           code: "1130", name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
-  { id: SYS_ACCS.AR_TRADE,           code: "1131", name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "Aggregate receivable for credit customers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.AR_GROUP,           code: "1130",     name: "Accounts Receivable",        head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Receivable",       description: "Amounts owed by customers & buyers" },
+  { id: SYS_ACCS.AR_TRADE,           code: "1131",     name: "Trade Receivables",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "Aggregate receivable for credit customers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.WALK_IN_CUSTOMER_AR, code: "1130-000", name: "Walk-in Customer",           head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.AR_GROUP,            subType: "Receivable",       description: "Receivable ledger for anonymous walk-in POS sales — do not delete", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.INVENTORY,          code: "1140", name: "Inventory / Stock",          head: "Assets",           accountType: "Group",  parentId: SYS_ACCS.CURRENT_ASSETS,      subType: "Inventory",        description: "Stock & inventory value — subsidiary ledgers per product/category" },
   { id: SYS_ACCS.GENERAL_INVENTORY, code: "1141", name: "General Inventory",          head: "Assets",           accountType: "Ledger", parentId: SYS_ACCS.INVENTORY,           subType: "Inventory",        description: "Catch-all inventory ledger — used when no per-category inventory ledger exists" },
   // Non-Current Assets
@@ -5475,6 +5481,41 @@ export function seedDefaultCoaAccounts(): void {
       staticChanged = true;
     }
     done.add("m09"); migrationsChanged = true;
+  }
+
+  // ── m10: Seed Walk-in Customer record ────────────────────────────────────────
+  // Creates a system Customer named "Walk-in" whose ledgerAccountId points at
+  // the WALK_IN_CUSTOMER_AR COA ledger (sys-walkin-ar / 1130-000). This ensures
+  // every anonymous POS sale posts its AR debit to that dedicated ledger instead
+  // of the generic "Trade Receivables" fallback.
+  if (!done.has("m10")) {
+    const existingCusts = getStored<Customer>(CUSTOMERS_KEY);
+    if (!existingCusts.some(c => c.id === SYS_WALKIN_CUSTOMER_ID)) {
+      const now10 = new Date().toISOString();
+      const walkInCustomer: Customer = {
+        id:              SYS_WALKIN_CUSTOMER_ID,
+        name:            "Walk-in",
+        company:         "",
+        email:           "",
+        phone:           "",
+        industry:        "",
+        city:            "",
+        status:          "Active",
+        source:          "direct",
+        customerType:    "POS Customer",
+        customerRole:    "Buyer",
+        notes:           "System-generated default customer for anonymous POS sales. Do not delete.",
+        tags:            [],
+        ledgerAccountId: SYS_ACCS.WALK_IN_CUSTOMER_AR,
+        customerSince:   now10.slice(0, 10),
+        totalValue:      "0",
+        currency:        "GBP",
+        createdAt:       now10,
+        updatedAt:       now10,
+      };
+      setStored(CUSTOMERS_KEY, [walkInCustomer, ...existingCusts]);
+    }
+    done.add("m10"); migrationsChanged = true;
   }
 
   // ── Persist static migration results ────────────────────────────────────────

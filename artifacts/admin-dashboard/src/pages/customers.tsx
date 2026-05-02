@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useCustomers, useLeads, useCities, useAreas } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Customer, CustomerStatus, Lead, convertLeadToCustomer, Address, isAddressEmpty } from "@/lib/store";
+import { Customer, CustomerStatus, Lead, convertLeadToCustomer, Address, isAddressEmpty, SYS_WALKIN_CUSTOMER_ID } from "@/lib/store";
 import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
@@ -640,7 +640,9 @@ export default function CustomersPage() {
                         <button className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="New sale invoice" onClick={() => nav(`/invoices/new?q=${encodeURIComponent(cust.name)}`)}><FileText size={13} /></button>
                         <button className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors" title="View invoices" onClick={() => nav(`/invoices?q=${encodeURIComponent(cust.name)}`)}><Receipt size={13} /></button>
                         <button className="p-1 rounded text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors" title="Collect payment" onClick={() => nav(`/receipt-payment?customer=${encodeURIComponent(cust.name)}`)}><DollarSign size={13} /></button>
-                        <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete" onClick={() => setDeleteId(cust.id)}><Trash2 size={13} /></button>
+                        {cust.id !== SYS_WALKIN_CUSTOMER_ID && (
+                          <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete" onClick={() => setDeleteId(cust.id)}><Trash2 size={13} /></button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -774,7 +776,7 @@ export default function CustomersPage() {
                   <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">{viewCust.notes}</p>
                 </div>
               )}
-              {can("Delete Customers") && (
+              {can("Delete Customers") && viewCust.id !== SYS_WALKIN_CUSTOMER_ID && (
                 <div className="pt-4 border-t">
                   <Button variant="destructive" className="w-full gap-2" onClick={() => { setDeleteId(viewCust.id); setViewCust(null); }}>
                     <Trash2 size={14} /> Delete Customer
