@@ -1209,7 +1209,7 @@ export type ModuleId =
   | "sales" | "invoices" | "sale_return" | "calc_invoice"
   | "sales_agents" | "agent_performance" | "areas"
   // HRM
-  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_recruitment"
+  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_recruitment" | "hrm_salary"
   // Products organisation
   | "products_departments"
   // Accounting
@@ -1261,10 +1261,11 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "areas",             label: "Delivery Areas",     desc: "Regional delivery zones & coverage",    group: "Sales", href: "/areas"             },
 
   // ── HRM ───────────────────────────────────────────────────────────────────
-  { id: "hrm_staff",       label: "Staff",                       desc: "Employee records & departments",    group: "HRM", href: "/staff"         },
-  { id: "hrm_roles",       label: "Roles",                       desc: "Permission roles & access control", group: "HRM", href: "/roles"         },
-  { id: "hrm_org",         label: "Departments & Designations",  desc: "Org chart & job descriptions",      group: "HRM", href: "/hrm-org"       },
+  { id: "hrm_staff",       label: "Staff",                       desc: "Employee records & departments",        group: "HRM", href: "/staff"       },
+  { id: "hrm_roles",       label: "Roles",                       desc: "Permission roles & access control",     group: "HRM", href: "/roles"       },
+  { id: "hrm_org",         label: "Departments & Designations",  desc: "Org chart & job descriptions",          group: "HRM", href: "/hrm-org"     },
   { id: "hrm_recruitment", label: "Recruitment",                 desc: "Job postings, applicants & interviews", group: "HRM", href: "/recruitment" },
+  { id: "hrm_salary",      label: "Salary Management",           desc: "Payroll, salary slips & JE posting",   group: "HRM", href: "/salary"      },
 
   // ── Accounting ────────────────────────────────────────────────────────────
   { id: "accounting_coa",      label: "Chart of Accounts",  desc: "Account structure & COA",           group: "Accounting",    href: "/chart-of-accounts" },
@@ -7273,3 +7274,102 @@ export const updateInterviewSchedule = (id: string, updates: Partial<Omit<Interv
 export const deleteInterviewSchedule = (id: string): void => {
   setStored(INTERVIEWS_KEY, getStored<InterviewSchedule>(INTERVIEWS_KEY).filter(x => x.id !== id));
 };
+
+// ─── HRM — Salary Management ──────────────────────────────────────────────────
+
+export type SalarySlipItem = { label: string; amount: number };
+export type SalarySlipStatus = "Draft" | "Approved" | "Paid";
+
+export type SalarySlip = {
+  id: string;
+  staffId: string;
+  staffName: string;
+  department: string;
+  designation: string;
+  period: string;                  // "YYYY-MM"
+  salaryType: "Monthly" | "Hourly" | "Daily" | "Commission";
+  basicSalary: number;
+  allowances: SalarySlipItem[];    // itemized allowances
+  deductions: SalarySlipItem[];    // itemized deductions
+  grossSalary: number;             // basicSalary + Σ allowances
+  netSalary: number;               // grossSalary  − Σ deductions
+  status: SalarySlipStatus;
+  paymentMethod?: "Cash" | "Bank Transfer" | "Wallet";
+  paymentAccountId?: string;
+  paidAt?: string;
+  journalEntryId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const SALARY_SLIPS_KEY = "admin-hrm-salary-slips";
+
+function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions: SalarySlipItem[]) {
+  const grossSalary = basic + allowances.reduce((s, a) => s + (a.amount || 0), 0);
+  const netSalary   = grossSalary - deductions.reduce((s, d) => s + (d.amount || 0), 0);
+  return { grossSalary, netSalary };
+}
+
+export const getSalarySlips = (): SalarySlip[] => getStored<SalarySlip>(SALARY_SLIPS_KEY);
+
+export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "netSalary" | "createdAt" | "updatedAt">): SalarySlip => {
+  const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions);
+  const item: SalarySlip = { ...data, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  setStored(SALARY_SLIPS_KEY, [...getSalarySlips(), item]);
+  return item;
+};
+
+export const updateSalarySlip = (id: string, updates: Partial<Omit<SalarySlip, "id" | "createdAt">>): SalarySlip => {
+  const items = getSalarySlips();
+  const i = items.findIndex(s => s.id === id);
+  if (i === -1) throw new Error("Salary slip not found");
+  const merged = { ...items[i], ...updates };
+  const { grossSalary, netSalary } = _calcSlipTotals(merged.basicSalary, merged.allowances, merged.deductions);
+  items[i] = { ...merged, grossSalary, netSalary, updatedAt: new Date().toISOString() };
+  setStored(SALARY_SLIPS_KEY, items);
+  return items[i];
+};
+
+export const deleteSalarySlip = (id: string): void => {
+  setStored(SALARY_SLIPS_KEY, getSalarySlips().filter(s => s.id !== id));
+};
+
+/**
+ * Post a double-entry journal entry for a salary payment:
+ *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages)
+ *   Cr — Payment Account Ledger (Cash / Bank)
+ */
+export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
+  const staffLedgerId = (() => {
+    const staff = getStaff().find(s => s.id === slip.staffId);
+    return staff?.ledgerAccountId ?? SYS_ACCS.SALARY_GROUP;
+  })();
+  const ref = `SAL-${slip.period}-${slip.staffId.slice(0, 8)}`;
+  const je = createJournalEntry({
+    date,
+    reference: ref,
+    description: `Salary payment — ${slip.staffName} (${slip.period})`,
+    lines: [
+      {
+        id: crypto.randomUUID(),
+        ledgerId:  staffLedgerId,
+        narration: `Salary expense — ${slip.staffName} (${slip.period})`,
+        debit:  slip.netSalary,
+        credit: 0,
+      },
+      {
+        id: crypto.randomUUID(),
+        ledgerId:  paymentAccountLedgerId,
+        narration: `Salary paid — ${slip.staffName} (${slip.period})`,
+        debit:  0,
+        credit: slip.netSalary,
+      },
+    ],
+    status:      "posted",
+    totalDebit:  slip.netSalary,
+    totalCredit: slip.netSalary,
+    isBalanced:  true,
+  });
+  return je;
+}

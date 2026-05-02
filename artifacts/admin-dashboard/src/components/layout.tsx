@@ -330,7 +330,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/users", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/recruitment", "/salary", "/users", "/sales-agents", "/agent-performance"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
@@ -486,6 +486,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     hrm_roles:           ["View Roles",     "Add Roles",    "Edit Roles",    "Delete Roles",    "Manage Roles"],
     hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_recruitment:     ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
+    hrm_salary:          ["View Staff",     "Manage Staff", "View Payroll",  "Manage Payroll"],
     // Accounting
     accounting_coa:      ["View Chart of Accounts","Add Chart of Accounts","Edit Chart of Accounts","Delete Chart of Accounts","View Accounts","Manage Accounts"],
     accounting_journal:  ["View Journal",   "Add Journal",  "Edit Journal",  "Delete Journal",  "View Accounts","Manage Accounts"],
@@ -544,6 +545,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-roles":            "hrm_roles",
     "l-hrm-org":          "hrm_org",
     "l-recruitment":      "hrm_recruitment",
+    "l-salary":           "hrm_salary",
     "l-products":      "products",
     "l-categories":    "products",
     "l-brands":        "products",
@@ -594,6 +596,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
     ...(isModuleAllowed("hrm_recruitment") ? [{ label: "Recruitment",          href: "/recruitment",  icon: Briefcase, desc: "Job postings, applicants & interviews" }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",    href: "/salary",       icon: Wallet,    desc: "Payroll, slips & JE posting"          }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
     ...(!isStaff && isSuperAdmin && !currentTenantId ? [

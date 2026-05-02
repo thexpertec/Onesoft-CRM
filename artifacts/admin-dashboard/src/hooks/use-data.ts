@@ -34,6 +34,7 @@ import {
   Product, Brand, Attribute, Unit, PurchaseOrder, Staff, StaffRole, Department, Designation, StockItem, Sale, Invoice, Account,
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgRecipe, MfgOutput, ProductionCost, RPVoucher,
   City, Area, PaymentAccount,
+  SalarySlip, getSalarySlips, createSalarySlip, updateSalarySlip, deleteSalarySlip,
 } from "@/lib/store";
 
 /**
@@ -479,4 +480,14 @@ export function usePaymentAccounts() {
   const edit   = (id: string, u: Parameters<typeof updatePaymentAccount>[1]) => { const a = updatePaymentAccount(id, u); fetch(); return a; };
   const remove = (id: string)                                                  => { deletePaymentAccount(id);              fetch(); };
   return { accounts, add, edit, remove, refresh: fetch };
+}
+
+export function useSalarySlips() {
+  const [slips, setSlips] = useState<SalarySlip[]>([]);
+  const fetch = useCallback(() => setSlips(getSalarySlips()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createSalarySlip>[0])                 => { const s = createSalarySlip(d);    fetch(); return s; };
+  const edit   = (id: string, u: Parameters<typeof updateSalarySlip>[1])     => { const s = updateSalarySlip(id, u); fetch(); return s; };
+  const remove = (id: string)                                                  => { deleteSalarySlip(id);              fetch(); };
+  return { slips, add, edit, remove, refresh: fetch };
 }
