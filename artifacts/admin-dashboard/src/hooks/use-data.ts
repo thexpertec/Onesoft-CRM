@@ -35,6 +35,7 @@ import {
   JournalEntry, SalesAgent, RawMaterial, ManufacturingOrder, MfgRecipe, MfgOutput, ProductionCost, RPVoucher,
   City, Area, PaymentAccount,
   SalarySlip, getSalarySlips, createSalarySlip, updateSalarySlip, deleteSalarySlip,
+  AttendanceRecord, getAttendanceRecords, upsertAttendance, bulkUpsertAttendance, deleteAttendanceRecord,
 } from "@/lib/store";
 
 /**
@@ -493,11 +494,11 @@ export function useSalarySlips() {
 }
 
 export function useAttendance() {
-  const [records, setRecords] = useState<import("@/lib/store").AttendanceRecord[]>([]);
-  const fetch = useCallback(() => setRecords(import_store.getAttendanceRecords()), []);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const fetch = useCallback(() => setRecords(getAttendanceRecords()), []);
   useStoreEffect(fetch);
-  const upsert      = (d: Parameters<typeof import_store.upsertAttendance>[0])      => { const r = import_store.upsertAttendance(d);      fetch(); return r; };
-  const bulkUpsert  = (d: Parameters<typeof import_store.bulkUpsertAttendance>[0])  => { const r = import_store.bulkUpsertAttendance(d);  fetch(); return r; };
-  const remove      = (id: string)                                                   => { import_store.deleteAttendanceRecord(id);          fetch(); };
+  const upsert     = (d: Parameters<typeof upsertAttendance>[0])     => { const r = upsertAttendance(d);     fetch(); return r; };
+  const bulkUpsert = (d: Parameters<typeof bulkUpsertAttendance>[0]) => { const r = bulkUpsertAttendance(d); fetch(); return r; };
+  const remove     = (id: string)                                     => { deleteAttendanceRecord(id);        fetch(); };
   return { records, upsert, bulkUpsert, remove, refresh: fetch };
 }
