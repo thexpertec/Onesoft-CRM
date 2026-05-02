@@ -60,6 +60,7 @@ import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
 import SaleReturnPage from "@/pages/sale-return";
 import PurchaseReturnPage from "@/pages/purchase-return";
+import ReturnsPage from "@/pages/returns";
 import SalesAgentsPage from "@/pages/sales-agents";
 import AgentNewPage from "@/pages/agent-new";
 import AgentPerformancePage from "@/pages/agent-performance";
@@ -206,6 +207,7 @@ function Router() {
               <Route path="/expense-report" component={ExpenseReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
               <Route path="/payment-accounts" component={PaymentAccountsPage} />
+              <Route path="/returns" component={ReturnsPage} />
               <Route path="/sale-return" component={SaleReturnPage} />
               <Route path="/purchase-return" component={PurchaseReturnPage} />
               <Route path="/website-cms" component={WebsiteCmsPage} />
