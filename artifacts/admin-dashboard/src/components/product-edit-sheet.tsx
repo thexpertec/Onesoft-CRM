@@ -24,6 +24,16 @@ type FormFields = {
   metaTitle: string; metaDescription: string;
 };
 
+const EMPTY_FORM: FormFields = {
+  name: "", localName: "", model: "", sku: "", barcode: "", brand: "",
+  category: "", subcategory: "", subSubcategory: "", department: "", unit: "",
+  purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
+  clubcardPrice: "", websitePrice: "", websitePriceWas: "",
+  commissionPct: "", openingStock: "", stockAlertValue: "",
+  status: "Active", condition: "", description: "",
+  metaTitle: "", metaDescription: "",
+};
+
 const toForm = (p: Product): FormFields => ({
   name:            p.name ?? "",
   localName:       p.localName ?? "",
@@ -88,7 +98,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
   const sym = useMemo(() => getSettingsCurrencySymbol(), []);
   const dp  = getSettingsDecimalPlaces();
 
-  const [form, setForm] = useState<FormFields>(product ? toForm(product) : {} as FormFields);
+  const [form, setForm] = useState<FormFields>(product ? toForm(product) : EMPTY_FORM);
   const [clubcardBogo, setClubcardBogo] = useState<boolean>(product?.clubcardBogo ?? false);
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
