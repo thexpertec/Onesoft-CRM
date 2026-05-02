@@ -19,6 +19,7 @@ import Documents from "@/pages/documents";
 import DocumentDetail from "@/pages/document-detail";
 import NewDocument from "@/pages/new-document";
 import ShareDocument from "@/pages/share-document";
+import ShareInvoicePage from "@/pages/share-invoice";
 import UsersPage from "@/pages/users";
 import SalesPage from "@/pages/sales";
 import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
@@ -148,6 +149,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/share/:id" component={ShareDocument} />
+      <Route path="/invoice-view/:id" component={ShareInvoicePage} />
       <Route>
         <RequireAuth>
           <Layout>

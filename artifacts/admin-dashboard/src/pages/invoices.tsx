@@ -19,7 +19,7 @@ import RichTextEditor from "@/components/RichTextEditor";
 import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
 import {
-  FileText, Plus, Search, X, Trash2, Printer, Send,
+  FileText, Plus, Search, X, Trash2, Printer, Send, Link2,
   CheckCircle, RotateCcw,
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
@@ -284,6 +284,28 @@ function DocPicker({
         )}
       </select>
     </div>
+  );
+}
+
+// ─── Copy Link Button ─────────────────────────────────────────────────────────
+function CopyLinkButton({ invoiceId }: { invoiceId: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    const url = `${window.location.origin}${window.location.pathname.split("/invoices")[0]}/invoice-view/${invoiceId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy shareable public link"
+      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-violet-200 dark:border-violet-800 text-sm font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
+    >
+      {copied ? <CheckCircle size={14} className="text-emerald-500"/> : <Link2 size={14}/>}
+      {copied ? "Copied!" : "Share Link"}
+    </button>
   );
 }
 
@@ -1800,6 +1822,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               <Send size={14}/> Send
             </button>
           )}
+
+          {/* Share Link — copy public invoice URL */}
+          {!isNew && <CopyLinkButton invoiceId={invoice!.id} />}
 
           {/* Print — only existing invoice */}
           {!isNew && (

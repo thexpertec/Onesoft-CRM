@@ -262,15 +262,17 @@ export default function ShareInvoicePage() {
 
           {/* Meta strip */}
           <div style={{ width:"200px", flexShrink:0, padding:"18px 32px 18px 20px", display:"flex", flexDirection:"column", justifyContent:"center", gap:"7px" }}>
-            {[
-              ["Invoice Date",    fmtDateShort(inv.invoiceDate)],
-              ["Due Date",        fmtDateShort(inv.dueDate)],
-              inv.paymentMethod ? ["Payment Via", inv.paymentMethod] : null,
-              inv.shippingMethod ? ["Shipping", inv.shippingMethod] : null,
-            ].filter(Boolean).map(([label, val]) => (
-              <div key={label as string} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:"8px", fontSize:"12px" }}>
-                <span style={{ color:"#94a3b8", whiteSpace:"nowrap" }}>{label as string}</span>
-                <span style={{ fontWeight:700, color: label === "Due Date" && inv.status === "Overdue" ? "#dc2626" : "#1e293b", textAlign:"right" }}>{val as string}</span>
+            {(
+              [
+                ["Invoice Date", fmtDateShort(inv.invoiceDate)],
+                ["Due Date",     fmtDateShort(inv.dueDate)],
+                ...(inv.paymentMethod  ? [["Payment Via", inv.paymentMethod]]  : []),
+                ...(inv.shippingMethod ? [["Shipping",    inv.shippingMethod]] : []),
+              ] as [string, string][]
+            ).map(([label, val]) => (
+              <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:"8px", fontSize:"12px" }}>
+                <span style={{ color:"#94a3b8", whiteSpace:"nowrap" }}>{label}</span>
+                <span style={{ fontWeight:700, color: label === "Due Date" && inv.status === "Overdue" ? "#dc2626" : "#1e293b", textAlign:"right" }}>{val}</span>
               </div>
             ))}
             <div style={{ marginTop:"6px", alignSelf:"flex-end" }}>
