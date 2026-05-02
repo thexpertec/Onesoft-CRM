@@ -51,6 +51,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
   Late:       "bg-amber-100  text-amber-800  border-amber-300  dark:bg-amber-900/40  dark:text-amber-300",
   "Half Day": "bg-blue-100   text-blue-800   border-blue-300   dark:bg-blue-900/40   dark:text-blue-300",
   Leave:      "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/40 dark:text-purple-300",
+  Off:        "bg-slate-100  text-slate-700  border-slate-300  dark:bg-slate-800      dark:text-slate-300",
 };
 
 const STATUS_ACTIVE_COLORS: Record<AttendanceStatus, string> = {
@@ -59,13 +60,14 @@ const STATUS_ACTIVE_COLORS: Record<AttendanceStatus, string> = {
   Late:       "bg-amber-500  text-white border-amber-500  shadow-amber-200  shadow-md",
   "Half Day": "bg-blue-500   text-white border-blue-500   shadow-blue-200   shadow-md",
   Leave:      "bg-purple-500 text-white border-purple-500 shadow-purple-200 shadow-md",
+  Off:        "bg-slate-500  text-white border-slate-500  shadow-slate-200  shadow-md",
 };
 
 const STATUS_SHORT: Record<AttendanceStatus, string> = {
-  Present: "P", Absent: "A", Late: "L", "Half Day": "H", Leave: "V",
+  Present: "P", Absent: "A", Late: "L", "Half Day": "H", Leave: "V", Off: "O",
 };
 
-const CYCLE: AttendanceStatus[] = ["Present", "Absent", "Late", "Half Day", "Leave"];
+const CYCLE: AttendanceStatus[] = ["Present", "Absent", "Late", "Half Day", "Leave", "Off"];
 function nextStatus(s: AttendanceStatus | undefined): AttendanceStatus {
   if (!s) return "Present";
   const i = CYCLE.indexOf(s);

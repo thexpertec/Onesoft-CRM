@@ -7376,8 +7376,8 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
 
 // ─── Attendance Management ────────────────────────────────────────────────────
 
-export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Leave";
-export const ATTENDANCE_STATUSES: AttendanceStatus[] = ["Present", "Absent", "Late", "Half Day", "Leave"];
+export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Leave" | "Off";
+export const ATTENDANCE_STATUSES: AttendanceStatus[] = ["Present", "Absent", "Late", "Half Day", "Leave", "Off"];
 
 export type AttendanceRecord = {
   id:         string;
