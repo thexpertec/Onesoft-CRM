@@ -1153,17 +1153,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <HrmTab href="/agent-performance" icon={BarChart3} label="Performance"
                 active={location === "/agent-performance"} />
 
-              {/* ── Admin (superadmin only) ── */}
-              {!isStaff && isSuperAdmin && !currentTenantId && <>
-                <HrmTabDivider />
-                <HrmTab href="/users"         icon={Shield}          label="Accounts"
-                  active={location === "/users"} />
-                <HrmTab href="/tenants"       icon={Globe}           label="Tenants"
-                  active={location === "/tenants"} />
-                <HrmTab href="/module-groups" icon={LayoutDashboard} label="Module Groups"
-                  active={location === "/module-groups"} />
-              </>}
-
             </div>
           </div>
         )}
