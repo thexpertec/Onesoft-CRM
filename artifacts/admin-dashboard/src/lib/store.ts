@@ -1524,22 +1524,41 @@ export type AdminUser = {
 
 const USERS_KEY = "admin-users";
 
+/**
+ * Builds the default superadmin record without touching any store.
+ */
+function _buildDefaultSuperadmin(): AdminUser {
+  return {
+    id: "u-superadmin",
+    username: "admin",
+    fullName: "Super Admin",
+    email: "admin@onesoft.com",
+    role: "superadmin",
+    password: "Onesoft@2024",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Patches the IN-MEMORY cache only — never writes to the server.
+ *
+ * Called at module load time when _memRaw is still empty (no server data yet).
+ * Writing to the server here would be catastrophic: syncAllFromServer drains
+ * _pendingWrites before reading from the DB, so a server write fired at module
+ * init would overwrite the real user list with [superadmin] on every page
+ * refresh, silently deleting every admin user that was created.
+ *
+ * Server persistence is handled by _persistSuperadminIfMissing(), which runs
+ * inside syncAllFromServer AFTER the real server state has been loaded.
+ */
 function ensureDefaultSuperadmin() {
   try {
     const existing: AdminUser[] = getGlobal<AdminUser>(USERS_KEY);
     const hasSuper = existing.some(u => u.id === "u-superadmin");
     if (!hasSuper) {
-      const superadmin: AdminUser = {
-        id: "u-superadmin",
-        username: "admin",
-        fullName: "Super Admin",
-        email: "admin@onesoft.com",
-        role: "superadmin",
-        password: "Onesoft@2024",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setGlobal(USERS_KEY, [superadmin, ...existing.filter(u => u.id !== "u-superadmin")]);
+      // Memory-only patch so the UI never sees an empty user list.
+      _lsCache(USERS_KEY, [_buildDefaultSuperadmin(), ...existing.filter(u => u.id !== "u-superadmin")]);
     }
   } catch { /* ignore */ }
 }
@@ -7037,6 +7056,23 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         if (value === undefined || value === null) continue;
         if (tenantId !== null && !isPlatformGlobalKey(key)) continue;
         _lsCache(key, value);
+      }
+    }
+
+    // Step 2b — Ensure the default superadmin exists in the DB.
+    // Now that _memRaw reflects the real server state we can safely check and
+    // write. This is the ONLY place that may persist the superadmin seed to the
+    // server; ensureDefaultSuperadmin() is intentionally memory-only so that it
+    // cannot corrupt the DB at module-load time (before any sync has run).
+    {
+      const dbUsers: AdminUser[] = getGlobal<AdminUser>(USERS_KEY);
+      const hasSuperInDb = dbUsers.some(u => u.id === "u-superadmin");
+      if (!hasSuperInDb) {
+        const superadmin = _buildDefaultSuperadmin();
+        const patched = [superadmin, ...dbUsers.filter(u => u.id !== "u-superadmin")];
+        _lsCache(USERS_KEY, patched);
+        // Fire-and-forget — failure is non-fatal; next sync will retry.
+        _apiWrite(USERS_KEY, patched).catch(() => { /* already logged */ });
       }
     }
 
