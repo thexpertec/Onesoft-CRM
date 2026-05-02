@@ -1035,6 +1035,7 @@ export default function Leads() {
     addLead({ name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
       industry: newRow.industry, city: newRow.city, status: (newRow.status as LeadStatus)||"New",
       source: newRow.source, notes: newRow.notes, isRelevant: true, callLogs: [],
+      assignedTo: isSalesAgent && agentName ? agentName : (newRow.assignedTo || undefined),
       ...(newRow.temperature ? { temperature: newRow.temperature as "Hot"|"Warm"|"Cold" } : {}),
       ...(newRow.nextFollowUp ? { nextFollowUp: newRow.nextFollowUp } : {}),
     });
@@ -1043,7 +1044,11 @@ export default function Leads() {
   };
 
   const cancelNewRow = () => { setNewRow(null); setNewRowActive(null); };
-  const startNewRow  = () => { setNewRow(BLANK_ROW()); setNewRowActive(0); setActiveCell(null); };
+  const startNewRow  = () => {
+    const blank = BLANK_ROW();
+    if (isSalesAgent && agentName) blank.assignedTo = agentName;
+    setNewRow(blank); setNewRowActive(0); setActiveCell(null);
+  };
 
   const handleDelete = () => {
     if (!deleteId) return;
@@ -1175,15 +1180,19 @@ export default function Leads() {
               : "Click any cell to edit · Tab to move · Enter to save · Esc to cancel"}
           </p>
         </div>
-        {can("Add Leads") && !isSalesAgent && (
+        {can("Add Leads") && (
           <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={downloadTemplate} title="Download import template CSV">
-              <Download size={14} /> Template
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={() => { setImportRows([]); setImportOpen(true); }}>
-              <Upload size={14} /> Import CSV
-            </Button>
-            <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={e => { const f=e.target.files?.[0]; if(f)processFile(f); e.target.value=""; }} />
+            {!isSalesAgent && (
+              <>
+                <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={downloadTemplate} title="Download import template CSV">
+                  <Download size={14} /> Template
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0 text-[13px]" onClick={() => { setImportRows([]); setImportOpen(true); }}>
+                  <Upload size={14} /> Import CSV
+                </Button>
+                <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={e => { const f=e.target.files?.[0]; if(f)processFile(f); e.target.value=""; }} />
+              </>
+            )}
             <Button size="sm" onClick={startNewRow} className="gap-1.5 flex-shrink-0" data-testid="btn-add-lead">
               <Plus size={14} /> Add Lead
             </Button>
@@ -1196,7 +1205,7 @@ export default function Leads() {
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
           <UserCircle2 size={15} className="text-violet-600 dark:text-violet-400 flex-shrink-0" />
           <span className="text-[13px] text-violet-700 dark:text-violet-300 font-medium">
-            You are viewing your assigned leads only. Contact your administrator to assign more leads to you.
+            Showing your leads. New leads you add will be automatically assigned to you.
           </span>
           <span className="ml-auto text-[12px] font-bold text-violet-500 dark:text-violet-400 flex-shrink-0">
             {filtered.length} lead{filtered.length !== 1 ? "s" : ""}
