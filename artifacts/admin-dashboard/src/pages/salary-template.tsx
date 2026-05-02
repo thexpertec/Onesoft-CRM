@@ -289,85 +289,95 @@ export default function SalaryTemplatePage() {
             </div>
           ) : (
             <div className="rounded-xl border border-border overflow-hidden bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/60 border-b border-border">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Role / Designation
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Staff Member
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Basic Salary
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Allowances
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Deductions
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                      Net Salary
-                    </th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {templates.map((t, idx) => {
-                    const ta = t.allowances.reduce((s, a) => s + a.amount, 0);
-                    const td = t.deductions.reduce((s, d) => s + d.amount, 0);
-                    const ns = t.basicSalary + ta - td;
-                    const staffName = allStaff.find(s => s.id === t.staffId)?.name;
-                    return (
-                      <tr
-                        key={t.id}
-                        className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "" : "bg-muted/10"}`}
-                      >
-                        <td className="px-4 py-3.5 font-medium">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-                            {t.designation || <span className="text-muted-foreground italic">Any role</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-muted-foreground">
-                          {staffName || <span className="italic text-xs">All staff in role</span>}
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono">
-                          {fmt(t.basicSalary, sym)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                          +{fmt(ta, sym)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono text-red-500 dark:text-red-400">
-                          -{fmt(td, sym)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono font-semibold">
-                          {fmt(ns, sym)}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => openEdit(t)}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                              title="Edit"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              onClick={() => setDeleteId(t.id)}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm whitespace-nowrap">
+                  <thead>
+                    <tr className="bg-muted/60 border-b border-border">
+                      <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-10">Sr.</th>
+                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Staff Id</th>
+                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Staff Name</th>
+                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Role</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Basic Salary</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Allowances</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Deduction</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Net Salary</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Overtime Rate</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Leave Rate</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">SL Rate</th>
+                      <th className="px-3 py-3 text-right text-xs uppercase tracking-wide font-semibold text-muted-foreground">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templates.map((t, idx) => {
+                      const staffMember = allStaff.find(s => s.id === t.staffId);
+                      const ta = t.allowances.reduce((s, a) => s + a.amount, 0);
+                      const td = t.deductions.reduce((s, d) => s + d.amount, 0);
+                      const ns = t.basicSalary + ta - td;
+                      const staffIdDisplay = staffMember
+                        ? staffMember.id.slice(0, 3).toUpperCase() + "-" + staffMember.id.slice(3, 11).toUpperCase()
+                        : "—";
+                      return (
+                        <tr
+                          key={t.id}
+                          className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "" : "bg-muted/10"}`}
+                        >
+                          <td className="px-3 py-3 text-center text-muted-foreground tabular-nums">{idx + 1}</td>
+                          <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{staffIdDisplay}</td>
+                          <td className="px-3 py-3 font-medium">
+                            {staffMember
+                              ? staffMember.name
+                              : <span className="italic text-xs text-muted-foreground">All staff in role</span>
+                            }
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                              {t.designation || <span className="text-muted-foreground italic">Any role</span>}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums">{fmt(t.basicSalary, sym)}</td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                            +{fmt(ta, sym)}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-red-500 dark:text-red-400">
+                            -{fmt(td, sym)}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums font-semibold">
+                            {fmt(ns, sym)}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {t.overtimeRatePerHour > 0 ? fmt(t.overtimeRatePerHour, sym) : <span className="text-xs">0</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {t.perLeaveDeduction > 0 ? fmt(t.perLeaveDeduction, sym) : <span className="text-xs">0</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                            {t.perShortLeaveDeduction > 0 ? fmt(t.perShortLeaveDeduction, sym) : <span className="text-xs">0</span>}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => openEdit(t)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => setDeleteId(t.id)}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
