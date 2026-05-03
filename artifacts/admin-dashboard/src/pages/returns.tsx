@@ -356,7 +356,10 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
       qty:         item.qty,
       unitPrice:   item.unitPrice,
       discount:    item.discount || "0",
-      costPrice:   products.find(p => p.sku === item.sku)?.costPrice || "",
+      // Use costPrice locked at sale time first; fall back to catalogue with variant-aware lookup
+      costPrice:   item.costPrice ||
+                   products.find(p => p.sku === item.sku ||
+                     p.variants?.some(v => v.sku === item.sku))?.costPrice || "",
     })));
     setStep(2);
   };
@@ -403,7 +406,7 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
 
       const catMap = new Map<string, { subtotal: number; costTotal: number }>();
       for (const it of effectiveItems) {
-        const prod  = products.find(p => p.sku === it.sku);
+        const prod  = products.find(p => p.sku === it.sku || p.variants?.some(v => v.sku === it.sku));
         const qty   = parseFloat(it.qty) || 0;
         const price = parseFloat(it.unitPrice) || 0;
         const disc  = parseFloat(it.discount) || 0;
