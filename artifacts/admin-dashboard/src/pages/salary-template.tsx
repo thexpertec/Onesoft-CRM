@@ -14,7 +14,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useSalaryTemplates, useStaff, useSalaryAllowanceCategories, useSalaryDeductionCategories } from "@/hooks/use-data";
+import { useSalaryTemplates, useStaff, useStaffRoles, useSalaryAllowanceCategories, useSalaryDeductionCategories } from "@/hooks/use-data";
 import { getDesignations, SalaryTemplate, SalaryTemplateItem } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
@@ -132,6 +132,7 @@ export default function SalaryTemplatePage() {
 
   const { templates, add, edit: editTemplate, remove }  = useSalaryTemplates();
   const { staff: allStaff }                             = useStaff();
+  const { roles }                                       = useStaffRoles();
   const { cats: allowanceCats }                         = useSalaryAllowanceCategories();
   const { cats: deductionCats }                         = useSalaryDeductionCategories();
   const { toast }                                       = useToast();
@@ -139,14 +140,31 @@ export default function SalaryTemplatePage() {
   const allowanceTypes = useMemo(() => allowanceCats.map(c => c.name), [allowanceCats]);
   const deductionTypes = useMemo(() => deductionCats.map(c => c.name), [deductionCats]);
 
-  const sym      = getSettingsCurrencySymbol();
-  const designations = getDesignations();
+  const sym         = getSettingsCurrencySymbol();
+  const designations = useMemo(() => getDesignations().filter(d => d.isActive), []);
 
-  // Filter staff by selected designation
+  // ── Merged Role / Designation options ──
+  // Roles come from HRM → Roles management (staff.role field)
+  // Designations come from HRM → Depts & Designations (staff.designation field)
+  const roleOpts  = useMemo(() => roles.map(r => ({ value: r.name,  label: r.name,  group: "Role"        as const })), [roles]);
+  const desigOpts = useMemo(() => designations.map(d => ({ value: d.title, label: d.title, group: "Designation" as const })), [designations]);
+  const allRoleDesigOpts  = useMemo(() => [...roleOpts, ...desigOpts], [roleOpts, desigOpts]);
+  // Map value → group for badge display in list view
+  const roleDesigTypeMap  = useMemo(() => {
+    const m = new Map<string, "Role" | "Designation">();
+    roleOpts.forEach(r  => m.set(r.value,  "Role"));
+    desigOpts.forEach(d => m.set(d.value,  "Designation"));
+    return m;
+  }, [roleOpts, desigOpts]);
+
+  // Filter staff by selected role OR designation value
   const filteredStaff = useMemo(() => {
     const active = allStaff.filter(s => s.status !== "Terminated");
     if (!form.designation) return active;
-    return active.filter(s => s.designation === form.designation);
+    return active.filter(s =>
+      s.role        === form.designation ||
+      s.designation === form.designation
+    );
   }, [allStaff, form.designation]);
 
   // Live calculations
@@ -289,7 +307,7 @@ export default function SalaryTemplatePage() {
                       <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-10">Sr.</th>
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Staff Id</th>
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Staff Name</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Role</th>
+                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Role / Designation</th>
                       <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Basic Salary</th>
                       <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Allowances</th>
                       <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Deduction</th>
@@ -323,10 +341,20 @@ export default function SalaryTemplatePage() {
                             }
                           </td>
                           <td className="px-3 py-3">
-                            <span className="inline-flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-                              {t.designation || <span className="text-muted-foreground italic">Any role</span>}
-                            </span>
+                            {t.designation ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                  roleDesigTypeMap.get(t.designation) === "Role"
+                                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                                    : "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300"
+                                }`}>
+                                  {roleDesigTypeMap.get(t.designation) ?? "Role"}
+                                </span>
+                                {t.designation}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground italic text-xs">Any</span>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-right font-mono tabular-nums">{fmt(t.basicSalary, sym)}</td>
                           <td className="px-3 py-3 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
@@ -450,16 +478,29 @@ export default function SalaryTemplatePage() {
                     <SelectValue placeholder="Select role…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {designations.length === 0 ? (
+                    {allRoleDesigOpts.length === 0 ? (
                       <SelectItem value="__none" disabled>
-                        No designations — add in HRM Org
+                        No roles or designations — add in HRM
                       </SelectItem>
                     ) : (
-                      designations
-                        .filter(d => d.isActive)
-                        .map(d => (
-                          <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
-                        ))
+                      <>
+                        {roleOpts.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Roles</div>
+                            {roleOpts.map(r => (
+                              <SelectItem key={`role-${r.value}`} value={r.value}>{r.label}</SelectItem>
+                            ))}
+                          </>
+                        )}
+                        {desigOpts.length > 0 && (
+                          <>
+                            <div className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground ${roleOpts.length > 0 ? "border-t mt-1 pt-2" : ""}`}>Designations</div>
+                            {desigOpts.map(d => (
+                              <SelectItem key={`desig-${d.value}`} value={d.value}>{d.label}</SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </>
                     )}
                   </SelectContent>
                 </Select>
