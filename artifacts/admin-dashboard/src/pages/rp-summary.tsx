@@ -50,10 +50,10 @@ export default function RpSummaryPage() {
     const ob: Record<ColId, number> = {};
     cbCols.forEach(a => { ob[a.id] = parseFloat(String(a.openingBalance || 0)) || 0; });
 
-    // Add JE movements before the start date
+    // Add JE movements before the start date (normalise to YYYY-MM-DD)
     getJournalEntries().forEach(je => {
       if (je.status !== "posted") return;
-      if (je.date >= from) return;
+      if (je.date.slice(0, 10) >= from) return;
       je.lines.forEach(l => {
         if (!cbIds.has(l.ledgerId)) return;
         ob[l.ledgerId] = (ob[l.ledgerId] ?? 0) + l.debit - l.credit;
@@ -62,32 +62,55 @@ export default function RpSummaryPage() {
     return ob;
   }, [cbCols, cbIds, from, entries]);
 
+  // ── Account name lookup (id → name) ───────────────────────────────────────
+  const acctName = useMemo(() => {
+    const m = new Map<string, string>();
+    accounts.forEach(a => m.set(a.id, a.name));
+    return m;
+  }, [accounts]);
+
   // ── Receipt & Payment rows from JEs within date range ─────────────────────
+  // Rows are grouped by the COUNTERPART account name(s), not by JE reference.
+  // For a CB-debit (receipt) line the counterpart is the non-CB credit side.
+  // For a CB-credit (payment) line the counterpart is the non-CB debit side.
   const { receiptRows, paymentRows } = useMemo(() => {
     const recMap = new Map<string, Record<ColId, number>>();
     const payMap = new Map<string, Record<ColId, number>>();
 
-    const posted = entries.filter(
-      je => je.status === "posted" && je.date >= from && je.date <= to
-    );
+    // Normalise to YYYY-MM-DD so full ISO timestamps compare correctly
+    const posted = entries.filter(je => {
+      if (je.status !== "posted") return false;
+      const d = je.date.slice(0, 10);
+      return d >= from && d <= to;
+    });
 
     posted.forEach(je => {
-      je.lines.forEach(l => {
-        if (!cbIds.has(l.ledgerId)) return;
-        // Use the line's narration if it's meaningful, otherwise fall back to JE description
-        const head = (l.narration && l.narration.trim()) ? l.narration.trim() : (je.description || je.reference);
+      const cbLines    = je.lines.filter(l =>  cbIds.has(l.ledgerId));
+      const nonCbLines = je.lines.filter(l => !cbIds.has(l.ledgerId));
 
+      // Unique account names on each side of the non-CB lines
+      const counterpartCredits = [...new Set(
+        nonCbLines.filter(l => l.credit > 0)
+          .map(l => acctName.get(l.ledgerId) || l.narration || je.description || je.reference)
+      )].join(" / ");
+
+      const counterpartDebits = [...new Set(
+        nonCbLines.filter(l => l.debit > 0)
+          .map(l => acctName.get(l.ledgerId) || l.narration || je.description || je.reference)
+      )].join(" / ");
+
+      cbLines.forEach(l => {
         if (l.debit > 0) {
-          // Debit to cash/bank = receipt (cash came in)
+          // Debit to cash/bank = receipt — head is the non-CB credit account(s)
+          const head = counterpartCredits || je.description || je.reference;
           if (!recMap.has(head)) recMap.set(head, {});
-          const row = recMap.get(head)!;
-          row[l.ledgerId] = (row[l.ledgerId] ?? 0) + l.debit;
+          recMap.get(head)![l.ledgerId] = (recMap.get(head)![l.ledgerId] ?? 0) + l.debit;
         }
         if (l.credit > 0) {
-          // Credit to cash/bank = payment (cash went out)
+          // Credit to cash/bank = payment — head is the non-CB debit account(s)
+          const head = counterpartDebits || je.description || je.reference;
           if (!payMap.has(head)) payMap.set(head, {});
-          const row = payMap.get(head)!;
-          row[l.ledgerId] = (row[l.ledgerId] ?? 0) + l.credit;
+          payMap.get(head)![l.ledgerId] = (payMap.get(head)![l.ledgerId] ?? 0) + l.credit;
         }
       });
     });
@@ -96,7 +119,7 @@ export default function RpSummaryPage() {
       Array.from(map.entries()).map(([head, amounts]) => ({ head, amounts }));
 
     return { receiptRows: toRows(recMap), paymentRows: toRows(payMap) };
-  }, [entries, cbIds, from, to]);
+  }, [entries, accounts, acctName, cbIds, from, to]);
 
   // ── Totals ─────────────────────────────────────────────────────────────────
   const recTotals = useMemo(() => {
