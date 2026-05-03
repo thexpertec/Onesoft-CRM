@@ -3158,6 +3158,24 @@ export const deletePurchaseReturn = (id: string): void => {
  * Sale return reverses every leg with matching ledger resolution so balances
  * on per-category and per-customer sub-ledgers are properly restored.
  */
+/**
+ * Posts a Sale Return JE — exact reversal of autoPostSaleJE (same 4 entries, flipped).
+ *
+ * Original sale posts:
+ *   DR  Customer AR                = grandTotal
+ *     CR  Revenue (per-category)   = subtotal
+ *     CR  VAT Payable              = taxAmount
+ *   DR  COGS                       = costTotal
+ *     CR  Inventory (per-category) = costTotal
+ *
+ * Sale return reverses every entry — customer ledger is ALWAYS the credit side
+ * (never Cash/Bank directly), keeping the return visible in the customer ledger:
+ *     CR  Customer AR              = grandTotal   ← mirrors original DR
+ *   DR  Revenue (per-category)     = subtotal     ← mirrors original CR
+ *   DR  VAT Payable                = taxAmount    ← mirrors original CR
+ *     CR  COGS                     = costTotal    ← mirrors original DR
+ *   DR  Inventory (per-category)   = costTotal    ← mirrors original CR
+ */
 export function autoPostSaleReturnJE(params: {
   returnNumber:  string;
   originalRef:   string;
@@ -3171,51 +3189,17 @@ export function autoPostSaleReturnJE(params: {
   /** Per-category breakdown — drives per-category Revenue and Inventory reversal lines */
   categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
 }): JournalEntry | null {
-  const s = getSettings();
+  const s           = getSettings();
+  const allAccounts = getAccounts();
 
-  // ── Credit side: who gets refunded? ──────────────────────────────────────
-  // Mirror of autoPostSaleJE's debit-side logic:
-  //   - "Credit" refund → CR per-customer AR sub-ledger (reverses the original AR debit)
-  //   - "Cash" / Card / Bank Transfer / Cheque → CR the matching Cash & Bank ledger
-  //     (resolved via COA name/id first, then settings fallback).
-  const _allAccounts = getAccounts();
-  const _resolvePayMethodLedger = (method: string): string | null => {
-    const byId = _allAccounts.find(a => a.id === method && a.accountType === "Ledger" && a.isActive !== false);
-    if (byId) return byId.id;
-    const nameLower = method.toLowerCase();
-    const cbLedgers = getCashBankLedgers();
-    const byName = cbLedgers.find(a => a.name.toLowerCase() === nameLower);
-    if (byName) return byName.id;
-    return null;
-  };
+  // ── Credit side: Customer AR — always the customer ledger, never Cash/Bank ──
+  // Mirrors autoPostSaleJE's debit logic: prefer dedicated AR sub-ledger,
+  // then configured Receivable account, then AR_TRADE fallback.
+  const customerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+                    || resolveToLedger(s.accReceivable)
+                    || SYS_ACCS.AR_TRADE;
 
-  const isCredit = params.refundMethod === "Credit";
-  // Resolve any dedicated AR sub-ledger for this customer (null if none exists).
-  // Any customer with a named sub-ledger (Walk-in 1130-000, Buyer 1 1130-001, …) should
-  // have their return routed through that AR account so the return appears in the customer's
-  // ledger report — identical transit pattern to autoPostSaleJE for Walk-in sales.
-  const _retCustomerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
-  const hasRetArSubLedger = !!_retCustomerArId;
-  let creditAccId: string | null;
-  if (isCredit || hasRetArSubLedger) {
-    // Named AR sub-ledger → always credit it first (transit); cash clearing added below.
-    // Falls back to Trade Receivables for customers without a dedicated sub-ledger.
-    creditAccId = _retCustomerArId
-               || resolveToLedger(s.accReceivable)
-               || SYS_ACCS.AR_TRADE;
-  } else {
-    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
-    if (dynLedger) {
-      creditAccId = dynLedger;
-    } else if (params.refundMethod === "Cash") {
-      creditAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
-    } else {
-      creditAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
-    }
-  }
-  if (!creditAccId) return null;
-
-  // ── Resolved fallback IDs — always valid Ledger targets ─────────────────
+  // ── Resolved fallback ledger IDs ─────────────────────────────────────────
   const _generalRevId = resolveToLedger(s.accSalesRevenue) ?? SYS_ACCS.GENERAL_SALES_REV;
   const _generalInvId = resolveToLedger(s.accInventory)    ?? SYS_ACCS.GENERAL_INVENTORY;
   const _cogsId       = resolveToLedger(s.accCogs)         ?? SYS_ACCS.COGS;
@@ -3225,51 +3209,47 @@ export function autoPostSaleReturnJE(params: {
   const catLines  = params.categoryLines ?? [];
   const costTotal = params.costTotal ?? 0;
 
-  // ── Credit refund (mirrors original sale's debit) ────────────────────────
-  const lines: JournalEntryLine[] = [
-    { id: crypto.randomUUID(), ledgerId: creditAccId, narration, debit: 0, credit: params.grandTotal },
-  ];
+  const lines: JournalEntryLine[] = [];
 
-  // ── Revenue reversal (DR) — per-category where possible ─────────────────
+  // ── Entry 1: CR Customer AR = grandTotal (reverses original DR AR) ────────
+  lines.push({ id: crypto.randomUUID(), ledgerId: customerArId, narration,
+    debit: 0, credit: params.grandTotal });
+
+  // ── Entry 2: DR Revenue (per-category) = subtotal ─────────────────────────
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.subtotal <= 0) continue;
-      const slug = (cl.category || "uncategorised").trim().toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
-      const catRevId  = `sr-cat-${slug}`;
-      const revLedger = _allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
-                          ? catRevId
-                          : _generalRevId;
+      const slug     = (cl.category || "uncategorised").trim().toLowerCase()
+                         .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catRevId = `sr-cat-${slug}`;
+      const revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
+                          ? catRevId : _generalRevId;
       lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
         narration: `Revenue reversal – ${params.returnNumber} – ${cl.category}`,
         debit: cl.subtotal, credit: 0 });
     }
-  } else {
-    // No breakdown — reverse the full subtotal against general revenue
-    if (params.subtotal > 0) {
-      lines.push({ id: crypto.randomUUID(), ledgerId: _generalRevId,
-        narration: `Revenue reversal – ${params.returnNumber}`,
-        debit: params.subtotal, credit: 0 });
-    }
+  } else if (params.subtotal > 0) {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _generalRevId,
+      narration: `Revenue reversal – ${params.returnNumber}`,
+      debit: params.subtotal, credit: 0 });
   }
 
-  // ── VAT reversal (DR) ────────────────────────────────────────────────────
+  // ── Entry 3: DR VAT Payable = taxAmount (reverses original CR VAT) ────────
   if (params.taxAmount > 0 && _vatId) {
     lines.push({ id: crypto.randomUUID(), ledgerId: _vatId,
       narration: `VAT reversal – ${params.returnNumber}`,
       debit: params.taxAmount, credit: 0 });
   }
 
-  // ── COGS reversal (CR) + Inventory restore (DR) — per-category ───────────
+  // ── Entry 4: DR Inventory + CR COGS (reverses original DR COGS / CR Inv) ──
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.costTotal <= 0) continue;
-      const slug = (cl.category || "uncategorised").trim().toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const slug      = (cl.category || "uncategorised").trim().toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
       const catInvId  = `inv-cat-${slug}`;
-      const invLedger = _allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
-                          ? catInvId
-                          : _generalInvId;
+      const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                          ? catInvId : _generalInvId;
       lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
         narration: `Inventory restore – ${params.returnNumber} – ${cl.category}`,
         debit: cl.costTotal, credit: 0 });
@@ -3284,26 +3264,6 @@ export function autoPostSaleReturnJE(params: {
     lines.push({ id: crypto.randomUUID(), ledgerId: _cogsId,
       narration: `COGS reversal – ${params.returnNumber}`,
       debit: 0, credit: costTotal });
-  }
-
-  // ── Named-customer cash transit reversal ─────────────────────────────────
-  // For any customer with a dedicated AR sub-ledger (Walk-in, Buyer 1, …): the
-  // primary credit above went to the AR account.  For non-credit refund methods
-  // (Cash, Card, Bank Transfer) we now add the clearing pair so cash actually
-  // leaves the business and the AR returns to zero — making the return visible
-  // in the customer's ledger report.
-  if (hasRetArSubLedger && !isCredit) {
-    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
-    const pmCashId  = dynLedger
-                   || (params.refundMethod === "Cash"
-                       ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
-                       : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH));
-    lines.push({ id: crypto.randomUUID(), ledgerId: creditAccId!,
-      narration: `AR transit cleared – ${params.returnNumber} – ${params.customer}`,
-      debit: params.grandTotal, credit: 0 });
-    lines.push({ id: crypto.randomUUID(), ledgerId: pmCashId,
-      narration: `Cash refund – ${params.returnNumber} – ${params.customer}`,
-      debit: 0, credit: params.grandTotal });
   }
 
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
@@ -6645,75 +6605,50 @@ export function autoPostPurchaseJE(params: {
 }
 
 /**
- * Posts a Purchase Return JE — reversal of autoPostPurchaseJE.
+ * Posts a Purchase Return JE — exact reversal of autoPostPurchaseJE (same entries, flipped).
  *
  * Original purchase:
  *   DR  inv-cat-{cat} / General Inventory  = total
  *     CR  AP sub-ledger / AP_TRADE          = total
  *
- * Purchase return reverses every leg:
- *   DR  AP sub-ledger / AP_TRADE            = grandTotal  (reduces liability / creates debit memo)
- *     CR  inv-cat-{cat} / General Inventory = grandTotal  (stock leaves warehouse)
- *
- * For cash/bank refunds, the AP leg is replaced by the cash/bank account
- * (money received back from supplier).
+ * Purchase return reverses every entry — supplier AP ledger is ALWAYS the debit side
+ * (never Cash/Bank directly), keeping the return visible in the supplier ledger:
+ *   DR  AP sub-ledger / AP_TRADE            = grandTotal  ← mirrors original CR
+ *     CR  inv-cat-{cat} / General Inventory = grandTotal  ← mirrors original DR
  */
 export function autoPostPurchaseReturnJE(params: {
   returnNumber:   string;
   originalRef:    string;
   supplier:       string;
   date:           string;
-  refundMethod:   string;   // "Credit" | "Cash" | payment account name/id
+  refundMethod:   string;   // kept for display/description purposes
   grandTotal:     number;
   /** Per-category breakdown — drives per-category Inventory reversal lines */
   categoryLines?: Array<{ category: string; total: number }>;
 }): JournalEntry | null {
   if (params.grandTotal <= 0) return null;
-  const s = getSettings();
+  const s           = getSettings();
   const allAccounts = getAccounts();
 
-  // ── Debit side: AP (credit note) or Cash/Bank (cash refund) ─────────────────
-  const _resolvePayMethodLedger = (method: string): string | null => {
-    const byId = allAccounts.find(a => a.id === method && a.accountType === "Ledger" && a.isActive !== false);
-    if (byId) return byId.id;
-    const nameLower = method.toLowerCase();
-    const cbLedgers = getCashBankLedgers();
-    const byName = cbLedgers.find(a => a.name.toLowerCase() === nameLower);
-    if (byName) return byName.id;
-    return null;
-  };
-
-  const isCredit = params.refundMethod === "Credit";
-  let debitAccId: string;
-
-  if (isCredit) {
-    // Credit note: reduce AP (debit AP)
-    debitAccId = findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
-              || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
-              || resolveToLedger(s.accPurchasePayable)
-              || SYS_ACCS.AP_GENERAL;
-  } else {
-    // Cash / bank refund received
-    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
-    if (dynLedger) {
-      debitAccId = dynLedger;
-    } else if (params.refundMethod === "Cash") {
-      debitAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
-    } else {
-      debitAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
-    }
-  }
+  // ── Debit side: Supplier AP — always, never Cash/Bank ───────────────────────
+  // Mirrors autoPostPurchaseJE's credit logic: prefer dedicated AP sub-ledger,
+  // then configured Payable account, then AP_GENERAL fallback.
+  const supplierApId = findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
+                    || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
+                    || resolveToLedger(s.accPurchasePayable)
+                    || SYS_ACCS.AP_GENERAL;
 
   // ── Credit side: Inventory — per-category where possible ────────────────────
-  const _genInvId  = resolveToLedger(s.accInventory) ?? SYS_ACCS.GENERAL_INVENTORY;
-  const catLines   = params.categoryLines ?? [];
-  const narration  = `Purchase Return ${params.returnNumber} – ${params.supplier} (orig: ${params.originalRef})`;
+  const _genInvId = resolveToLedger(s.accInventory) ?? SYS_ACCS.GENERAL_INVENTORY;
+  const catLines  = params.categoryLines ?? [];
+  const narration = `Purchase Return ${params.returnNumber} – ${params.supplier} (orig: ${params.originalRef})`;
   const lines: JournalEntryLine[] = [];
 
-  // DR: AP / Cash
-  lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId, narration, debit: params.grandTotal, credit: 0 });
+  // ── Entry 1: DR Supplier AP = grandTotal (reverses original CR AP) ────────
+  lines.push({ id: crypto.randomUUID(), ledgerId: supplierApId, narration,
+    debit: params.grandTotal, credit: 0 });
 
-  // CR: Inventory (per-category)
+  // ── Entry 2: CR Inventory (per-category) = grandTotal (reverses original DR Inv) ──
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.total <= 0) continue;
@@ -6721,8 +6656,7 @@ export function autoPostPurchaseReturnJE(params: {
                     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
       const catInvId  = `inv-cat-${slug}`;
       const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
-                          ? catInvId
-                          : _genInvId;
+                          ? catInvId : _genInvId;
       lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
         narration: `Inventory deducted – ${params.returnNumber} – ${cl.category}`,
         debit: 0, credit: cl.total });
