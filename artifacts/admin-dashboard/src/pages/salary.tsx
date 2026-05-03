@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import { format, parseISO } from "date-fns";
 import {
   Wallet, Users, DollarSign, CheckCircle2, Clock, Plus, Trash2,
   Pencil, Printer, Download, BadgeCheck, X, ChevronsUpDown, Search,
@@ -17,6 +16,7 @@ import {
   SalarySlip, SalarySlipItem, SalarySlipStatus,
   getSettings, postSalaryPaymentJE, getPaymentAccounts,
 } from "@/lib/store";
+import { buildPayslipHtml } from "@/lib/print-payslip";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,142 +116,14 @@ function ItemList({
 }
 
 // ─── Print Payslip ────────────────────────────────────────────────────────────
-function PrintSlipDialog({
-  slip,
-  onClose,
-}: {
-  slip: SalarySlip;
-  onClose: () => void;
-}) {
+function openPayslipWindow(slip: SalarySlip) {
   const settings = getSettings();
-  const sym = getSettingsCurrencySymbol();
-  const status = STATUS_CONFIG[slip.status];
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Printer size={16} /> Pay Slip — {periodLabel(slip.period)}
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Printable area */}
-        <div id="payslip-print" className="border rounded-lg p-5 space-y-4 text-[13px]">
-          {/* Header */}
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="font-bold text-base">{settings?.companyName || "Company"}</p>
-              {settings?.addressHull && <p className="text-muted-foreground text-[11px]">{settings.addressHull}</p>}
-            </div>
-            <div className="text-right">
-              <p className="font-semibold text-primary">PAY SLIP</p>
-              <p className="text-muted-foreground text-[11px]">{periodLabel(slip.period)}</p>
-            </div>
-          </div>
-          <hr />
-
-          {/* Employee details */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-            <Row label="Employee" value={slip.staffName} />
-            <Row label="Department" value={slip.department} />
-            <Row label="Designation" value={slip.designation} />
-            <Row label="Salary Type" value={slip.salaryType} />
-            {slip.paidAt && <Row label="Paid On" value={format(parseISO(slip.paidAt), "dd MMM yyyy")} />}
-            <Row label="Status" value={status.label} />
-          </div>
-          <hr />
-
-          {/* Earnings */}
-          <div>
-            <p className="font-semibold mb-2 text-emerald-600 dark:text-emerald-400">Earnings</p>
-            <div className="space-y-1">
-              <div className="flex justify-between text-[12px]">
-                <span>Basic Salary</span>
-                <span className="font-medium">{fmt(slip.basicSalary, sym)}</span>
-              </div>
-              {slip.allowances.map((a, i) => (
-                <div key={i} className="flex justify-between text-[12px] text-muted-foreground">
-                  <span>{a.label || "Allowance"}</span>
-                  <span>{fmt(a.amount, sym)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-[12px] font-semibold border-t pt-1 mt-1">
-                <span>Gross Salary</span>
-                <span className="text-emerald-600 dark:text-emerald-400">{fmt(slip.grossSalary, sym)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Deductions */}
-          {slip.deductions.length > 0 && (
-            <div>
-              <p className="font-semibold mb-2 text-red-600 dark:text-red-400">Deductions</p>
-              <div className="space-y-1">
-                {slip.deductions.map((d, i) => (
-                  <div key={i} className="flex justify-between text-[12px] text-muted-foreground">
-                    <span>{d.label || "Deduction"}</span>
-                    <span>{fmt(d.amount, sym)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-[12px] font-semibold border-t pt-1 mt-1">
-                  <span>Total Deductions</span>
-                  <span className="text-red-600 dark:text-red-400">
-                    {fmt(slip.deductions.reduce((s, d) => s + d.amount, 0), sym)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Net */}
-          <div className="bg-primary/5 rounded-lg p-3 flex justify-between items-center">
-            <span className="font-bold">Net Salary</span>
-            <span className="font-bold text-lg text-primary">{fmt(slip.netSalary, sym)}</span>
-          </div>
-
-          {slip.notes && (
-            <p className="text-[11px] text-muted-foreground italic">Note: {slip.notes}</p>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button
-            onClick={() => {
-              const el = document.getElementById("payslip-print");
-              if (!el) return;
-              const win = window.open("", "_blank");
-              if (!win) return;
-              win.document.write(`<!DOCTYPE html><html><head><title>Pay Slip</title>
-                <style>
-                  body { font-family: system-ui, sans-serif; padding: 32px; font-size: 13px; color: #111; }
-                  hr { border: none; border-top: 1px solid #e5e7eb; margin: 12px 0; }
-                  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
-                  .row { display: flex; justify-content: space-between; margin: 2px 0; }
-                  .header { display: flex; justify-content: space-between; }
-                  .net { background: #f0f9ff; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
-                </style>
-              </head><body>${el.innerHTML}</body></html>`);
-              win.document.close();
-              win.print();
-            }}
-          >
-            <Printer size={14} className="mr-1.5" /> Print
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span className="text-muted-foreground text-[11px]">{label}: </span>
-      <span className="font-medium text-[12px]">{value}</span>
-    </div>
-  );
+  const html = buildPayslipHtml(slip, settings);
+  const win = window.open("", "_blank", "width=820,height=1000");
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -278,7 +150,6 @@ export default function SalaryPage() {
   // ── Dialogs ────────────────────────────────────────────────────────────────
   const [editSlipId,    setEditSlipId]    = useState<string | null>(null);
   const [paySlipId,     setPaySlipId]     = useState<string | null>(null);
-  const [printSlip,     setPrintSlip]     = useState<SalarySlip | null>(null);
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
   const [generateOpen,          setGenerateOpen]          = useState(false);
   const [generateStaffOpen,     setGenerateStaffOpen]     = useState(false);
@@ -598,7 +469,7 @@ export default function SalaryPage() {
                         {/* Print */}
                         <button
                           title="Print Slip"
-                          onClick={() => setPrintSlip(slip)}
+                          onClick={() => openPayslipWindow(slip)}
                           className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                         >
                           <Printer size={13} />
@@ -731,11 +602,6 @@ export default function SalaryPage() {
           }}
           onClose={() => setPaySlipId(null)}
         />
-      )}
-
-      {/* ── Print Dialog ─────────────────────────────────────────────────────── */}
-      {printSlip && (
-        <PrintSlipDialog slip={printSlip} onClose={() => setPrintSlip(null)} />
       )}
 
       {/* ── Delete Confirm ───────────────────────────────────────────────────── */}
