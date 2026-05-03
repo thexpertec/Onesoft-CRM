@@ -6644,6 +6644,110 @@ export function autoPostPurchaseJE(params: {
   });
 }
 
+/**
+ * Posts a Purchase Return JE — reversal of autoPostPurchaseJE.
+ *
+ * Original purchase:
+ *   DR  inv-cat-{cat} / General Inventory  = total
+ *     CR  AP sub-ledger / AP_TRADE          = total
+ *
+ * Purchase return reverses every leg:
+ *   DR  AP sub-ledger / AP_TRADE            = grandTotal  (reduces liability / creates debit memo)
+ *     CR  inv-cat-{cat} / General Inventory = grandTotal  (stock leaves warehouse)
+ *
+ * For cash/bank refunds, the AP leg is replaced by the cash/bank account
+ * (money received back from supplier).
+ */
+export function autoPostPurchaseReturnJE(params: {
+  returnNumber:   string;
+  originalRef:    string;
+  supplier:       string;
+  date:           string;
+  refundMethod:   string;   // "Credit" | "Cash" | payment account name/id
+  grandTotal:     number;
+  /** Per-category breakdown — drives per-category Inventory reversal lines */
+  categoryLines?: Array<{ category: string; total: number }>;
+}): JournalEntry | null {
+  if (params.grandTotal <= 0) return null;
+  const s = getSettings();
+  const allAccounts = getAccounts();
+
+  // ── Debit side: AP (credit note) or Cash/Bank (cash refund) ─────────────────
+  const _resolvePayMethodLedger = (method: string): string | null => {
+    const byId = allAccounts.find(a => a.id === method && a.accountType === "Ledger" && a.isActive !== false);
+    if (byId) return byId.id;
+    const nameLower = method.toLowerCase();
+    const cbLedgers = getCashBankLedgers();
+    const byName = cbLedgers.find(a => a.name.toLowerCase() === nameLower);
+    if (byName) return byName.id;
+    return null;
+  };
+
+  const isCredit = params.refundMethod === "Credit";
+  let debitAccId: string;
+
+  if (isCredit) {
+    // Credit note: reduce AP (debit AP)
+    debitAccId = findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
+              || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
+              || resolveToLedger(s.accPurchasePayable)
+              || SYS_ACCS.AP_GENERAL;
+  } else {
+    // Cash / bank refund received
+    const dynLedger = _resolvePayMethodLedger(params.refundMethod);
+    if (dynLedger) {
+      debitAccId = dynLedger;
+    } else if (params.refundMethod === "Cash") {
+      debitAccId = resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    } else {
+      debitAccId = resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH;
+    }
+  }
+
+  // ── Credit side: Inventory — per-category where possible ────────────────────
+  const _genInvId  = resolveToLedger(s.accInventory) ?? SYS_ACCS.GENERAL_INVENTORY;
+  const catLines   = params.categoryLines ?? [];
+  const narration  = `Purchase Return ${params.returnNumber} – ${params.supplier} (orig: ${params.originalRef})`;
+  const lines: JournalEntryLine[] = [];
+
+  // DR: AP / Cash
+  lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId, narration, debit: params.grandTotal, credit: 0 });
+
+  // CR: Inventory (per-category)
+  if (catLines.length > 0) {
+    for (const cl of catLines) {
+      if (cl.total <= 0) continue;
+      const slug = (cl.category || "uncategorised").trim().toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+      const catInvId  = `inv-cat-${slug}`;
+      const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                          ? catInvId
+                          : _genInvId;
+      lines.push({ id: crypto.randomUUID(), ledgerId: invLedger,
+        narration: `Inventory deducted – ${params.returnNumber} – ${cl.category}`,
+        debit: 0, credit: cl.total });
+    }
+  } else {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _genInvId,
+      narration: `Inventory deducted – ${params.returnNumber}`,
+      debit: 0, credit: params.grandTotal });
+  }
+
+  const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
+  const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `AUTO-${params.returnNumber}`,
+    description: `Purchase Return: ${params.returnNumber} – ${params.supplier}`,
+    lines,
+    status:      "posted",
+    totalDebit,
+    totalCredit,
+    isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
+  });
+}
+
 // ─── Server sync ──────────────────────────────────────────────────────────────
 
 /**

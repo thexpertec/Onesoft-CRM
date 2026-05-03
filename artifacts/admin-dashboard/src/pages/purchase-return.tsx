@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getInvoices, getPurchaseReturns, createPurchaseReturn, updatePurchaseReturn, deletePurchaseReturn,
-  deductStockForSale, getPaymentAccounts,
+  deductStockForSale, autoPostPurchaseReturnJE, getPaymentAccounts, getProducts,
   type Invoice, type PurchaseReturn, type PurchaseReturnItem,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -284,7 +284,36 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
         "purchase-return"
       );
 
-      toast({ title: `${pr.returnNumber} posted`, description: `Stock adjusted · Debit note created` });
+      // Build per-category breakdown for JE
+      const allProds = getProducts();
+      const catMap = new Map<string, number>();
+      for (const it of effectiveItems) {
+        const prod = allProds.find(p => p.sku === it.sku);
+        const qty  = parseFloat(it.qty) || 0;
+        const price = parseFloat(it.unitPrice) || 0;
+        const disc  = parseFloat(it.discount) || 0;
+        const lineTotal = qty * price * (1 - disc / 100);
+        const cat = prod?.category?.trim() || "Uncategorised";
+        catMap.set(cat, (catMap.get(cat) ?? 0) + lineTotal);
+      }
+      const categoryLines = Array.from(catMap.entries()).map(([category, total]) => ({
+        category,
+        total: parseFloat(total.toFixed(2)),
+      }));
+
+      // Post JE
+      const je = autoPostPurchaseReturnJE({
+        returnNumber: pr.returnNumber,
+        originalRef:  selectedInv.invoiceNumber,
+        supplier:     pr.supplier,
+        date,
+        refundMethod,
+        grandTotal,
+        categoryLines,
+      });
+      if (je) updatePurchaseReturn(pr.id, { jeId: je.id });
+
+      toast({ title: `${pr.returnNumber} posted`, description: `Stock adjusted · ${je ? "JE posted" : "JE skipped (configure COA accounts in Settings)"}` });
       onSaved();
     } catch (e: unknown) {
       toast({ title: "Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
