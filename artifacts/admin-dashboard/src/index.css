@@ -224,6 +224,16 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* ── Stark preset override (light, zero grey) ────────────────────────────── */
+.stark {
+  --foreground:               0 0% 0%;
+  --card-foreground:          0 0% 0%;
+  --popover-foreground:       0 0% 0%;
+  --secondary-foreground:     0 0% 0%;
+  --muted-foreground:         0 0% 0%;
+  --accent-foreground:        0 0% 0%;
+}
+
 /* ── Pitch Black preset override ─────────────────────────────────────────── */
 .dark.pitch-black {
   --background:               0 0% 0%;

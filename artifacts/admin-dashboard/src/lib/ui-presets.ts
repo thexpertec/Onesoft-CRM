@@ -137,6 +137,17 @@ export const UI_PRESETS: UiPreset[] = [
     primaryLight: "199 89% 48%",
     primaryDark:  "199 89% 56%",
   },
+  {
+    id:           "stark",
+    name:         "Stark",
+    desc:         "Bright white — zero grey, all text pure black",
+    mode:         "light",
+    scale:        "standard",
+    accentName:   "Blue",
+    accentSwatch: "#3b82f6",
+    primaryLight: "221 83% 53%",
+    primaryDark:  "221 83% 60%",
+  },
 ];
 
 export function getPresetById(id: string): UiPreset | undefined {
