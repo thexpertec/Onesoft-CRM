@@ -4,7 +4,7 @@ import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Staff, StaffStatus, getDepartments, getDesignations } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff } from "lucide-react";
+import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -398,6 +398,14 @@ export default function StaffPage() {
                 })}
                 <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: CELL_H }} onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {can("Edit Staff") && (
+                      <button
+                        title="Edit staff member"
+                        onClick={() => nav(`/staff/${member.id}/edit`)}
+                        className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors">
+                        <Pencil size={13} />
+                      </button>
+                    )}
                     {can("Edit Staff") && (
                       <button
                         title={member.loginEnabled ? "Login access enabled — click to edit" : "Set login access"}

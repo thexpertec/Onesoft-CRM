@@ -27,6 +27,7 @@ import CalcInvoicePage from "@/pages/calc-invoice";
 import StockLedgerPage from "@/pages/stock-ledger";
 import StaffPage from "@/pages/staff";
 import StaffNewPage from "@/pages/staff-new";
+import StaffEditPage from "@/pages/staff-edit";
 import HrmRolesPage from "@/pages/hrm-roles";
 import HrmOrgPage from "@/pages/hrm-org";
 import SalaryPage from "@/pages/salary";
@@ -198,6 +199,7 @@ function Router() {
               <Route path="/sales/new" component={SalesPage} />
               <Route path="/sales" component={SalesPage} />
               <Route path="/stock-ledger" component={StockLedgerPage} />
+              <Route path="/staff/:id/edit" component={StaffEditPage} />
               <Route path="/staff/new" component={StaffNewPage} />
               <Route path="/staff" component={StaffPage} />
               <Route path="/roles" component={HrmRolesPage} />
