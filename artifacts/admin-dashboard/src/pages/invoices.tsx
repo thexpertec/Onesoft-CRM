@@ -2034,7 +2034,7 @@ export function InvoiceFormPage() {
     if (!inv.jeId) {
       const catLines  = buildSaleCatLines(inv.items);
       const paidSoFar = parseFloat(inv.amountPaid || "0") || 0;
-      const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
+      const { after: subtotal, tax: taxAmount, shipping, handling, total: grandTotal } = computeTotals(
         inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee,
       );
       const je = autoPostSaleJE({
@@ -2043,6 +2043,7 @@ export function InvoiceFormPage() {
         date: inv.invoiceDate || new Date().toISOString().slice(0, 10),
         paymentMethod: inv.paymentMethod,
         subtotal, taxAmount, grandTotal,
+        deliveryAmount: parseFloat((shipping + handling).toFixed(2)),
         amountPaid: paidSoFar,
         costTotal: catLines.reduce((s, c) => s + c.costTotal, 0),
         categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
@@ -2176,6 +2177,7 @@ export function InvoiceFormPage() {
           customer: inv.customer || "Customer",
           date: invDate, paymentMethod: inv.paymentMethod,
           subtotal, taxAmount, grandTotal,
+          deliveryAmount: parseFloat(((computeTotals(inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee).shipping) + (computeTotals(inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee).handling)).toFixed(2)),
           amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
@@ -2200,11 +2202,13 @@ export function InvoiceFormPage() {
           });
         } else if (!inv.jeId) {
           // Immediate cash/bank sale with no prior JE — full JE now (payment in hand → Cash debit)
+          const { shipping: _s2, handling: _h2 } = computeTotals(inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee);
           const je = autoPostSaleJE({
             source: "Invoice", reference: inv.invoiceNumber,
             customer: inv.customer || "Customer",
             date: invDate, paymentMethod: inv.paymentMethod,
             subtotal, taxAmount, grandTotal,
+            deliveryAmount: parseFloat((_s2 + _h2).toFixed(2)),
             // grandTotal === paidAmt here, so no outstanding balance → Cash/Bank debit
             amountPaid: paidAmt,
             costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
@@ -2275,11 +2279,13 @@ export function InvoiceFormPage() {
       if (!inv.jeId) {
         // First JE: pass amountPaid so AR is used if there's an outstanding balance
         const paidSoFar = parseFloat(newTotalPaid) || 0;
+        const { shipping: _s3, handling: _h3 } = computeTotals(inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee);
         const je = autoPostSaleJE({
           source: "Invoice", reference: inv.invoiceNumber,
           customer: inv.customer || "Customer",
           date: inv.invoiceDate || payDate, paymentMethod: inv.paymentMethod,
           subtotal, taxAmount, grandTotal,
+          deliveryAmount: parseFloat((_s3 + _h3).toFixed(2)),
           amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),

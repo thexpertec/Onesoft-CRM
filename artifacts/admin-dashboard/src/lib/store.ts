@@ -2026,7 +2026,7 @@ export function backfillPOSCreditSaleJEs(): void {
     if (item.discountType === "amt") return Math.max(0, q * p - d);
     return q * p * (1 - d / 100);
   };
-  const _grandTotal = (sale: Sale): { subtotal: number; taxAmt: number; grandTotal: number; costTotal: number } => {
+  const _grandTotal = (sale: Sale): { subtotal: number; taxAmt: number; delivery: number; grandTotal: number; costTotal: number } => {
     const items = sale.items ?? [];
     const sub = items.reduce((s, i) => s + _lineTotal(i), 0);
     const invDiscVal = parseFloat(sale.invoiceDiscount || "0") || 0;
@@ -2041,8 +2041,9 @@ export function backfillPOSCreditSaleJEs(): void {
       return s + effectiveItemCost(i, prod) * (parseFloat(i.qty) || 0);
     }, 0);
     return {
-      subtotal:  parseFloat(afterDisc.toFixed(2)),
+      subtotal:   parseFloat(afterDisc.toFixed(2)),
       taxAmt,
+      delivery:   parseFloat(delivery.toFixed(2)),
       grandTotal: parseFloat((afterDisc + taxAmt + delivery).toFixed(2)),
       costTotal:  parseFloat(costTotal.toFixed(2)),
     };
@@ -2056,18 +2057,19 @@ export function backfillPOSCreditSaleJEs(): void {
     const items = sale.items ?? [];
     if (items.length === 0) continue;
 
-    const { subtotal, taxAmt, grandTotal, costTotal } = _grandTotal(sale);
+    const { subtotal, taxAmt, delivery, grandTotal, costTotal } = _grandTotal(sale);
     if (!(grandTotal > 0.005)) continue;
 
     const amountPaid = parseFloat(sale.amountPaid || "0") || 0;
     const je = autoPostSaleJE({
-      source:        "POS",
-      reference:     sale.saleNumber || "",
-      customer:      sale.customer || "Walk-in",
-      date:          sale.saleDate || new Date().toISOString().slice(0, 10),
-      paymentMethod: (sale.paymentMethod as SalePayment) || "Cash",
+      source:          "POS",
+      reference:       sale.saleNumber || "",
+      customer:        sale.customer || "Walk-in",
+      date:            sale.saleDate || new Date().toISOString().slice(0, 10),
+      paymentMethod:   (sale.paymentMethod as SalePayment) || "Cash",
       subtotal,
-      taxAmount:     taxAmt,
+      taxAmount:       taxAmt,
+      deliveryAmount:  delivery,
       grandTotal,
       costTotal,
       amountPaid,
@@ -6327,10 +6329,13 @@ export function autoPostSaleJE(params: {
   customer:      string;
   date:          string;    // YYYY-MM-DD
   paymentMethod: SalePayment;
-  subtotal:      number;    // net of tax
-  taxAmount:     number;    // VAT / tax collected
-  grandTotal:    number;    // subtotal + taxAmount
+  subtotal:      number;    // net of tax, net of discounts — does NOT include delivery
+  taxAmount:     number;    // VAT / tax collected (on subtotal only)
+  grandTotal:    number;    // subtotal + taxAmount + deliveryAmount
   costTotal?:    number;    // total cost of goods sold (for COGS/Inventory entry)
+  /** Delivery / shipping charges included in grandTotal.
+   *  Must be credited separately so DR = CR. Defaults to 0. */
+  deliveryAmount?: number;
   /** When provided, an outstanding balance (grandTotal − amountPaid > 0) routes the debit to AR
    *  instead of Cash/Bank, so a cash-receipt JE can be posted separately when payment arrives.
    *  Leave undefined for POS/cash sales where payment is collected immediately. */
@@ -6442,6 +6447,13 @@ export function autoPostSaleJE(params: {
   if (params.taxAmount > 0 && _vatId) {
     lines.push({ id: crypto.randomUUID(), ledgerId: _vatId,
       narration: `VAT – ${params.reference}`, debit: 0, credit: params.taxAmount });
+  }
+
+  // Delivery / shipping charges — credited to General Sales Revenue (balances the DR)
+  const _deliveryAmt = params.deliveryAmount ?? 0;
+  if (_deliveryAmt > 0.005) {
+    lines.push({ id: crypto.randomUUID(), ledgerId: _generalRevId,
+      narration: `Delivery – ${params.reference}`, debit: 0, credit: parseFloat(_deliveryAmt.toFixed(2)) });
   }
 
   // ── COGS / Inventory — per-category ledgers where possible ───────────────

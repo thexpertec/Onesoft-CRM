@@ -2748,15 +2748,16 @@ export default function SalesPage() {
       }));
       const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
       const je = autoPostSaleJE({
-        source:        "POS",
-        reference:     detailSale?.saleNumber || "",
-        customer:      localMeta.customer || "Walk-in",
-        date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
-        paymentMethod: "Credit",
-        subtotal:      sub_,
-        taxAmount:     taxAmt_,
-        grandTotal:    parseFloat((sub_ + taxAmt_ + delAmt_).toFixed(2)),
-        costTotal:     parseFloat(costTotal.toFixed(2)),
+        source:          "POS",
+        reference:       detailSale?.saleNumber || "",
+        customer:        localMeta.customer || "Walk-in",
+        date:            detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+        paymentMethod:   "Credit",
+        subtotal:        sub_,
+        taxAmount:       taxAmt_,
+        deliveryAmount:  delAmt_,
+        grandTotal:      parseFloat((sub_ + taxAmt_ + delAmt_).toFixed(2)),
+        costTotal:       parseFloat(costTotal.toFixed(2)),
         categoryLines,
       });
       if (je) jeId = je.id;
@@ -2847,17 +2848,18 @@ export default function SalesPage() {
         }));
         const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
         const je = autoPostSaleJE({
-          source:        "POS",
-          reference:     detailSale?.saleNumber || "",
-          customer:      localMeta.customer || "Walk-in",
-          date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+          source:          "POS",
+          reference:       detailSale?.saleNumber || "",
+          customer:        localMeta.customer || "Walk-in",
+          date:            detailSale?.saleDate || new Date().toISOString().slice(0, 10),
           paymentMethod,
-          subtotal:      subtotal_,
+          subtotal:        afterInvDisc_,
           taxAmount,
-          grandTotal:    grandTotal_,
-          costTotal:     parseFloat(costTotal.toFixed(2)),
+          deliveryAmount:  deliveryAmt_,
+          grandTotal:      grandTotal_,
+          costTotal:       parseFloat(costTotal.toFixed(2)),
           categoryLines,
-          amountPaid:    paidNum,
+          amountPaid:      paidNum,
         });
         if (je) jeId = je.id;
       } else {
