@@ -5745,24 +5745,43 @@ export function seedDefaultCoaAccounts(): void {
     _apiWrite(sk, dynamicAccounts);
   }
 
-  // ── Always: backfill customer AR subsidiary ledgers ──────────────────────────
-  const customers = getStored<{ id: string; name: string; company?: string; ledgerAccountId?: string }>(CUSTOMERS_KEY);
-  let customersUpdated = false;
-  const customersPatched = customers.map(c => {
-    if (c.ledgerAccountId) return c;
-    const lid = createSubsidiaryLedger({
-      parentId:    SYS_ACCS.AR_GROUP,
-      parentCode:  "1130",
-      name:        c.name + (c.company ? ` (${c.company})` : ""),
-      head:        "Assets",
-      subType:     "Receivable",
-      description: `Accounts receivable ledger for ${c.name}`,
+  // ── Always: backfill/relink contact AR/AP subsidiary ledgers ────────────────
+  // Runs every login. Creates a ledger for any contact that:
+  //   (a) has no ledgerAccountId, OR
+  //   (b) has a ledgerAccountId that no longer exists in the COA (deleted/reset)
+  // Also respects customerRole: Suppliers → AP_TRADE, all others → AR_GROUP.
+  {
+    type ContactRow = {
+      id: string; name: string; company?: string;
+      customerRole?: string; ledgerAccountId?: string;
+    };
+    const contacts = getStored<ContactRow>(CUSTOMERS_KEY);
+    const liveAccountIds = new Set(getAccounts().map(a => a.id));
+    let contactsUpdated = false;
+    const contactsPatched = contacts.map(c => {
+      // Skip only when the ledger is set AND the COA account actually exists
+      if (c.ledgerAccountId && liveAccountIds.has(c.ledgerAccountId)) return c;
+      const isSupplier = (c.customerRole ?? "Buyer") === "Supplier";
+      const displayName = (c.name ?? "").trim() + (c.company ? ` (${c.company})` : "");
+      const lid = createSubsidiaryLedger({
+        parentId:    isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP,
+        parentCode:  isSupplier ? "2111"             : "1130",
+        name:        displayName || c.name,
+        head:        isSupplier ? "Liabilities" : "Assets",
+        subType:     isSupplier ? "Payable"     : "Receivable",
+        description: isSupplier
+          ? `Accounts payable ledger for supplier: ${c.name}`
+          : `Accounts receivable ledger for customer: ${c.name}`,
+      });
+      // Keep the new ID in the live set so subsequent contacts in this loop
+      // don't wrongly collide on code generation.
+      liveAccountIds.add(lid);
+      contactsUpdated = true;
+      return { ...c, ledgerAccountId: lid };
     });
-    customersUpdated = true;
-    return { ...c, ledgerAccountId: lid };
-  });
-  if (customersUpdated) {
-    setStored(CUSTOMERS_KEY, customersPatched);
+    if (contactsUpdated) {
+      setStored(CUSTOMERS_KEY, contactsPatched);
+    }
   }
 
   // ── Always: backfill COA ledgers for payment accounts missing one ────────────
