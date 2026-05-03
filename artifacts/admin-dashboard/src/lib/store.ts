@@ -3076,6 +3076,10 @@ export type PurchaseReturnItem = {
   qty:         string;
   unitPrice:   string;
   discount:    string;
+  /** Locked at invoice-selection time — ensures the return JE reverses the same
+   *  inventory ledger as the original purchase JE, even if the product's category
+   *  is edited later or the SKU lookup fails at post time. */
+  category?:   string;
 };
 
 export type PurchaseReturnStatus = "draft" | "posted";

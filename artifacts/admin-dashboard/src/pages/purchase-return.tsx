@@ -223,15 +223,24 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
 
   const handleSelect = (inv: Invoice) => {
     setSelectedInv(inv);
-    setReturnItems(inv.items.map(it => ({
-      id:          crypto.randomUUID(),
-      productName: it.productName || it.description || "",
-      sku:         it.sku || "",
-      unit:        it.unit || "pcs",
-      qty:         it.qty,
-      unitPrice:   it.unitPrice,
-      discount:    it.discount || "0",
-    })));
+    const allProds = getProducts();
+    setReturnItems(inv.items.map(it => {
+      const prod = allProds.find(
+        p => (it.sku && p.sku === it.sku) ||
+             p.name === (it.productName || "") ||
+             p.variants?.some(v => it.sku && v.sku === it.sku)
+      );
+      return {
+        id:          crypto.randomUUID(),
+        productName: it.productName || "",
+        sku:         it.sku || "",
+        unit:        it.unit || "pcs",
+        qty:         it.qty,
+        unitPrice:   it.unitPrice,
+        discount:    it.discount || "0",
+        category:    prod?.category?.trim() || undefined,
+      };
+    }));
     setStep(2);
   };
 
@@ -285,15 +294,20 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
       );
 
       // Build per-category breakdown for JE
+      // Prefer category locked at invoice-selection time; fall back to live catalog only if missing.
       const allProds = getProducts();
       const catMap = new Map<string, number>();
       for (const it of effectiveItems) {
-        const prod = allProds.find(p => p.sku === it.sku);
-        const qty  = parseFloat(it.qty) || 0;
-        const price = parseFloat(it.unitPrice) || 0;
-        const disc  = parseFloat(it.discount) || 0;
+        const qty       = parseFloat(it.qty) || 0;
+        const price     = parseFloat(it.unitPrice) || 0;
+        const disc      = parseFloat(it.discount) || 0;
         const lineTotal = qty * price * (1 - disc / 100);
-        const cat = prod?.category?.trim() || "Uncategorised";
+        const prod = allProds.find(
+          p => (it.sku && p.sku === it.sku) ||
+               p.name === it.productName ||
+               p.variants?.some(v => it.sku && v.sku === it.sku)
+        );
+        const cat = it.category?.trim() || prod?.category?.trim() || "Uncategorised";
         catMap.set(cat, (catMap.get(cat) ?? 0) + lineTotal);
       }
       const categoryLines = Array.from(catMap.entries()).map(([category, total]) => ({
