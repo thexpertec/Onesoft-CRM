@@ -429,6 +429,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       // ── Accent colour from active preset ──────────────────────────────────
       const preset = s.uiPreset ? getPresetById(s.uiPreset) : null;
+
+      // Pitch Black class toggling
+      if (preset?.id === "pitch-black") {
+        root.classList.add("pitch-black");
+      } else {
+        root.classList.remove("pitch-black");
+      }
+
       if (preset) {
         const isDark  = root.classList.contains("dark");
         const primary = isDark ? preset.primaryDark : preset.primaryLight;

@@ -126,6 +126,17 @@ export const UI_PRESETS: UiPreset[] = [
     primaryLight: "174 72% 38%",
     primaryDark:  "174 72% 46%",
   },
+  {
+    id:           "pitch-black",
+    name:         "Pitch Black",
+    desc:         "Pure black background — zero grey, all text full white",
+    mode:         "dark",
+    scale:        "standard",
+    accentName:   "Electric Blue",
+    accentSwatch: "#38bdf8",
+    primaryLight: "199 89% 48%",
+    primaryDark:  "199 89% 56%",
+  },
 ];
 
 export function getPresetById(id: string): UiPreset | undefined {
