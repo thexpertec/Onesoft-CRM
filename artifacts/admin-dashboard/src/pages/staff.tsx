@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Staff, StaffStatus } from "@/lib/store";
+import { Staff, StaffStatus, getDepartments, getDesignations } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,6 @@ const STATUS_BG: Record<StaffStatus, string> = {
   "Terminated": "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
-const DEPT_SUGGESTIONS = ["Management","Sales","Marketing","Development","Design","Finance","HR","Operations","Customer Support","Legal","IT","Procurement"];
-const DESIG_SUGGESTIONS = ["CEO","CTO","CFO","COO","Manager","Senior Developer","Developer","Designer","Sales Executive","HR Executive","Accountant","Analyst","Team Lead","Intern","Director","Associate"];
 
 type EditableField = "name" | "department" | "designation" | "role" | "status" | "email" | "phone" | "joinDate" | "notes";
 const BLANK = (): Record<EditableField, string> => ({
@@ -50,7 +48,9 @@ export default function StaffPage() {
   const { isAuthenticated, can } = useAuth();
   const { toast } = useToast();
 
-  const roleNames = useMemo(() => roles.map(r => r.name), [roles]);
+  const roleNames   = useMemo(() => roles.map(r => r.name), [roles]);
+  const allDepts    = useMemo(() => getDepartments().filter(d => d.isActive), []);
+  const allDesigs   = useMemo(() => getDesignations().filter(d => d.isActive), []);
 
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [deptFilter,   setDeptFilter]   = useState<string>("All");
@@ -79,9 +79,16 @@ export default function StaffPage() {
   }, [staff]);
 
   // ── Combobox options ──
-  const deptComboOpts  = useMemo<ComboOption[]>(() => DEPT_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
-  const desigComboOpts = useMemo<ComboOption[]>(() => DESIG_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
+  const deptComboOpts  = useMemo<ComboOption[]>(() => allDepts.map(d => ({ value: d.name,  label: d.name,  sub: d.headOf || undefined })), [allDepts]);
+  const desigComboOpts = useMemo<ComboOption[]>(() => allDesigs.map(d => ({ value: d.title, label: d.title, sub: d.department || undefined })), [allDesigs]);
   const roleComboOpts  = useMemo<ComboOption[]>(() => roleNames.map(r => ({ value: r, label: r })), [roleNames]);
+
+  // ── Smart designation filter: only show designations for selected department ──
+  const desigOptsForDept = useCallback((dept: string): ComboOption[] => {
+    if (!dept) return desigComboOpts;
+    const filtered = allDesigs.filter(d => d.department === dept).map(d => ({ value: d.title, label: d.title }));
+    return filtered.length > 0 ? filtered : desigComboOpts;
+  }, [allDesigs, desigComboOpts]);
 
   const filtered = useMemo(() => {
     let rows = [...staff];
@@ -298,7 +305,7 @@ export default function StaffPage() {
                       <div className="absolute inset-0 flex items-center">
                         <Combobox autoFocus value={val}
                           onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
-                          options={c.field === "department" ? deptComboOpts : c.field === "designation" ? desigComboOpts : roleComboOpts}
+                          options={c.field === "department" ? deptComboOpts : c.field === "designation" ? desigOptsForDept(newRow?.department ?? "") : roleComboOpts}
                           placeholder={c.label}
                           className="w-full h-full"
                           inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
@@ -380,7 +387,7 @@ export default function StaffPage() {
                           onEnter={() => moveCellDown(member.id, ci)}
                           suggestions={
                             c.field === "department"  ? deptComboOpts :
-                            c.field === "designation" ? desigComboOpts :
+                            c.field === "designation" ? desigOptsForDept(member.department ?? "") :
                             c.field === "role"        ? roleComboOpts :
                             undefined
                           }

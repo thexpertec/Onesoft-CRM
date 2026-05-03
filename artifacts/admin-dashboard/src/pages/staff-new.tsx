@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useStaff, useStaffRoles } from "@/hooks/use-data";
-import { StaffStatus } from "@/lib/store";
+import { StaffStatus, getDepartments, getDesignations } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Users2, Plus, ArrowLeft } from "lucide-react";
@@ -10,8 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Combobox, ComboOption } from "@/components/combobox";
 import { format } from "date-fns";
 
-const DEPT_SUGGESTIONS = ["Management","Sales","Marketing","Development","Design","Finance","HR","Operations","Customer Support","Legal","IT","Procurement"];
-const DESIG_SUGGESTIONS = ["CEO","CTO","CFO","COO","Manager","Senior Developer","Developer","Designer","Sales Executive","HR Executive","Accountant","Analyst","Team Lead","Intern","Director","Associate"];
 
 const Divider = ({ label }: { label: string }) => (
   <div className="flex items-center gap-3 pt-1">
@@ -37,9 +35,11 @@ export default function StaffNewPage() {
   const sym = getSettingsCurrencySymbol();
   const dp  = getSettingsDecimalPlaces();
 
-  const roleNames = useMemo(() => roles.map(r => r.name), [roles]);
-  const deptComboOpts  = useMemo<ComboOption[]>(() => DEPT_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
-  const desigComboOpts = useMemo<ComboOption[]>(() => DESIG_SUGGESTIONS.map(d => ({ value: d, label: d })), []);
+  const roleNames   = useMemo(() => roles.map(r => r.name), [roles]);
+  const allDepts    = useMemo(() => getDepartments().filter(d => d.isActive), []);
+  const allDesigs   = useMemo(() => getDesignations().filter(d => d.isActive), []);
+  const deptComboOpts  = useMemo<ComboOption[]>(() => allDepts.map(d => ({ value: d.name,  label: d.name,  sub: d.headOf || undefined })), [allDepts]);
+  const desigComboOpts = useMemo<ComboOption[]>(() => allDesigs.map(d => ({ value: d.title, label: d.title, sub: d.department || undefined })), [allDesigs]);
   const roleComboOpts  = useMemo<ComboOption[]>(() => roleNames.map(r => ({ value: r, label: r })), [roleNames]);
 
   const BLANK = () => ({
@@ -55,6 +55,13 @@ export default function StaffNewPage() {
 
   const [form, setForm] = useState(BLANK());
   const set = (key: string, value: string) => setForm(p => ({ ...p, [key]: value }));
+
+  // ── Smart designation filter: only show designations for the selected department ──
+  const desigOptsForDept = useMemo<ComboOption[]>(() => {
+    if (!form.department) return desigComboOpts;
+    const filtered = allDesigs.filter(d => d.department === form.department).map(d => ({ value: d.title, label: d.title }));
+    return filtered.length > 0 ? filtered : desigComboOpts;
+  }, [form.department, allDesigs, desigComboOpts]);
 
   const net = (parseFloat(form.basicSalary) || 0) + (parseFloat(form.allowances) || 0) - (parseFloat(form.deductions) || 0);
 
@@ -133,7 +140,7 @@ export default function StaffNewPage() {
             </Field>
             <Field label="Designation">
               <Combobox value={form.designation} onChange={v => set("designation", v)}
-                options={desigComboOpts} placeholder="Select or type…"
+                options={desigOptsForDept} placeholder="Select or type…"
                 inputClassName="h-9 text-sm w-full border rounded-md px-3" />
             </Field>
             <Field label="Role">
