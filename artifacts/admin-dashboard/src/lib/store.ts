@@ -485,6 +485,19 @@ function _ensureCBGroup(): void {
   _saveAccounts([...accounts, ...toAdd]);
 }
 
+/**
+ * Returns the next sequential account code for a new child of CB_GROUP.
+ * Cash is always 1111; subsequent payment accounts get 1112, 1113, …
+ * Must be called after _ensureCBGroup() so Cash (1111) already exists.
+ */
+function _nextCBCode(): string {
+  const cbChildren = getAccounts().filter(
+    a => a.parentId === SYS_ACCS.CB_GROUP && /^\d+$/.test(a.code ?? "")
+  );
+  const maxCode = cbChildren.reduce((max, a) => Math.max(max, parseInt(a.code, 10)), 1110);
+  return String(maxCode + 1);
+}
+
 /** Build the COA Ledger name and subType from a payment account. */
 function _coaNameFromPA(pa: Pick<PaymentAccount, "accountTitle" | "bankName" | "paymentMethod">): { name: string; subType: string } {
   const name    = pa.bankName ? `${pa.accountTitle} (${pa.bankName})` : pa.accountTitle;
@@ -496,9 +509,9 @@ export const createPaymentAccount = (data: Omit<PaymentAccount, "id" | "createdA
   _ensureCBGroup();
   const now   = new Date().toISOString();
   const { name, subType } = _coaNameFromPA(data);
-  // Create the matching COA Ledger account under CB_GROUP
+  // Create the matching COA Ledger account under CB_GROUP with the next sequential code
   const coaAcc = createAccount({
-    code:           "",
+    code:           _nextCBCode(),
     name,
     head:           "Assets",
     subType,
@@ -5714,7 +5727,7 @@ export function seedDefaultCoaAccounts(): void {
     if (pa.id === SYS_PA_CASH) return pa;      // default cash uses sys-1200 directly, already set above
     const { name, subType } = _coaNameFromPA(pa);
     const lid = createAccount({
-      code:           "",
+      code:           _nextCBCode(),   // sequential under 1110 (1112, 1113, …)
       name,
       head:           "Assets",
       subType,
@@ -5730,6 +5743,28 @@ export function seedDefaultCoaAccounts(): void {
   });
   if (paUpdated) {
     setStored(PAYMENT_ACCOUNTS_KEY, pAsPatched);
+  }
+
+  // ── Always: backfill missing codes on existing CB_GROUP child ledgers ─────────
+  // Accounts created before this fix have code="". Assign sequential numbers now.
+  {
+    const allAccs = getAccounts();
+    const emptyCodeCB = allAccs.filter(
+      a => a.parentId === SYS_ACCS.CB_GROUP && a.accountType === "Ledger" && !a.code
+    );
+    if (emptyCodeCB.length > 0) {
+      let patched = getAccounts();
+      for (const acc of emptyCodeCB) {
+        // Recompute max each iteration so codes don't collide
+        const existingNums = patched
+          .filter(a => a.parentId === SYS_ACCS.CB_GROUP && /^\d+$/.test(a.code ?? ""))
+          .map(a => parseInt(a.code, 10));
+        const maxCode = existingNums.length > 0 ? Math.max(...existingNums) : 1110;
+        const newCode  = String(maxCode + 1);
+        patched = patched.map(a => a.id === acc.id ? { ...a, code: newCode, updatedAt: new Date().toISOString() } : a);
+      }
+      _saveAccounts(patched);
+    }
   }
 
   // Shareholders → Owner's Capital Group
