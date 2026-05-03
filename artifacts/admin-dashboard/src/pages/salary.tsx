@@ -187,11 +187,19 @@ export default function SalaryPage() {
     let created = 0;
     for (const s of activeStaff) {
       if (existingIds.has(s.id)) continue;
-      const basic = s.basicSalary ?? 0;
-      const allowances: SalarySlipItem[] = s.allowances && s.allowances > 0
-        ? [{ label: "Allowances", amount: s.allowances }] : [];
-      const deductions: SalarySlipItem[] = s.deductions && s.deductions > 0
-        ? [{ label: "Deductions", amount: s.deductions }] : [];
+      // Resolve salary template: staff-specific → designation match → role match → fallback to Staff record
+      const tmpl =
+        salaryTemplates.find(t => t.staffId === s.id) ??
+        salaryTemplates.find(t => t.designation === s.designation) ??
+        salaryTemplates.find(t => t.designation === s.role) ??
+        null;
+      const basic = tmpl ? tmpl.basicSalary : (s.basicSalary ?? 0);
+      const allowances: SalarySlipItem[] = tmpl
+        ? tmpl.allowances.map(a => ({ label: a.type, amount: a.amount }))
+        : (s.allowances && s.allowances > 0 ? [{ label: "Allowances", amount: s.allowances }] : []);
+      const deductions: SalarySlipItem[] = tmpl
+        ? tmpl.deductions.map(d => ({ label: d.type, amount: d.amount }))
+        : (s.deductions && s.deductions > 0 ? [{ label: "Deductions", amount: s.deductions }] : []);
       addSlip({
         staffId:     s.id,
         staffName:   s.name,
@@ -577,15 +585,17 @@ export default function SalaryPage() {
           slip={payTarget}
           paymentAccounts={paymentAccounts}
           sym={sym}
-          onPay={(accountId, ledgerId, date) => {
+          onPay={(accountId, ledgerId, date, postJE) => {
             const account = paymentAccounts.find(a => a.id === accountId);
-            // Post JE
+            // Post JE only when the checkbox is checked
             let jeId: string | undefined;
-            try {
-              const je = postSalaryPaymentJE(payTarget, ledgerId, date);
-              jeId = je.id;
-            } catch (err) {
-              console.error("JE posting failed:", err);
+            if (postJE) {
+              try {
+                const je = postSalaryPaymentJE(payTarget, ledgerId, date);
+                jeId = je.id;
+              } catch (err) {
+                console.error("JE posting failed:", err);
+              }
             }
             editSlip(payTarget.id, {
               status: "Paid",
@@ -746,7 +756,7 @@ function PayDialog({
   slip: SalarySlip;
   paymentAccounts: ReturnType<typeof getPaymentAccounts>;
   sym: string;
-  onPay: (accountId: string, ledgerId: string, date: string) => void;
+  onPay: (accountId: string, ledgerId: string, date: string, postJE: boolean) => void;
   onClose: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -759,7 +769,7 @@ function PayDialog({
   const handlePay = () => {
     if (!accountId) return;
     const ledgerId = account?.ledgerAccountId ?? "sys-1111";
-    onPay(accountId, ledgerId, date);
+    onPay(accountId, ledgerId, date, postJE);
   };
 
   return (
@@ -876,6 +886,7 @@ function GenerateForStaffDialog({
     return (
       salaryTemplates.find(t => t.staffId === selectedStaff.id) ??
       salaryTemplates.find(t => t.designation === selectedStaff.designation) ??
+      salaryTemplates.find(t => t.designation === selectedStaff.role) ??
       null
     );
   }, [selectedStaff, salaryTemplates]);
