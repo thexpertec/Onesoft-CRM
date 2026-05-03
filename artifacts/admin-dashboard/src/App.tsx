@@ -67,6 +67,7 @@ import TrialBalance6ColPage from "@/pages/trial-balance-6col";
 import ExpenseReportPage from "@/pages/expense-report";
 import IncomeReportPage from "@/pages/income-report";
 import ReceiptPaymentPage from "@/pages/receipt-payment";
+import RpSummaryPage from "@/pages/rp-summary";
 import TransactionHistoryPage from "@/pages/transaction-history";
 import SaleReturnPage from "@/pages/sale-return";
 import PurchaseReturnPage from "@/pages/purchase-return";
