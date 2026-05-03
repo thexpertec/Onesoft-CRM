@@ -5559,6 +5559,54 @@ export function seedDefaultCoaAccounts(): void {
     done.add("m10"); migrationsChanged = true;
   }
 
+  // ── m11: Repair JE lines whose ledgerId no longer exists in the COA ─────────
+  // Caused by: customer ledger missing at JE-posting time (race, import, delete).
+  // For each AR/AP debit/credit line with an unknown ledger, we extract the
+  // party name from the narration ("Source – Ref – PartyName"), look them up in
+  // the CRM, and recreate their subsidiary ledger if needed — then patch the JE.
+  if (!done.has("m11")) {
+    const knownIds = new Set(workingAccounts.map(a => a.id));
+    const allJEs   = getJournalEntries();
+    let jeChanged  = false;
+
+    const repairedJEs = allJEs.map(je => {
+      let touched = false;
+      const repairedLines = je.lines.map(line => {
+        if (knownIds.has(line.ledgerId)) return line;
+        // Unknown ledger — try to extract party name from narration
+        // Expected formats: "Invoice – REF – Party" or "POS – REF – Party"
+        const dashParts = line.narration?.split(" – ");
+        const partyName = dashParts && dashParts.length >= 3
+          ? dashParts.slice(2).join(" – ").trim()
+          : "";
+        if (!partyName) return line;
+
+        // Determine AR vs AP from the original line type (debit on AR side)
+        const parentGroupId = line.debit > 0 ? SYS_ACCS.AR_GROUP : SYS_ACCS.AP_GROUP;
+        const resolved = findSubLedgerForParty(partyName, parentGroupId);
+        if (!resolved) return line;
+
+        // Re-check knownIds since findSubLedgerForParty may have just created one
+        const freshAccounts = getAccounts();
+        knownIds.clear();
+        freshAccounts.forEach(a => knownIds.add(a.id));
+        workingAccounts = freshAccounts;
+
+        touched = true;
+        return { ...line, ledgerId: resolved };
+      });
+      if (touched) { jeChanged = true; return { ...je, lines: repairedLines }; }
+      return je;
+    });
+
+    if (jeChanged) {
+      const jeSk = tenantKey(JE_KEY);
+      _lsSet(jeSk, repairedJEs);
+      _apiWrite(jeSk, repairedJEs);
+    }
+    done.add("m11"); migrationsChanged = true;
+  }
+
   // ── Persist static migration results ────────────────────────────────────────
   if (staticChanged) {
     const sk = tenantKey(COA_KEY);
@@ -5963,6 +6011,8 @@ function createSubsidiaryLedger(params: {
   const sk = tenantKey(COA_KEY);
   _lsSet(sk, updated);
   _apiWrite(sk, updated);
+  // Notify React hooks so the new account appears in useAccounts() immediately
+  try { window.dispatchEvent(new CustomEvent("onesoft:data-synced")); } catch { /* SSR */ }
   return account.id;
 }
 
@@ -6284,14 +6334,35 @@ export function findSubLedgerForParty(partyName: string, parentGroupId: string):
     (c.name || "").toLowerCase() === lower ||
     (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === lower
   );
-  if (contact?.ledgerAccountId) {
-    const all = getAccounts();
-    const acct = all.find(
-      a => a.id === contact.ledgerAccountId &&
-           a.accountType === "Ledger" &&
-           a.isActive !== false
-    );
-    if (acct) return acct.id;
+
+  if (contact) {
+    if (contact.ledgerAccountId) {
+      const all = getAccounts();
+      const acct = all.find(
+        a => a.id === contact.ledgerAccountId &&
+             a.accountType === "Ledger" &&
+             a.isActive !== false
+      );
+      if (acct) return acct.id;
+    }
+    // Contact found but ledger is missing or was deleted — auto-create it
+    // so the JE always has a named, individual AR/AP ledger for this party.
+    const isSupplier = (contact.customerRole ?? "Buyer") === "Supplier";
+    const displayName = (contact.name ?? "").trim() +
+      (contact.company ? ` (${contact.company})` : "");
+    const ledgerId = createSubsidiaryLedger({
+      parentId:    isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP,
+      parentCode:  isSupplier ? "2111"             : "1130",
+      name:        displayName || partyName,
+      head:        isSupplier ? "Liabilities" : "Assets",
+      subType:     isSupplier ? "Payable"     : "Receivable",
+      description: isSupplier
+        ? `Payable account for supplier: ${contact.name ?? partyName}`
+        : `Receivable account for customer: ${contact.name ?? partyName}`,
+    });
+    // Persist the new ledgerAccountId back onto the contact record
+    try { updateCustomer(contact.id, { ledgerAccountId: ledgerId }); } catch { /* non-fatal */ }
+    return ledgerId;
   }
 
   // ── 2. Name-based fallback (original behaviour) ──────────────────────────
