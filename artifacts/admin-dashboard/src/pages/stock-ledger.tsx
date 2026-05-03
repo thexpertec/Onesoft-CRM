@@ -2,21 +2,21 @@ import { useState, useMemo, useCallback } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getStock, getStockLedger, getSettings,
+  getStock, getStockLedger, getSettings, getProducts,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
   reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts, deduplicateSaleEntries,
+  Product, StockItem,
 } from "@/lib/store";
 import {
   BookOpen, Search, Printer, ArrowLeft,
   TrendingUp, TrendingDown, Package, BarChart3,
-  Filter, X, AlertTriangle, ChevronDown, Wrench, CheckCircle2, Eraser,
+  Filter, X, AlertTriangle, ChevronDown, Wrench, CheckCircle2, Eraser, ChevronRight,
+  Layers,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const today      = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
-const absQty     = (n: number, unit = "") =>
-  `${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}${unit ? " " + unit : ""}`;
 const fmtDate    = (d: string) =>
   new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -48,11 +48,71 @@ const TX_PRINT_COLORS: Record<LedgerTxType, string> = {
   "opening-balance":   "#374151",
 };
 
+// ─── Variant helpers ───────────────────────────────────────────────────────────
+/** Human-readable label for a variant from its SKU, e.g. "Red / Large" */
+function getVariantLabel(product: Product, sku: string): string {
+  const v = product.variants?.find(pv => pv.sku?.trim().toLowerCase() === sku.trim().toLowerCase());
+  if (!v) return sku;
+  const attrs = Object.values(v.attributes ?? {}).filter(Boolean);
+  return attrs.length ? attrs.join(" / ") : (v.sku ?? sku);
+}
+
+type StockGroupItem = {
+  stock: StockItem;
+  variantLabel: string; // "" = parent/single product (no variant differentiation)
+  isVariant: boolean;
+};
+
+type StockGroup = {
+  productName: string;
+  items: StockGroupItem[];
+};
+
+/** Group StockItems by product, enriching each with its variant label */
+function buildProductGroups(stocks: StockItem[], products: Product[]): StockGroup[] {
+  // Build SKU → Product map
+  const skuToProduct = new Map<string, Product>();
+  for (const p of products) {
+    if (p.sku?.trim()) skuToProduct.set(p.sku.trim().toLowerCase(), p);
+    for (const v of p.variants ?? []) {
+      if (v.sku?.trim()) skuToProduct.set(v.sku.trim().toLowerCase(), p);
+    }
+  }
+
+  const groups = new Map<string, StockGroup>(); // key = productName
+
+  for (const s of stocks) {
+    const skuKey = s.sku?.trim().toLowerCase();
+    const matchedProduct = skuKey ? skuToProduct.get(skuKey) : undefined;
+    const groupKey = matchedProduct?.name ?? s.productName;
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { productName: groupKey, items: [] });
+    }
+    const group = groups.get(groupKey)!;
+
+    // Determine if this SKU is a variant (not the parent product SKU)
+    const isVariant = matchedProduct
+      ? (matchedProduct.variants?.length ?? 0) > 0 &&
+        matchedProduct.sku?.trim().toLowerCase() !== skuKey
+      : false;
+
+    const variantLabel = (matchedProduct && isVariant)
+      ? getVariantLabel(matchedProduct, s.sku)
+      : "";
+
+    group.items.push({ stock: s, variantLabel, isVariant });
+  }
+
+  // Sort groups alphabetically by product name
+  return Array.from(groups.values()).sort((a, b) => a.productName.localeCompare(b.productName));
+}
+
 // ─── Print ────────────────────────────────────────────────────────────────────
 type BalancedRow = StockLedgerEntry & { displayBalance: number };
 
 function printLedger(
-  productName: string,
+  displayName: string,
   from: string,
   to: string,
   rows: BalancedRow[],
@@ -62,6 +122,7 @@ function printLedger(
   closingQty: number,
   unit: string,
   companyName: string,
+  isAllProducts: boolean,
 ) {
   const now = new Date().toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
@@ -75,7 +136,7 @@ function printLedger(
       <td class="nowrap">${fmtDate(r.date)}</td>
       <td><span class="ref">${r.reference || "—"}</span></td>
       <td><span class="badge" style="color:${TX_PRINT_COLORS[r.txType] || "#374151"}">${LEDGER_TX_LABELS[r.txType] || r.txType}</span></td>
-      ${productName === "All Products" ? `<td class="ellipsis">${r.entityName}</td>` : ""}
+      ${isAllProducts ? `<td class="ellipsis">${r.entityName}</td>` : ""}
       <td class="right in">${r.qtyChange > 0 ? "+" + fmtN(r.qtyChange) : ""}</td>
       <td class="right out">${r.qtyChange < 0 ? fmtN(Math.abs(r.qtyChange)) : ""}</td>
       <td class="right bal ${r.displayBalance < 0 ? "negative" : ""}">${fmtN(r.displayBalance)}</td>
@@ -85,13 +146,11 @@ function printLedger(
   const html = `<!DOCTYPE html><html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Stock Ledger — ${productName}</title>
+<title>Stock Ledger — ${displayName}</title>
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; }
   .page { padding: 18mm 16mm; }
-
-  /* ── Header ── */
   .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2.5px solid #059669; }
   .company { font-size: 18px; font-weight: 800; color: #059669; letter-spacing: -0.5px; }
   .company-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
@@ -99,14 +158,10 @@ function printLedger(
   .doc-title h1 { font-size: 15px; font-weight: 700; color: #111; }
   .doc-title .period { font-size: 10px; color: #6b7280; margin-top: 4px; }
   .doc-title .printed { font-size: 9px; color: #9ca3af; margin-top: 2px; }
-
-  /* ── Product info strip ── */
-  .product-strip { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 16px; }
+  .product-strip { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .product-strip .pname { font-weight: 700; font-size: 13px; color: #065f46; }
   .product-strip .pinfo { font-size: 10px; color: #374151; }
   .product-strip .sep { color: #d1d5db; }
-
-  /* ── KPI row ── */
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
   .kpi { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; }
   .kpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; font-weight: 600; margin-bottom: 4px; }
@@ -117,8 +172,6 @@ function printLedger(
   .kpi.red   .kpi-value { color: #dc2626; }
   .kpi.green { border-color: #a7f3d0; background: #f0fdf4; }
   .kpi.red   { border-color: #fecaca; background: #fff5f5; }
-
-  /* ── Table ── */
   .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
   .section-title span { flex: 1; height: 1px; background: #e5e7eb; }
   table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
@@ -142,12 +195,9 @@ function printLedger(
   .sumrow td.in  { color: #6ee7b7; }
   .sumrow td.out { color: #fca5a5; }
   .sumrow td.bal { color: #fff; font-size: 12px; }
-
-  /* ── Footer ── */
   .footer { margin-top: 20px; display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
   .sig-box { width: 150px; border-top: 1px solid #374151; padding-top: 4px; font-size: 9px; color: #374151; text-align: center; margin-top: 30px; }
   .sigs { display: flex; justify-content: space-between; margin-top: 10px; }
-
   @media print {
     @page { margin: 0; size: A4 landscape; }
     .page { padding: 12mm 14mm; }
@@ -157,8 +207,6 @@ function printLedger(
 </head>
 <body>
 <div class="page">
-
-  <!-- Header -->
   <div class="header">
     <div>
       <div class="company">${companyName || "Onesoft"}</div>
@@ -170,10 +218,8 @@ function printLedger(
       <div class="printed">Printed: ${now}</div>
     </div>
   </div>
-
-  <!-- Product strip -->
   <div class="product-strip">
-    <span class="pname">${productName}</span>
+    <span class="pname">${displayName}</span>
     <span class="sep">|</span>
     <span class="pinfo">Opening: <b>${fmtN(openingQty)} ${unit}</b></span>
     <span class="sep">|</span>
@@ -183,8 +229,6 @@ function printLedger(
     <span class="sep">|</span>
     <span class="pinfo">Closing: <b>${fmtN(closingQty)} ${unit}</b></span>
   </div>
-
-  <!-- KPI cards -->
   <div class="kpis">
     <div class="kpi">
       <div class="kpi-label">Opening Stock</div>
@@ -198,7 +242,7 @@ function printLedger(
     </div>
     <div class="kpi red">
       <div class="kpi-label">Total Issued</div>
-      <div><span class="kpi-value">${fmtN(totalOut)}</span><span class="kpi-unit">${unit}</span></div>
+      <div><span class="kpi-value">${fmtN(totalIn)}</span><span class="kpi-unit">${unit}</span></div>
       <div class="kpi-sub">${rows.filter(r => r.qtyChange < 0).length} issue(s)</div>
     </div>
     <div class="kpi ${closingQty < 0 ? "red" : "green"}">
@@ -207,8 +251,6 @@ function printLedger(
       <div class="kpi-sub">as of ${fmtDate(to)}</div>
     </div>
   </div>
-
-  <!-- Table -->
   <div class="section-title">Transaction History <span></span></div>
   <table>
     <thead>
@@ -217,7 +259,7 @@ function printLedger(
         <th style="width:90px">Date</th>
         <th style="width:100px">Reference</th>
         <th style="width:110px">Type</th>
-        ${productName === "All Products" ? "<th>Product</th>" : ""}
+        ${isAllProducts ? "<th>Product</th>" : ""}
         <th class="right" style="width:80px">Qty In</th>
         <th class="right" style="width:80px">Qty Out</th>
         <th class="right" style="width:90px">Balance</th>
@@ -228,7 +270,7 @@ function printLedger(
       <tr class="opening">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(from)}</td>
-        <td colspan="${productName === "All Products" ? 3 : 2}" style="font-style:italic;color:#374151;">Opening Balance</td>
+        <td colspan="${isAllProducts ? 3 : 2}" style="font-style:italic;color:#374151;">Opening Balance</td>
         <td colspan="2"></td>
         <td class="right bal">${fmtN(openingQty)}</td>
         <td></td>
@@ -237,7 +279,7 @@ function printLedger(
       <tr class="sumrow">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(to)}</td>
-        <td colspan="${productName === "All Products" ? 3 : 2}" style="font-style:italic;">Closing Balance</td>
+        <td colspan="${isAllProducts ? 3 : 2}" style="font-style:italic;">Closing Balance</td>
         <td class="right in">+${fmtN(totalIn)}</td>
         <td class="right out">${fmtN(totalOut)}</td>
         <td class="right bal">${fmtN(closingQty)}</td>
@@ -245,21 +287,16 @@ function printLedger(
       </tr>
     </tbody>
   </table>
-
-  <!-- Signatures -->
   <div class="sigs">
     <div class="sig-box">Prepared By</div>
     <div class="sig-box">Verified By</div>
     <div class="sig-box">Approved By</div>
   </div>
-
-  <!-- Footer -->
   <div class="footer">
     <span>${companyName || "Onesoft"} — Confidential</span>
     <span>${rows.length} transaction(s) in this period</span>
     <span>Printed: ${now}</span>
   </div>
-
 </div>
 </body></html>`;
 
@@ -277,27 +314,150 @@ export default function StockLedgerPage() {
   const rawSearch     = useSearch();
   const { toast }     = useToast();
 
-  const [search,    setSearch]    = useState(() => new URLSearchParams(rawSearch).get("q") || "");
-  const [productId, setProductId] = useState<string>("__all__");
-  const [fromDate,  setFromDate]  = useState(monthStart());
-  const [toDate,    setToDate]    = useState(today());
-  const [txFilter,  setTxFilter]  = useState<"__all__" | LedgerTxType>("__all__");
-  const [revision,  setRevision]  = useState(0);
+  const [search,     setSearch]     = useState(() => new URLSearchParams(rawSearch).get("q") || "");
+  const [fromDate,   setFromDate]   = useState(monthStart());
+  const [toDate,     setToDate]     = useState(today());
+  const [txFilter,   setTxFilter]   = useState<"__all__" | LedgerTxType>("__all__");
+  const [revision,   setRevision]   = useState(0);
 
-  const stocks  = useMemo(() => getStock(),       [revision]); // eslint-disable-line
-  const ledger  = useMemo(() => getStockLedger(), [revision]); // eslint-disable-line
-  const settings = useMemo(() => getSettings(),   []);
+  // selectedIds: [] = All Products, [id] = single item, [id,id,...] = product group
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Track expanded product groups in the sidebar (by productName)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
+  const stocks   = useMemo(() => getStock(),        [revision]); // eslint-disable-line
+  const ledger   = useMemo(() => getStockLedger(),  [revision]); // eslint-disable-line
+  const products = useMemo(() => getProducts(),     [revision]); // eslint-disable-line
+  const settings = useMemo(() => getSettings(),     []);
+
+  // ── Product groups ────────────────────────────────────────────────────────
+  const productGroups = useMemo(
+    () => buildProductGroups(stocks, products),
+    [stocks, products],
+  );
+
+  const filteredGroups = useMemo(() =>
+    productGroups.filter(g =>
+      !search ||
+      g.productName.toLowerCase().includes(search.toLowerCase()) ||
+      g.items.some(i =>
+        i.stock.sku.toLowerCase().includes(search.toLowerCase()) ||
+        i.variantLabel.toLowerCase().includes(search.toLowerCase())
+      )
+    ),
+    [productGroups, search]
+  );
+
+  // ── Selection helpers ─────────────────────────────────────────────────────
+  const selectAll = useCallback(() => setSelectedIds([]), []);
+
+  const selectGroup = useCallback((group: StockGroup) => {
+    const ids = group.items.map(i => i.stock.id);
+    setSelectedIds(ids);
+    // Auto-expand the group when its header is clicked
+    setExpandedGroups(prev => { const s = new Set(prev); s.add(group.productName); return s; });
+  }, []);
+
+  const selectItem = useCallback((stockId: string, groupName: string) => {
+    setSelectedIds([stockId]);
+    setExpandedGroups(prev => { const s = new Set(prev); s.add(groupName); return s; });
+  }, []);
+
+  const toggleExpand = useCallback((groupName: string) => {
+    setExpandedGroups(prev => {
+      const s = new Set(prev);
+      if (s.has(groupName)) s.delete(groupName); else s.add(groupName);
+      return s;
+    });
+  }, []);
+
+  // ── Derived selection info ────────────────────────────────────────────────
+  const isAllSelected = selectedIds.length === 0;
+
+  /** The group that covers all selectedIds (if they all belong to the same group) */
+  const selectedGroup = useMemo(() => {
+    if (isAllSelected) return null;
+    const idSet = new Set(selectedIds);
+    return productGroups.find(g => g.items.every(i => idSet.has(i.stock.id)) && idSet.size === g.items.length) ?? null;
+  }, [selectedIds, productGroups, isAllSelected]);
+
+  /** Single item selected */
+  const singleItem = useMemo(() => {
+    if (selectedIds.length !== 1) return null;
+    return stocks.find(s => s.id === selectedIds[0]) ?? null;
+  }, [selectedIds, stocks]);
+
+  /** Human display name for the current selection */
+  const selectionLabel = useMemo(() => {
+    if (isAllSelected) return "All Products";
+    if (singleItem) {
+      // Find if this item has a variant label
+      const group = productGroups.find(g => g.items.some(i => i.stock.id === singleItem.id));
+      const gi = group?.items.find(i => i.stock.id === singleItem.id);
+      if (gi?.variantLabel) return `${group!.productName} — ${gi.variantLabel}`;
+      return singleItem.productName;
+    }
+    if (selectedGroup) return `${selectedGroup.productName} (All Variants)`;
+    return `${selectedIds.length} items`;
+  }, [isAllSelected, singleItem, selectedGroup, selectedIds, productGroups]);
+
+  /** Unit for display — use singleItem unit, or first item's unit if group */
+  const unit = useMemo(() => {
+    if (singleItem) return singleItem.unit || "";
+    if (selectedGroup) return selectedGroup.items[0]?.stock.unit || "";
+    return "";
+  }, [singleItem, selectedGroup]);
+
+  // ── Ledger computation ────────────────────────────────────────────────────
+  const idSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  const productLedger = useMemo(() => {
+    const rows = isAllSelected
+      ? ledger
+      : ledger.filter(e => idSet.has(e.entityId));
+    return rows.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  }, [ledger, isAllSelected, idSet]);
+
+  const openingQty = useMemo(() => {
+    const before = productLedger.filter(r => r.date < fromDate);
+    return before.length > 0 ? before[before.length - 1].qtyAfter : 0;
+  }, [productLedger, fromDate]);
+
+  const filtered = useMemo(() =>
+    productLedger.filter(r => {
+      const inRange = r.date >= fromDate && r.date <= toDate;
+      const matchTx = txFilter === "__all__" || r.txType === txFilter;
+      return inRange && matchTx;
+    }),
+    [productLedger, fromDate, toDate, txFilter]
+  );
+
+  const totalIn    = useMemo(() => filtered.filter(r => r.qtyChange > 0).reduce((s, r) => s + r.qtyChange, 0), [filtered]);
+  const totalOut   = useMemo(() => filtered.filter(r => r.qtyChange < 0).reduce((s, r) => s + Math.abs(r.qtyChange), 0), [filtered]);
+  const closingQty = openingQty + totalIn - totalOut;
+
+  const filteredWithBalance = useMemo<BalancedRow[]>(() => {
+    let running = openingQty;
+    return filtered.map(r => { running += r.qtyChange; return { ...r, displayBalance: running }; });
+  }, [filtered, openingQty]);
+
+  // Mismatch warning only for single-item selection
+  const actualQty = singleItem ? (parseFloat(singleItem.quantity) || 0) : null;
+  const hasGap    = actualQty !== null && Math.abs(actualQty - closingQty) > 0.001;
+  const inCount   = filtered.filter(r => r.qtyChange > 0).length;
+  const outCount  = filtered.filter(r => r.qtyChange < 0).length;
+
+  // ── Reconcile & maintenance ───────────────────────────────────────────────
   const handleReconcileOne = useCallback(() => {
-    if (!productId || productId === "__all__") return;
-    const fixed = reconcileStockItem(productId);
+    if (!singleItem) return;
+    const fixed = reconcileStockItem(singleItem.id);
     setRevision(r => r + 1);
     if (fixed) {
       toast({ title: "Reconciled", description: "A correction entry has been added to bring the ledger in sync." });
     } else {
       toast({ title: "Already in sync", description: "The ledger balance already matches the actual stock quantity." });
     }
-  }, [productId, toast]);
+  }, [singleItem, toast]);
 
   const handleReconcileAll = useCallback(() => {
     const count = reconcileAllStock();
@@ -335,51 +495,15 @@ export default function StockLedgerPage() {
     }
   }, [toast]);
 
-  const productOpts = useMemo(() =>
-    stocks.filter(s =>
-      !search ||
-      s.productName.toLowerCase().includes(search.toLowerCase()) ||
-      s.sku.toLowerCase().includes(search.toLowerCase())
-    ).map(s => ({ id: s.id, name: s.productName, sku: s.sku, unit: s.unit })),
-    [stocks, search]
-  );
+  // ── Mobile select options ─────────────────────────────────────────────────
+  // Encode selection as comma-separated IDs
+  const mobileValue = selectedIds.join(",");
+  const handleMobileChange = (val: string) => {
+    if (val === "") { setSelectedIds([]); return; }
+    setSelectedIds(val.split(",").filter(Boolean));
+  };
 
-  const selectedStock = stocks.find(s => s.id === productId);
-
-  const productLedger = useMemo(() => {
-    const rows = productId === "__all__" ? ledger : ledger.filter(e => e.entityId === productId);
-    return rows.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
-  }, [ledger, productId]);
-
-  const openingQty = useMemo(() => {
-    const before = productLedger.filter(r => r.date < fromDate);
-    return before.length > 0 ? before[before.length - 1].qtyAfter : 0;
-  }, [productLedger, fromDate]);
-
-  const filtered = useMemo(() =>
-    productLedger.filter(r => {
-      const inRange = r.date >= fromDate && r.date <= toDate;
-      const matchTx = txFilter === "__all__" || r.txType === txFilter;
-      return inRange && matchTx;
-    }),
-    [productLedger, fromDate, toDate, txFilter]
-  );
-
-  const totalIn    = useMemo(() => filtered.filter(r => r.qtyChange > 0).reduce((s, r) => s + r.qtyChange, 0), [filtered]);
-  const totalOut   = useMemo(() => filtered.filter(r => r.qtyChange < 0).reduce((s, r) => s + Math.abs(r.qtyChange), 0), [filtered]);
-  const closingQty = openingQty + totalIn - totalOut;
-
-  const filteredWithBalance = useMemo<BalancedRow[]>(() => {
-    let running = openingQty;
-    return filtered.map(r => { running += r.qtyChange; return { ...r, displayBalance: running }; });
-  }, [filtered, openingQty]);
-
-  const actualQty = selectedStock ? (parseFloat(selectedStock.quantity) || 0) : null;
-  const hasGap    = actualQty !== null && Math.abs(actualQty - closingQty) > 0.001;
-  const unit      = selectedStock?.unit || "";
-  const inCount   = filtered.filter(r => r.qtyChange > 0).length;
-  const outCount  = filtered.filter(r => r.qtyChange < 0).length;
-
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="-mx-5 md:-mx-8 -my-6 md:-my-8 min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col">
 
@@ -404,7 +528,7 @@ export default function StockLedgerPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleDeduplicateSales}
-            title="Remove duplicate sale entries where the same invoice number deducted stock more than once, and correct stock quantities"
+            title="Remove duplicate sale entries"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-orange-200 dark:border-orange-800 text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors"
           >
             <Eraser size={12}/> Remove Sale Dups
@@ -412,7 +536,7 @@ export default function StockLedgerPage() {
 
           <button
             onClick={handleDeduplicatePurchases}
-            title="Remove duplicate purchase receipt entries caused by clicking 'Receive to Stock' multiple times on the same invoice, and correct stock quantities"
+            title="Remove duplicate purchase receipt entries"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
           >
             <Eraser size={12}/> Remove Purchase Dups
@@ -420,23 +544,24 @@ export default function StockLedgerPage() {
 
           <button
             onClick={handleReconcileAll}
-            title="Scan all stock items and create correction ledger entries where the ledger balance doesn't match actual quantity"
+            title="Scan all stock items and create correction ledger entries"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 dark:border-violet-800 text-xs font-semibold text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
           >
             <Wrench size={12}/> Reconcile All
           </button>
 
-        <button
-          onClick={() => printLedger(
-            selectedStock?.productName ?? "All Products",
-            fromDate, toDate, filteredWithBalance,
-            openingQty, totalIn, totalOut, closingQty, unit,
-            settings.companyName || "Onesoft",
-          )}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm"
-        >
-          <Printer size={13}/> Print / Export
-        </button>
+          <button
+            onClick={() => printLedger(
+              selectionLabel,
+              fromDate, toDate, filteredWithBalance,
+              openingQty, totalIn, totalOut, closingQty, unit,
+              settings.companyName || "Onesoft",
+              isAllSelected,
+            )}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm"
+          >
+            <Printer size={13}/> Print / Export
+          </button>
         </div>
       </header>
 
@@ -447,7 +572,7 @@ export default function StockLedgerPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search product…"
+            placeholder="Search product or variant…"
             className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
           />
           {search && (
@@ -488,18 +613,19 @@ export default function StockLedgerPage() {
       {/* ── Body ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Sidebar: Product list ── */}
-        <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 overflow-y-auto">
+        {/* ── Sidebar: Product / Variant tree ── */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 overflow-y-auto">
           <div className="px-3 pt-3 pb-2 sticky top-0 bg-white dark:bg-zinc-900 z-10 border-b border-gray-100 dark:border-zinc-800">
             <p className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
-              Products ({productOpts.length})
+              Products ({filteredGroups.length})
             </p>
           </div>
 
+          {/* All Products */}
           <button
-            onClick={() => setProductId("__all__")}
+            onClick={selectAll}
             className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition-colors text-sm border-b border-gray-50 dark:border-zinc-800/60 ${
-              productId === "__all__"
+              isAllSelected
                 ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 font-semibold border-l-2 border-l-emerald-500"
                 : "text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800"
             }`}
@@ -509,36 +635,121 @@ export default function StockLedgerPage() {
             <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 tabular-nums">{stocks.length}</span>
           </button>
 
-          {productOpts.map(p => {
-            const s = stocks.find(x => x.id === p.id);
-            const qty = parseFloat(s?.quantity ?? "0") || 0;
-            const isActive = productId === p.id;
+          {/* Product groups */}
+          {filteredGroups.map(group => {
+            const hasVariants    = group.items.length > 1 || group.items.some(i => i.isVariant);
+            const isExpanded     = expandedGroups.has(group.productName);
+            const groupIds       = group.items.map(i => i.stock.id);
+            const isGroupActive  = !isAllSelected && groupIds.every(id => idSet.has(id)) && idSet.size === groupIds.length;
+            const groupTotalQty  = group.items.reduce((s, i) => s + (parseFloat(i.stock.quantity) || 0), 0);
+
+            if (!hasVariants) {
+              // ── Single-item product (flat row) ──
+              const s = group.items[0].stock;
+              const qty = parseFloat(s.quantity) || 0;
+              const isItemActive = !isAllSelected && idSet.has(s.id) && idSet.size === 1;
+              return (
+                <button
+                  key={group.productName}
+                  onClick={() => selectItem(s.id, group.productName)}
+                  className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition-all text-sm border-b border-gray-50 dark:border-zinc-800/40 ${
+                    isItemActive
+                      ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-l-2 border-l-emerald-500"
+                      : "text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium truncate leading-snug">{s.productName}</p>
+                    {s.sku && <p className="text-[10px] text-gray-400 dark:text-zinc-500 truncate font-mono">{s.sku}</p>}
+                  </div>
+                  <span className={`text-xs font-bold shrink-0 tabular-nums px-1.5 py-0.5 rounded ${
+                    qty <= 0 ? "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                    : qty < 10 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400"
+                    : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+                  }`}>
+                    {qty.toLocaleString("en-GB", { maximumFractionDigits: 1 })}
+                  </span>
+                </button>
+              );
+            }
+
+            // ── Multi-variant product (group row + children) ──
             return (
-              <button
-                key={p.id}
-                onClick={() => setProductId(p.id)}
-                className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition-all text-sm border-b border-gray-50 dark:border-zinc-800/40 ${
-                  isActive
-                    ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-l-2 border-l-emerald-500"
-                    : "text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium truncate leading-snug">{p.name}</p>
-                  {p.sku && <p className="text-[10px] text-gray-400 dark:text-zinc-500 truncate">{p.sku}</p>}
-                </div>
-                <span className={`text-xs font-bold shrink-0 tabular-nums px-1.5 py-0.5 rounded ${
-                  qty <= 0 ? "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
-                  : qty < 10 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400"
-                  : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+              <div key={group.productName} className="border-b border-gray-50 dark:border-zinc-800/40">
+                {/* Group header */}
+                <div className={`flex items-center gap-1 transition-all text-sm ${
+                  isGroupActive
+                    ? "bg-emerald-50 dark:bg-emerald-950/30 border-l-2 border-l-emerald-500"
+                    : ""
                 }`}>
-                  {qty.toLocaleString("en-GB", { maximumFractionDigits: 1 })}
-                </span>
-              </button>
+                  {/* Expand / collapse toggle */}
+                  <button
+                    onClick={() => toggleExpand(group.productName)}
+                    className="pl-2 pr-1 py-2.5 text-gray-400 dark:text-zinc-500 hover:text-gray-700 dark:hover:text-zinc-300 shrink-0"
+                  >
+                    {isExpanded
+                      ? <ChevronDown size={12}/>
+                      : <ChevronRight size={12}/>}
+                  </button>
+                  {/* Clicking the product name selects whole group */}
+                  <button
+                    onClick={() => selectGroup(group)}
+                    className={`flex-1 min-w-0 text-left pr-2 py-2.5 flex items-center gap-2 ${
+                      isGroupActive
+                        ? "text-emerald-700 dark:text-emerald-400 font-semibold"
+                        : "text-gray-700 dark:text-zinc-200 hover:text-emerald-700 dark:hover:text-emerald-400"
+                    }`}
+                  >
+                    <Layers size={11} className="shrink-0 text-gray-400 dark:text-zinc-500"/>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold truncate leading-snug">{group.productName}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">{group.items.length} variant{group.items.length !== 1 ? "s" : ""}</p>
+                    </div>
+                    <span className={`text-xs font-bold shrink-0 tabular-nums px-1.5 py-0.5 rounded ${
+                      groupTotalQty <= 0 ? "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                      : groupTotalQty < 10 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+                    }`}>
+                      {groupTotalQty.toLocaleString("en-GB", { maximumFractionDigits: 1 })}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Variant children */}
+                {isExpanded && group.items.map(gi => {
+                  const qty = parseFloat(gi.stock.quantity) || 0;
+                  const isActive = !isAllSelected && idSet.has(gi.stock.id) && idSet.size === 1;
+                  return (
+                    <button
+                      key={gi.stock.id}
+                      onClick={() => selectItem(gi.stock.id, group.productName)}
+                      className={`w-full text-left pl-8 pr-3 py-2 flex items-center gap-2 transition-all text-sm border-t border-gray-50 dark:border-zinc-800/30 ${
+                        isActive
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-l-2 border-l-emerald-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium truncate leading-snug">
+                          {gi.variantLabel || gi.stock.productName}
+                        </p>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-600 font-mono truncate">{gi.stock.sku}</p>
+                      </div>
+                      <span className={`text-[11px] font-bold shrink-0 tabular-nums px-1.5 py-0.5 rounded ${
+                        qty <= 0 ? "bg-red-50 dark:bg-red-950/30 text-red-500 dark:text-red-400"
+                        : qty < 10 ? "bg-amber-50 dark:bg-amber-950/30 text-amber-500 dark:text-amber-400"
+                        : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
+                      }`}>
+                        {qty.toLocaleString("en-GB", { maximumFractionDigits: 1 })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
 
-          {productOpts.length === 0 && (
+          {filteredGroups.length === 0 && (
             <div className="px-4 py-10 text-center text-xs text-gray-400 dark:text-zinc-500">No products found</div>
           )}
         </aside>
@@ -549,42 +760,61 @@ export default function StockLedgerPage() {
           {/* Mobile product select */}
           <div className="lg:hidden px-4 pt-3">
             <select
-              value={productId}
-              onChange={e => setProductId(e.target.value)}
+              value={mobileValue}
+              onChange={e => handleMobileChange(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-zinc-100 outline-none"
             >
-              <option value="__all__">All Products</option>
-              {stocks.map(s => <option key={s.id} value={s.id}>{s.productName} ({s.sku})</option>)}
+              <option value="">All Products</option>
+              {filteredGroups.map(group => {
+                const hasVariants = group.items.length > 1 || group.items.some(i => i.isVariant);
+                if (!hasVariants) {
+                  const s = group.items[0].stock;
+                  return <option key={s.id} value={s.id}>{s.productName} ({s.sku})</option>;
+                }
+                return [
+                  <option key={`__grp__${group.productName}`} value={group.items.map(i => i.stock.id).join(",")}>
+                    {group.productName} — All Variants
+                  </option>,
+                  ...group.items.map(gi => (
+                    <option key={gi.stock.id} value={gi.stock.id}>
+                      {"  "}↳ {gi.variantLabel || gi.stock.sku} ({gi.stock.sku})
+                    </option>
+                  )),
+                ];
+              })}
             </select>
           </div>
 
           <div className="px-4 md:px-6 py-5 space-y-4">
 
-            {/* Product title row */}
+            {/* Selection title row */}
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100 leading-tight">
-                  {selectedStock ? selectedStock.productName : "All Products"}
+                  {selectionLabel}
                 </h2>
-                {selectedStock ? (
+                {singleItem ? (
                   <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1 flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                    <span className="font-mono bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px]">{selectedStock.sku}</span>
+                    <span className="font-mono bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 px-1.5 py-0.5 rounded text-[10px]">{singleItem.sku}</span>
                     <span>·</span>
-                    <span>Store: <strong className="text-gray-600 dark:text-zinc-300">{selectedStock.store}</strong></span>
+                    <span>Store: <strong className="text-gray-600 dark:text-zinc-300">{singleItem.store}</strong></span>
                     <span>·</span>
-                    <span>Type: <strong className="text-gray-600 dark:text-zinc-300">{selectedStock.stockType}</strong></span>
+                    <span>Type: <strong className="text-gray-600 dark:text-zinc-300">{singleItem.stockType}</strong></span>
                     <span>·</span>
-                    <span>Unit: <strong className="text-gray-600 dark:text-zinc-300">{selectedStock.unit || "—"}</strong></span>
+                    <span>Unit: <strong className="text-gray-600 dark:text-zinc-300">{singleItem.unit || "—"}</strong></span>
+                  </p>
+                ) : selectedGroup ? (
+                  <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
+                    {selectedGroup.items.length} variant{selectedGroup.items.length !== 1 ? "s" : ""} · {filtered.length} total transactions
                   </p>
                 ) : (
-                  <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{stocks.length} product(s) · {filtered.length} total transactions</p>
+                  <p className="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{stocks.length} product{stocks.length !== 1 ? "s" : ""} · {filtered.length} total transactions</p>
                 )}
               </div>
             </div>
 
             {/* KPI cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Opening */}
               <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
@@ -599,7 +829,6 @@ export default function StockLedgerPage() {
                 <p className="text-[10px] text-gray-400 dark:text-zinc-600 mt-1.5">as of {fmtDate(fromDate)}</p>
               </div>
 
-              {/* Total In */}
               <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
@@ -614,7 +843,6 @@ export default function StockLedgerPage() {
                 <p className="text-[10px] text-emerald-500/80 dark:text-emerald-700 mt-1.5">{inCount} receipt{inCount !== 1 ? "s" : ""}</p>
               </div>
 
-              {/* Total Out */}
               <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center">
@@ -629,7 +857,6 @@ export default function StockLedgerPage() {
                 <p className="text-[10px] text-rose-500/80 dark:text-rose-700 mt-1.5">{outCount} issue{outCount !== 1 ? "s" : ""}</p>
               </div>
 
-              {/* Closing */}
               <div className={`rounded-xl p-4 border ${
                 closingQty <= 0
                   ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900"
@@ -657,8 +884,8 @@ export default function StockLedgerPage() {
               </div>
             </div>
 
-            {/* Mismatch warning */}
-            {hasGap && (
+            {/* Mismatch warning (only for single-item selection) */}
+            {hasGap && singleItem && (
               <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
                 <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0 mt-0.5">
                   <AlertTriangle size={15} className="text-amber-600"/>
@@ -682,7 +909,6 @@ export default function StockLedgerPage() {
             {/* Ledger table */}
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden shadow-sm">
 
-              {/* Table header row */}
               <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50/80 dark:bg-zinc-800/40">
                 <div className="flex items-center gap-2">
                   <BookOpen size={13} className="text-gray-400 dark:text-zinc-500"/>
@@ -714,7 +940,11 @@ export default function StockLedgerPage() {
                         <th className="text-left px-4 py-3">Reference</th>
                         <th className="text-left px-4 py-3">Type</th>
                         <th className="text-left px-4 py-3">Source</th>
-                        {productId === "__all__" && <th className="text-left px-4 py-3">Product</th>}
+                        {(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) && (
+                          <th className="text-left px-4 py-3">
+                            {isAllSelected ? "Product" : "Variant"}
+                          </th>
+                        )}
                         <th className="text-right px-4 py-3 text-emerald-400">Qty In</th>
                         <th className="text-right px-4 py-3 text-rose-400">Qty Out</th>
                         <th className="text-right px-4 py-3">Balance</th>
@@ -728,7 +958,7 @@ export default function StockLedgerPage() {
                         <td className="text-center px-3 py-2.5 text-xs text-gray-300 dark:text-zinc-600">—</td>
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-zinc-400 whitespace-nowrap">{fmtDate(fromDate)}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 italic"
-                            colSpan={productId === "__all__" ? 4 : 3}>Opening Balance</td>
+                            colSpan={(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) ? 4 : 3}>Opening Balance</td>
                         <td colSpan={2}/>
                         <td className="px-4 py-2.5 text-right font-bold text-gray-700 dark:text-zinc-300">
                           {openingQty.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
@@ -737,66 +967,78 @@ export default function StockLedgerPage() {
                         <td/>
                       </tr>
 
-                      {filteredWithBalance.map((row, idx) => (
-                        <tr key={row.id}
-                            className={`transition-colors group ${idx % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-slate-50/60 dark:bg-zinc-800/20"} hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20`}>
-                          <td className="text-center px-3 py-2.5 text-xs text-gray-300 dark:text-zinc-600 tabular-nums">{idx + 1}</td>
-                          <td className="px-4 py-2.5 whitespace-nowrap text-gray-600 dark:text-zinc-400 text-xs font-medium">
-                            {fmtDate(row.date)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {row.reference
-                              ? <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded">{row.reference}</span>
-                              : <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${TX_COLORS[row.txType] || "bg-gray-100 text-gray-600"}`}>
-                              {LEDGER_TX_LABELS[row.txType] || row.txType}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {row.sourceType ? (
-                              <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${SOURCE_BADGE_COLORS[row.sourceType] ?? "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300"}`}>
-                                {row.sourceType}
+                      {filteredWithBalance.map((row, idx) => {
+                        // Resolve variant label for this row's entityId
+                        const rowStock = stocks.find(s => s.id === row.entityId);
+                        const rowGroup = rowStock
+                          ? productGroups.find(g => g.items.some(i => i.stock.id === rowStock.id))
+                          : undefined;
+                        const rowGI    = rowGroup?.items.find(i => i.stock.id === rowStock?.id);
+                        const rowLabel = isAllSelected
+                          ? row.entityName
+                          : (rowGI?.variantLabel || rowGI?.stock.sku || row.entityName);
+
+                        return (
+                          <tr key={row.id}
+                              className={`transition-colors group ${idx % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-slate-50/60 dark:bg-zinc-800/20"} hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20`}>
+                            <td className="text-center px-3 py-2.5 text-xs text-gray-300 dark:text-zinc-600 tabular-nums">{idx + 1}</td>
+                            <td className="px-4 py-2.5 whitespace-nowrap text-gray-600 dark:text-zinc-400 text-xs font-medium">
+                              {fmtDate(row.date)}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {row.reference
+                                ? <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded">{row.reference}</span>
+                                : <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${TX_COLORS[row.txType] || "bg-gray-100 text-gray-600"}`}>
+                                {LEDGER_TX_LABELS[row.txType] || row.txType}
                               </span>
-                            ) : (
-                              <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {row.sourceType ? (
+                                <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${SOURCE_BADGE_COLORS[row.sourceType] ?? "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300"}`}>
+                                  {row.sourceType}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
+                              )}
+                            </td>
+                            {(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) && (
+                              <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-zinc-300 max-w-[140px] truncate">{rowLabel}</td>
                             )}
-                          </td>
-                          {productId === "__all__" && (
-                            <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-zinc-300 max-w-[140px] truncate">{row.entityName}</td>
-                          )}
-                          <td className="px-4 py-2.5 text-right tabular-nums">
-                            {row.qtyChange > 0
-                              ? <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">+{row.qtyChange.toLocaleString("en-GB", { maximumFractionDigits: 3 })}</span>
-                              : <span className="text-gray-200 dark:text-zinc-800">—</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">
-                            {row.qtyChange < 0
-                              ? <span className="text-rose-600 dark:text-rose-400 font-bold text-sm">{Math.abs(row.qtyChange).toLocaleString("en-GB", { maximumFractionDigits: 3 })}</span>
-                              : <span className="text-gray-200 dark:text-zinc-800">—</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">
-                            <span className={`font-extrabold text-sm ${
-                              row.displayBalance < 0 ? "text-red-600 dark:text-red-400"
-                              : row.displayBalance === 0 ? "text-gray-400 dark:text-zinc-600"
-                              : "text-gray-900 dark:text-zinc-100"
-                            }`}>
-                              {row.displayBalance.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
-                              {unit && <span className="text-[10px] font-normal text-gray-400 dark:text-zinc-600 ml-1">{unit}</span>}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 max-w-[160px] truncate">
-                            {row.notes || <span className="text-gray-200 dark:text-zinc-800">—</span>}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              {row.qtyChange > 0
+                                ? <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">+{row.qtyChange.toLocaleString("en-GB", { maximumFractionDigits: 3 })}</span>
+                                : <span className="text-gray-200 dark:text-zinc-800">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              {row.qtyChange < 0
+                                ? <span className="text-rose-600 dark:text-rose-400 font-bold text-sm">{Math.abs(row.qtyChange).toLocaleString("en-GB", { maximumFractionDigits: 3 })}</span>
+                                : <span className="text-gray-200 dark:text-zinc-800">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">
+                              <span className={`font-extrabold text-sm ${
+                                row.displayBalance < 0 ? "text-red-600 dark:text-red-400"
+                                : row.displayBalance === 0 ? "text-gray-400 dark:text-zinc-600"
+                                : "text-gray-900 dark:text-zinc-100"
+                              }`}>
+                                {row.displayBalance.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
+                                {unit && <span className="text-[10px] font-normal text-gray-400 dark:text-zinc-600 ml-1">{unit}</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 max-w-[160px] truncate">
+                              {row.notes || <span className="text-gray-200 dark:text-zinc-800">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
 
                       {/* Closing summary row */}
                       <tr className="bg-gray-800 dark:bg-zinc-950 text-white">
                         <td className="text-center px-3 py-3 text-xs text-gray-400">—</td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(toDate)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={productId === "__all__" ? 4 : 3}>Closing Balance</td>
+                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) ? 4 : 3}>Closing Balance</td>
                         <td className="px-4 py-3 text-right text-emerald-400 font-bold text-sm tabular-nums">
                           +{totalIn.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
                         </td>
