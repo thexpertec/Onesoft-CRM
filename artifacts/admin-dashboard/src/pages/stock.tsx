@@ -35,12 +35,13 @@ const isLowStock = (item: StockItem) => {
 };
 
 // Fields that must never be edited directly — quantity only moves via Purchase Orders
-const PRODUCT_LOCKED = new Set(["productName", "sku", "quantity"]);
+const PRODUCT_LOCKED = new Set(["productName", "sku", "quantity", "variantLabel"]);
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 const ALL_COLS: ColDef[] = [
   { field: "productName",  label: "Product / Service",  minW: 200, type: "text"   },
   { field: "sku",          label: "SKU",                minW: 110, type: "text"   },
+  { field: "variantLabel", label: "Variant",            minW: 130, type: "text"   },
   { field: "store",        label: "Store / Location",   minW: 145, type: "text"   },
   { field: "stockType",    label: "Stock Type",         minW: 155, type: "select", options: [...STOCK_TYPES] },
   { field: "quantity",     label: "Qty",                minW: 80,  type: "number" },
@@ -53,6 +54,7 @@ const ALL_COLS: ColDef[] = [
 const HOLDS_COLS: ColDef[] = [
   { field: "productName",  label: "Product / Service",  minW: 200, type: "text"   },
   { field: "sku",          label: "SKU",                minW: 110, type: "text"   },
+  { field: "variantLabel", label: "Variant",            minW: 130, type: "text"   },
   { field: "store",        label: "Store / Location",   minW: 140, type: "text"   },
   { field: "quantity",     label: "Qty Reserved",       minW: 105, type: "number" },
   { field: "unit",         label: "Unit",               minW: 90,  type: "text"   },
@@ -81,6 +83,19 @@ export default function StockPage() {
 
   const productComboOpts  = useMemo<ComboOption[]>(() => getProducts().map(p => ({ value: p.name, label: p.name, sub: p.sku, tag: p.category })), []);
   const storeComboOpts    = useMemo<ComboOption[]>(() => STORES_LIST.map(s => ({ value: s, label: s })), []);
+
+  // SKU → variant label map, e.g. "RED-L" → "Red / Large"
+  const skuVariantMap = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const p of getProducts()) {
+      for (const v of p.variants ?? []) {
+        if (!v.sku?.trim()) continue;
+        const attrs = Object.values(v.attributes ?? {}).filter(Boolean);
+        map.set(v.sku.trim().toLowerCase(), attrs.length ? attrs.join(" / ") : v.sku);
+      }
+    }
+    return map;
+  }, []);
   const unitComboOpts     = useMemo<ComboOption[]>(() => UNITS_LIST.map(u => ({ value: u, label: u })), []);
   const customerComboOpts = useMemo<ComboOption[]>(() => getCustomers().map(c => ({ value: c.name, label: c.name, sub: c.email || c.phone })), []);
 
@@ -119,12 +134,16 @@ export default function StockPage() {
     if (isHoldsView && customerFilter !== "All") rows = rows.filter(s => s.holdCustomer === customerFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      rows = rows.filter(s =>
-        s.productName.toLowerCase().includes(q) ||
-        s.sku.toLowerCase().includes(q) ||
-        s.store.toLowerCase().includes(q) ||
-        s.holdCustomer.toLowerCase().includes(q),
-      );
+      rows = rows.filter(s => {
+        const vl = skuVariantMap.get(s.sku?.trim().toLowerCase() ?? "") ?? "";
+        return (
+          s.productName.toLowerCase().includes(q) ||
+          s.sku.toLowerCase().includes(q) ||
+          s.store.toLowerCase().includes(q) ||
+          s.holdCustomer.toLowerCase().includes(q) ||
+          vl.toLowerCase().includes(q)
+        );
+      });
     }
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [stock, isHoldsView, typeFilter, customerFilter, search]);
@@ -226,6 +245,7 @@ export default function StockPage() {
                   { header: "#",              key: "id",           getValue: r => filtered.indexOf(r) + 1, width: 5 },
                   { header: "Product",        key: "productName",  width: 28 },
                   { header: "SKU",            key: "sku",          width: 18 },
+                  { header: "Variant",        key: "sku",          getValue: r => skuVariantMap.get(r.sku?.trim().toLowerCase() ?? "") ?? "", width: 22 },
                   { header: "Stock Type",     key: "stockType",    width: 18 },
                   { header: "Quantity",       key: "quantity",     width: 12 },
                   { header: "Unit",           key: "unit",         width: 10 },
@@ -359,6 +379,10 @@ export default function StockPage() {
                         <span className="text-[13px] text-gray-400 italic">0 — set via PO</span>
                         <span className="ml-auto flex items-center gap-0.5 text-[10px] text-gray-300 pr-1"><Lock size={9} /> PO only</span>
                       </div>
+                    ) : c.field === "variantLabel" ? (
+                      <div className="w-full h-full flex items-center px-3 cursor-default">
+                        <span className="text-gray-300 dark:text-zinc-700 text-[12px] italic">auto</span>
+                      </div>
                     ) : isA && c.field === "stockType" ? (
                       <div className="absolute inset-0 flex items-center gap-1 px-2" tabIndex={0} autoFocus
                         onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); navigateNewRow(ci, e.shiftKey); } if (e.key === "Escape") { setNewRow(null); setNewRowActive(null); } }}>
@@ -434,7 +458,9 @@ export default function StockPage() {
                 </td>
                 {COLS.map((c, ci) => {
                   const isA = activeCell?.id === item.id && activeCell.col === ci;
-                  const rawVal = String((item as unknown as Record<string, string>)[c.field] ?? "");
+                  const rawVal = c.field === "variantLabel"
+                    ? (skuVariantMap.get(item.sku?.trim().toLowerCase() ?? "") ?? "")
+                    : String((item as unknown as Record<string, string>)[c.field] ?? "");
                   const isProductLocked = PRODUCT_LOCKED.has(c.field);
                   const canEdit = can("Edit Stock") && !isProductLocked;
                   return (
@@ -447,8 +473,18 @@ export default function StockPage() {
                       style={{ height: CELL_H }}
                       onClick={() => !isProductLocked && !isA && canEdit && setActiveCell({ id: item.id, col: ci })}>
 
-                      {/* product-locked cell — read-only, managed in Products */}
-                      {isProductLocked ? (
+                      {/* variant label cell — pill badge, read-only */}
+                      {c.field === "variantLabel" ? (
+                        <div className="w-full h-full flex items-center px-3 cursor-default">
+                          {rawVal ? (
+                            <span className="text-[11px] font-semibold rounded-full px-2.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 truncate max-w-full">{rawVal}</span>
+                          ) : (
+                            <span className="text-gray-300 dark:text-zinc-700 text-[12px]">—</span>
+                          )}
+                        </div>
+
+                      /* product-locked cell — read-only, managed in Products */
+                      ) : isProductLocked ? (
                         <div className="w-full h-full flex items-center px-3 cursor-default group/lock">
                           <span className="truncate text-[13px] text-gray-500 dark:text-gray-400">{rawVal || "—"}</span>
                           <span className="ml-auto opacity-0 group-hover/lock:opacity-50 transition-opacity text-[10px] text-gray-400 whitespace-nowrap flex items-center gap-0.5 pr-1">
