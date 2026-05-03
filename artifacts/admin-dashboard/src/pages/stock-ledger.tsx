@@ -123,6 +123,7 @@ function printLedger(
   unit: string,
   companyName: string,
   isAllProducts: boolean,
+  variantMap: Map<string, string>,
 ) {
   const now = new Date().toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
@@ -130,18 +131,21 @@ function printLedger(
   });
   const fmtN = (n: number) => Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 
-  const rowsHtml = rows.map((r, i) => `
+  const rowsHtml = rows.map((r, i) => {
+    const varLabel = variantMap.get(r.entityId) ?? "";
+    return `
     <tr class="${i % 2 === 0 ? "even" : "odd"}">
       <td class="center">${i + 1}</td>
       <td class="nowrap">${fmtDate(r.date)}</td>
       <td><span class="ref">${r.reference || "—"}</span></td>
       <td><span class="badge" style="color:${TX_PRINT_COLORS[r.txType] || "#374151"}">${LEDGER_TX_LABELS[r.txType] || r.txType}</span></td>
-      ${isAllProducts ? `<td class="ellipsis">${r.entityName}</td>` : ""}
+      ${isAllProducts ? `<td class="ellipsis">${r.entityName}</td><td class="ellipsis variant">${varLabel || "—"}</td>` : ""}
       <td class="right in">${r.qtyChange > 0 ? "+" + fmtN(r.qtyChange) : ""}</td>
       <td class="right out">${r.qtyChange < 0 ? fmtN(Math.abs(r.qtyChange)) : ""}</td>
       <td class="right bal ${r.displayBalance < 0 ? "negative" : ""}">${fmtN(r.displayBalance)}</td>
       <td class="notes">${r.notes || ""}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   const html = `<!DOCTYPE html><html lang="en">
 <head>
@@ -259,7 +263,7 @@ function printLedger(
         <th style="width:90px">Date</th>
         <th style="width:100px">Reference</th>
         <th style="width:110px">Type</th>
-        ${isAllProducts ? "<th>Product</th>" : ""}
+        ${isAllProducts ? "<th>Product</th><th>Variant</th>" : ""}
         <th class="right" style="width:80px">Qty In</th>
         <th class="right" style="width:80px">Qty Out</th>
         <th class="right" style="width:90px">Balance</th>
@@ -270,7 +274,7 @@ function printLedger(
       <tr class="opening">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(from)}</td>
-        <td colspan="${isAllProducts ? 3 : 2}" style="font-style:italic;color:#374151;">Opening Balance</td>
+        <td colspan="${isAllProducts ? 4 : 2}" style="font-style:italic;color:#374151;">Opening Balance</td>
         <td colspan="2"></td>
         <td class="right bal">${fmtN(openingQty)}</td>
         <td></td>
@@ -279,7 +283,7 @@ function printLedger(
       <tr class="sumrow">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(to)}</td>
-        <td colspan="${isAllProducts ? 3 : 2}" style="font-style:italic;">Closing Balance</td>
+        <td colspan="${isAllProducts ? 4 : 2}" style="font-style:italic;">Closing Balance</td>
         <td class="right in">+${fmtN(totalIn)}</td>
         <td class="right out">${fmtN(totalOut)}</td>
         <td class="right bal">${fmtN(closingQty)}</td>
@@ -551,13 +555,23 @@ export default function StockLedgerPage() {
           </button>
 
           <button
-            onClick={() => printLedger(
-              selectionLabel,
-              fromDate, toDate, filteredWithBalance,
-              openingQty, totalIn, totalOut, closingQty, unit,
-              settings.companyName || "Onesoft",
-              isAllSelected,
-            )}
+            onClick={() => {
+              // Build stockItemId → variantLabel map for print
+              const printVariantMap = new Map<string, string>();
+              for (const g of productGroups) {
+                for (const gi of g.items) {
+                  if (gi.variantLabel) printVariantMap.set(gi.stock.id, gi.variantLabel);
+                }
+              }
+              printLedger(
+                selectionLabel,
+                fromDate, toDate, filteredWithBalance,
+                openingQty, totalIn, totalOut, closingQty, unit,
+                settings.companyName || "Onesoft",
+                isAllSelected,
+                printVariantMap,
+              );
+            }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm"
           >
             <Printer size={13}/> Print / Export
@@ -940,10 +954,11 @@ export default function StockLedgerPage() {
                         <th className="text-left px-4 py-3">Reference</th>
                         <th className="text-left px-4 py-3">Type</th>
                         <th className="text-left px-4 py-3">Source</th>
+                        {isAllSelected && (
+                          <th className="text-left px-4 py-3">Product</th>
+                        )}
                         {(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) && (
-                          <th className="text-left px-4 py-3">
-                            {isAllSelected ? "Product" : "Variant"}
-                          </th>
+                          <th className="text-left px-4 py-3">Variant</th>
                         )}
                         <th className="text-right px-4 py-3 text-emerald-400">Qty In</th>
                         <th className="text-right px-4 py-3 text-rose-400">Qty Out</th>
@@ -958,7 +973,7 @@ export default function StockLedgerPage() {
                         <td className="text-center px-3 py-2.5 text-xs text-gray-300 dark:text-zinc-600">—</td>
                         <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-zinc-400 whitespace-nowrap">{fmtDate(fromDate)}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-zinc-500 italic"
-                            colSpan={(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) ? 4 : 3}>Opening Balance</td>
+                            colSpan={isAllSelected ? 5 : (selectedGroup && selectedGroup.items.length > 1) ? 4 : 3}>Opening Balance</td>
                         <td colSpan={2}/>
                         <td className="px-4 py-2.5 text-right font-bold text-gray-700 dark:text-zinc-300">
                           {openingQty.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
@@ -974,9 +989,8 @@ export default function StockLedgerPage() {
                           ? productGroups.find(g => g.items.some(i => i.stock.id === rowStock.id))
                           : undefined;
                         const rowGI    = rowGroup?.items.find(i => i.stock.id === rowStock?.id);
-                        const rowLabel = isAllSelected
-                          ? row.entityName
-                          : (rowGI?.variantLabel || rowGI?.stock.sku || row.entityName);
+                        const rowProductName  = row.entityName;
+                        const rowVariantLabel = rowGI?.variantLabel || rowGI?.stock.sku || "";
 
                         return (
                           <tr key={row.id}
@@ -1004,8 +1018,16 @@ export default function StockLedgerPage() {
                                 <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
                               )}
                             </td>
+                            {isAllSelected && (
+                              <td className="px-4 py-2.5 text-xs font-medium text-gray-700 dark:text-zinc-300 max-w-[160px] truncate">{rowProductName}</td>
+                            )}
                             {(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) && (
-                              <td className="px-4 py-2.5 text-xs text-gray-700 dark:text-zinc-300 max-w-[140px] truncate">{rowLabel}</td>
+                              <td className="px-4 py-2.5 text-xs max-w-[140px] truncate">
+                                {rowVariantLabel
+                                  ? <span className="inline-block bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded px-1.5 py-0.5 font-medium">{rowVariantLabel}</span>
+                                  : <span className="text-gray-300 dark:text-zinc-700">—</span>
+                                }
+                              </td>
                             )}
                             <td className="px-4 py-2.5 text-right tabular-nums">
                               {row.qtyChange > 0
@@ -1038,7 +1060,7 @@ export default function StockLedgerPage() {
                       <tr className="bg-gray-800 dark:bg-zinc-950 text-white">
                         <td className="text-center px-3 py-3 text-xs text-gray-400">—</td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(toDate)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={(isAllSelected || (selectedGroup && selectedGroup.items.length > 1)) ? 4 : 3}>Closing Balance</td>
+                        <td className="px-4 py-3 text-xs text-gray-300 italic" colSpan={isAllSelected ? 5 : (selectedGroup && selectedGroup.items.length > 1) ? 4 : 3}>Closing Balance</td>
                         <td className="px-4 py-3 text-right text-emerald-400 font-bold text-sm tabular-nums">
                           +{totalIn.toLocaleString("en-GB", { maximumFractionDigits: 3 })}
                         </td>
