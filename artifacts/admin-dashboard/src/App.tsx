@@ -226,6 +226,7 @@ function Router() {
               <Route path="/income-report" component={IncomeReportPage} />
               <Route path="/expense-report" component={ExpenseReportPage} />
               <Route path="/receipt-payment" component={ReceiptPaymentPage} />
+              <Route path="/rp-summary" component={RpSummaryPage} />
               <Route path="/transaction-history" component={TransactionHistoryPage} />
               <Route path="/payment-accounts" component={PaymentAccountsPage} />
               <Route path="/returns" component={ReturnsPage} />

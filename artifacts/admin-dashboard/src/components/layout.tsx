@@ -275,6 +275,7 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
       { label: "Chart of Accounts",   href: "/chart-of-accounts",    icon: BookOpen,      desc: "Account hierarchy & ledgers"  },
       { label: "Journal Entry",       href: "/journal-entry",        icon: ClipboardList, desc: "Double-entry bookkeeping"     },
       { label: "Receipt & Payment",   href: "/receipt-payment",      icon: CreditCard,    desc: "Cash & bank transactions"     },
+      { label: "R&P Summary",         href: "/rp-summary",           icon: CreditCard,    desc: "Cash & Bank summary by head"  },
       { label: "Transaction History", href: "/transaction-history",  icon: FileText,      desc: "All transactions in one view" },
       { label: "Cash & Bank Accounts", href: "/payment-accounts",   icon: CreditCard,    desc: "Bank & payment method setup"  },
     ],
@@ -356,7 +357,7 @@ const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salar
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
-const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
+const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/rp-summary", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
 const REPAIR_ROUTES        = ["/repair", "/repair-report"];
 
 const QUICK_ADD: SubItem[] = [
