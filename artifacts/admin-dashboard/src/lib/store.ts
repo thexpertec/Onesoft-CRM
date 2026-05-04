@@ -236,6 +236,11 @@ function _lsRemove(storageKey: string): void {
  * Returns a Promise so callers that need durable confirmation (e.g. tenant
  * delete) can `await` it; legacy callers that don't await retain the original
  * fire-and-forget behaviour because errors are still caught here.
+ *
+ * IMPORTANT: kvPut now THROWS on failure (unlike the read-only apiFetch which
+ * swallows errors). This means a failed write is detectable here, propagated
+ * to awaiting callers (e.g. setGlobalAsync / createAdminUserAsync), and also
+ * surfaced to the UI via the "onesoft:write-error" event so the user can act.
  */
 function _apiWrite(storageKey: string, value: unknown): Promise<void> {
   let ns: string;
@@ -249,8 +254,17 @@ function _apiWrite(storageKey: string, value: unknown): Promise<void> {
     key = storageKey;
   }
   const p: Promise<void> = kvPut(ns, key, value).catch((err) => {
-    console.error(`[kv] server write FAILED for ${ns}/${key}:`, err instanceof Error ? err.message : err);
-    throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[kv] server write FAILED for ${ns}/${key}:`, msg);
+    // Dispatch a UI-visible event so components / toasts can react.
+    // Fire-and-forget callers (setStored / setGlobal) listen for this event
+    // to show a non-blocking warning; awaiting callers get the thrown error.
+    try {
+      window.dispatchEvent(new CustomEvent("onesoft:write-error", {
+        detail: { key: `${ns}/${key}`, message: msg },
+      }));
+    } catch { /* SSR guard */ }
+    throw err; // re-throw so awaiting callers (setGlobalAsync) can surface it
   }).finally(() => {
     // De-register once settled (only if this is still the latest promise for the key)
     if (_pendingWrites.get(storageKey) === p) _pendingWrites.delete(storageKey);
@@ -277,7 +291,10 @@ function getStored<T>(key: string): T[] {
 function setStored<T>(key: string, data: T[]) {
   const sk = tenantKey(key);
   _lsCache(sk, data);   // update _memRaw immediately so rest of app sees the change
-  _apiWrite(sk, data);  // persist to server (tracked by _pendingWrites)
+  // _apiWrite now throws on server failure — add a no-op .catch() so the
+  // unhandled-rejection doesn't bubble; the "onesoft:write-error" event
+  // dispatched inside _apiWrite is the user-visible signal.
+  _apiWrite(sk, data).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 /** Platform-level read (always unprefixed — for users & tenants registry). */
@@ -295,8 +312,9 @@ function getGlobal<T>(key: string): T[] {
 /** Platform-level write — also persists to PostgreSQL. */
 function setGlobal<T>(key: string, data: T[]) {
   _lsCache(key, data);  // write to _memRaw immediately
-  // Fire-and-forget; awaitable variant available via setGlobalAsync below
-  _apiWrite(key, data).catch(() => { /* error already logged */ });
+  // Fire-and-forget; awaitable variant available via setGlobalAsync below.
+  // .catch() prevents unhandled rejection — onesoft:write-error event handles UI.
+  _apiWrite(key, data).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 /** Awaitable platform-level write. Resolves only after the server confirms. */
@@ -366,7 +384,7 @@ export const deleteDoc = (id: string): void => {
 /** Force-push in-memory docs to the API server (manual repair / recovery tool). */
 export const syncDocsToApi = (): void => {
   const docs = getDocs();
-  if (docs.length > 0) _apiWrite(tenantKey(DOCS_KEY), docs);
+  if (docs.length > 0) _apiWrite(tenantKey(DOCS_KEY), docs).catch(() => { /* handled via onesoft:write-error event */ });
 };
 
 // ─── Cities & Areas API ───────────────────────────────────────────────────────
@@ -1042,7 +1060,7 @@ export const updateShareholder = (id: string, updates: Partial<Omit<Shareholder,
       accounts[idx] = { ...accounts[idx], name: updates.name, updatedAt: new Date().toISOString() };
       const sk = tenantKey(COA_KEY);
       _lsSet(sk, accounts);
-      _apiWrite(sk, accounts);
+      _apiWrite(sk, accounts).catch(() => { /* handled via onesoft:write-error event */ });
     }
   }
   addActivity({ action: "updated", entity: "Shareholder", entityName: items[i].name });
@@ -1355,7 +1373,7 @@ export const getModuleGroups = (): ModuleGroup[] => {
     }
     if (dirty) {
       _lsSet(MODULE_GROUPS_KEY, groups);
-      _apiWrite(MODULE_GROUPS_KEY, groups);
+      _apiWrite(MODULE_GROUPS_KEY, groups).catch(() => { /* handled via onesoft:write-error event */ });
     }
     return groups;
   } catch { return []; }
@@ -1371,7 +1389,7 @@ export const createModuleGroup = (
   const group: ModuleGroup = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   const updated = [...getModuleGroups(), group];
   _lsSet(MODULE_GROUPS_KEY, updated);
-  _apiWrite(MODULE_GROUPS_KEY, updated);
+  _apiWrite(MODULE_GROUPS_KEY, updated).catch(() => { /* handled via onesoft:write-error event */ });
   return group;
 };
 
@@ -1384,14 +1402,14 @@ export const updateModuleGroup = (
   if (idx === -1) throw new Error("Module group not found");
   groups[idx] = { ...groups[idx], ...updates, updatedAt: new Date().toISOString() };
   _lsSet(MODULE_GROUPS_KEY, groups);
-  _apiWrite(MODULE_GROUPS_KEY, groups);
+  _apiWrite(MODULE_GROUPS_KEY, groups).catch(() => { /* handled via onesoft:write-error event */ });
   return groups[idx];
 };
 
 export const deleteModuleGroup = (id: string): void => {
   const updated = getModuleGroups().filter(g => g.id !== id);
   _lsSet(MODULE_GROUPS_KEY, updated);
-  _apiWrite(MODULE_GROUPS_KEY, updated);
+  _apiWrite(MODULE_GROUPS_KEY, updated).catch(() => { /* handled via onesoft:write-error event */ });
 };
 
 // ─── Tenants API (platform-level, always global/unprefixed) ───────────────────
@@ -1614,12 +1632,10 @@ export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "upda
     updatedAt: new Date().toISOString(),
   };
   const updated = [...getAdminUsers(), newUser];
-  // Update in-memory cache immediately so the rest of the app sees the new
-  // user; then persist to server via setGlobalAsync for durability.
   _lsCache(USERS_KEY, updated);
-  setGlobalAsync(USERS_KEY, updated).catch(err =>
-    console.error("[users] Failed to persist new user to server:", err)
-  );
+  // onesoft:write-error event (dispatched by _apiWrite on failure) is the
+  // user-visible signal; the .catch() here just prevents unhandled rejection.
+  setGlobalAsync(USERS_KEY, updated).catch(() => { /* handled via onesoft:write-error */ });
   return newUser;
 };
 
@@ -1632,6 +1648,7 @@ export const createAdminUserAsync = async (user: Omit<AdminUser, "id" | "created
   };
   const updated = [...getAdminUsers(), newUser];
   _lsCache(USERS_KEY, updated);
+  // Properly awaited — throws if the server write fails so the caller can show an error.
   await setGlobalAsync(USERS_KEY, updated);
   return newUser;
 };
@@ -1642,18 +1659,14 @@ export const updateAdminUser = (id: string, updates: Partial<Omit<AdminUser, "id
   if (index === -1) throw new Error("User not found");
   users[index] = { ...users[index], ...updates, updatedAt: new Date().toISOString() };
   _lsCache(USERS_KEY, users);
-  setGlobalAsync(USERS_KEY, users).catch(err =>
-    console.error("[users] Failed to persist user update to server:", err)
-  );
+  setGlobalAsync(USERS_KEY, users).catch(() => { /* handled via onesoft:write-error */ });
   return users[index];
 };
 
 export const deleteAdminUser = (id: string): void => {
   const updated = getAdminUsers().filter(u => u.id !== id);
   _lsCache(USERS_KEY, updated);
-  setGlobalAsync(USERS_KEY, updated).catch(err =>
-    console.error("[users] Failed to persist user deletion to server:", err)
-  );
+  setGlobalAsync(USERS_KEY, updated).catch(() => { /* handled via onesoft:write-error */ });
 };
 
 // ─── Team Members API (for New Document "Prepared By") ───────────────────────
@@ -1670,7 +1683,7 @@ export const getTeamMembers = (): string[] => {
   } catch { /* ignore */ }
   const sk = tenantKey(TEAM_KEY);
   _lsSet(sk, DEFAULT_TEAM);
-  _apiWrite(sk, DEFAULT_TEAM);
+  _apiWrite(sk, DEFAULT_TEAM).catch(() => { /* handled via onesoft:write-error event */ });
   return DEFAULT_TEAM;
 };
 
@@ -1838,7 +1851,7 @@ function _coaAccounts(): Account[] {
 function _saveCoaAccounts(accounts: Account[]): void {
   const sk = tenantKey(COA_KEY);
   _lsSet(sk, accounts);
-  _apiWrite(sk, accounts);
+  _apiWrite(sk, accounts).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 /** Stable URL-safe slug from a category name. */
@@ -5140,7 +5153,7 @@ export function effectiveItemCost(it: SaleItem, prod: Product | undefined): numb
 export function saveSettings(s: AppSettings): void {
   const sk = tenantKey(SETTINGS_KEY);
   _lsSet(sk, s);
-  _apiWrite(sk, s);
+  _apiWrite(sk, s).catch(() => { /* handled via onesoft:write-error event */ });
   window.dispatchEvent(new CustomEvent("admin-settings-changed"));
 }
 
@@ -5180,7 +5193,7 @@ export function clearStoredModule(keys: readonly string[]): void {
   keys.forEach(k => {
     const sk = tenantKey(k);
     _lsSet(sk, []);
-    _apiWrite(sk, []);
+    _apiWrite(sk, []).catch(() => { /* handled via onesoft:write-error event */ });
   });
 }
 
@@ -5227,7 +5240,7 @@ export function restoreStoredModuleSnapshot(data: Record<string, unknown>): numb
     if (k in data && Array.isArray(data[k])) {
       const sk = tenantKey(k);
       _lsSet(sk, data[k]);
-      _apiWrite(sk, data[k]);
+      _apiWrite(sk, data[k]).catch(() => { /* handled via onesoft:write-error event */ });
       count++;
     }
   });
@@ -5246,13 +5259,13 @@ export function clearAccountingLedger(): void {
   // 1 — wipe journal entries
   const jeKey = tenantKey(JE_KEY);
   _lsRemove(jeKey);
-  _apiWrite(jeKey, []);
+  _apiWrite(jeKey, []).catch(() => { /* handled via onesoft:write-error event */ });
 
   // 2 — reset opening balances to 0 on all COA accounts
   const coaKey = tenantKey(COA_KEY);
   const accounts = getAccounts().map(a => ({ ...a, openingBalance: 0 }));
   _lsSet(coaKey, accounts);
-  _apiWrite(coaKey, accounts);
+  _apiWrite(coaKey, accounts).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 export const addTeamMember = (name: string): string[] => {
@@ -5261,7 +5274,7 @@ export const addTeamMember = (name: string): string[] => {
   const updated = [...current, name];
   const sk = tenantKey(TEAM_KEY);
   _lsSet(sk, updated);
-  _apiWrite(sk, updated);
+  _apiWrite(sk, updated).catch(() => { /* handled via onesoft:write-error event */ });
   return updated;
 };
 
@@ -5269,7 +5282,7 @@ export const removeTeamMember = (name: string): string[] => {
   const updated = getTeamMembers().filter(m => m !== name);
   const sk = tenantKey(TEAM_KEY);
   _lsSet(sk, updated);
-  _apiWrite(sk, updated);
+  _apiWrite(sk, updated).catch(() => { /* handled via onesoft:write-error event */ });
   return updated;
 };
 
@@ -5437,7 +5450,7 @@ function _getCoaMigrations(): Set<string> {
 function _saveCoaMigrations(done: Set<string>): void {
   const sk = tenantKey(COA_MIGRATIONS_KEY);
   _lsSet(sk, [...done]);
-  _apiWrite(sk, [...done]);
+  _apiWrite(sk, [...done]).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 /**
@@ -5707,7 +5720,7 @@ export function seedDefaultCoaAccounts(): void {
     if (jeChanged) {
       const jeSk = tenantKey(JE_KEY);
       _lsSet(jeSk, repairedJEs);
-      _apiWrite(jeSk, repairedJEs);
+      _apiWrite(jeSk, repairedJEs).catch(() => { /* handled via onesoft:write-error event */ });
     }
     done.add("m11"); migrationsChanged = true;
   }
@@ -5716,7 +5729,7 @@ export function seedDefaultCoaAccounts(): void {
   if (staticChanged) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, workingAccounts);
-    _apiWrite(sk, workingAccounts);
+    _apiWrite(sk, workingAccounts).catch(() => { /* handled via onesoft:write-error event */ });
   }
   if (migrationsChanged) {
     _saveCoaMigrations(done);
@@ -5847,7 +5860,7 @@ export function seedDefaultCoaAccounts(): void {
   if (dynamicChanged) {
     const sk = tenantKey(COA_KEY);
     _lsSet(sk, dynamicAccounts);
-    _apiWrite(sk, dynamicAccounts);
+    _apiWrite(sk, dynamicAccounts).catch(() => { /* handled via onesoft:write-error event */ });
   }
 
   // ── Always: backfill/relink contact AR/AP subsidiary ledgers ────────────────
@@ -6082,7 +6095,7 @@ export function seedTenantCOA(tenantId: string): void {
   }));
 
   _lsSet(tenantCoaKey, tenantAccounts);
-  _apiWrite(tenantCoaKey, tenantAccounts);
+  _apiWrite(tenantCoaKey, tenantAccounts).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 /**
@@ -6134,7 +6147,7 @@ function createSubsidiaryLedger(params: {
   const updated = [...existing, account];
   const sk = tenantKey(COA_KEY);
   _lsSet(sk, updated);
-  _apiWrite(sk, updated);
+  _apiWrite(sk, updated).catch(() => { /* handled via onesoft:write-error event */ });
   // Notify React hooks so the new account appears in useAccounts() immediately
   try { window.dispatchEvent(new CustomEvent("onesoft:data-synced")); } catch { /* SSR */ }
   return account.id;
@@ -6175,14 +6188,14 @@ export function getAccounts(): Account[] {
   // Fresh install — start with empty chart
   const sk = tenantKey(COA_KEY);
   _lsSet(sk, []);
-  _apiWrite(sk, []);
+  _apiWrite(sk, []).catch(() => { /* handled via onesoft:write-error event */ });
   return [];
 }
 
 function _saveAccounts(accounts: Account[]): void {
   const sk = tenantKey(COA_KEY);
   _lsCache(sk, accounts);
-  _apiWrite(sk, accounts);
+  _apiWrite(sk, accounts).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -6969,7 +6982,7 @@ export function getRPVouchers(): RPVoucher[] {
 function _saveRPVouchers(data: RPVoucher[]): void {
   const sk = tenantKey(RPV_KEY);
   _lsCache(sk, data);
-  _apiWrite(sk, data);
+  _apiWrite(sk, data).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 function nextRPVoucherNumber(type: "receipt" | "payment"): string {

@@ -4,6 +4,7 @@ import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJE
 import type { ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
@@ -125,6 +126,7 @@ function PurchasesRedirect() {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [location, navigate] = useLocation();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -141,6 +143,23 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
       backfillPOSCreditSaleJEs();
     }
   }, [isAuthenticated]);
+
+  // Listen for server write failures and show a visible warning toast.
+  // This catches ALL fire-and-forget setStored / setGlobal failures that
+  // previously were silent — data appeared saved but was lost on page refresh.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ key: string; message: string }>).detail;
+      toast({
+        title: "Save failed — please refresh",
+        description: `Could not save to server (${detail?.key ?? "unknown"}). Your recent change may be lost after refresh. Check your connection.`,
+        variant: "destructive",
+        duration: 8000,
+      });
+    };
+    window.addEventListener("onesoft:write-error", handler);
+    return () => window.removeEventListener("onesoft:write-error", handler);
+  }, [toast]);
 
   if (!isAuthenticated) return null;
   return <>{children}</>;
