@@ -2143,8 +2143,24 @@ export function backfillPOSCreditSaleJEs(): void {
  * Cost price is required on every product because it drives COGS journal
  * entries. A missing or non-positive cost would silently leak inventory
  * value into Revenue/AR. Throws a user-friendly error when invalid.
+ *
+ * Pass `variants` so the check is skipped when the product carries per-variant
+ * costs instead of a single base cost.
  */
-const _validateCostPrice = (costPrice: string | undefined, productName: string): void => {
+const _validateCostPrice = (
+  costPrice: string | undefined,
+  productName: string,
+  variants?: ProductVariant[],
+): void => {
+  // If the product has variants and at least one has a positive cost, the
+  // per-variant cost covers COGS — no need for a base-level cost.
+  if (variants && variants.length > 0) {
+    const anyVariantHasCost = variants.some(v => {
+      const n = parseFloat((v.costPrice ?? "").trim());
+      return Number.isFinite(n) && n > 0;
+    });
+    if (anyVariantHasCost) return;
+  }
   const raw = (costPrice ?? "").trim();
   if (!raw) {
     throw new Error(`Cost price is required for "${productName || "this product"}". Cost drives COGS journal entries and cannot be empty.`);
@@ -2157,7 +2173,8 @@ const _validateCostPrice = (costPrice: string | undefined, productName: string):
 
 export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedAt">): Product => {
   // Cost price is required to support correct COGS posting
-  _validateCostPrice(data.costPrice, data.name);
+  // (waived when the product carries per-variant costs)
+  _validateCostPrice(data.costPrice, data.name, data.variants);
   // Auto-generate SKU if not provided — SKU is required on every product
   const sku = data.sku?.trim() || generateProductSku(data.name);
   if (sku !== data.sku?.trim()) {
@@ -2197,9 +2214,11 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   // (a) edits that try to clear cost are rejected, and
   // (b) legacy products that were saved before this rule cannot be edited
   //     without first supplying a cost.
-  const effectiveCost = updates.costPrice !== undefined ? updates.costPrice : items[i].costPrice;
-  const effectiveName = updates.name ?? items[i].name;
-  _validateCostPrice(effectiveCost, effectiveName);
+  // Waived when the effective variant list carries at least one positive cost.
+  const effectiveCost    = updates.costPrice !== undefined ? updates.costPrice : items[i].costPrice;
+  const effectiveName    = updates.name ?? items[i].name;
+  const effectiveVariants = updates.variants !== undefined ? updates.variants : items[i].variants;
+  _validateCostPrice(effectiveCost, effectiveName, effectiveVariants);
   // Auto-generate SKU if neither the update nor the existing record has one
   if (!updates.sku?.trim() && !items[i].sku?.trim()) {
     updates = { ...updates, sku: generateProductSku(updates.name ?? items[i].name) };
