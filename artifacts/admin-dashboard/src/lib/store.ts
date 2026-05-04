@@ -3845,6 +3845,7 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
 export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourceType?: string): void => {
   const stocks    = getStock();
   const allProds  = getProducts();
+  const rms       = getRawMaterials();
   const today     = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
 
@@ -3852,6 +3853,8 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
   const existing = reference ? getStockLedger() : [];
   const alreadyReceived = (entityId: string) =>
     reference && existing.some(e => e.entityId === entityId && e.reference === reference && e.txType === "purchase-receipt");
+
+  let rmsDirty = false;
 
   items.forEach(item => {
     const rawQty = parseFloat(item.qty) || 0;
@@ -3861,6 +3864,41 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     const factor = Math.max(1, parseFloat(item.conversionFactor || "") || 1);
     const qty    = rawQty * factor;
 
+    // ── Raw material check ────────────────────────────────────────────────────
+    // If the line's SKU matches a raw-material rmCode (e.g. "RM-001") or the
+    // product name matches a raw-material name, update RM stock directly instead
+    // of going into the product/StockItem path.
+    const skuUpper = (item.sku || "").trim().toUpperCase();
+    const rmByCode = /^RM-\d+$/.test(skuUpper)
+      ? rms.findIndex(r => r.rmCode.toUpperCase() === skuUpper)
+      : -1;
+    const rmByName = rmByCode < 0
+      ? rms.findIndex(r => r.name.toLowerCase() === (item.productName || "").toLowerCase())
+      : -1;
+    const rmIdx = rmByCode >= 0 ? rmByCode : rmByName;
+
+    if (rmIdx >= 0) {
+      if (alreadyReceived(rms[rmIdx].id)) return;
+      const current = Math.max(0, parseFloat(rms[rmIdx].currentStock) || 0);
+      // Also update costPerUnit if the invoice line provides a price
+      const newCost = parseFloat(item.unitPrice) > 0 ? item.unitPrice : rms[rmIdx].costPerUnit;
+      rms[rmIdx] = {
+        ...rms[rmIdx],
+        currentStock: String(current + qty),
+        costPerUnit:  newCost,
+        updatedAt:    new Date().toISOString(),
+      };
+      ledger.push({
+        entityType: "raw-material", entityId: rms[rmIdx].id, entityName: rms[rmIdx].name,
+        date: today, txType: "purchase-receipt", sourceType, reference,
+        qtyBefore: current, qtyChange: qty, qtyAfter: current + qty,
+        unit: rms[rmIdx].unit, notes: reference ? `Purchase ${reference}` : "Purchase Receipt",
+      });
+      rmsDirty = true;
+      return; // handled — skip the product/StockItem path
+    }
+
+    // ── Regular product path ──────────────────────────────────────────────────
     // Resolve effective SKU — SKU is the canonical identifier.
     // Priority: item.sku → canonical product SKU by SKU match → by name match.
     let effectiveSku = item.sku || "";
@@ -3929,6 +3967,7 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
   });
 
   setStored(STOCK_KEY, stocks);
+  if (rmsDirty) setStored(RM_KEY, rms);
   batchLedger(ledger);
 };
 

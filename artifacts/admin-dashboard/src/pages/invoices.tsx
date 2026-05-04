@@ -12,6 +12,7 @@ import {
   autoPostPurchaseJE,
   createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
   findProductForItem, effectiveItemCost,
+  getRawMaterials,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -546,17 +547,26 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
 
   const { toast } = useToast();
   const products    = useMemo(() => getProducts(), []);
+  const rawMaterials = useMemo(() => getRawMaterials(), []);
   const customers   = useMemo(() => getCustomers(), []);
   const settings    = useMemo(() => getSettings(), []);
   const legalDocs   = useMemo(() => settings.legalDocuments ?? [], [settings]);
-  const productOpts = useMemo<ComboOption[]>(() =>
-    products.map(p => ({
+  const productOpts = useMemo<ComboOption[]>(() => {
+    const prodOpts = products.map(p => ({
       value: p.name,
       label: p.name,
       sub:   [p.sku, p.brand].filter(Boolean).join(" · "),
       tag:   p.category || undefined,
-    })),
-  [products]);
+    }));
+    if (invoiceType !== "purchase") return prodOpts;
+    const rmOpts = rawMaterials.map(r => ({
+      value: `__rm__${r.id}`,
+      label: r.name,
+      sub:   r.rmCode,
+      tag:   "Raw Material",
+    }));
+    return [...prodOpts, ...rmOpts];
+  }, [products, rawMaterials, invoiceType]);
 
   // Resolve variants for a line item — SKU is the canonical identifier
   const variantsForItem = useCallback((item: SaleItem): ProductVariant[] => {
@@ -631,6 +641,26 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   }, [invoiceType, pricingMode]);
 
   const pickProduct = (id: string, name: string) => {
+    // Raw-material option — value is prefixed with "__rm__<rmId>"
+    if (name.startsWith("__rm__")) {
+      const rmId = name.slice(6);
+      const rm = rawMaterials.find(r => r.id === rmId);
+      if (!rm) return;
+      setItems(prev => prev.map(i =>
+        i.id === id
+          ? {
+              ...i,
+              productName: rm.name,
+              localName: "",
+              sku: rm.rmCode,
+              unit: rm.unit,
+              unitPrice: rm.costPerUnit,
+              variantLabel: undefined,
+            }
+          : i
+      ));
+      return;
+    }
     const p = products.find(pr => pr.name === name);
     if (!p) return updateItem(id, "productName", name);
     setItems(prev => prev.map(i =>
