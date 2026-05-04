@@ -4463,6 +4463,10 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   const effectiveOutputs: MfgOutput[] = (order.outputs && order.outputs.length > 0) ? order.outputs : [];
   const totalOutputQty = effectiveOutputs.reduce((sum, out) => sum + (parseFloat(out.qty) || 0), 0);
 
+  // Load stocks once so we can check for existing records and update in-place
+  const allStocks = getStock();
+  let stocksDirty = false;
+
   effectiveOutputs.forEach(out => {
     const qty = parseFloat(out.qty) || 0;
     if (!out.productName || qty <= 0) return;
@@ -4477,26 +4481,69 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
       allProducts[pi] = { ...allProducts[pi], costPrice: unitCost, updatedAt: new Date().toISOString() };
     }
 
-    const newStock = createStockItem({
-      productName:  out.productName,
-      sku:          product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-"),
-      store:        "Manufacturing",
-      stockType:    "For Sale",
-      quantity:     out.qty,
-      minLevel:     "0",
-      unit:         out.unit || product?.unit || "",
-      holdCustomer: "",
-      holdReason:   "",
-      notes:        `Produced by ${order.orderNumber}`,
-    });
+    const effectiveSku = product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-");
+    const skuLower = effectiveSku.trim().toLowerCase();
+
+    // Look for an existing stock record with the same SKU (any store) so we don't
+    // create duplicate records when the same product is manufactured more than once.
+    let si = allStocks.findIndex(
+      s => (s.sku?.trim() || "").toLowerCase() === skuLower && s.stockType === "For Sale"
+    );
+    if (si < 0) si = allStocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === skuLower);
+
+    let stockId: string;
+    let stockUnit: string;
+    let qtyBefore: number;
+
+    if (si >= 0) {
+      // ── Update existing record ──────────────────────────────────────────────
+      qtyBefore = Math.max(0, parseFloat(allStocks[si].quantity) || 0);
+      allStocks[si] = {
+        ...allStocks[si],
+        quantity:  String(qtyBefore + qty),
+        updatedAt: new Date().toISOString(),
+      };
+      stockId   = allStocks[si].id;
+      stockUnit = allStocks[si].unit;
+    } else {
+      // ── Create new record with quantity "0" to suppress the auto
+      //    opening-balance entry in createStockItem, then set the real qty ────
+      const newStock = createStockItem({
+        productName:  out.productName,
+        sku:          effectiveSku,
+        store:        "Manufacturing",
+        stockType:    "For Sale",
+        quantity:     "0",          // ← zero prevents spurious opening-balance ledger entry
+        minLevel:     "0",
+        unit:         out.unit || product?.unit || "",
+        holdCustomer: "",
+        holdReason:   "",
+        notes:        `Produced by ${order.orderNumber}`,
+      });
+      // createStockItem already persisted to storage; load fresh and apply qty
+      const fresh = getStock();
+      const ni = fresh.findIndex(s => s.id === newStock.id);
+      if (ni >= 0) {
+        fresh[ni] = { ...fresh[ni], quantity: String(qty), updatedAt: new Date().toISOString() };
+        setStored(STOCK_KEY, fresh);
+        // Sync our in-memory array to avoid stale references
+        allStocks.splice(0, allStocks.length, ...fresh);
+      }
+      qtyBefore = 0;
+      stockId   = newStock.id;
+      stockUnit = newStock.unit;
+    }
+
+    stocksDirty = true;
     ledger.push({
-      entityType: "product", entityId: newStock.id, entityName: newStock.productName,
+      entityType: "product", entityId: stockId, entityName: out.productName,
       date: today, txType: "mfg-output", reference: order.orderNumber,
-      qtyBefore: 0, qtyChange: qty, qtyAfter: qty,
-      unit: newStock.unit, notes: `Produced by ${order.orderNumber}`,
+      qtyBefore, qtyChange: qty, qtyAfter: qtyBefore + qty,
+      unit: stockUnit, notes: `Produced by ${order.orderNumber}`,
     });
   });
 
+  if (stocksDirty) setStored(STOCK_KEY, allStocks);
   setStored(PRODUCTS_KEY, allProducts);
   batchLedger(ledger);
 
