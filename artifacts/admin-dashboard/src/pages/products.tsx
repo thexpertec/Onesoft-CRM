@@ -208,9 +208,10 @@ function parseCSV(text: string): ImportRow[] {
 
   // Blank row initializer covering ALL editable fields
   const blankRow = (): Omit<ImportRow, "_rowNum"> => ({
-    name: "", localName: "", sku: "", barcode: "", brand: "",
-    category: "", subcategory: "", unit: "",
+    name: "", localName: "", model: "", sku: "", barcode: "", brand: "",
+    category: "", subcategory: "", subSubcategory: "", department: "", unit: "",
     purchasePrice: "", costPrice: "", price: "", wholesalePrice: "",
+    websitePrice: "", websitePriceWas: "", clubcardPrice: "",
     retailProfit: "", wholesaleProfit: "", commissionPct: "",
     openingStock: "", stockAlertValue: "",
     status: "Active", condition: "", description: "",
@@ -307,8 +308,8 @@ export default function ProductsPage() {
   const [editProdId,    setEditProdId]    = useState<string | null>(null);
   const [expandedIds,   setExpandedIds]   = useState<Set<string>>(new Set());
   // Inline edits for variant sub-rows: keyed as "productId:variantId"
-  const [variantDraft,  setVariantDraft]  = useState<Record<string, Record<string, string | boolean>>>({});
-  const patchVDraft = useCallback((prodId: string, varId: string, updates: Record<string, string | boolean>) => {
+  const [variantDraft,  setVariantDraft]  = useState<Record<string, Partial<ProductVariant>>>({});
+  const patchVDraft = useCallback((prodId: string, varId: string, updates: Partial<ProductVariant>) => {
     setVariantDraft(prev => {
       const key = `${prodId}:${varId}`;
       return { ...prev, [key]: { ...prev[key], ...updates } };
@@ -634,28 +635,37 @@ export default function ProductsPage() {
           const groupRows  = [r, ...(continuationsByKey.get(parentKey) ?? [])];
 
           // Build variants array if any row in the group has attribute data
-          const hasVariants = groupRows.some(gr => gr.variantAttr1Name?.trim());
+          const hasExplicitVariants = groupRows.some(gr => gr.variantAttr1Name?.trim());
+          // Implicit variant detection: continuation rows with model values but no explicit variantAttr cols
+          const hasImplicitModelVariants = groupRows.length > 1 && !hasExplicitVariants
+            && groupRows.some(gr => gr.model?.trim());
+          const hasVariants = hasExplicitVariants || hasImplicitModelVariants;
           let variants: ProductVariant[] | undefined;
           let productAttributes: string[] | undefined;
           if (hasVariants) {
             variants = groupRows
-              .filter(gr => gr.variantAttr1Name?.trim())
+              .filter(gr => gr.variantAttr1Name?.trim() || (!hasExplicitVariants && gr.model?.trim()))
               .map(gr => {
                 const attrs: Record<string, string> = {};
                 if (gr.variantAttr1Name?.trim()) attrs[gr.variantAttr1Name.trim()] = gr.variantAttr1Value?.trim() ?? "";
                 if (gr.variantAttr2Name?.trim()) attrs[gr.variantAttr2Name.trim()] = gr.variantAttr2Value?.trim() ?? "";
                 if (gr.variantAttr3Name?.trim()) attrs[gr.variantAttr3Name.trim()] = gr.variantAttr3Value?.trim() ?? "";
+                // Fallback: use model as variant attribute when no explicit attr cols used
+                if (Object.keys(attrs).length === 0 && gr.model?.trim()) {
+                  attrs["Model"] = gr.model.trim();
+                }
                 return {
                   id: crypto.randomUUID(),
                   attributes: attrs,
-                  sku:              gr.variantSku?.trim()           || undefined,
-                  barcode:          gr.variantBarcode?.trim()        || undefined,
-                  price:            gr.variantPrice?.trim()          || r.price || "0",
-                  purchasePrice:    gr.variantPurchasePrice?.trim()  || undefined,
-                  costPrice:        gr.variantCostPrice?.trim()      || undefined,
-                  wholesalePrice:   gr.variantWholesalePrice?.trim() || undefined,
-                  stock:            gr.variantStock?.trim()          || undefined,
-                  condition:        gr.variantCondition?.trim()      || undefined,
+                  model:            gr.model?.trim()                 || undefined,
+                  sku:              gr.variantSku?.trim()            || undefined,
+                  barcode:          gr.variantBarcode?.trim()         || undefined,
+                  price:            gr.variantPrice?.trim()           || gr.price?.trim() || r.price || "0",
+                  purchasePrice:    gr.variantPurchasePrice?.trim()   || gr.purchasePrice?.trim() || undefined,
+                  costPrice:        gr.variantCostPrice?.trim()       || gr.costPrice?.trim()     || undefined,
+                  wholesalePrice:   gr.variantWholesalePrice?.trim()  || undefined,
+                  stock:            gr.variantStock?.trim()           || gr.openingStock?.trim()  || undefined,
+                  condition:        gr.variantCondition?.trim()       || gr.condition?.trim()     || undefined,
                 } satisfies ProductVariant;
               });
             const attrNameSet = new Set<string>();
@@ -670,7 +680,8 @@ export default function ProductsPage() {
             unit: r.unit, purchasePrice: r.purchasePrice, costPrice: r.costPrice,
             price: r.price, wholesalePrice: r.wholesalePrice,
             barcode: r.barcode, localName: r.localName,
-            openingStock: r.openingStock, stockAlertQty: r.stockAlertValue,
+            model: r.model,
+            openingStock: r.openingStock, stockAlertValue: r.stockAlertValue,
             commissionPct: r.commissionPct,
             status: (r.status as Product["status"]) || "Active",
             condition: (r.condition as Product["condition"]) || undefined,
@@ -2189,11 +2200,11 @@ export default function ProductsPage() {
                         </td>
                       );
 
-                      // brand — select
+                      // brand — select (falls back to parent product brand)
                       if (c.field === "brand") return (
                         <td key={c.field} className={cellCls} style={{ height: "36px" }}>
                           <select className={inputCls}
-                            value={(draft.brand as string) ?? v.brand ?? ""}
+                            value={(draft.brand as string) ?? v.brand ?? prod.brand ?? ""}
                             onChange={e => { patchVDraft(prod.id, v.id, { brand: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
                             <option value="">—</option>
                             {brandOptions.map(o => <option key={o} value={o}>{o}</option>)}
@@ -2201,11 +2212,11 @@ export default function ProductsPage() {
                         </td>
                       );
 
-                      // category — select
+                      // category — select (falls back to parent product category)
                       if (c.field === "category") return (
                         <td key={c.field} className={cellCls} style={{ height: "36px" }}>
                           <select className={inputCls}
-                            value={(draft.category as string) ?? v.category ?? ""}
+                            value={(draft.category as string) ?? v.category ?? prod.category ?? ""}
                             onChange={e => { patchVDraft(prod.id, v.id, { category: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
                             <option value="">—</option>
                             {categoryOptions.map(o => <option key={o} value={o}>{o}</option>)}
@@ -2359,11 +2370,11 @@ export default function ProductsPage() {
                         </td>
                       );
 
-                      // Condition
+                      // Condition (falls back to parent product condition)
                       if (c.field === "condition") return (
                         <td key={c.field} className={cellCls} style={{ height: "36px" }}>
                           <select className={inputCls}
-                            value={draft.condition ?? v.condition ?? ""}
+                            value={draft.condition ?? v.condition ?? prod.condition ?? ""}
                             onChange={e => { patchVDraft(prod.id, v.id, { condition: e.target.value }); setTimeout(() => saveVariantEdit(prod.id, v.id, prod.variants), 0); }}>
                             <option value="">—</option>
                             {["New","Used","Fresh","Refurbished","Damaged"].map(o => <option key={o} value={o}>{o}</option>)}
@@ -2615,29 +2626,39 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {importRows.map(row => {
+                    {(() => {
+                      let lastParentRow: ImportRow | null = null;
+                      return importRows.map(row => {
                       // ── Continuation (variant) row — rendered as indented sub-row ──
                       if (row._isContinuation) {
-                        const attrs = [
+                        const explicitAttrs = [
                           row.variantAttr1Name && row.variantAttr1Value ? `${row.variantAttr1Name}: ${row.variantAttr1Value}` : null,
                           row.variantAttr2Name && row.variantAttr2Value ? `${row.variantAttr2Name}: ${row.variantAttr2Value}` : null,
                           row.variantAttr3Name && row.variantAttr3Value ? `${row.variantAttr3Name}: ${row.variantAttr3Value}` : null,
                         ].filter(Boolean).join(" · ");
+                        // Fallback: show model when no explicit variant attrs
+                        const attrDisplay = explicitAttrs || (row.model ? `Model: ${row.model}` : "—");
+                        const parentBrand    = lastParentRow?.brand    || "";
+                        const parentCategory = lastParentRow?.category || "";
+                        const parentCondition = lastParentRow?.condition || row.variantCondition || "";
                         return (
                           <tr key={row._rowNum} className="border-b bg-indigo-50/40 dark:bg-indigo-950/10">
                             <td className="border-r px-3 py-1 text-indigo-400 font-mono text-center text-[11px]">↳</td>
                             <td colSpan={CSV_HEADERS.length} className="border-r px-4 py-1 text-[11px]">
                               <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold uppercase tracking-wide">Variant</span>
-                              <span className="text-indigo-700 dark:text-indigo-300 font-medium">{attrs || "—"}</span>
-                              {row.variantSku && <span className="ml-3 font-mono text-muted-foreground text-[10px]">SKU: {row.variantSku}</span>}
-                              {row.variantPrice && <span className="ml-3 text-emerald-600 dark:text-emerald-400 text-[10px]">Price: {row.variantPrice}</span>}
-                              {row.variantStock && <span className="ml-3 text-blue-600 dark:text-blue-400 text-[10px]">Stock: {row.variantStock}</span>}
-                              {row.variantCondition && <span className="ml-3 text-amber-600 dark:text-amber-400 text-[10px]">{row.variantCondition}</span>}
+                              <span className="text-indigo-700 dark:text-indigo-300 font-medium">{attrDisplay}</span>
+                              {(row.variantSku || row.sku) && <span className="ml-3 font-mono text-muted-foreground text-[10px]">SKU: {row.variantSku || row.sku}</span>}
+                              {(row.variantPrice || row.price) && <span className="ml-3 text-emerald-600 dark:text-emerald-400 text-[10px]">Price: {row.variantPrice || row.price}</span>}
+                              {(row.variantStock || row.openingStock) && <span className="ml-3 text-blue-600 dark:text-blue-400 text-[10px]">Stock: {row.variantStock || row.openingStock}</span>}
+                              {parentCondition && <span className="ml-3 text-amber-600 dark:text-amber-400 text-[10px]">{parentCondition}</span>}
+                              {parentBrand    && <span className="ml-3 text-violet-600 dark:text-violet-400 text-[10px]">{parentBrand}</span>}
+                              {parentCategory && <span className="ml-3 text-sky-600 dark:text-sky-400 text-[10px]">{parentCategory}</span>}
                             </td>
                             <td className="px-3 py-1 text-[10px] text-indigo-400 italic whitespace-nowrap">variant row</td>
                           </tr>
                         );
                       }
+                      lastParentRow = row;
 
                       // ── Regular (parent) row ──
                       const rowResult = importRowResults.get(row._rowNum);
@@ -2702,7 +2723,8 @@ export default function ProductsPage() {
                           </td>
                         </tr>
                       );
-                    })}
+                    });
+                    })()}
                   </tbody>
                 </table>
               </div>
