@@ -148,6 +148,7 @@ export default function ProductNewPage() {
   }, []);
 
   const patchVariantPrice        = (id: string, price: string)        => setVariants(prev => prev.map(v => v.id === id ? { ...v, price }        : v));
+  const patchVariantPurchasePrice = (id: string, purchasePrice: string) => setVariants(prev => prev.map(v => v.id === id ? { ...v, purchasePrice } : v));
   const patchVariantCostPrice    = (id: string, costPrice: string)     => setVariants(prev => prev.map(v => v.id === id ? { ...v, costPrice }     : v));
   const patchVariantSku          = (id: string, sku: string)           => setVariants(prev => prev.map(v => v.id === id ? { ...v, sku }           : v));
   const patchVariantBarcode      = (id: string, barcode: string)       => setVariants(prev => prev.map(v => v.id === id ? { ...v, barcode }       : v));
@@ -694,7 +695,7 @@ export default function ProductNewPage() {
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[19%]">SKU</th>
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[16%]">Model</th>
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[22%]">Barcode</th>
-                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Cost ({sym})</th>
+                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Purchase ({sym})</th>
                         <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Retail ({sym})</th>
                         <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[7%]">Image</th>
                       </tr>
@@ -736,9 +737,9 @@ export default function ProductNewPage() {
                             </td>
                             <td className="px-2 py-1.5">
                               <Input type="number" min="0" step="0.01"
-                                value={v.costPrice ?? ""}
-                                onChange={e => patchVariantCostPrice(v.id, e.target.value)}
-                                placeholder={form.costPrice || "0.00"}
+                                value={v.purchasePrice ?? ""}
+                                onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
+                                placeholder={form.purchasePrice || "0.00"}
                                 className="h-7 w-full text-xs tabular-nums text-right px-2" />
                             </td>
                             <td className="px-2 py-1.5">
