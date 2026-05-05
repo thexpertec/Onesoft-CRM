@@ -230,89 +230,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // surface the wrong tenant's data.
     sessionStorage.removeItem("onesoft_tab_tenant");
 
-    // First sync global data from the DB so we have the latest users/tenants
+    // First sync global data from the DB so we have the latest users/tenants.
+    // syncAllFromServer has its own inner try/catch — the catch here is a
+    // defensive backstop so a race or edge-case rejection never propagates to
+    // doLogin's catch (which would show "check your connection" for valid creds).
     setIsSyncing(true);
     try {
       await syncAllFromServer(null);
+    } catch {
+      // Swallow: we fall back to whatever is in the in-memory cache.
     } finally {
       setIsSyncing(false);
     }
 
-    // 1. Check platform users first (superadmin + any platform staff)
-    const users  = getAdminUsers();
-    const user   = users.find(
-      u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
-    );
-    if (user) {
-      setActiveTenant(null);
-      setActivityUser(user.fullName || user.username);
-      localStorage.setItem(AUTH_KEY,     "true");
-      localStorage.setItem(AUTH_USER_ID, user.id);
-      localStorage.setItem(TENANT_KEY,   "");
-      setCurrentUser(user);
-      setCurrentTenantId(null);
-      return true;
-    }
-
-    // 2. Check tenant registry
-    const tenant = getTenantByCredentials(username, password);
-    if (tenant) {
-      if (tenant.status === "suspended") return false;
-
-      // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
-      // If this is done after the sync/seed, _activeTenantId is still null and the COA
-      // gets written to the global (superadmin) namespace, contaminating it.
-      setActiveTenant(tenant.id);
-
-      // Sync tenant-specific data from DB
-      setIsSyncing(true);
-      try {
-        await syncAllFromServer(tenant.id);
-        seedDefaultCoaAccounts();
-      } finally {
-        setIsSyncing(false);
+    // Wrap ALL credential checks so no unexpected runtime error surfaces as
+    // the scary "Sign in failed — please check your connection" message.
+    try {
+      // 1. Check platform users first (superadmin + any platform staff)
+      const users  = getAdminUsers();
+      const user   = users.find(
+        u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+      );
+      if (user) {
+        setActiveTenant(null);
+        setActivityUser(user.fullName || user.username);
+        localStorage.setItem(AUTH_KEY,     "true");
+        localStorage.setItem(AUTH_USER_ID, user.id);
+        localStorage.setItem(TENANT_KEY,   "");
+        setCurrentUser(user);
+        setCurrentTenantId(null);
+        return true;
       }
 
-      const tenantUser = tenantToAdminUser(tenant);
-      setActivityUser(tenantUser.fullName || tenantUser.username);
-      localStorage.setItem(AUTH_KEY,     "true");
-      localStorage.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
-      localStorage.setItem(TENANT_KEY,   tenant.id);
-      setCurrentUser(tenantUser);
-      setCurrentTenantId(tenant.id);
-      return true;
-    }
+      // 2. Check tenant registry
+      const tenant = getTenantByCredentials(username, password);
+      if (tenant) {
+        if (tenant.status === "suspended") return false;
 
-    // 3. Check HRM staff with login enabled
-    const staffMember = getStaffByCredentials(username, password);
-    if (staffMember) {
-      if (staffMember.status === "Terminated") return false;
-      const staffUser = staffToAdminUser(staffMember);
-      setActiveTenant(null);
-      setActivityUser(staffUser.fullName || staffUser.username);
-      localStorage.setItem(AUTH_KEY,     "true");
-      localStorage.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
-      localStorage.setItem(TENANT_KEY,   "");
-      setCurrentUser(staffUser);
-      setCurrentTenantId(null);
-      return true;
-    }
+        // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
+        // If this is done after the sync/seed, _activeTenantId is still null and the COA
+        // gets written to the global (superadmin) namespace, contaminating it.
+        setActiveTenant(tenant.id);
 
-    // 4. Check Sales Agents with portal login enabled
-    const agent = getAgentByCredentials(username, password);
-    if (agent) {
-      const agentUser = agentToAdminUser(agent);
-      setActiveTenant(null);
-      setActivityUser(agentUser.fullName || agentUser.username);
-      localStorage.setItem(AUTH_KEY,     "true");
-      localStorage.setItem(AUTH_USER_ID, `agent:${agent.id}`);
-      localStorage.setItem(TENANT_KEY,   "");
-      setCurrentUser(agentUser);
-      setCurrentTenantId(null);
-      return true;
-    }
+        // Sync tenant-specific data from DB
+        setIsSyncing(true);
+        try {
+          await syncAllFromServer(tenant.id);
+          seedDefaultCoaAccounts();
+        } catch {
+          // Swallow: fall back to in-memory cache; COA seed may retry on next sync.
+        } finally {
+          setIsSyncing(false);
+        }
 
-    return false;
+        const tenantUser = tenantToAdminUser(tenant);
+        setActivityUser(tenantUser.fullName || tenantUser.username);
+        localStorage.setItem(AUTH_KEY,     "true");
+        localStorage.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
+        localStorage.setItem(TENANT_KEY,   tenant.id);
+        setCurrentUser(tenantUser);
+        setCurrentTenantId(tenant.id);
+        return true;
+      }
+
+      // 3. Check HRM staff with login enabled
+      const staffMember = getStaffByCredentials(username, password);
+      if (staffMember) {
+        if (staffMember.status === "Terminated") return false;
+        const staffUser = staffToAdminUser(staffMember);
+        setActiveTenant(null);
+        setActivityUser(staffUser.fullName || staffUser.username);
+        localStorage.setItem(AUTH_KEY,     "true");
+        localStorage.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
+        localStorage.setItem(TENANT_KEY,   "");
+        setCurrentUser(staffUser);
+        setCurrentTenantId(null);
+        return true;
+      }
+
+      // 4. Check Sales Agents with portal login enabled
+      const agent = getAgentByCredentials(username, password);
+      if (agent) {
+        const agentUser = agentToAdminUser(agent);
+        setActiveTenant(null);
+        setActivityUser(agentUser.fullName || agentUser.username);
+        localStorage.setItem(AUTH_KEY,     "true");
+        localStorage.setItem(AUTH_USER_ID, `agent:${agent.id}`);
+        localStorage.setItem(TENANT_KEY,   "");
+        setCurrentUser(agentUser);
+        setCurrentTenantId(null);
+        return true;
+      }
+
+      return false;
+    } catch (credErr) {
+      // An unexpected runtime error slipped through — log it and report as wrong
+      // credentials rather than showing the misleading "check your connection" banner.
+      console.error("[login] unexpected credential-check error:", credErr);
+      return false;
+    }
   };
 
   // ── Login As (manager impersonation) ───────────────────────────────────────
@@ -336,6 +352,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await syncAllFromServer(tenantId);
       seedDefaultCoaAccounts();
+    } catch {
+      // Swallow: fall back to in-memory cache.
     } finally {
       setIsSyncing(false);
     }

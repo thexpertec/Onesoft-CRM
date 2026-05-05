@@ -5,6 +5,15 @@
 
 const BASE = "/api/kv";
 
+/** Milliseconds before a read fetch gives up and returns null. */
+const READ_TIMEOUT_MS  = 10_000;
+/** Milliseconds before a write fetch gives up and throws. */
+const WRITE_TIMEOUT_MS = 15_000;
+
+function withTimeout(ms: number): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
 /**
  * Read fetch — swallows errors and returns null on failure.
  * Used for GET requests where in-memory cache is an acceptable fallback.
@@ -12,13 +21,15 @@ const BASE = "/api/kv";
 async function apiFetch(url: string, options?: RequestInit) {
   try {
     const res = await fetch(url, {
+      signal: withTimeout(READ_TIMEOUT_MS),
       ...options,
       headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    // Use "return await" so JSON parse errors are caught by the try/catch above.
+    return await res.json();
   } catch (e) {
-    // Silently swallow network errors — in-memory cache is the fallback
+    // Silently swallow network/timeout errors — in-memory cache is the fallback
     console.warn("[api]", url, e);
     return null;
   }
@@ -31,6 +42,7 @@ async function apiFetch(url: string, options?: RequestInit) {
  */
 async function apiWriteFetch(url: string, options: RequestInit): Promise<void> {
   const res = await fetch(url, {
+    signal: withTimeout(WRITE_TIMEOUT_MS),
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
   });
@@ -64,7 +76,9 @@ export async function kvDelete(namespace: string, key: string): Promise<void> {
 
 /** Fetch ALL key-value pairs for a namespace in one request. */
 export async function kvGetAll(namespace: string): Promise<Record<string, unknown> | null> {
-  return apiFetch(`${BASE}/${encodeURIComponent(namespace)}`);
+  // Use "return await" so any rejection from apiFetch propagates to the caller
+  // rather than being silently converted to a resolved-but-rejected promise chain.
+  return await apiFetch(`${BASE}/${encodeURIComponent(namespace)}`);
 }
 
 /** Delete an entire namespace (used when a tenant is deleted). */
