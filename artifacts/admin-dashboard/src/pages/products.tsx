@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty } from "@/lib/store";
+import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -99,31 +99,60 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
   clubcardPrice:   ["clubcardprice", "clubprice", "memberprice", "loyaltyprice", "ccprice"],
 };
 
+// ── Variant-level import columns ─────────────────────────────────────────────
+type VariantField =
+  | "variantAttr1Name" | "variantAttr1Value"
+  | "variantAttr2Name" | "variantAttr2Value"
+  | "variantAttr3Name" | "variantAttr3Value"
+  | "variantSku" | "variantBarcode"
+  | "variantPrice" | "variantPurchasePrice" | "variantCostPrice" | "variantWholesalePrice"
+  | "variantStock" | "variantCondition";
+
+const VARIANT_HEADER_ALIASES: Record<VariantField, string[]> = {
+  variantAttr1Name:     ["variantattr1name","attr1name","attribute1name","varattr1name","attr1","attribute1"],
+  variantAttr1Value:    ["variantattr1value","attr1value","attr1val","varattr1value","varattr1val"],
+  variantAttr2Name:     ["variantattr2name","attr2name","attribute2name","varattr2name","attr2","attribute2"],
+  variantAttr2Value:    ["variantattr2value","attr2value","attr2val","varattr2value","varattr2val"],
+  variantAttr3Name:     ["variantattr3name","attr3name","attribute3name","varattr3name","attr3","attribute3"],
+  variantAttr3Value:    ["variantattr3value","attr3value","attr3val","varattr3value","varattr3val"],
+  variantSku:           ["variantsku","vsku","varsku","variant_sku","variantitemcode"],
+  variantBarcode:       ["variantbarcode","vbarcode","variantean","variantqrcode"],
+  variantPrice:         ["variantprice","vprice","variant_price","variantretailprice","variantsaleprice"],
+  variantPurchasePrice: ["variantpurchaseprice","vpurchaseprice","variant_purchaseprice","variantbuyprice"],
+  variantCostPrice:     ["variantcostprice","vcostprice","variant_costprice","variantcost"],
+  variantWholesalePrice:["variantwholesaleprice","vwholesaleprice","variant_wholesaleprice","variantwholesale"],
+  variantStock:         ["variantstock","vstock","variantqty","variantquantity","variant_stock","variant_qty"],
+  variantCondition:     ["variantcondition","vcondition","variant_condition"],
+};
+
+const VARIANT_COLS = Object.keys(VARIANT_HEADER_ALIASES) as VariantField[];
+
 function downloadTemplate() {
-  const sample: string[] = [
-    "Onesoft CRM Software",  // name
-    "",                       // localName
-    "",                       // model
-    "SKU-001",               // sku
-    "",                       // barcode
-    "Onesoft",               // brand
-    "Software",              // category
-    "CRM",                   // subcategory
-    "",                       // subSubcategory
-    "",                       // department
-    "Licence",               // unit
-    "600.00",                // purchasePrice
-    "750.00",                // costPrice
-    "999.00",                // retailPrice
-    "799.00",                // wholesalePrice
-    "0",                     // openingStock
-    "5",                     // stockAlertQty
-    "",                      // commissionPct
-    "Active",                // status
-    "New",                   // condition
-    "Cloud-based CRM solution", // description
+  const allHeaders = [...CSV_HEADER_LABELS, ...VARIANT_COLS];
+
+  // Product base fields for T-Shirt example (21 columns)
+  const tshirtBase = [
+    "T-Shirt", "", "", "TSH-001", "", "Onesoft", "Clothing", "Tops", "", "", "Pcs",
+    "15.00", "18.00", "25.00", "20.00", "", "5", "", "Active", "New", "Comfortable cotton T-shirt",
   ];
-  const rows = [CSV_HEADER_LABELS.join(","), sample.map(v => `"${v.replace(/"/g, '""')}"`).join(",")];
+  // Variant row 1: Color=Red, Size=M
+  const varRow1 = ["Color","Red","Size","M","","", "TSH-001-RED-M","","25.00","15.00","18.00","20.00","10","New"];
+  // Variant row 2: Color=Blue, Size=L (same parent SKU → continuation)
+  const varRow2 = ["Color","Blue","Size","L","","", "TSH-001-BLU-L","","25.00","15.00","18.00","20.00","8","New"];
+
+  // Standalone product (no variants) — all variant columns empty
+  const standalone = [
+    "Onesoft CRM Licence", "", "", "SOFT-001", "", "Onesoft", "Software", "CRM", "", "", "Licence",
+    "600.00", "750.00", "999.00", "799.00", "0", "5", "", "Active", "New", "Cloud-based CRM solution",
+    ...Array(14).fill(""),
+  ];
+
+  const rows = [
+    allHeaders.join(","),
+    [...tshirtBase, ...varRow1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...tshirtBase, ...varRow2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    standalone.map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+  ];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -131,7 +160,12 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-type ImportRow = Record<EditableField, string> & { _rowNum: number; _error?: string; _updateId?: string };
+type ImportRow = Record<EditableField, string> & Partial<Record<VariantField, string>> & {
+  _rowNum: number;
+  _error?: string;
+  _updateId?: string;
+  _isContinuation?: boolean;
+};
 
 function parseCSV(text: string): ImportRow[] {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim());
@@ -165,6 +199,13 @@ function parseCSV(text: string): ImportRow[] {
     if (idx !== -1) colMap[field] = idx;
   });
 
+  // Build variant column index map
+  const varColMap: Partial<Record<VariantField, number>> = {};
+  VARIANT_COLS.forEach(field => {
+    const idx = headerRow.findIndex(h => VARIANT_HEADER_ALIASES[field].includes(h));
+    if (idx !== -1) varColMap[field] = idx;
+  });
+
   // Blank row initializer covering ALL editable fields
   const blankRow = (): Omit<ImportRow, "_rowNum"> => ({
     name: "", localName: "", sku: "", barcode: "", brand: "",
@@ -175,25 +216,51 @@ function parseCSV(text: string): ImportRow[] {
     status: "Active", condition: "", description: "",
   });
 
+  // Track seen parent keys (sku or name) to detect continuation (variant) rows
+  const seenParentKeys = new Set<string>();
+
   return lines.slice(1).map((line, i) => {
     const cells = parseLine(line);
     const row: ImportRow = { _rowNum: i + 2, ...blankRow() };
+
+    // Parse product-level fields
     (Object.keys(colMap) as EditableField[]).forEach(f => {
       const ci = colMap[f]!;
       row[f] = ci >= 0 && cells[ci] !== undefined ? cells[ci].trim() : "";
     });
-    if (!row.name.trim()) row._error = "Name is required";
-    if (!row._error) {
-      const costRaw = (row.costPrice ?? "").trim();
-      if (!costRaw) {
-        row._error = "Cost price is required (drives COGS)";
-      } else {
-        const cost = parseFloat(costRaw);
-        if (!Number.isFinite(cost) || cost <= 0) {
-          row._error = `Cost price must be a positive number (got "${costRaw}")`;
+
+    // Parse variant-level fields
+    VARIANT_COLS.forEach(f => {
+      const ci = varColMap[f];
+      if (ci !== undefined && ci >= 0 && cells[ci] !== undefined) {
+        row[f] = cells[ci].trim();
+      }
+    });
+
+    // Detect continuation rows — same sku/name as a previous parent row
+    const parentKey = (row.sku.trim() || row.name.trim()).toLowerCase();
+    if (parentKey && seenParentKeys.has(parentKey)) {
+      row._isContinuation = true;
+    } else if (parentKey) {
+      seenParentKeys.add(parentKey);
+    }
+
+    // Validate (skip for continuation rows — they inherit from parent)
+    if (!row._isContinuation) {
+      if (!row.name.trim()) row._error = "Name is required";
+      if (!row._error) {
+        const costRaw = (row.costPrice ?? "").trim();
+        if (!costRaw) {
+          row._error = "Cost price is required (drives COGS)";
+        } else {
+          const cost = parseFloat(costRaw);
+          if (!Number.isFinite(cost) || cost <= 0) {
+            row._error = `Cost price must be a positive number (got "${costRaw}")`;
+          }
         }
       }
     }
+
     const validStatuses = ["Active", "Inactive", "Draft"];
     if (row.status && !validStatuses.includes(row.status)) row.status = "Active";
     const validConditions = ["New", "Used", "Fresh", "Refurbished", "Damaged"];
@@ -364,6 +431,8 @@ export default function ProductsPage() {
     const seenSkuInFile  = new Map<string, number>();
     const seenNameInFile = new Map<string, number>();
     return rows.map(r => {
+      // Continuation rows share their parent's SKU by design — skip all conflict checks
+      if (r._isContinuation) return r;
       if (r._error) return r;
       const skuKey  = r.sku.trim().toLowerCase();
       const nameKey = r.name.trim().toLowerCase();
@@ -381,7 +450,7 @@ export default function ProductsPage() {
         return { ...r, _updateId: existing.id };
       }
 
-      // 3. Duplicate-in-file check
+      // 3. Duplicate-in-file check (parent rows only — continuations handled above)
       if (skuKey) {
         if (seenSkuInFile.has(skuKey))
           return { ...r, _error: `SKU "${r.sku}" duplicated in this file (first at row ${seenSkuInFile.get(skuKey)})` };
@@ -401,6 +470,20 @@ export default function ProductsPage() {
     () => enrichWithSkuErrors(rawImportRows, importMode),
     [rawImportRows, importMode, enrichWithSkuErrors]
   );
+
+  // Count of continuation (variant) rows per parent row number — used in preview table
+  const variantCountByRowNum = useMemo(() => {
+    const map = new Map<number, number>();
+    let lastParentRowNum = -1;
+    for (const row of importRows) {
+      if (row._isContinuation) {
+        map.set(lastParentRowNum, (map.get(lastParentRowNum) ?? 0) + 1);
+      } else {
+        lastParentRowNum = row._rowNum;
+      }
+    }
+    return map;
+  }, [importRows]);
 
   const resetImport = () => {
     setImportOpen(false);
@@ -494,17 +577,23 @@ export default function ProductsPage() {
 
   const confirmImport = () => {
     // Snapshot importRows NOW, before any async re-renders change it
-    const snapshot  = importRows;
-    const valid     = snapshot.filter(r => !r._error);
-    const invalid   = snapshot.filter(r => !!r._error);
-    const total     = snapshot.length;
+    const snapshot     = importRows;
+    const valid        = snapshot.filter(r => !r._error);
+    const invalid      = snapshot.filter(r => !!r._error);
+    // Parent rows drive product creation; continuation rows are variant data only
+    const validParents = valid.filter(r => !r._isContinuation);
 
-    // Diagnostic — helps identify stale-mode or stale-products issues
-    console.info(
-      `[import] mode=${importMode} total=${total} valid=${valid.length} invalid=${invalid.length}` +
-      ` new=${valid.filter(r => !r._updateId).length} update=${valid.filter(r => !!r._updateId).length}`,
-    );
-    const BATCH     = 30;
+    // Build a map of continuation rows keyed by parent SKU/name
+    const continuationsByKey = new Map<string, ImportRow[]>();
+    valid.filter(r => r._isContinuation).forEach(r => {
+      const key = (r.sku.trim() || r.name.trim()).toLowerCase();
+      if (!continuationsByKey.has(key)) continuationsByKey.set(key, []);
+      continuationsByKey.get(key)!.push(r);
+    });
+
+    const total = validParents.length + invalid.length;
+
+    const BATCH = 30;
 
     setImporting(true);
     setImportedRowNums(new Set());
@@ -527,8 +616,8 @@ export default function ProductsPage() {
     // the QuotaExceededError that occurs when writing 30 + 30 + 30 … times
     // with an ever-growing product list.
     type RowPayload = Omit<Product, "id" | "createdAt" | "updatedAt">;
-    const allToCreate: { row: (typeof valid)[0]; payload: RowPayload }[] = [];
-    const allToUpdate: { row: (typeof valid)[0]; id: string; payload: Partial<Omit<Product, "id" | "createdAt">> }[] = [];
+    const allToCreate: { row: ImportRow; payload: RowPayload }[] = [];
+    const allToUpdate: { row: ImportRow; id: string; payload: Partial<Omit<Product, "id" | "createdAt">> }[] = [];
 
     let batchIdx = 0;
     const batchRowResults   = new Map<number, "created" | "updated">();
@@ -536,10 +625,44 @@ export default function ProductsPage() {
 
     const processBatch = async () => {
       try {
-        const slice = valid.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
+        const slice = validParents.slice(batchIdx * BATCH, (batchIdx + 1) * BATCH);
 
         // Classify rows — pure in-memory, no I/O
         for (const r of slice) {
+          // Gather continuation rows for this parent (same SKU/name key)
+          const parentKey  = (r.sku.trim() || r.name.trim()).toLowerCase();
+          const groupRows  = [r, ...(continuationsByKey.get(parentKey) ?? [])];
+
+          // Build variants array if any row in the group has attribute data
+          const hasVariants = groupRows.some(gr => gr.variantAttr1Name?.trim());
+          let variants: ProductVariant[] | undefined;
+          let productAttributes: string[] | undefined;
+          if (hasVariants) {
+            variants = groupRows
+              .filter(gr => gr.variantAttr1Name?.trim())
+              .map(gr => {
+                const attrs: Record<string, string> = {};
+                if (gr.variantAttr1Name?.trim()) attrs[gr.variantAttr1Name.trim()] = gr.variantAttr1Value?.trim() ?? "";
+                if (gr.variantAttr2Name?.trim()) attrs[gr.variantAttr2Name.trim()] = gr.variantAttr2Value?.trim() ?? "";
+                if (gr.variantAttr3Name?.trim()) attrs[gr.variantAttr3Name.trim()] = gr.variantAttr3Value?.trim() ?? "";
+                return {
+                  id: crypto.randomUUID(),
+                  attributes: attrs,
+                  sku:              gr.variantSku?.trim()           || undefined,
+                  barcode:          gr.variantBarcode?.trim()        || undefined,
+                  price:            gr.variantPrice?.trim()          || r.price || "0",
+                  purchasePrice:    gr.variantPurchasePrice?.trim()  || undefined,
+                  costPrice:        gr.variantCostPrice?.trim()      || undefined,
+                  wholesalePrice:   gr.variantWholesalePrice?.trim() || undefined,
+                  stock:            gr.variantStock?.trim()          || undefined,
+                  condition:        gr.variantCondition?.trim()      || undefined,
+                } satisfies ProductVariant;
+              });
+            const attrNameSet = new Set<string>();
+            variants.forEach(v => Object.keys(v.attributes).forEach(k => attrNameSet.add(k)));
+            productAttributes = [...attrNameSet];
+          }
+
           const payload: RowPayload = {
             name: r.name, sku: r.sku, brand: r.brand, category: r.category,
             subcategory: r.subcategory,
@@ -552,12 +675,13 @@ export default function ProductsPage() {
             status: (r.status as Product["status"]) || "Active",
             condition: (r.condition as Product["condition"]) || undefined,
             description: r.description,
+            ...(variants ? { variants, productAttributes } : {}),
           };
           if (r._updateId) allToUpdate.push({ row: r, id: r._updateId, payload });
           else             allToCreate.push({ row: r, payload });
         }
 
-        // Track per-row UI state for this batch tick
+        // Track per-row UI state for this batch tick (parent rows only)
         for (const r of slice) {
           const label = r._updateId ? "updated" : "created";
           batchRowResults.set(r._rowNum, label);
@@ -565,14 +689,14 @@ export default function ProductsPage() {
         }
 
         batchIdx++;
-        const done = Math.min(batchIdx * BATCH, valid.length) + invalid.length;
+        const done = Math.min(batchIdx * BATCH, validParents.length) + invalid.length;
         const created = allToCreate.length;
         const updated = allToUpdate.length;
         setImportProgress({ total, done, created, updated, failed: invalid.length });
         setImportedRowNums(new Set(batchImportedNums));
         setImportRowResults(new Map(batchRowResults));
 
-        if (batchIdx * BATCH < valid.length) {
+        if (batchIdx * BATCH < validParents.length) {
           // More batches — keep ticking for UI progress
           setTimeout(processBatch, 0);
           return;
@@ -1128,26 +1252,32 @@ export default function ProductsPage() {
             {/* Column 3 — Multiple variants */}
             <div className="space-y-2.5">
               <p className="font-semibold text-primary uppercase tracking-wide text-[10px]">Multiple Variants (Sizes, Colours, etc.)</p>
-              <p className="text-muted-foreground leading-relaxed">Each variant is a <span className="font-semibold text-foreground">separate row</span>. Every row must have its own unique SKU — add a suffix to the base code for each variant:</p>
-              <div className="rounded bg-muted/60 border border-border divide-y divide-border font-mono text-[10.5px] text-foreground overflow-hidden">
-                <div className="grid grid-cols-2 gap-2 px-3 py-1.5 bg-muted/80 text-[9px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">
-                  <span>Name (one row each)</span><span>SKU</span>
+              <p className="text-muted-foreground leading-relaxed">Use <span className="font-semibold text-foreground">the same parent SKU</span> across rows — each row adds a variant. Fill the variant columns on the right side of the template:</p>
+              <div className="rounded bg-muted/60 border border-border divide-y divide-border text-[10px] text-foreground overflow-hidden">
+                <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-muted/80 text-[9px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>name / sku</span><span>variantAttr1Name · Value</span><span>variantSku</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
-                  <span>T-Shirt Blue – S</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-S</span>
+                <div className="grid grid-cols-3 gap-1 px-3 py-1.5 font-mono">
+                  <span className="truncate">T-Shirt / TSH-001</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">Color · Red</span>
+                  <span className="text-blue-600 dark:text-blue-400">TSH-001-RED</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
-                  <span>T-Shirt Blue – M</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-M</span>
+                <div className="grid grid-cols-3 gap-1 px-3 py-1.5 font-mono bg-indigo-50/40 dark:bg-indigo-950/10">
+                  <span className="text-indigo-400 truncate">↳ T-Shirt / TSH-001</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">Color · Blue</span>
+                  <span className="text-blue-600 dark:text-blue-400">TSH-001-BLU</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
-                  <span>T-Shirt Blue – L</span><span className="text-blue-600 dark:text-blue-400">TSH-BLU-L</span>
+                <div className="grid grid-cols-3 gap-1 px-3 py-1.5 font-mono bg-indigo-50/40 dark:bg-indigo-950/10">
+                  <span className="text-indigo-400 truncate">↳ T-Shirt / TSH-001</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">Color · Green</span>
+                  <span className="text-blue-600 dark:text-blue-400">TSH-001-GRN</span>
                 </div>
               </div>
-              <div className="rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
-                <p className="font-semibold">What is a SKU?</p>
-                <p className="leading-relaxed">A <span className="font-semibold">SKU (Stock Keeping Unit)</span> is a short unique code you assign to identify each product or variant. It must be <span className="font-semibold">unique across all rows</span> — no two products can share one. A common format is <span className="font-mono">BRAND-PRODUCT-VARIANT</span> (e.g. <span className="font-mono">TSH-BLU-M</span> = T-Shirt, Blue, Medium).</p>
+              <div className="rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300 space-y-1">
+                <p className="font-semibold">Variant columns (added after the standard columns):</p>
+                <p className="leading-relaxed font-mono text-[10px]">variantAttr1Name · variantAttr1Value · variantAttr2Name · variantAttr2Value · variantSku · variantPrice · variantStock · variantCondition</p>
               </div>
-              <p className="text-[11px] text-muted-foreground/70">Keep <span className="font-semibold">Brand</span> and <span className="font-semibold">Category</span> the same across variants — each row has its own purchase, cost, and sale price.</p>
+              <p className="text-[11px] text-muted-foreground/70">Rows with the same parent SKU are grouped into one product with multiple variants. Each variant can have its own SKU, price and stock level. Download the <span className="font-semibold">Template</span> to see a working example.</p>
             </div>
 
           </div>
@@ -2398,10 +2528,10 @@ export default function ProductsPage() {
               </div>
               <p className="text-[11px] text-muted-foreground border border-dashed rounded-lg px-4 py-2.5 bg-muted/30 leading-relaxed max-w-md text-center">
                 Key columns: <code className="font-mono">name</code> (required) ·{" "}
-                <code className="font-mono">sku</code> · <code className="font-mono">category</code> ·{" "}
-                <code className="font-mono">subcategory</code> · <code className="font-mono">brand</code> ·{" "}
+                <code className="font-mono">sku</code> · <code className="font-mono">costPrice</code> ·{" "}
                 <code className="font-mono">retailPrice</code> · <code className="font-mono">status</code><br />
-                All other columns optional. Headers are flexible — alternative names accepted.
+                Variant columns: <code className="font-mono">variantAttr1Name</code> · <code className="font-mono">variantAttr1Value</code> · <code className="font-mono">variantSku</code> · <code className="font-mono">variantPrice</code><br />
+                Use multiple rows with the same SKU for multi-variant products. Download the template for a full example.
               </p>
             </div>
           ) : (
@@ -2409,13 +2539,20 @@ export default function ProductsPage() {
             <Fragment>
               {/* Summary bar */}
               <div className="px-6 py-3 border-b bg-muted/30 flex items-center gap-3 flex-wrap text-[12px]">
-                <span className="font-medium">{importRows.length} row{importRows.length !== 1 ? "s" : ""} detected</span>
                 {(() => {
-                  const newRows    = importRows.filter(r => !r._error && !r._updateId).length;
-                  const updateRows = importRows.filter(r => !r._error && !!r._updateId).length;
-                  const errorRows  = importRows.filter(r => !!r._error).length;
+                  const parentRows  = importRows.filter(r => !r._isContinuation);
+                  const contRows    = importRows.filter(r => !!r._isContinuation);
+                  const newRows     = parentRows.filter(r => !r._error && !r._updateId).length;
+                  const updateRows  = parentRows.filter(r => !r._error && !!r._updateId).length;
+                  const errorRows   = parentRows.filter(r => !!r._error).length;
                   return (
                     <>
+                      <span className="font-medium">{parentRows.length} product{parentRows.length !== 1 ? "s" : ""}</span>
+                      {contRows.length > 0 && (
+                        <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+                          · {contRows.length} variant row{contRows.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
                       {newRows > 0 && <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 size={12} />{newRows} new</span>}
                       {updateRows > 0 && <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium"><RefreshCw size={12} />{updateRows} will update</span>}
                       {errorRows > 0 && <span className="flex items-center gap-1 text-red-500 dark:text-red-400 font-medium"><AlertCircle size={12} />{errorRows} skipped (errors)</span>}
@@ -2479,13 +2616,38 @@ export default function ProductsPage() {
                   </thead>
                   <tbody>
                     {importRows.map(row => {
+                      // ── Continuation (variant) row — rendered as indented sub-row ──
+                      if (row._isContinuation) {
+                        const attrs = [
+                          row.variantAttr1Name && row.variantAttr1Value ? `${row.variantAttr1Name}: ${row.variantAttr1Value}` : null,
+                          row.variantAttr2Name && row.variantAttr2Value ? `${row.variantAttr2Name}: ${row.variantAttr2Value}` : null,
+                          row.variantAttr3Name && row.variantAttr3Value ? `${row.variantAttr3Name}: ${row.variantAttr3Value}` : null,
+                        ].filter(Boolean).join(" · ");
+                        return (
+                          <tr key={row._rowNum} className="border-b bg-indigo-50/40 dark:bg-indigo-950/10">
+                            <td className="border-r px-3 py-1 text-indigo-400 font-mono text-center text-[11px]">↳</td>
+                            <td colSpan={CSV_HEADERS.length} className="border-r px-4 py-1 text-[11px]">
+                              <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold uppercase tracking-wide">Variant</span>
+                              <span className="text-indigo-700 dark:text-indigo-300 font-medium">{attrs || "—"}</span>
+                              {row.variantSku && <span className="ml-3 font-mono text-muted-foreground text-[10px]">SKU: {row.variantSku}</span>}
+                              {row.variantPrice && <span className="ml-3 text-emerald-600 dark:text-emerald-400 text-[10px]">Price: {row.variantPrice}</span>}
+                              {row.variantStock && <span className="ml-3 text-blue-600 dark:text-blue-400 text-[10px]">Stock: {row.variantStock}</span>}
+                              {row.variantCondition && <span className="ml-3 text-amber-600 dark:text-amber-400 text-[10px]">{row.variantCondition}</span>}
+                            </td>
+                            <td className="px-3 py-1 text-[10px] text-indigo-400 italic whitespace-nowrap">variant row</td>
+                          </tr>
+                        );
+                      }
+
+                      // ── Regular (parent) row ──
                       const rowResult = importRowResults.get(row._rowNum);
+                      const variantCount = variantCountByRowNum.get(row._rowNum) ?? 0;
                       let rowBg = "";
-                      if (row._error)             rowBg = "bg-red-50/60 dark:bg-red-950/20";
+                      if (row._error)                  rowBg = "bg-red-50/60 dark:bg-red-950/20";
                       else if (rowResult === "created") rowBg = "bg-emerald-50/70 dark:bg-emerald-950/20";
                       else if (rowResult === "updated") rowBg = "bg-indigo-50/70 dark:bg-indigo-950/20";
-                      else if (row._updateId)     rowBg = "bg-blue-50/40 dark:bg-blue-950/10";
-                      else                        rowBg = "hover:bg-muted/20";
+                      else if (row._updateId)          rowBg = "bg-blue-50/40 dark:bg-blue-950/10";
+                      else                             rowBg = "hover:bg-muted/20";
 
                       let statusTag: React.ReactNode;
                       if (row._error) {
@@ -2528,7 +2690,16 @@ export default function ProductsPage() {
                               {row[h] || <span className="text-muted-foreground/40">—</span>}
                             </td>
                           ))}
-                          <td className="px-3 py-1.5 whitespace-nowrap">{statusTag}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {statusTag}
+                              {variantCount > 0 && !row._error && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold">
+                                  +{variantCount} var
+                                </span>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
