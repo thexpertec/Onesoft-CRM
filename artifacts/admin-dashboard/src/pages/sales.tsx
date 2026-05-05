@@ -588,9 +588,9 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
 
   return (
     <Dialog open={!!product} onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-[820px] w-[95vw] p-0 overflow-hidden rounded-2xl gap-0">
-        {/* Header */}
-        <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800">
+      <DialogContent className="max-w-[820px] w-[95vw] p-0 overflow-hidden rounded-2xl gap-0 flex flex-col max-h-[90vh]">
+        {/* Header — fixed */}
+        <div className="flex-shrink-0 flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800">
           {product.thumbnail && (
             <img src={product.thumbnail} alt={product.name}
               className="w-14 h-14 rounded-xl object-cover border border-gray-200 dark:border-zinc-700 flex-shrink-0" />
@@ -608,8 +608,8 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
           </div>
         </div>
 
-        {/* Variant chips */}
-        <div className="px-5 pt-4 pb-3 max-h-[55vh] overflow-y-auto">
+        {/* Variant chips — scrollable, fills available space */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-4 pb-3">
           {attrName && (
             <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2.5">
               Choose {attrName}:
@@ -636,12 +636,10 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
                         ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40 shadow-sm"
                         : "border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm"
                   }`}>
-                  {/* Variant image if present */}
                   {v.image && (
                     <img src={v.image} alt={label}
                       className="w-10 h-10 object-cover rounded-lg mb-1 border border-gray-100 dark:border-zinc-700" />
                   )}
-                  {/* Selection tick */}
                   {isSelected && (
                     <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
                       <Check size={9} strokeWidth={3} className="text-white" />
@@ -668,64 +666,65 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
           </div>
         </div>
 
-        {/* Selected info + qty stepper */}
-        {selected && (
-          <div className="px-5 pb-4 space-y-3">
-            <div className="flex items-center gap-4 py-2.5 px-3.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-gray-500 dark:text-zinc-400">Selected</p>
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">{variantLabel(selected)}</p>
-                <p className={`text-[13px] font-extrabold font-mono tabular-nums ${
-                  priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400"
-                  : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400"
-                  : "text-emerald-600 dark:text-emerald-400"
-                }`}>{curr}{parseFloat(resolvedPrice(selected) || "0").toFixed(dp)}</p>
-              </div>
-              {selAvailable !== null && (
-                <div className="text-right">
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500">Stock</p>
-                  <p className={`text-[13px] font-bold tabular-nums ${
-                    selAvailable <= 0 ? "text-red-500" : selAvailable <= 5 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
-                  }`}>{selAvailable}</p>
+        {/* Bottom panel — fixed, never pushed off screen */}
+        <div className="flex-shrink-0 border-t border-gray-100 dark:border-zinc-800">
+          {/* Selected info + qty stepper */}
+          {selected && (
+            <div className="px-5 pt-3 pb-3 space-y-3">
+              <div className="flex items-center gap-4 py-2 px-3.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-gray-500 dark:text-zinc-400">Selected</p>
+                  <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">{variantLabel(selected)}</p>
+                  <p className={`text-[13px] font-extrabold font-mono tabular-nums ${
+                    priceMode === "wholesale" ? "text-purple-600 dark:text-purple-400"
+                    : priceMode === "clubcard" ? "text-teal-600 dark:text-teal-400"
+                    : "text-emerald-600 dark:text-emerald-400"
+                  }`}>{curr}{parseFloat(resolvedPrice(selected) || "0").toFixed(dp)}</p>
                 </div>
-              )}
+                <div className="flex items-center gap-3">
+                  {selAvailable !== null && (
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">Stock</p>
+                      <p className={`text-[13px] font-bold tabular-nums ${
+                        selAvailable <= 0 ? "text-red-500" : selAvailable <= 5 ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
+                      }`}>{selAvailable}</p>
+                    </div>
+                  )}
+                  {/* Qty stepper inline */}
+                  <div className="flex items-center gap-0">
+                    <button onClick={() => setQty(q => Math.max(1, q - 1))}
+                      className="w-8 h-8 rounded-l-lg border border-r-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
+                      <Minus size={13} strokeWidth={2.5} />
+                    </button>
+                    <div className="w-10 h-8 border-y border-gray-200 dark:border-zinc-700 flex items-center justify-center text-[14px] font-bold text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-900 tabular-nums select-none">
+                      {qty}
+                    </div>
+                    <button onClick={() => setQty(q => q + 1)}
+                      className="w-8 h-8 rounded-r-lg border border-l-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
+                      <Plus size={13} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* Qty stepper */}
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-gray-600 dark:text-zinc-300">Quantity</span>
-              <div className="flex items-center gap-0">
-                <button onClick={() => setQty(q => Math.max(1, q - 1))}
-                  className="w-9 h-9 rounded-l-xl border border-r-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
-                  <Minus size={14} strokeWidth={2.5} />
-                </button>
-                <div className="w-12 h-9 border-y border-gray-200 dark:border-zinc-700 flex items-center justify-center text-[15px] font-bold text-gray-900 dark:text-gray-100 bg-white dark:bg-zinc-900 tabular-nums select-none">
-                  {qty}
-                </div>
-                <button onClick={() => setQty(q => q + 1)}
-                  className="w-9 h-9 rounded-r-xl border border-l-0 border-gray-200 dark:border-zinc-700 flex items-center justify-center text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 active:bg-gray-200 transition-colors">
-                  <Plus size={14} strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
+          {/* Footer */}
+          <div className="px-5 pb-5 pt-1 flex flex-col gap-2">
+            <Button
+              onClick={handleAdd}
+              disabled={!selected}
+              className="w-full h-11 text-[14px] font-bold rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
+              <ShoppingCart size={16} />
+              {selected ? `Add ${qty > 1 ? `${qty}×` : ""} ${variantLabel(selected)} to Cart` : "Select a variant above"}
+            </Button>
+            <button
+              onClick={() => { onAddBase(product); onClose(); }}
+              className="text-[11px] text-gray-400 dark:text-zinc-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors py-1 text-center w-full">
+              Add base product without variant
+            </button>
           </div>
-        )}
-
-        {/* Footer */}
-        <DialogFooter className="px-5 pb-5 pt-2 flex-col gap-2 sm:flex-col">
-          <Button
-            onClick={handleAdd}
-            disabled={!selected}
-            className="w-full h-12 text-[14px] font-bold rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
-            <ShoppingCart size={16} />
-            {selected ? `Add ${qty > 1 ? `${qty}×` : ""} ${variantLabel(selected)} to Cart` : "Select a variant above"}
-          </Button>
-          <button
-            onClick={() => { onAddBase(product); onClose(); }}
-            className="text-[11px] text-gray-400 dark:text-zinc-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors py-1 text-center w-full">
-            Add base product without variant
-          </button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
