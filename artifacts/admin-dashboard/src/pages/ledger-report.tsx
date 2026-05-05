@@ -7,7 +7,7 @@ import { Account, getSettings, reconcileAccountingData, SYS_ACCS } from "@/lib/s
 import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
-  ArrowDownCircle, ArrowUpCircle,
+  ArrowDownCircle, ArrowUpCircle, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -775,12 +775,21 @@ export default function LedgerReportPage() {
                   )}
                   {rows.map((row, i) => (
                     <tr key={i}
-                      className={`border-b border-border/60 transition-colors hover:bg-muted/30
+                      className={`border-b border-border/60 transition-colors hover:bg-muted/30 group
                         ${i % 2 === 0 ? "" : "bg-muted/10"}`}
                     >
                       <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-medium whitespace-nowrap">{row.date}</td>
                       <td className="px-4 py-2.5">
-                        <span className="text-[12px] font-mono font-semibold text-primary">{row.reference}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[12px] font-mono font-semibold text-primary">{row.reference}</span>
+                          <button
+                            title={`Edit journal entry ${row.reference}`}
+                            onClick={() => navigate(`/journal-entry?q=${encodeURIComponent(row.reference)}`)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="text-[13px] font-medium text-foreground leading-tight">{row.description}</div>
