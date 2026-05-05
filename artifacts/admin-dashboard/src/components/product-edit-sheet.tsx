@@ -683,13 +683,9 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
 
           <Divider label="Variants" />
 
-          {allAttrs.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground text-center py-2">
-              No attributes with values yet — go to <strong>Attributes</strong> and add comma-separated values.
-            </p>
-          ) : (
+          {/* ── Attribute catalog selector (only when catalog has entries) ── */}
+          {allAttrs.length > 0 && (
             <div className="space-y-3">
-              {/* ── Attribute type selector ── */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select one attribute</label>
                 <div className="flex flex-wrap gap-2">
@@ -711,7 +707,6 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 </div>
               </div>
 
-              {/* ── Value chips — shown when an attribute is selected ── */}
               {selectedAttrName && attrValues.length > 0 && (
                 <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
@@ -751,100 +746,111 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                 </div>
               )}
 
-              {variants.length > 0 && (
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-2 w-[16%]">Variant Name</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[19%]">SKU</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[16%]">Model</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[22%]">Barcode</th>
-                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Purchase ({sym})</th>
-                        <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Retail ({sym})</th>
-                        <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[7%]">Image</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {variants.map(v => {
-                        const label = Object.values(v.attributes)[0] ?? "—";
-                        return (
-                          <tr key={v.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-3 py-1.5">
-                              <span className="block text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
-                                {label}
-                              </span>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Input value={v.sku ?? ""} onChange={e => patchVariantSku(v.id, e.target.value)}
-                                placeholder="SKU…" className="h-7 w-full text-xs font-mono px-2" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Input value={v.model ?? ""} onChange={e => patchVariantModel(v.id, e.target.value)}
-                                placeholder="Model…" className="h-7 w-full text-xs px-2" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex items-center gap-1">
-                                <Input value={v.barcode ?? ""} onChange={e => patchVariantBarcode(v.id, e.target.value)}
-                                  placeholder="Point scanner or generate…"
-                                  className="h-7 flex-1 min-w-0 text-xs font-mono px-2" />
-                                <button type="button" title="Auto-generate EAN-13"
-                                  onClick={() => patchVariantBarcode(v.id, generateEan13())}
-                                  className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 text-muted-foreground hover:text-blue-600 transition-colors">
-                                  <Wand2 size={11} />
-                                </button>
-                                <button type="button" title="Print barcode label"
-                                  onClick={() => printBarcodeLabels([{ name: `${form.name || "Variant"} – ${label}`, barcode: v.barcode || generateEan13(), sku: v.sku || undefined, price: v.price || undefined }])}
-                                  className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition-colors">
-                                  <Printer size={11} />
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Input type="number" min="0" step="0.01"
-                                value={v.purchasePrice ?? ""}
-                                onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
-                                placeholder={form.purchasePrice || "0.00"}
-                                className="h-7 w-full text-xs tabular-nums text-right px-2" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Input type="number" min="0" step="0.01"
-                                value={v.price}
-                                onChange={e => patchVariantPrice(v.id, e.target.value)}
-                                placeholder={form.price || "0.00"}
-                                className="h-7 w-full text-xs tabular-nums text-right px-2" />
-                            </td>
-                            <td className="px-1 py-1.5">
-                              <div className="flex items-center gap-0.5 justify-center">
-                                <button type="button" onClick={() => setPickerVariantId(v.id)} title={v.image ? "Change image" : "Add image"}
-                                  className="flex items-center justify-center h-7 w-7 shrink-0 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-muted-foreground hover:text-blue-600">
-                                  {v.image ? (
-                                    <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover" />
-                                  ) : (
-                                    <ImageIcon size={12} className="opacity-50" />
-                                  )}
-                                </button>
-                                {v.image && (
-                                  <button type="button" onClick={() => patchVariantImage(v.id, "")} title="Remove image"
-                                    className="w-4 h-4 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors">
-                                    <X size={8} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
               {selectedAttrName && variants.length === 0 && (
                 <p className="text-[11px] text-muted-foreground text-center py-1">
                   This attribute has no values defined yet.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* ── Guide: no catalog AND no existing variants ── */}
+          {allAttrs.length === 0 && variants.length === 0 && (
+            <p className="text-[11px] text-muted-foreground text-center py-2">
+              No attributes with values yet — go to <strong>Attributes</strong> and add comma-separated values.
+            </p>
+          )}
+
+          {/* ── Variants table — always visible when product has variants (incl. imported) ── */}
+          {variants.length > 0 && (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-2 w-[16%]">Variant Name</th>
+                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[19%]">SKU</th>
+                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[16%]">Model</th>
+                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[22%]">Barcode</th>
+                    <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Purchase ({sym})</th>
+                    <th className="text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[10%]">Retail ({sym})</th>
+                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-2 w-[7%]">Image</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {variants.map(v => {
+                    const attrEntries = Object.entries(v.attributes);
+                    const label = attrEntries.length > 0
+                      ? attrEntries.map(([k, val]) => `${k}: ${val}`).join(" · ")
+                      : (v.model ?? "—");
+                    return (
+                      <tr key={v.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-1.5">
+                          <span className="block text-[12px] font-medium px-2 py-0.5 rounded-full text-center truncate text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50">
+                            {label}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={v.sku ?? ""} onChange={e => patchVariantSku(v.id, e.target.value)}
+                            placeholder="SKU…" className="h-7 w-full text-xs font-mono px-2" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={v.model ?? ""} onChange={e => patchVariantModel(v.id, e.target.value)}
+                            placeholder="Model…" className="h-7 w-full text-xs px-2" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex items-center gap-1">
+                            <Input value={v.barcode ?? ""} onChange={e => patchVariantBarcode(v.id, e.target.value)}
+                              placeholder="Point scanner or generate…"
+                              className="h-7 flex-1 min-w-0 text-xs font-mono px-2" />
+                            <button type="button" title="Auto-generate EAN-13"
+                              onClick={() => patchVariantBarcode(v.id, generateEan13())}
+                              className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 text-muted-foreground hover:text-blue-600 transition-colors">
+                              <Wand2 size={11} />
+                            </button>
+                            <button type="button" title="Print barcode label"
+                              onClick={() => printBarcodeLabels([{ name: `${form.name || "Variant"} – ${label}`, barcode: v.barcode || generateEan13(), sku: v.sku || undefined, price: v.price || undefined }])}
+                              className="h-7 w-7 shrink-0 flex items-center justify-center rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition-colors">
+                              <Printer size={11} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input type="number" min="0" step="0.01"
+                            value={v.purchasePrice ?? ""}
+                            onChange={e => patchVariantPurchasePrice(v.id, e.target.value)}
+                            placeholder={form.purchasePrice || "0.00"}
+                            className="h-7 w-full text-xs tabular-nums text-right px-2" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input type="number" min="0" step="0.01"
+                            value={v.price}
+                            onChange={e => patchVariantPrice(v.id, e.target.value)}
+                            placeholder={form.price || "0.00"}
+                            className="h-7 w-full text-xs tabular-nums text-right px-2" />
+                        </td>
+                        <td className="px-1 py-1.5">
+                          <div className="flex items-center gap-0.5 justify-center">
+                            <button type="button" onClick={() => setPickerVariantId(v.id)} title={v.image ? "Change image" : "Add image"}
+                              className="flex items-center justify-center h-7 w-7 shrink-0 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-muted-foreground hover:text-blue-600">
+                              {v.image ? (
+                                <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover" />
+                              ) : (
+                                <ImageIcon size={12} className="opacity-50" />
+                              )}
+                            </button>
+                            {v.image && (
+                              <button type="button" onClick={() => patchVariantImage(v.id, "")} title="Remove image"
+                                className="w-4 h-4 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors">
+                                <X size={8} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
 

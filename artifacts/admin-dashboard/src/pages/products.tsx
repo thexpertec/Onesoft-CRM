@@ -2397,8 +2397,20 @@ export default function ProductsPage() {
 
                       return <td key={c.field} className={cellCls} style={{ height: "36px" }}>{dash}</td>;
                     })}
-                    {/* Actions col placeholder */}
-                    <td className="sticky right-0 bg-blue-50/40 dark:bg-blue-950/10 border-l border-blue-100 dark:border-blue-900/30" style={{ height: "36px", width: 160 }} />
+                    {/* Actions: Edit opens parent product sheet */}
+                    <td className="sticky right-0 bg-blue-50/40 dark:bg-blue-950/10 border-l border-blue-100 dark:border-blue-900/30" style={{ height: "36px", width: 160 }} onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-center h-full px-2 gap-1.5">
+                        {can("Edit Products") && (
+                          <button
+                            className="flex items-center gap-1 h-6 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-[11px] font-semibold transition-colors"
+                            title="Edit parent product (all variants)"
+                            onClick={e => { e.stopPropagation(); setEditProdId(prod.id); }}
+                          >
+                            <Pencil size={11} /> Edit
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
