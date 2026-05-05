@@ -8,6 +8,7 @@ import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
   ArrowDownCircle, ArrowUpCircle, Pencil,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,6 +160,17 @@ export default function LedgerReportPage() {
   const [reconciling, setReconciling] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  function shiftPeriod(dir: 1 | -1) {
+    const d1 = new Date(from);
+    const d2 = new Date(to);
+    const days = Math.round((d2.getTime() - d1.getTime()) / 86400000) + 1;
+    const shift = dir * days;
+    d1.setDate(d1.getDate() + shift);
+    d2.setDate(d2.getDate() + shift);
+    setFrom(d1.toISOString().slice(0, 10));
+    setTo(d2.toISOString().slice(0, 10));
+  }
 
   function handleReconcile() {
     setReconciling(true);
@@ -545,11 +557,27 @@ export default function LedgerReportPage() {
         {/* Date range */}
         <div className="flex items-center gap-1.5">
           <Calendar size={14} className="text-muted-foreground" />
+          <button
+            type="button"
+            onClick={() => shiftPeriod(-1)}
+            title="Previous period"
+            className="h-9 w-8 flex items-center justify-center rounded-lg border border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
+          >
+            <ChevronLeft size={15} />
+          </button>
           <Input type="date" value={from} onChange={e => setFrom(e.target.value)}
             className="h-9 text-sm w-[140px]" />
           <span className="text-muted-foreground text-sm">to</span>
           <Input type="date" value={to} onChange={e => setTo(e.target.value)}
             className="h-9 text-sm w-[140px]" />
+          <button
+            type="button"
+            onClick={() => shiftPeriod(1)}
+            title="Next period"
+            className="h-9 w-8 flex items-center justify-center rounded-lg border border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
+          >
+            <ChevronRight size={15} />
+          </button>
         </div>
 
         {/* Status filter */}
