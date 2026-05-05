@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
   ArrowDownCircle, ArrowUpCircle, Pencil,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,6 +158,7 @@ export default function LedgerReportPage() {
   const [to, setTo] = useState(today());
   const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "draft">("posted");
   const [reconciling, setReconciling] = useState(false);
+  const [dateOrder, setDateOrder] = useState<"asc" | "desc">("asc");
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -763,7 +764,20 @@ export default function LedgerReportPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[100px]">Date</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() => setDateOrder(o => o === "asc" ? "desc" : "asc")}
+                        className="flex items-center gap-1 group/sort hover:text-foreground transition-colors"
+                        title={dateOrder === "asc" ? "Showing oldest first — click for newest first" : "Showing newest first — click for oldest first"}
+                      >
+                        Date
+                        <span className="flex flex-col -space-y-0.5">
+                          <ArrowUp size={9} className={dateOrder === "asc" ? "text-primary" : "text-muted-foreground/40 group-hover/sort:text-muted-foreground"} />
+                          <ArrowDown size={9} className={dateOrder === "desc" ? "text-primary" : "text-muted-foreground/40 group-hover/sort:text-muted-foreground"} />
+                        </span>
+                      </button>
+                    </th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[110px]">Ref #</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Description / Narration</th>
                     <th className="text-right px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[120px]">Debit</th>
@@ -801,7 +815,7 @@ export default function LedgerReportPage() {
                       </td>
                     </tr>
                   )}
-                  {rows.map((row, i) => (
+                  {(dateOrder === "desc" ? [...rows].reverse() : rows).map((row, i) => (
                     <tr key={i}
                       className={`border-b border-border/60 transition-colors hover:bg-muted/30 group
                         ${i % 2 === 0 ? "" : "bg-muted/10"}`}
