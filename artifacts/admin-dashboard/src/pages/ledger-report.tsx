@@ -784,7 +784,7 @@ export default function LedgerReportPage() {
                           <span className="text-[12px] font-mono font-semibold text-primary">{row.reference}</span>
                           <button
                             title={`Edit journal entry ${row.reference}`}
-                            onClick={() => navigate(`/journal-entry?q=${encodeURIComponent(row.reference)}`)}
+                            onClick={() => window.open(`/admin-dashboard/journal-entry?q=${encodeURIComponent(row.reference)}`, "_blank")}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
                           >
                             <Pencil size={11} />
