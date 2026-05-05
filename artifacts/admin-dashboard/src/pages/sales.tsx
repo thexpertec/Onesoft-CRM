@@ -588,7 +588,7 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
 
   return (
     <Dialog open={!!product} onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-[480px] p-0 overflow-hidden rounded-2xl gap-0">
+      <DialogContent className="max-w-[820px] w-[95vw] p-0 overflow-hidden rounded-2xl gap-0">
         {/* Header */}
         <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800">
           {product.thumbnail && (
@@ -609,13 +609,13 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
         </div>
 
         {/* Variant chips */}
-        <div className="px-5 pt-4 pb-3">
+        <div className="px-5 pt-4 pb-3 max-h-[55vh] overflow-y-auto">
           {attrName && (
             <p className="text-[11px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2.5">
               Choose {attrName}:
             </p>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
             {variants.map(v => {
               const label = variantLabel(v);
               const price = resolvedPrice(v);
