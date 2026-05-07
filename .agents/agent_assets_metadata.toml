@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ppy2W1VliJzbjc9k0NtXN"
+uri = "file://onesoft_production_dump.sql.gz"
+type = "unspecified"
+title = "Onesoft Production Database Dump (SQL)"
