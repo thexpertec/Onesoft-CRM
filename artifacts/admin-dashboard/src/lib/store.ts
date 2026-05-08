@@ -1806,6 +1806,10 @@ export function deleteMediaLibraryItem(id: string): void {
   setStored(MEDIA_LIBRARY_KEY, getMediaLibraryItems().filter(i => i.id !== id));
 }
 
+export function replaceAllMediaLibraryItems(items: MediaLibraryItem[]): void {
+  setStored(MEDIA_LIBRARY_KEY, items);
+}
+
 // ─── Products (catalogue) ─────────────────────────────────────────────────────
 const PRODUCTS_KEY = "admin-products";
 
@@ -2299,6 +2303,29 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
   _syncProductLedgers(items[i]);
   return items[i];
 };
+
+/**
+ * Bulk-replace only the image fields (thumbnail / images / variants) for a
+ * set of products without triggering SKU validation or cost-price checks.
+ * Used exclusively by the WebP bulk-conversion flow in the media library.
+ */
+export function bulkReplaceProductImages(
+  updates: { id: string; thumbnail?: string; images?: string[]; variants?: Product["variants"] }[]
+): void {
+  const all = getProducts();
+  let changed = false;
+  for (const u of updates) {
+    const i = all.findIndex(p => p.id === u.id);
+    if (i === -1) continue;
+    const next = { ...all[i], updatedAt: new Date().toISOString() };
+    if (u.thumbnail !== undefined) next.thumbnail = u.thumbnail;
+    if (u.images    !== undefined) next.images    = u.images;
+    if (u.variants  !== undefined) next.variants  = u.variants;
+    all[i] = next;
+    changed = true;
+  }
+  if (changed) setStored(PRODUCTS_KEY, all);
+}
 
 export const deleteProduct = (id: string): void => {
   const item = getProducts().find(p => p.id === id);
