@@ -353,7 +353,8 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
+const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
@@ -660,12 +661,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Role-based salary structures"         }] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Allowances",  href: "/salary-allowances", icon: TrendingUp,     desc: "Allowance categories & account groups"}] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Deductions",  href: "/salary-deductions", icon: TrendingDown,   desc: "Deduction categories & types"         }] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Advance Salary",     href: "/advance-salary",    icon: Banknote,       desc: "Staff advance salary payments"        }] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "My Application",     href: "/my-application",    icon: FileText,       desc: "My advance salary requests"           }] : []),
-    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Manage Applications",href: "/manage-application",icon: ClipboardList,  desc: "Review & approve applications"        }] : []),
+    ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Templates, allowances, deductions & advances" }] : []),
     ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",         href: "/attendance",        icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
     { label: "Sales Agents",          href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
     { label: "Agent Performance",     href: "/agent-performance", icon: BarChart3, desc: "Revenue, targets & commission" },
@@ -680,14 +676,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org", icon: Building2, desc: "Org chart & job descriptions"        }] : []),
   ];
   const hrmPayrollLinks = [
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",   href: "/salary",             icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Templates",   href: "/salary-template",    icon: FileText,       desc: "Role-based salary structures"          }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Allowances",         href: "/salary-allowances",  icon: TrendingUp,     desc: "Allowance categories & account groups"  }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Deductions",         href: "/salary-deductions",  icon: TrendingDown,   desc: "Deduction categories & types"          }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Advance Salary",     href: "/advance-salary",     icon: Banknote,       desc: "Staff advance salary payments"         }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "My Application",     href: "/my-application",     icon: FileText,       desc: "My advance salary requests"            }] : []),
-    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Manage Applications",href: "/manage-application", icon: ClipboardList,  desc: "Review & approve applications"         }] : []),
-    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",         href: "/attendance",         icon: CalendarCheck2, desc: "Daily & bulk attendance marking"       }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
+    ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Templates, allowances, deductions & advances" }] : []),
+    ...(isModuleAllowed("hrm_attendance") ? [{ label: "Attendance",         href: "/attendance",        icon: CalendarCheck2, desc: "Daily & bulk attendance marking"       }] : []),
   ];
   const hrmSalesTeamLinks = [
     { label: "Sales Agents",      href: "/sales-agents",      icon: Users2,    desc: "Manage agents & commissions"   },
@@ -745,7 +736,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isCrmActive           = CRM_ROUTES.some(r           => location === r || location.startsWith(r));
   const isProductsActive      = PRODUCTS_ROUTES.some(r      => location === r || location.startsWith(r));
   const isSalesActive         = SALES_ROUTES.some(r         => location === r || location.startsWith(r));
-  const isHrmActive           = HRM_ROUTES.some(r           => location === r || location.startsWith(r));
+  const isHrmActive             = HRM_ROUTES.some(r             => location === r || location.startsWith(r));
+  const isSalaryTemplateActive  = SALARY_TEMPLATE_ROUTES.some(r => location === r || location.startsWith(r));
   const isManufacturingActive = MANUFACTURING_ROUTES.some(r => location === r || location.startsWith(r));
   const isInvestmentsActive   = INVESTMENTS_ROUTES.some(r   => location === r || location.startsWith(r));
   const isAccountsActive      = ACCOUNTS_ROUTES.some(r      => location === r || location.startsWith(r));
@@ -1189,15 +1181,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
               {isModuleAllowed("hrm_salary") && (
                 <HrmTab href="/salary-template" icon={FileText} label="Salary Templates"
-                  active={location === "/salary-template"} />
-              )}
-              {isModuleAllowed("hrm_salary") && (
-                <HrmTab href="/salary-allowances" icon={TrendingUp} label="Allowances"
-                  active={location === "/salary-allowances"} />
-              )}
-              {isModuleAllowed("hrm_salary") && (
-                <HrmTab href="/salary-deductions" icon={TrendingDown} label="Deductions"
-                  active={location === "/salary-deductions"} />
+                  active={isSalaryTemplateActive} />
               )}
               {isModuleAllowed("hrm_attendance") && (
                 <HrmTab href="/attendance" icon={CalendarCheck2} label="Attendance"
@@ -1211,6 +1195,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <HrmTab href="/agent-performance" icon={BarChart3} label="Performance"
                 active={location === "/agent-performance"} />
 
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            ROW 4 — Salary Templates contextual sub-tab strip
+        ═══════════════════════════════════════════════════════════════ */}
+        {isSalaryTemplateActive && !isManager && isModuleAllowed("hrm_salary") && (
+          <div className="hidden md:block border-t border-blue-100 dark:border-blue-900/40 bg-blue-50/30 dark:bg-blue-950/10">
+            <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-stretch h-[32px] overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+              <HrmTab href="/salary-template"   icon={FileText}       label="Templates"
+                active={location === "/salary-template"}   />
+              <HrmTabDivider />
+              <HrmTab href="/salary-allowances" icon={TrendingUp}     label="Allowances"
+                active={location === "/salary-allowances"} />
+              <HrmTab href="/salary-deductions" icon={TrendingDown}   label="Deductions"
+                active={location === "/salary-deductions"} />
+              <HrmTabDivider />
+              <HrmTab href="/advance-salary"    icon={Banknote}       label="Advance Salary"
+                active={location === "/advance-salary"}    />
+              <HrmTab href="/my-application"    icon={FileText}       label="My Application"
+                active={location === "/my-application"}    />
+              <HrmTab href="/manage-application" icon={ClipboardList} label="Manage Applications"
+                active={location === "/manage-application"} />
             </div>
           </div>
         )}
