@@ -552,7 +552,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const settings    = useMemo(() => getSettings(), []);
   const legalDocs   = useMemo(() => settings.legalDocuments ?? [], [settings]);
   const productOpts = useMemo<ComboOption[]>(() => {
-    const prodOpts = products.map(p => ({
+    // In purchase mode: filter to supplier's linked products if the supplier has any configured
+    let availableProducts = products;
+    if (invoiceType === "purchase" && form.customer) {
+      const supplier = customers.find(c => c.name === form.customer && c.customerRole === "Supplier");
+      if (supplier?.supplierProducts?.length) {
+        const allowed = new Set(supplier.supplierProducts);
+        availableProducts = products.filter(p => allowed.has(p.id));
+      }
+    }
+
+    const prodOpts = availableProducts.map(p => ({
       value: p.name,
       label: p.name,
       sub:   [p.sku, p.brand].filter(Boolean).join(" · "),
@@ -566,7 +576,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       tag:   "Raw Material",
     }));
     return [...prodOpts, ...rmOpts];
-  }, [products, rawMaterials, invoiceType]);
+  }, [products, rawMaterials, invoiceType, form.customer, customers]);
 
   // Resolve variants for a line item — SKU is the canonical identifier
   const variantsForItem = useCallback((item: SaleItem): ProductVariant[] => {

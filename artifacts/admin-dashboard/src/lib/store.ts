@@ -646,6 +646,7 @@ export type Customer = {
   notes: string;
   tags: string[];
   ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Receivable
+  supplierProducts?: string[];  // product IDs this supplier supplies — filters purchase invoice dropdown
   createdAt: string;
   updatedAt: string;
 };

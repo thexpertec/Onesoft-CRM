@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useCustomers, useCities, useAreas } from "@/hooks/use-data";
-import { CustomerStatus, Address, isAddressEmpty, formatAddress } from "@/lib/store";
+import { CustomerStatus, Address, isAddressEmpty, formatAddress, getProducts } from "@/lib/store";
 import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, Truck, Copy } from "lucide-react";
+import { Plus, ArrowLeft, Truck, Copy, Search, X, PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,11 +14,11 @@ import { Combobox, ComboOption } from "@/components/combobox";
 
 const CUSTOMER_STATUSES: CustomerStatus[] = ["Active", "Inactive", "Churned"];
 
-const Divider = ({ label }: { label: string }) => (
+const Divider = ({ label, orange }: { label: string; orange?: boolean }) => (
   <div className="flex items-center gap-3 pt-1">
-    <div className="h-px flex-1 bg-border" />
-    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">{label}</span>
-    <div className="h-px flex-1 bg-border" />
+    <div className={`h-px flex-1 ${orange ? "bg-orange-200 dark:bg-orange-800/40" : "bg-border"}`} />
+    <span className={`text-[10px] font-bold uppercase tracking-widest shrink-0 ${orange ? "text-orange-500 dark:text-orange-400" : "text-muted-foreground"}`}>{label}</span>
+    <div className={`h-px flex-1 ${orange ? "bg-orange-200 dark:bg-orange-800/40" : "bg-border"}`} />
   </div>
 );
 
@@ -43,6 +43,8 @@ export default function SupplierNewPage() {
   const existingEmails = useMemo(() => new Set(customers.map(c => c.email?.toLowerCase()).filter(Boolean)), [customers]);
   const existingPhones = useMemo(() => new Set(customers.map(c => c.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [customers]);
 
+  const allProducts = useMemo(() => getProducts().filter(p => p.status !== "Inactive").sort((a, b) => a.name.localeCompare(b.name)), []);
+
   const BLANK = () => ({
     name: "", company: "", email: "", phone: "", industry: "",
     city: "", area: "", status: "Active" as CustomerStatus,
@@ -55,6 +57,19 @@ export default function SupplierNewPage() {
   const [billing,  setBilling]  = useState<Address>({ ...EMPTY_ADDRESS });
   const [shipping, setShipping] = useState<Address>({ ...EMPTY_ADDRESS });
   const [sameAddr, setSameAddr] = useState(true);
+
+  const [supplierProducts, setSupplierProducts] = useState<string[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.toLowerCase();
+    return allProducts.filter(p =>
+      !q || p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q)
+    );
+  }, [allProducts, productSearch]);
+
+  const toggleProduct = (id: string) =>
+    setSupplierProducts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleSubmit = () => {
     if (!form.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
@@ -84,6 +99,7 @@ export default function SupplierNewPage() {
       notes: form.notes.trim(), source: "direct",
       customerType: "Regular Customer",
       customerRole: "Supplier",
+      supplierProducts: supplierProducts.length > 0 ? supplierProducts : undefined,
       tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
       billingAddressDetails:  billingDetails,
       shippingAddressDetails: shippingDetails,
@@ -193,6 +209,103 @@ export default function SupplierNewPage() {
               <Input type="number" step="0.01" placeholder="0.00" value={form.openingBalance}
                 onChange={e => set("openingBalance", e.target.value)} className="h-9 text-sm tabular-nums" />
             </Field>
+          </div>
+
+          {/* ── Supplied Products ─────────────────────────────────────────── */}
+          <Divider label="Supplied Products" orange />
+
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[12px] text-muted-foreground leading-snug max-w-lg">
+                Select products this supplier provides. In a purchase invoice, only these products will appear in the item dropdown when this supplier is selected.
+                {allProducts.length === 0 && (
+                  <span className="block text-amber-600 dark:text-amber-400 mt-1">No products found — add products first from the Inventory page.</span>
+                )}
+              </p>
+              {supplierProducts.length > 0 && (
+                <button type="button" onClick={() => setSupplierProducts([])}
+                  className="shrink-0 text-[11px] text-rose-500 hover:text-rose-600 font-medium underline-offset-2 hover:underline">
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {supplierProducts.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {supplierProducts.map(pid => {
+                  const p = allProducts.find(x => x.id === pid);
+                  if (!p) return null;
+                  return (
+                    <span key={pid} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
+                      {p.name}
+                      <button type="button" onClick={() => toggleProduct(pid)} className="ml-0.5 hover:text-rose-600">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {allProducts.length > 0 && (
+              <div className="rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50/30 dark:bg-orange-950/10 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-orange-200 dark:border-orange-800/40">
+                  <Search size={13} className="text-orange-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search products…"
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    className="flex-1 text-[13px] bg-transparent outline-none placeholder:text-muted-foreground"
+                  />
+                  {productSearch && (
+                    <button type="button" onClick={() => setProductSearch("")} className="text-muted-foreground hover:text-foreground">
+                      <X size={12} />
+                    </button>
+                  )}
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {supplierProducts.length > 0 ? `${supplierProducts.length} selected` : ""}
+                  </span>
+                </div>
+
+                {filteredProducts.length === 0 ? (
+                  <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+                    <PackageSearch size={16} /> No products match "{productSearch}"
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto divide-y divide-orange-100 dark:divide-orange-900/30">
+                    {filteredProducts.map(p => {
+                      const checked = supplierProducts.includes(p.id);
+                      return (
+                        <label key={p.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${checked ? "bg-orange-100/60 dark:bg-orange-900/20" : "hover:bg-orange-50 dark:hover:bg-orange-950/10"}`}>
+                          <Checkbox checked={checked} onCheckedChange={() => toggleProduct(p.id)}
+                            className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-foreground truncate">{p.name}</p>
+                            {(p.sku || p.brand || p.category) && (
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {[p.sku, p.brand, p.category].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between px-3 py-2 border-t border-orange-200 dark:border-orange-800/40">
+                  <button type="button"
+                    onClick={() => setSupplierProducts(allProducts.map(p => p.id))}
+                    className="text-[11px] text-orange-600 dark:text-orange-400 hover:underline font-medium">
+                    Select all ({allProducts.length})
+                  </button>
+                  <span className="text-[11px] text-muted-foreground">
+                    {filteredProducts.length} of {allProducts.length} shown
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <Divider label="Billing Address" />
