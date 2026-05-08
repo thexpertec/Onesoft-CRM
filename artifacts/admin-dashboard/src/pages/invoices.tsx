@@ -554,11 +554,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const productOpts = useMemo<ComboOption[]>(() => {
     // In purchase mode: filter to supplier's linked products if the supplier has any configured
     let availableProducts = products;
+    let supplierHasLinkedProducts = false;
+
     if (invoiceType === "purchase" && form.customer) {
       const supplier = customers.find(c => c.name === form.customer && c.customerRole === "Supplier");
       if (supplier?.supplierProducts?.length) {
         const allowed = new Set(supplier.supplierProducts);
         availableProducts = products.filter(p => allowed.has(p.id));
+        supplierHasLinkedProducts = true;
       }
     }
 
@@ -568,7 +571,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       sub:   [p.sku, p.brand].filter(Boolean).join(" · "),
       tag:   p.category || undefined,
     }));
-    if (invoiceType !== "purchase") return prodOpts;
+
+    // Only show raw materials when no supplier product restriction is active
+    if (invoiceType !== "purchase" || supplierHasLinkedProducts) return prodOpts;
+
     const rmOpts = rawMaterials.map(r => ({
       value: `__rm__${r.id}`,
       label: r.name,
