@@ -7467,8 +7467,9 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         }
       } catch { /* malformed */ }
     }
-  } catch {
+  } catch (e) {
     // Network unavailable — in-memory cache from previous writes is used as fallback.
+    console.warn("[sync] syncAllFromServer failed:", e);
   }
 
   // Step 5 — Notify all data hooks so they re-render with the fresh server data.

@@ -15,6 +15,7 @@ import {
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
+  syncAllFromServer,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -413,9 +414,10 @@ export default function TenantsPage() {
   const [editing,     setEditing]     = useState<Tenant | null>(null);
   const [deleteId,    setDeleteId]    = useState<string | null>(null);
   const [statsCache,  setStatsCache]  = useState<Record<string, Record<string, number>>>({});
-  const [demoSeeded,  setDemoSeeded]  = useState(() => isDemoSeeded());
-  const [demoLoading, setDemoLoading] = useState(false);
-  const [seedingId,   setSeedingId]   = useState<string | null>(null);
+  const [demoSeeded,    setDemoSeeded]    = useState(() => isDemoSeeded());
+  const [demoLoading,   setDemoLoading]   = useState(false);
+  const [seedingId,     setSeedingId]     = useState<string | null>(null);
+  const [isRefreshing,  setIsRefreshing]  = useState(false);
 
   const reload = () => {
     setTenants(getTenants());
@@ -428,6 +430,31 @@ export default function TenantsPage() {
     if (!isSyncing) reload();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSyncing]);
+
+  // On mount: always pull the latest tenant list directly from the server so
+  // stale in-memory state (e.g. from a previous session or HMR update) is
+  // replaced with the real DB contents immediately.
+  useEffect(() => {
+    setIsRefreshing(true);
+    syncAllFromServer(null)
+      .then(() => reload())
+      .catch(() => {})
+      .finally(() => setIsRefreshing(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleManualRefresh() {
+    setIsRefreshing(true);
+    try {
+      await syncAllFromServer(null);
+      reload();
+      toast({ title: "Tenant list refreshed from server" });
+    } catch {
+      toast({ title: "Refresh failed", description: "Could not reach the server.", variant: "destructive" });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   function handleLoadDemo() {
     setDemoLoading(true);
@@ -633,6 +660,16 @@ export default function TenantsPage() {
               }
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="h-9 gap-1.5 text-[13px]"
+            title="Reload tenant list from database"
+          >
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+            {isRefreshing ? "Refreshing…" : "Refresh"}
+          </Button>
           <Button
             onClick={() => { setEditing(null); setModalOpen(true); }}
             className="h-9 gap-1.5 text-[13px] bg-blue-600 hover:bg-blue-700 text-white"
