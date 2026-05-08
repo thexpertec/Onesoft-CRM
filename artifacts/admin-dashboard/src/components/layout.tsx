@@ -1215,10 +1215,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <HrmTabDivider />
               <HrmTab href="/advance-salary"    icon={Banknote}       label="Advance Salary"
                 active={location === "/advance-salary"}    />
-              <HrmTab href="/my-application"    icon={FileText}       label="My Application"
-                active={location === "/my-application"}    />
-              <HrmTab href="/manage-application" icon={ClipboardList} label="Manage Applications"
-                active={location === "/manage-application"} />
             </div>
           </div>
         )}
