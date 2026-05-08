@@ -935,7 +935,7 @@ export function CheckoutPage() {
             <div key={item.product.id} className="flex gap-3 items-start">
               <div className="w-12 h-12 rounded-xl bg-gray-50 dark:bg-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-100 dark:border-slate-600">
                 {item.product.thumbnail
-                  ? <img src={item.product.thumbnail} alt={item.product.name} className="w-full h-full object-contain p-1" />
+                  ? <img src={item.product.thumbnail} alt={item.product.name} className="w-full h-full object-contain p-1" loading="lazy" />
                   : <ShoppingBag size={16} className="text-slate-300 dark:text-slate-500" />
                 }
               </div>

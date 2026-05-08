@@ -633,7 +633,7 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
         <div className="flex-shrink-0 flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800">
           {product.thumbnail && (
             <img src={product.thumbnail} alt={product.name}
-              className="w-14 h-14 rounded-xl object-cover border border-gray-200 dark:border-zinc-700 flex-shrink-0" />
+              className="w-14 h-14 rounded-xl object-cover border border-gray-200 dark:border-zinc-700 flex-shrink-0" loading="lazy" />
           )}
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-[15px] text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{product.name}</h2>
@@ -678,7 +678,7 @@ function VariantPickerDialog({ product, priceMode, localItems, onClose, onAdd, o
                   }`}>
                   {v.image && (
                     <img src={v.image} alt={label}
-                      className="w-10 h-10 object-cover rounded-lg mb-1 border border-gray-100 dark:border-zinc-700" />
+                      className="w-10 h-10 object-cover rounded-lg mb-1 border border-gray-100 dark:border-zinc-700" loading="lazy" />
                   )}
                   {isSelected && (
                     <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">

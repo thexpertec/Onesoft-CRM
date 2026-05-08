@@ -380,7 +380,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                   }`}
               >
                 {thumbnail ? (
-                  <img src={thumbnail} alt="Thumbnail" className="w-full h-full object-cover" />
+                  <img src={thumbnail} alt="Thumbnail" className="w-full h-full object-cover" loading="lazy" />
                 ) : (
                   <>
                     <ImageIcon size={24} className="text-muted-foreground/40" />
@@ -833,7 +833,7 @@ export function ProductEditSheet({ product, open, onClose, editProduct }: Props)
                             <button type="button" onClick={() => setPickerVariantId(v.id)} title={v.image ? "Change image" : "Add image"}
                               className="flex items-center justify-center h-7 w-7 shrink-0 rounded border border-dashed border-border bg-muted/40 hover:bg-blue-50 hover:border-blue-400 dark:hover:bg-blue-950/30 dark:hover:border-blue-600 transition-colors text-muted-foreground hover:text-blue-600">
                               {v.image ? (
-                                <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover" />
+                                <img src={v.image} alt={label} className="w-5 h-5 rounded object-cover" loading="lazy" />
                               ) : (
                                 <ImageIcon size={12} className="opacity-50" />
                               )}

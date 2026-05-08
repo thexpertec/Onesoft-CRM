@@ -80,7 +80,7 @@ export function ProductImagesDialog({ product, open, onClose, onSave }: Props) {
               {thumbnail ? (
                 <div className="flex items-start gap-4 p-4">
                   <img src={thumbnail} alt="Thumbnail"
-                    className="w-36 h-36 object-cover rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm flex-shrink-0" />
+                    className="w-36 h-36 object-cover rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm flex-shrink-0" loading="lazy" />
                   <div className="flex flex-col gap-2 mt-1">
                     <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Thumbnail set</span>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => openPicker("thumbnail")}>
@@ -135,7 +135,7 @@ export function ProductImagesDialog({ product, open, onClose, onSave }: Props) {
                 <div className="grid grid-cols-4 gap-2">
                   {images.map((img, i) => (
                     <div key={i} className="relative group rounded-lg overflow-hidden aspect-square bg-zinc-100 dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600">
-                      <img src={img} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
+                      <img src={img} alt={`Image ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
                       <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
                         <button onClick={() => promoteToThumb(i)} title="Set as thumbnail"
                           className="p-1.5 rounded-full bg-amber-500 text-white hover:bg-amber-600 transition-colors">

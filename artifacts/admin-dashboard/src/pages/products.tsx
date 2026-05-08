@@ -2150,7 +2150,7 @@ export default function ProductsPage() {
                     {/* IMG col */}
                     <td className="border-r border-blue-100 dark:border-blue-900/30 text-center align-middle p-1" style={{ height: "36px" }}>
                       {v.image ? (
-                        <img src={v.image} alt={attrLabel} className="w-8 h-8 object-cover rounded mx-auto border border-blue-200 dark:border-blue-800" />
+                        <img src={v.image} alt={attrLabel} className="w-8 h-8 object-cover rounded mx-auto border border-blue-200 dark:border-blue-800" loading="lazy" />
                       ) : (
                         <div className="w-8 h-8 rounded mx-auto bg-blue-100/60 dark:bg-blue-900/20 border border-dashed border-blue-200 dark:border-blue-800 flex items-center justify-center">
                           <Package size={10} className="text-blue-300 dark:text-blue-700" />
@@ -2895,7 +2895,7 @@ export default function ProductsPage() {
                 <div className="flex items-start gap-4">
                   {prod.thumbnail ? (
                     <img src={prod.thumbnail} alt={prod.name}
-                      className="w-16 h-16 rounded-xl object-cover border-2 border-white/30 shrink-0 shadow-lg" />
+                      className="w-16 h-16 rounded-xl object-cover border-2 border-white/30 shrink-0 shadow-lg" loading="lazy" />
                   ) : (
                     <div className="w-16 h-16 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
                       <Package size={28} className="text-white/60" />

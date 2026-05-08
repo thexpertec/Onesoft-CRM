@@ -98,7 +98,7 @@ export function CartDrawer() {
                 {/* Image */}
                 <div className="w-16 h-16 rounded-lg bg-gray-50 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
                   {item.product.thumbnail ? (
-                    <img src={item.product.thumbnail} alt={item.product.name} className="w-full h-full object-contain p-1" />
+                    <img src={item.product.thumbnail} alt={item.product.name} className="w-full h-full object-contain p-1" loading="lazy" />
                   ) : (
                     <div className="w-8 h-8 text-slate-300 dark:text-slate-600">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="100%" height="100%">
