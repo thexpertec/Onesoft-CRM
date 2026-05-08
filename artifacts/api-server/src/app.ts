@@ -17,10 +17,11 @@ app.use(compression());
 // in-memory store from populating on first load.
 app.set("etag", false);
 
-// Default: no caching for write endpoints and everything else.
-// Individual GET routes that benefit from caching set their own header.
+// Belt-and-suspenders: tell every caching layer not to store responses.
+// Individual GET routes that want browser caching override this header inside
+// their own handler (route handlers run after middleware, so the last setter wins).
 app.use((_req, res, next) => {
-  if (_req.method !== "GET") res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "no-store");
   next();
 });
 

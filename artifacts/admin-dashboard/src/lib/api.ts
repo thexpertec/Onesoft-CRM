@@ -16,28 +16,46 @@ function withTimeout(ms: number): AbortSignal {
 
 /**
  * Read fetch — swallows errors and returns null on failure.
- * Used for GET requests where in-memory cache is an acceptable fallback.
+ * Uses cache:"no-store" so the Replit deployment proxy (which used to return
+ * stale 304s based on its own ETag tracking) cannot interfere with reads.
  */
 async function apiFetch(url: string, options?: RequestInit) {
   try {
     const res = await fetch(url, {
       signal: withTimeout(READ_TIMEOUT_MS),
-      // Prevent browser (and Replit deployment proxy) from serving a cached
-      // 304 Not Modified response. Without this, a fresh page load gets null
-      // from kvGetAll and the in-memory store never populates from the server.
       cache: "no-store",
       ...options,
       headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
     });
-    // 304 means "your cached copy is still valid" — treat it as a clean no-op
-    // (in-memory store already has the data from a prior successful sync).
     if (res.status === 304) return null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Use "return await" so JSON parse errors are caught by the try/catch above.
     return await res.json();
   } catch (e) {
-    // Silently swallow network/timeout errors — in-memory cache is the fallback
     console.warn("[api]", url, e);
+    return null;
+  }
+}
+
+/**
+ * Cached read fetch — uses the browser's own HTTP cache with the server's
+ * stale-while-revalidate policy. Only safe to use on endpoints that set
+ * Cache-Control: private (preventing proxy caching) and have ETags disabled
+ * (preventing 304-with-no-body from the proxy).
+ * GET /api/kv/:namespace satisfies both conditions.
+ */
+async function apiFetchCached(url: string) {
+  try {
+    const res = await fetch(url, {
+      signal: withTimeout(READ_TIMEOUT_MS),
+      // "default" means: use the browser's HTTP cache, respecting the server's
+      // Cache-Control header (private, max-age=30, stale-while-revalidate=300).
+      cache: "default",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.warn("[api cached]", url, e);
     return null;
   }
 }
@@ -81,11 +99,11 @@ export async function kvDelete(namespace: string, key: string): Promise<void> {
   });
 }
 
-/** Fetch ALL key-value pairs for a namespace in one request. */
+/** Fetch ALL key-value pairs for a namespace in one request.
+ *  Uses the cached fetch so the browser serves stale data instantly on reload
+ *  while revalidating in the background (stale-while-revalidate=300). */
 export async function kvGetAll(namespace: string): Promise<Record<string, unknown> | null> {
-  // Use "return await" so any rejection from apiFetch propagates to the caller
-  // rather than being silently converted to a resolved-but-rejected promise chain.
-  return await apiFetch(`${BASE}/${encodeURIComponent(namespace)}`);
+  return await apiFetchCached(`${BASE}/${encodeURIComponent(namespace)}`);
 }
 
 /** Delete an entire namespace (used when a tenant is deleted).
