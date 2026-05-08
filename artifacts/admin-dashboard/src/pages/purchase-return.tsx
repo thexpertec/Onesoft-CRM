@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getInvoices, getPurchaseReturns, createPurchaseReturn, updatePurchaseReturn, deletePurchaseReturn,
@@ -524,9 +524,10 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: NewReturnSheetProps) {
 export default function PurchaseReturnPage() {
   const [, navigate]          = useLocation();
   const { toast }             = useToast();
+  const rawSearch             = useSearch();
   const [newOpen, setNewOpen] = useState(false);
   const [viewPr, setViewPr]   = useState<PurchaseReturn | null>(null);
-  const [search, setSearch]   = useState("");
+  const [search, setSearch]   = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [rev, setRev]         = useState(0);
   const reload = () => setRev(r => r + 1);
 

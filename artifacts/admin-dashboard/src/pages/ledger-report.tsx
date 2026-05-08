@@ -143,6 +143,85 @@ type LedgerRow = {
   isDebitNormal: boolean;
 };
 
+/**
+ * Resolve which app page originated a ledger entry and return the URL to open
+ * for viewing / editing it. Falls back to the journal-entry search page.
+ *
+ * Reference patterns created by the system:
+ *   AUTO-SAL-YYYYMM-NNN  →  POS Sale or Invoice Sale
+ *   AUTO-PO-YYYYMM-NNN   →  Purchase Receipt (purchase invoice)
+ *   AUTO-SR-YYYYMM-NNN   →  Sale Return
+ *   AUTO-PR-YYYYMM-NNN   →  Purchase Return
+ *   RV-NNNNNN / PV-NNNNNN → Receipt / Payment Voucher
+ *   JE-YYYYMM-NNN        →  Manual Journal Entry
+ */
+function resolveSourceUrl(reference: string, description: string): { url: string; title: string } {
+  const srcRef = reference.startsWith("AUTO-") ? reference.slice(5) : reference;
+  const desc   = description.trim();
+
+  // POS sale  →  /sales
+  if (desc.startsWith("POS Sale:") || desc.startsWith("POS –")) {
+    return {
+      url:   `/sales?q=${encodeURIComponent(srcRef)}`,
+      title: `Open POS Sale: ${srcRef}`,
+    };
+  }
+
+  // Invoice (credit) sale  →  /invoices
+  if (desc.startsWith("Invoice Sale:")) {
+    return {
+      url:   `/invoices?q=${encodeURIComponent(srcRef)}`,
+      title: `Open Invoice Sale: ${srcRef}`,
+    };
+  }
+
+  // Purchase receipt  →  /invoices?type=purchase
+  if (desc.startsWith("Purchase Receipt:")) {
+    return {
+      url:   `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`,
+      title: `Open Purchase Receipt: ${srcRef}`,
+    };
+  }
+
+  // Sale return  →  /returns
+  if (desc.startsWith("Sale Return:")) {
+    return {
+      url:   `/returns?q=${encodeURIComponent(srcRef)}`,
+      title: `Open Sale Return: ${srcRef}`,
+    };
+  }
+
+  // Purchase return  →  /purchase-return
+  if (desc.startsWith("Purchase Return:")) {
+    return {
+      url:   `/purchase-return?q=${encodeURIComponent(srcRef)}`,
+      title: `Open Purchase Return: ${srcRef}`,
+    };
+  }
+
+  // Receipt / Payment voucher (RV-… / PV-…)
+  if (reference.startsWith("RV-") || reference.startsWith("PV-")) {
+    return {
+      url:   `/receipt-payment?q=${encodeURIComponent(reference)}`,
+      title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}`,
+    };
+  }
+
+  // Salary slip
+  if (desc.startsWith("Salary Slip") || srcRef.startsWith("SLIP-")) {
+    return {
+      url:   `/salary`,
+      title: `Open Salary: ${srcRef}`,
+    };
+  }
+
+  // Default: manual journal entry
+  return {
+    url:   `/journal-entry?q=${encodeURIComponent(reference)}`,
+    title: `Open Journal Entry: ${reference}`,
+  };
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LedgerReportPage() {
@@ -824,13 +903,18 @@ export default function LedgerReportPage() {
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[12px] font-mono font-semibold text-primary">{row.reference}</span>
-                          <button
-                            title={`Edit journal entry ${row.reference}`}
-                            onClick={() => window.open(`/admin-dashboard/journal-entry?q=${encodeURIComponent(row.reference)}`, "_blank")}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
-                          >
-                            <Pencil size={11} />
-                          </button>
+                          {(() => {
+                            const { url, title } = resolveSourceUrl(row.reference, row.description);
+                            return (
+                              <button
+                                title={title}
+                                onClick={() => window.open(`/admin-dashboard${url}`, "_blank")}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
+                              >
+                                <Pencil size={11} />
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">

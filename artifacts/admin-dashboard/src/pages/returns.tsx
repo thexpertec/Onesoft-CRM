@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getSales, getSaleReturns, createSaleReturn, updateSaleReturn, deleteSaleReturn,
@@ -879,9 +879,10 @@ export default function ReturnsPage() {
   const [, navigate]   = useLocation();
   const { toast }      = useToast();
   const sym            = getSettingsCurrencySymbol();
+  const rawSearch      = useSearch();
 
   const [tab, setTab]  = useState<Tab>("sale");
-  const [search, setSearch]   = useState("");
+  const [search, setSearch]   = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [newOpen, setNewOpen] = useState(false);
   const [rev, setRev]         = useState(0);
   const reload = () => setRev(r => r + 1);

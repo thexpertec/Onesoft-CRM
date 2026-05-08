@@ -1459,7 +1459,7 @@ export default function ReceiptPaymentPage() {
 
   const [typeFilter,   setTypeFilter]   = useState<"all" | "receipt" | "payment">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "posted">("all");
-  const [search,       setSearch]       = useState("");
+  const [search,       setSearch]       = useState(() => new URLSearchParams(searchStr).get("q") || "");
   const [formOpen,     setFormOpen]     = useState(false);
   const [editVoucher,  setEditVoucher]  = useState<RPVoucher | null>(null);
   const [prefillData,  setPrefillData]  = useState<Partial<RPVoucher> | null>(null);
