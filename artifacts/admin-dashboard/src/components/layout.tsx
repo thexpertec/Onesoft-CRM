@@ -1153,7 +1153,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* ═══════════════════════════════════════════════════════════════
             ROW 3 — HRM contextual sub-tab strip
         ═══════════════════════════════════════════════════════════════ */}
-        {isHrmActive && !isManager && (
+        {isHrmActive && !isManager && !isSalaryTemplateActive && (
           <div className="hidden md:block border-t border-gray-100 dark:border-border bg-gray-50/40 dark:bg-muted/20">
             <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-stretch h-[34px] overflow-x-auto" style={{ scrollbarWidth: "none" }}>
 
