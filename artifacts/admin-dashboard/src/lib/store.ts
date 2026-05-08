@@ -1473,6 +1473,11 @@ export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt"
 export const createTenantAsync = async (
   data: Omit<Tenant, "id" | "createdAt" | "updatedAt">,
 ): Promise<Tenant> => {
+  const existing = getTenants();
+  const slugConflict = existing.find(t => t.slug.toLowerCase() === data.slug.toLowerCase());
+  if (slugConflict) throw new Error(`A tenant with slug "${data.slug}" already exists.`);
+  const usernameConflict = existing.find(t => t.adminUsername.toLowerCase() === data.adminUsername.toLowerCase());
+  if (usernameConflict) throw new Error(`A tenant with username "${data.adminUsername}" already exists.`);
   const now = new Date().toISOString();
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   await setGlobalAsync(TENANTS_KEY, [...getTenants(), tenant]);

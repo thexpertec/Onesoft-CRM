@@ -96,11 +96,12 @@ function TenantModal({
   open:    boolean;
   editing: Tenant | null;
   onClose: () => void;
-  onSave:  (data: Omit<Tenant, "id" | "createdAt" | "updatedAt">) => void;
+  onSave:  (data: Omit<Tenant, "id" | "createdAt" | "updatedAt">) => Promise<void> | void;
 }) {
   const [form,       setForm]       = useState(() => editing ? { ...editing } : blankForm());
   const [showPwd,    setShowPwd]    = useState(false);
   const [slugLocked, setSlugLocked] = useState(!!editing);
+  const [saving,     setSaving]     = useState(false);
   const [moduleGroups, setModuleGroups] = useState<ModuleGroup[]>(() => getModuleGroups());
 
   // Reset form when modal opens or editing target changes
@@ -384,11 +385,14 @@ function TenantModal({
         <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/60">
           <Button variant="outline" onClick={onClose} className="h-10 px-5 text-sm">Cancel</Button>
           <Button
-            disabled={!canSave}
-            onClick={() => onSave(form)}
+            disabled={!canSave || saving}
+            onClick={async () => {
+              setSaving(true);
+              try { await onSave(form); } finally { setSaving(false); }
+            }}
             className="h-10 px-5 text-sm bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <Check size={15} className="mr-1.5" /> {editing ? "Save Changes" : "Create Tenant"}
+            <Check size={15} className="mr-1.5" /> {saving ? (editing ? "Saving…" : "Creating…") : (editing ? "Save Changes" : "Create Tenant")}
           </Button>
         </div>
 
