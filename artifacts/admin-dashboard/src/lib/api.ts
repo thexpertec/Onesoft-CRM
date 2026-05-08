@@ -22,9 +22,16 @@ async function apiFetch(url: string, options?: RequestInit) {
   try {
     const res = await fetch(url, {
       signal: withTimeout(READ_TIMEOUT_MS),
+      // Prevent browser (and Replit deployment proxy) from serving a cached
+      // 304 Not Modified response. Without this, a fresh page load gets null
+      // from kvGetAll and the in-memory store never populates from the server.
+      cache: "no-store",
       ...options,
       headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
     });
+    // 304 means "your cached copy is still valid" — treat it as a clean no-op
+    // (in-memory store already has the data from a prior successful sync).
+    if (res.status === 304) return null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     // Use "return await" so JSON parse errors are caught by the try/catch above.
     return await res.json();
