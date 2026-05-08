@@ -273,7 +273,7 @@ function parseCSV(text: string): ImportRow[] {
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
   const { stock, refresh: refreshStock } = useStock();
-  const { isAuthenticated, currentTenantId, can } = useAuth();
+  const { isAuthenticated, currentTenantId, can, isSyncing } = useAuth();
   const dp = getSettingsDecimalPlaces();
 
   // Build a map: SKU (lowercased) → total qty across all stock entries
@@ -1809,8 +1809,23 @@ export default function ProductsPage() {
             </tr>
           )}
 
+          {/* Skeleton rows — shown while the initial server sync is in progress */}
+          {isSyncing && products.length === 0 && Array.from({ length: 8 }).map((_, i) => (
+            <tr key={`skel-${i}`} className={i % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"}>
+              <td className="px-2 py-2 w-8"><div className="h-4 w-4 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse mx-auto" /></td>
+              <td className="px-2 py-2 w-8"><div className="h-4 w-4 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse mx-auto" /></td>
+              <td className="px-2 py-2"><div className="h-7 w-7 rounded-lg bg-gray-200 dark:bg-zinc-700 animate-pulse" /></td>
+              {visibleCols.map((_, ci) => (
+                <td key={ci} className="px-2 py-2">
+                  <div className="h-4 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse" style={{ width: `${55 + (i * 13 + ci * 17) % 35}%`, animationDelay: `${(i + ci) * 40}ms` }} />
+                </td>
+              ))}
+              <td className="px-2 py-2"><div className="h-4 w-12 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse" /></td>
+            </tr>
+          ))}
+
           {/* Existing rows */}
-          {displayRows.length === 0 ? (
+          {!isSyncing && displayRows.length === 0 ? (
             <tr><td colSpan={visibleCols.length + 3} className="text-center py-16 text-muted-foreground text-sm">
               {search || statusFilter !== "All" || filterCategory || filterBrand || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
                 ? "No products match your current filters."

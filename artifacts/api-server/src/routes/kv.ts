@@ -41,9 +41,14 @@ router.get("/:namespace/:key", async (req, res) => {
 });
 
 // GET /api/kv/:namespace  → { [key]: value, ... }  (all keys in namespace)
+// Uses stale-while-revalidate so the browser serves cached data instantly on
+// page reload while refreshing in the background. "private" prevents the
+// Replit proxy from caching (which caused the 304/empty-body bug) while still
+// allowing the user's own browser cache to work correctly.
 router.get("/:namespace", async (req, res) => {
   try {
     const { namespace } = req.params;
+    res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=300");
     const rows = await query<{ key: string; value: unknown }>(
       "SELECT key, value FROM kv_store WHERE namespace = $1",
       [namespace]

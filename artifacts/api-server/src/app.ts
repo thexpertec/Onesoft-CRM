@@ -1,10 +1,15 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import compression from "compression";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 
 const app: Express = express();
+
+// Compress all responses — dramatically reduces transfer size for large JSON
+// payloads (e.g. product thumbnails stored as base64 compress 8-10×).
+app.use(compression());
 
 // Disable Express's default ETag generation so GET responses always return 200
 // (not 304 Not Modified). The Replit deployment proxy caches responses and can
@@ -12,9 +17,10 @@ const app: Express = express();
 // in-memory store from populating on first load.
 app.set("etag", false);
 
-// Belt-and-suspenders: tell every caching layer not to store GET responses.
+// Default: no caching for write endpoints and everything else.
+// Individual GET routes that benefit from caching set their own header.
 app.use((_req, res, next) => {
-  res.setHeader("Cache-Control", "no-store");
+  if (_req.method !== "GET") res.setHeader("Cache-Control", "no-store");
   next();
 });
 
