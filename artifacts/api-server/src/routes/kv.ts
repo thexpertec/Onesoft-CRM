@@ -3,6 +3,25 @@ import { query } from "../lib/db.js";
 
 const router = Router();
 
+// GET /api/kv  → [{ namespace, keyCount, updatedAt }]  (all namespaces summary)
+router.get("/", async (_req, res) => {
+  try {
+    const rows = await query<{ namespace: string; key_count: string; last_updated: string }>(
+      `SELECT namespace,
+              COUNT(*)::text          AS key_count,
+              MAX(updated_at)::text   AS last_updated
+       FROM kv_store
+       GROUP BY namespace
+       ORDER BY namespace`,
+      []
+    );
+    return res.json(rows);
+  } catch (err) {
+    console.error("KV LIST namespaces error", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /api/kv/:namespace/:key  → { value: any }
 router.get("/:namespace/:key", async (req, res) => {
   try {

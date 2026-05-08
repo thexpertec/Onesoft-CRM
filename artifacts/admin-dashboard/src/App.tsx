@@ -85,6 +85,7 @@ import WebsiteCmsPage from "@/pages/website-cms";
 import RepairPage from "@/pages/repair";
 import RepairReportPage from "@/pages/repair-report";
 import PaymentAccountsPage from "@/pages/payment-accounts";
+import DatabaseViewerPage from "@/pages/database-viewer";
 
 const queryClient = new QueryClient();
 
@@ -237,6 +238,7 @@ function Router() {
               <Route path="/users" component={UsersPage} />
               <Route path="/tenants" component={TenantsPage} />
               <Route path="/module-groups" component={ModuleGroupsPage} />
+              <Route path="/database" component={DatabaseViewerPage} />
               <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
               <Route path="/journal-entry" component={JournalEntryPage} />
               <Route path="/balance-sheet" component={BalanceSheetPage} />
