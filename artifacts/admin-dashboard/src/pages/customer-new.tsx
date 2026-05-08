@@ -46,7 +46,6 @@ export default function CustomerNewPage() {
   const BLANK = () => ({
     name: "", company: "", email: "", phone: "", industry: "",
     city: "", area: "", status: "Active" as CustomerStatus,
-    customerRole: "Buyer" as "Buyer" | "Supplier",
     customerSince: new Date().toISOString().split("T")[0],
     totalValue: "", currency: "GBP", openingBalance: "", notes: "", tags: "",
   });
@@ -84,7 +83,7 @@ export default function CustomerNewPage() {
       openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : undefined,
       notes: form.notes.trim(), source: "direct",
       customerType: "Regular Customer",
-      customerRole: form.customerRole,
+      customerRole: "Buyer",
       tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
       billingAddressDetails:  billingDetails,
       shippingAddressDetails: shippingDetails,
@@ -153,38 +152,21 @@ export default function CustomerNewPage() {
             </Field>
           </div>
 
-          <Divider label="Customer Type & Status" />
+          <Divider label="Status" />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <p className="text-[12px] font-semibold text-foreground">Customer Type</p>
-              <div className="flex gap-3">
-                {(["Buyer", "Supplier"] as const).map(r => (
-                  <button key={r} type="button" onClick={() => setForm(p => ({ ...p, customerRole: r }))}
-                    className={`flex-1 h-9 rounded-lg text-[13px] font-semibold transition-all border ${
-                      form.customerRole === r
-                        ? r === "Buyer"
-                          ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                          : "bg-orange-500 border-orange-500 text-white shadow-sm"
-                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                    }`}>{r}</button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[12px] font-semibold text-foreground">Status</p>
-              <div className="flex gap-3">
-                {CUSTOMER_STATUSES.map(s => (
-                  <button key={s} type="button" onClick={() => set("status", s)}
-                    className={`flex-1 h-9 rounded-lg text-[13px] font-semibold transition-all border ${
-                      form.status === s
-                        ? s === "Active"   ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
-                        : s === "Inactive" ? "bg-amber-500 border-amber-500 text-white shadow-sm"
-                        :                   "bg-red-500 border-red-500 text-white shadow-sm"
-                        : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
-                    }`}>{s}</button>
-                ))}
-              </div>
+          <div className="space-y-1.5 max-w-xs">
+            <p className="text-[12px] font-semibold text-foreground">Status</p>
+            <div className="flex gap-3">
+              {CUSTOMER_STATUSES.map(s => (
+                <button key={s} type="button" onClick={() => set("status", s)}
+                  className={`flex-1 h-9 rounded-lg text-[13px] font-semibold transition-all border ${
+                    form.status === s
+                      ? s === "Active"   ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                      : s === "Inactive" ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                      :                   "bg-red-500 border-red-500 text-white shadow-sm"
+                      : "bg-background border-border text-muted-foreground hover:border-gray-400 hover:text-foreground"
+                  }`}>{s}</button>
+              ))}
             </div>
           </div>
 

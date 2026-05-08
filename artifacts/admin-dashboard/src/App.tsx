@@ -41,6 +41,7 @@ import ManageApplicationPage from "@/pages/manage-application";
 import AttendancePage from "@/pages/attendance";
 import CustomersPage from "@/pages/customers";
 import CustomerNewPage from "@/pages/customer-new";
+import SupplierNewPage from "@/pages/supplier-new";
 import CustomerEditPage from "@/pages/customer-edit";
 import ProductsPage from "@/pages/products";
 import ProductNewPage from "@/pages/product-new";
@@ -191,6 +192,7 @@ function Router() {
               <Route path="/documents/edit/:id" component={NewDocument} />
               <Route path="/documents/:id" component={DocumentDetail} />
               <Route path="/customers/new" component={CustomerNewPage} />
+              <Route path="/suppliers/new" component={SupplierNewPage} />
               <Route path="/customers/:id/edit" component={CustomerEditPage} />
               <Route path="/customers" component={CustomersPage} />
               <Route path="/products/new" component={ProductNewPage} />

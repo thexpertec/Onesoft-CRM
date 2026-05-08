@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2, Banknote,
-  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2,
+  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2, Truck,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -181,9 +181,10 @@ const CRM_COLUMNS: MegaColumn[] = [
     color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40",
     desc: "Client management",
     links: [
-      { label: "All Customers",     href: "/customers", icon: UserCheck  },
-      { label: "Add Customer",      href: "/customers", icon: UserPlus   },
-      { label: "Convert from Lead", href: "/customers", icon: ArrowRight },
+      { label: "All Customers",     href: "/customers",        icon: UserCheck  },
+      { label: "Add Customer",      href: "/customers/new",    icon: UserPlus   },
+      { label: "Add Supplier",      href: "/suppliers/new",    icon: Truck      },
+      { label: "Convert from Lead", href: "/customers",        icon: ArrowRight },
     ],
   },
   {
