@@ -3,7 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { useSales, useCustomers, useStock, useSaleReturns } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  Sale, SaleItem, SaleStatus, SalePayment,
+  Sale, SaleItem, SaleStatus, SalePayment, SaleReturn,
   SALE_STATUSES,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
@@ -118,6 +118,46 @@ const CHIP_COLORS: Record<string, string> = {
   teal:    "bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800",
   rose:    "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
 };
+
+// ─── Unified row type: Sale rows + adapted Sale Return rows ───────────────────
+type SaleRowData = Sale & { _returnRef?: SaleReturn };
+
+/** Adapt a SaleReturn into a display-compatible SaleRowData for the unified table. */
+function adaptReturn(r: SaleReturn): SaleRowData {
+  return {
+    id:            r.id,
+    saleNumber:    r.returnNumber,
+    saleDate:      r.date,
+    customer:      r.customer,
+    orderType:     "Sale Return" as unknown as "POS" | "Invoice" | "Online",
+    status:        r.status === "posted" ? "Completed" as SaleStatus : "Draft" as SaleStatus,
+    items:         r.items.map((i, idx) => ({
+      id:           `${r.id}-${idx}`,
+      productName:  i.productName,
+      sku:          i.sku || "",
+      qty:          String(i.qty),
+      unit:         i.unit || "pcs",
+      unitPrice:    String(i.unitPrice),
+      discount:     String(i.discount || "0"),
+      discountType: "pct" as const,
+      notes:        "",
+    })),
+    paymentMethod:       r.refundMethod,
+    amountPaid:          String(r.grandTotal),
+    taxRate:             "0",
+    invoiceDiscount:     "0",
+    invoiceDiscountType: "pct",
+    deliveryCharges:     "0",
+    saleMode:            "Retail",
+    deliveryStatus:      "Delivered",
+    paidAt:              r.date,
+    stockDeducted:       true,
+    notes:               [r.reason, r.notes].filter(Boolean).join(" · "),
+    createdAt:           r.createdAt,
+    updatedAt:           r.updatedAt,
+    _returnRef:          r,
+  };
+}
 
 function Chip({ label, onRemove, color = "blue" }: { label: string; onRemove: () => void; color?: string }) {
   return (
@@ -2372,6 +2412,7 @@ export default function SalesPage() {
   const rawSearch = useSearch();
   // ── List state ──
   const [statusFilter,   setStatusFilter]   = useState<string>("All");
+  const [typeFilter,     setTypeFilter]     = useState<string>("All");
   const [search,         setSearch]         = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [activeCell,     setActiveCell]     = useState<{ id: string; col: number } | null>(null);
   const [newRow,         setNewRow]         = useState<Record<string, string> | null>(null);
@@ -2484,7 +2525,17 @@ export default function SalesPage() {
   ], [sym, agentNameOpts]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);
 
-  const cellValue = (sale: Sale, field: string): string => {
+  const cellValue = (sale: SaleRowData, field: string): string => {
+    const ret = sale._returnRef;
+    if (ret) {
+      if (field === "itemCount") return String(ret.items.length);
+      if (field === "total")     return ret.grandTotal.toFixed(dp);
+      if (field === "amountPaid") return ret.grandTotal.toFixed(dp);
+      if (field === "balance")   return (0).toFixed(dp);
+      if (field === "payStatus") return "Refunded";
+      if (field === "orderStage") return "Refunded";
+      if (field === "status")    return ret.status === "posted" ? "Completed" : "Draft";
+    }
     if (field === "itemCount") {
       const totalQty = sale.items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
       return Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
@@ -2945,9 +2996,20 @@ export default function SalesPage() {
 
   // ── List filtering ──
   const filtered = useMemo(() => {
-    let rows = [...sales];
+    // Merge sales + adapted sale returns
+    const adaptedReturns: SaleRowData[] = saleReturns.map(adaptReturn);
+    let rows: SaleRowData[] = [...sales, ...adaptedReturns];
 
-    // Status pill filter
+    // Type filter
+    if (typeFilter !== "All") {
+      if (typeFilter === "Sale Return") {
+        rows = rows.filter(s => !!s._returnRef);
+      } else {
+        rows = rows.filter(s => !s._returnRef && ((s.orderType ?? "POS") === typeFilter));
+      }
+    }
+
+    // Status pill filter (skip for return rows — they use their own status)
     if (statusFilter !== "All") rows = rows.filter(s => s.status === statusFilter);
 
     // Text search
@@ -2961,15 +3023,15 @@ export default function SalesPage() {
       );
     }
 
-    // ── Advanced filters ─────────────────────────────────────────────────────
+    // ── Advanced filters (skip for return rows where data may not apply) ─────
     if (filterArea) {
-      rows = rows.filter(s => !!s.agentId && agentIdAreaMap.get(s.agentId) === filterArea);
+      rows = rows.filter(s => !s._returnRef && !!s.agentId && agentIdAreaMap.get(s.agentId) === filterArea);
     }
     if (filterCustomer) {
       rows = rows.filter(s => s.customer === filterCustomer);
     }
     if (filterAgent) {
-      rows = rows.filter(s => s.agentName === filterAgent || s.agentId === filterAgent);
+      rows = rows.filter(s => !s._returnRef && (s.agentName === filterAgent || s.agentId === filterAgent));
     }
     if (filterDateFrom) {
       rows = rows.filter(s => s.saleDate >= filterDateFrom);
@@ -2982,6 +3044,7 @@ export default function SalesPage() {
     }
     if (filterPayStatus) {
       rows = rows.filter(s => {
+        if (s._returnRef) return filterPayStatus === "paid"; // returns are always refunded/paid
         const total = saleTotalFull(s);
         const paid  = parseFloat(s.amountPaid || "0") || 0;
         switch (filterPayStatus) {
@@ -2995,24 +3058,31 @@ export default function SalesPage() {
     }
 
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [sales, statusFilter, search,
+  }, [sales, saleReturns, typeFilter, statusFilter, search,
       filterArea, filterCustomer, filterAgent, filterDateFrom, filterDateTo, filterPayMode, filterPayStatus,
       agentIdAreaMap]);
 
   const counts: Record<string, number> = useMemo(() => {
-    const c: Record<string, number> = { All: sales.length };
+    const c: Record<string, number> = { All: sales.length + saleReturns.length };
     SALE_STATUSES.forEach(s => { c[s] = sales.filter(x => x.status === s).length; });
+    c["Sale Return"] = saleReturns.length;
     return c;
-  }, [sales]);
+  }, [sales, saleReturns]);
 
   const revenue = useMemo(() =>
     sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotalFull(s), 0), [sales]);
 
   const filteredSums = useMemo(() => ({
-    items:   filtered.reduce((s, sale) => s + sale.items.reduce((q, i) => q + (parseFloat(i.qty) || 0), 0), 0),
-    total:   filtered.reduce((s, sale) => s + saleTotalFull(sale), 0),
-    paid:    filtered.reduce((s, sale) => s + (parseFloat(sale.amountPaid || "0") || 0), 0),
-    balance: filtered.reduce((s, sale) => s + Math.max(0, saleTotalFull(sale) - (parseFloat(sale.amountPaid || "0") || 0)), 0),
+    items: filtered.reduce((s, sale) => {
+      if (sale._returnRef) return s + sale._returnRef.items.reduce((q, i) => q + (parseFloat(String(i.qty)) || 0), 0);
+      return s + sale.items.reduce((q, i) => q + (parseFloat(i.qty) || 0), 0);
+    }, 0),
+    total: filtered.reduce((s, sale) => s + (sale._returnRef ? sale._returnRef.grandTotal : saleTotalFull(sale)), 0),
+    paid:  filtered.reduce((s, sale) => s + (sale._returnRef ? sale._returnRef.grandTotal : parseFloat(sale.amountPaid || "0") || 0), 0),
+    balance: filtered.reduce((s, sale) => {
+      if (sale._returnRef) return s;
+      return s + Math.max(0, saleTotalFull(sale) - (parseFloat(sale.amountPaid || "0") || 0));
+    }, 0),
   }), [filtered]);
 
   // ── Grid handlers ──
@@ -3164,7 +3234,7 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* KPI pills */}
+      {/* Status KPI pills */}
       <div className="flex items-center gap-2 flex-wrap">
         {["All", ...SALE_STATUSES].map(s => {
           const isActive = statusFilter === s;
@@ -3183,6 +3253,43 @@ export default function SalesPage() {
             Revenue: {sym}{revenue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
           </span>
         )}
+      </div>
+
+      {/* Type filter pills */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Type:</span>
+        {(["All", "POS", "Invoice", "Online", "Sale Return"] as const).map(t => {
+          const isActive = typeFilter === t;
+          const colorMap: Record<string, string> = {
+            All:          "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
+            POS:          "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+            Invoice:      "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+            Online:       "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+            "Sale Return":"bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300",
+          };
+          const activeRing: Record<string, string> = {
+            All: "ring-2 ring-gray-400", POS: "ring-2 ring-blue-400",
+            Invoice: "ring-2 ring-violet-400", Online: "ring-2 ring-emerald-400",
+            "Sale Return": "ring-2 ring-rose-400",
+          };
+          const iconMap: Record<string, React.ReactNode> = {
+            POS:          <ShoppingCart size={10} />,
+            Invoice:      <Receipt size={10} />,
+            Online:       <Globe size={10} />,
+            "Sale Return":<Undo2 size={10} />,
+          };
+          const count = t === "All" ? counts["All"]
+            : t === "Sale Return" ? (counts["Sale Return"] ?? 0)
+            : sales.filter(s => (s.orderType ?? "POS") === t).length;
+          return (
+            <button key={t} aria-pressed={isActive}
+              onClick={() => setTypeFilter(prev => prev === t && t !== "All" ? "All" : t)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] ${colorMap[t]} ${isActive ? `${activeRing[t]} ring-offset-1 shadow-sm` : "opacity-80 hover:opacity-100"}`}>
+              {iconMap[t]} {t}: <span>{count}</span>
+              {isActive && t !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Toolbar */}
@@ -3429,16 +3536,24 @@ export default function SalesPage() {
           {/* Existing rows */}
           {filtered.length === 0 ? (
             <tr><td colSpan={COLS.length + 2} className="text-center py-16 text-muted-foreground text-sm">
-              {search || statusFilter !== "All" ? "No sales match your filters." : "No sales yet — click Open POS to create your first sale."}
+              {search || statusFilter !== "All" || typeFilter !== "All" ? "No sales match your filters." : "No sales yet — click Open POS to create your first sale."}
             </td></tr>
-          ) : filtered.map((sale, ri) => (
+          ) : filtered.map((sale, ri) => {
+            const isReturnRow = !!sale._returnRef;
+            return (
             <tr key={sale.id}
-              className={`border-b border-gray-100 dark:border-border transition-colors group ${activeCell?.id === sale.id ? "bg-blue-50/30 dark:bg-blue-950/10" : ri % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"} hover:bg-blue-50/20 dark:hover:bg-blue-950/10`}>
+              className={`border-b transition-colors group ${
+                isReturnRow
+                  ? "border-rose-100 dark:border-rose-900/40 bg-rose-50/30 dark:bg-rose-950/10 hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
+                  : activeCell?.id === sale.id ? "border-gray-100 dark:border-border bg-blue-50/30 dark:bg-blue-950/10"
+                  : ri % 2 === 0 ? "border-gray-100 dark:border-border bg-white dark:bg-card hover:bg-blue-50/20 dark:hover:bg-blue-950/10"
+                  : "border-gray-100 dark:border-border bg-gray-50/50 dark:bg-muted/10 hover:bg-blue-50/20 dark:hover:bg-blue-950/10"
+              }`}>
               <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 font-mono select-none" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>{ri + 1}</td>
               {COLS.map((c, ci) => {
-                const isA = activeCell?.id === sale.id && activeCell.col === ci;
+                const isA = !isReturnRow && activeCell?.id === sale.id && activeCell.col === ci;
                 const rawVal = cellValue(sale, c.field);
-                const canEdit = can("Edit Sales") && c.type !== "readonly";
+                const canEdit = !isReturnRow && can("Edit Sales") && c.type !== "readonly";
                 return (
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${c.type === "readonly" ? "bg-gray-50/40 dark:bg-gray-800/10" : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
@@ -3446,7 +3561,11 @@ export default function SalesPage() {
                     onClick={() => canEdit && !isA && setActiveCell({ id: sale.id, col: ci })}>
                     {c.field === "orderType" ? (
                       <div className={`w-full flex items-center px-3 ${wrapText ? "py-2" : "h-full"}`}>
-                        {rawVal === "Online" ? (
+                        {rawVal === "Sale Return" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+                            <Undo2 size={9} /> Return
+                          </span>
+                        ) : rawVal === "Online" ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
                             <Globe size={9} /> Online
                           </span>
@@ -3544,11 +3663,18 @@ export default function SalesPage() {
               })}
               <td className="sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }} onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                    title="Open POS" onClick={() => openDetail(sale.id)}>
-                    <Eye size={13} />
-                  </button>
-                  {can("Delete Sales") && (
+                  {isReturnRow ? (
+                    <button className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                      title="View return" onClick={() => navigate(`/returns?q=${encodeURIComponent(sale.saleNumber)}`)}>
+                      <Eye size={13} />
+                    </button>
+                  ) : (
+                    <button className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                      title="Open POS" onClick={() => openDetail(sale.id)}>
+                      <Eye size={13} />
+                    </button>
+                  )}
+                  {!isReturnRow && can("Delete Sales") && (
                     <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       title="Delete" onClick={() => setDeleteId(sale.id)}>
                       <Trash2 size={13} />
@@ -3557,7 +3683,8 @@ export default function SalesPage() {
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
 
           {/* ── Totals row ── */}
           {filtered.length > 0 && (
