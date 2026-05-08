@@ -898,6 +898,21 @@ export default function ReturnsPage() {
   );
   const [viewPR, setViewPR] = useState<PurchaseReturn | null>(null);
 
+  // Auto-open from URL param: ?open=<id>&tab=<sale|purchase>  (from ledger / transaction-history)
+  useEffect(() => {
+    const p = new URLSearchParams(rawSearch);
+    const openId = p.get("open");
+    if (!openId) return;
+    if (p.get("tab") === "purchase") {
+      const pr = getPurchaseReturns().find(r => r.id === openId);
+      if (pr) { setTab("purchase"); setViewPR(pr); }
+    } else {
+      const sr = getSaleReturns().find(r => r.id === openId);
+      if (sr) setViewSR(sr);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const refreshAll = () => {
     setSaleReturns(getSaleReturns());
     setPurchaseReturns([...getPurchaseReturns()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));

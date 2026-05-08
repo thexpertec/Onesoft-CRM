@@ -2488,6 +2488,13 @@ export default function SalesPage() {
 
   // ── POS state ──
   const [detailId,               setDetailId]               = useState<string | null>(null);
+
+  // Auto-open a sale from URL param: ?open=<saleId>  (from ledger / transaction-history)
+  useEffect(() => {
+    const openId = new URLSearchParams(rawSearch).get("open");
+    if (openId) setDetailId(openId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [localItems,             setLocalItems]             = useState<SaleItem[]>([]);
   const [priceMode,              setPriceMode]              = useState<"retail" | "wholesale" | "clubcard">("retail");
   const [localMeta,              setLocalMeta]              = useState<LocalMeta | null>(null);

@@ -3,7 +3,7 @@ import { useSearch, useLocation } from "wouter";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
-import { Account, getSettings, reconcileAccountingData, SYS_ACCS } from "@/lib/store";
+import { Account, getSettings, reconcileAccountingData, SYS_ACCS, getInvoices, getSales, getSaleReturns, getPurchaseReturns, getRPVouchers, getJournalEntries } from "@/lib/store";
 import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
@@ -145,7 +145,7 @@ type LedgerRow = {
 
 /**
  * Resolve which app page originated a ledger entry and return the URL to open
- * for viewing / editing it. Falls back to the journal-entry search page.
+ * for viewing / editing it directly (not a filtered list).
  *
  * Reference patterns created by the system:
  *   AUTO-SAL-YYYYMM-NNN  →  POS Sale or Invoice Sale
@@ -159,67 +159,57 @@ function resolveSourceUrl(reference: string, description: string): { url: string
   const srcRef = reference.startsWith("AUTO-") ? reference.slice(5) : reference;
   const desc   = description.trim();
 
-  // POS sale  →  /sales
-  if (desc.startsWith("POS Sale:") || desc.startsWith("POS –")) {
-    return {
-      url:   `/sales?q=${encodeURIComponent(srcRef)}`,
-      title: `Open POS Sale: ${srcRef}`,
-    };
-  }
-
-  // Invoice (credit) sale  →  /invoices
+  // Invoice (credit) sale  →  /invoices/:id
   if (desc.startsWith("Invoice Sale:")) {
-    return {
-      url:   `/invoices?q=${encodeURIComponent(srcRef)}`,
-      title: `Open Invoice Sale: ${srcRef}`,
-    };
+    const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Edit Sale Invoice: ${srcRef}` };
+    return { url: `/invoices?q=${encodeURIComponent(srcRef)}`, title: `Open Sale Invoice: ${srcRef}` };
   }
 
-  // Purchase receipt  →  /invoices?type=purchase
+  // Purchase receipt  →  /invoices/:id
   if (desc.startsWith("Purchase Receipt:")) {
-    return {
-      url:   `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`,
-      title: `Open Purchase Receipt: ${srcRef}`,
-    };
+    const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Edit Purchase Invoice: ${srcRef}` };
+    return { url: `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Invoice: ${srcRef}` };
   }
 
-  // Sale return  →  /returns
+  // POS sale  →  /sales?open=:id
+  if (desc.startsWith("POS Sale:") || desc.startsWith("POS –")) {
+    const sale = getSales().find(s => s.saleNumber === srcRef);
+    if (sale) return { url: `/sales?open=${sale.id}`, title: `Open POS Sale: ${srcRef}` };
+    return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Open POS Sale: ${srcRef}` };
+  }
+
+  // Sale return  →  /returns?open=:id
   if (desc.startsWith("Sale Return:")) {
-    return {
-      url:   `/returns?q=${encodeURIComponent(srcRef)}`,
-      title: `Open Sale Return: ${srcRef}`,
-    };
+    const sr = getSaleReturns().find(r => r.returnNumber === srcRef);
+    if (sr) return { url: `/returns?open=${sr.id}`, title: `Open Sale Return: ${srcRef}` };
+    return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Open Sale Return: ${srcRef}` };
   }
 
-  // Purchase return  →  /purchase-return
+  // Purchase return  →  /returns?tab=purchase&open=:id
   if (desc.startsWith("Purchase Return:")) {
-    return {
-      url:   `/purchase-return?q=${encodeURIComponent(srcRef)}`,
-      title: `Open Purchase Return: ${srcRef}`,
-    };
+    const pr = getPurchaseReturns().find(r => r.returnNumber === srcRef);
+    if (pr) return { url: `/returns?tab=purchase&open=${pr.id}`, title: `Open Purchase Return: ${srcRef}` };
+    return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Return: ${srcRef}` };
   }
 
-  // Receipt / Payment voucher (RV-… / PV-…)
+  // Receipt / Payment voucher  →  /receipt-payment?open=:id
   if (reference.startsWith("RV-") || reference.startsWith("PV-")) {
-    return {
-      url:   `/receipt-payment?q=${encodeURIComponent(reference)}`,
-      title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}`,
-    };
+    const v = getRPVouchers().find(v => v.voucherNumber === reference);
+    if (v) return { url: `/receipt-payment?open=${v.id}`, title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}` };
+    return { url: `/receipt-payment?q=${encodeURIComponent(reference)}`, title: `Open Voucher: ${reference}` };
   }
 
   // Salary slip
   if (desc.startsWith("Salary Slip") || srcRef.startsWith("SLIP-")) {
-    return {
-      url:   `/salary`,
-      title: `Open Salary: ${srcRef}`,
-    };
+    return { url: `/salary`, title: `Open Salary: ${srcRef}` };
   }
 
-  // Default: manual journal entry
-  return {
-    url:   `/journal-entry?q=${encodeURIComponent(reference)}`,
-    title: `Open Journal Entry: ${reference}`,
-  };
+  // Default: manual journal entry  →  /journal-entry?open=:id
+  const je = getJournalEntries().find(j => j.reference === reference);
+  if (je) return { url: `/journal-entry?open=${je.id}`, title: `Open Journal Entry: ${reference}` };
+  return { url: `/journal-entry?q=${encodeURIComponent(reference)}`, title: `Open Journal Entry: ${reference}` };
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────

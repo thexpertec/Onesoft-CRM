@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer, getRPVouchers } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -1470,6 +1470,14 @@ export default function ReceiptPaymentPage() {
   useLayoutEffect(() => {
     if (!searchStr) return;
     const p = new URLSearchParams(searchStr);
+
+    // Direct open: ?open=<voucherId>  (from ledger / transaction-history)
+    const openId = p.get("open");
+    if (openId) {
+      const v = getRPVouchers().find(v => v.id === openId);
+      if (v) { setEditVoucher(v); setFormOpen(true); return; }
+    }
+
     const invoiceId     = p.get("invoiceId");
     const invoiceNumber = p.get("invoiceNumber");
     const customer      = p.get("customer");

@@ -231,6 +231,15 @@ export default function JournalEntryPage() {
   const [viewEntry, setViewEntry] = useState<string | null>(null);
   const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
 
+  // Auto-open from URL param: ?open=<journalEntryId>  (from ledger / transaction-history)
+  useEffect(() => {
+    const openId = new URLSearchParams(rawSearch).get("open");
+    if (!openId) return;
+    const entry = entries.find(e => e.id === openId);
+    if (entry) loadEntryForEdit(entry);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Fix Data: purge orphaned voucher JEs ─────────────────────────────────
   const handleFixData = useCallback(() => {
     const removed = purgeOrphanedVoucherJEs();

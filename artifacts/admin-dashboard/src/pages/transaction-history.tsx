@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import {
   getSales, getInvoices, getSaleReturns, getPurchaseReturns,
   getJournalEntries, getRPVouchers, getPaymentAccounts,
@@ -9,7 +10,7 @@ import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/curre
 import {
   ArrowUpRight, ArrowDownLeft, RefreshCw, BookOpen, FileText,
   CreditCard, Search, Download, Filter, ChevronDown, ChevronUp,
-  X, TrendingUp, TrendingDown, Minus,
+  X, TrendingUp, TrendingDown, Minus, ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,6 +30,20 @@ function formatRef(ref: string): string {
   if (!ref) return "—";
   const m = ref.match(UUID_RE);
   return m ? `${m[1]}-${m[2]}` : ref;
+}
+
+function resolveSourceUrl(row: TxnRow): string {
+  switch (row.type) {
+    case "Sale (POS)":       return `/sales?open=${row.sourceId}`;
+    case "Sale Invoice":     return `/invoices/${row.sourceId}`;
+    case "Purchase Invoice": return `/invoices/${row.sourceId}`;
+    case "Sale Return":      return `/returns?open=${row.sourceId}`;
+    case "Purchase Return":  return `/returns?tab=purchase&open=${row.sourceId}`;
+    case "Receipt Voucher":  return `/receipt-payment?open=${row.sourceId}`;
+    case "Payment Voucher":  return `/receipt-payment?open=${row.sourceId}`;
+    case "Journal Entry":    return `/journal-entry?open=${row.sourceId}`;
+    default:                 return `/transaction-history`;
+  }
 }
 
 // ─── Unified row ──────────────────────────────────────────────────────────────
@@ -494,7 +509,7 @@ export default function TransactionHistoryPage() {
                     const stColor = STATUS_COLOR[row.status] ?? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
                     return (
                       <tr key={row.id}
-                        className={`border-b border-gray-100 dark:border-zinc-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors ${idx % 2 === 1 ? "bg-gray-50/40 dark:bg-zinc-800/10" : ""}`}
+                        className={`border-b border-gray-100 dark:border-zinc-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors group ${idx % 2 === 1 ? "bg-gray-50/40 dark:bg-zinc-800/10" : ""}`}
                       >
                         {/* Date */}
                         <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap">
@@ -510,7 +525,18 @@ export default function TransactionHistoryPage() {
 
                         {/* Reference */}
                         <td className="px-3 py-2.5 font-mono font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap" title={row.reference}>
-                          {formatRef(row.reference)}
+                          <div className="flex items-center gap-1">
+                            {formatRef(row.reference)}
+                            <a
+                              href={`/admin-dashboard${resolveSourceUrl(row)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Open source entry"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
+                            >
+                              <ExternalLink size={11} />
+                            </a>
+                          </div>
                         </td>
 
                         {/* Party */}
