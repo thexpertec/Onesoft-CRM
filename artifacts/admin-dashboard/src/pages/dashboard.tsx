@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders, useInvoices } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
@@ -28,6 +28,48 @@ import {
   CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer,
   LineChart, Line,
 } from "recharts";
+
+// ─── Count-up animation hook ──────────────────────────────────────────────────
+function useCountUp(target: number, duration = 1000, delay = 100): number {
+  const [value, setValue] = useState(0);
+  const raf = useRef<number>(0);
+  const timer = useRef<ReturnType<typeof setTimeout>>(0 as unknown as ReturnType<typeof setTimeout>);
+  useEffect(() => {
+    setValue(0);
+    timer.current = setTimeout(() => {
+      let start: number | null = null;
+      const step = (ts: number) => {
+        if (start === null) start = ts;
+        const elapsed  = ts - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased    = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+        setValue(target * eased);
+        if (progress < 1) raf.current = requestAnimationFrame(step);
+        else setValue(target);
+      };
+      raf.current = requestAnimationFrame(step);
+    }, delay);
+    return () => {
+      clearTimeout(timer.current);
+      cancelAnimationFrame(raf.current);
+    };
+  }, [target, duration, delay]);
+  return value;
+}
+
+// ─── Skeleton shimmer ─────────────────────────────────────────────────────────
+function SkeletonKpiCard({ gradient }: { gradient: string }) {
+  return (
+    <div className={`relative overflow-hidden rounded-xl border-0 shadow-sm ${gradient} p-5 h-[108px]`}>
+      <div className="animate-pulse space-y-3">
+        <div className="h-2.5 w-24 rounded-full bg-white/25" />
+        <div className="h-8 w-20 rounded-lg bg-white/30" />
+        <div className="h-2 w-32 rounded-full bg-white/20" />
+      </div>
+      <div className="absolute top-5 right-5 w-10 h-10 rounded-xl bg-white/20 animate-pulse" />
+    </div>
+  );
+}
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 const fmtCurrency = fmtMoneyCompact;
@@ -89,14 +131,21 @@ type QuickCustomerValues = z.infer<typeof quickCustomerSchema>;
 
 // Gradient KPI card
 function KpiCard({
-  icon: Icon, label, value, sub, sub2, gradient, iconBg, delta, testId, href,
+  icon: Icon, label, value, numericValue, formatter,
+  sub, sub2, gradient, iconBg, delta, testId, href,
 }: {
   icon: React.ElementType; label: string; value: string | number;
+  numericValue?: number; formatter?: (n: number) => string;
   sub?: React.ReactNode; sub2?: string;
   gradient: string; iconBg: string; delta?: { val: number; label: string };
   testId?: string;
   href?: string;
 }) {
+  const animated = useCountUp(numericValue ?? 0, 1000, 200);
+  const display  = numericValue !== undefined && formatter
+    ? formatter(animated)
+    : value;
+
   const card = (
     <Card
       className={`relative overflow-hidden border-0 shadow-sm ${gradient} ${href ? "cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" : ""}`}
@@ -105,7 +154,9 @@ function KpiCard({
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">{label}</p>
-            <p className="text-[28px] font-bold mt-1 text-white leading-none" data-testid={testId}>{value}</p>
+            <p className="text-[28px] font-bold mt-1 text-white leading-none tabular-nums" data-testid={testId}>
+              {display}
+            </p>
             {sub  && <p className="text-[11px] text-white/70 mt-1.5">{sub}</p>}
             {sub2 && <p className="text-[11px] text-white/60 mt-0.5">{sub2}</p>}
           </div>
@@ -168,6 +219,10 @@ function QuickTile({
   href: string; icon: React.ElementType; label: string;
   count: number | string; sub?: string; color: string; testId?: string;
 }) {
+  const numeric  = typeof count === "number" ? count : NaN;
+  const animated = useCountUp(isNaN(numeric) ? 0 : numeric, 900, 250);
+  const display  = isNaN(numeric) ? count : Math.round(animated);
+
   return (
     <Link href={href}>
       <div
@@ -178,7 +233,7 @@ function QuickTile({
           <Icon size={17} className="text-white" />
         </div>
         <div>
-          <p className="text-[22px] font-bold text-gray-800 dark:text-foreground leading-none tabular-nums">{count}</p>
+          <p className="text-[22px] font-bold text-gray-800 dark:text-foreground leading-none tabular-nums">{display}</p>
           <p className="text-[12px] font-medium text-gray-600 dark:text-gray-400 mt-0.5">{label}</p>
           {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
         </div>
@@ -205,6 +260,12 @@ export default function Dashboard() {
 
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [dateRange, setDateRange]             = useState<"7d" | "30d" | "90d">("30d");
+  const [mounted, setMounted]                 = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   const settings = useMemo(() => getSettings(), []);
 
@@ -509,92 +570,123 @@ export default function Dashboard() {
 
       {/* ══ KPI Cards ═════════════════════════════════════════════════════════ */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          icon={PoundSterling}
-          label="Total Revenue"
-          value={fmtCurrency(totalRevenue)}
-          sub={`This month: ${fmtCurrency(monthRevenue)}`}
-          sub2={`Today: ${fmtCurrency(todayRevenue)}`}
-          gradient="bg-gradient-to-br from-blue-600 to-blue-500"
-          iconBg="bg-blue-400/40"
-          testId="stat-revenue"
-          href="/sales"
-        />
-        <KpiCard
-          icon={Receipt}
-          label="Sales This Week"
-          value={fmtCurrency(weekRevenue)}
-          sub={`${completedSales.length} completed sale${completedSales.length !== 1 ? "s" : ""}`}
-          sub2={`${salesStatusMap["On Credit"] || 0} on credit`}
-          gradient="bg-gradient-to-br from-emerald-600 to-emerald-500"
-          iconBg="bg-emerald-400/40"
-          testId="stat-week-revenue"
-          href="/sales"
-        />
-        <KpiCard
-          icon={Users}
-          label="Leads"
-          value={totalLeads}
-          sub={`${activeLeads} active · ${wonLeads} won`}
-          sub2={`Win rate: ${winRate}%`}
-          gradient="bg-gradient-to-br from-violet-600 to-violet-500"
-          iconBg="bg-violet-400/40"
-          testId="stat-total-leads"
-          href="/leads"
-        />
-        <KpiCard
-          icon={UserCheck}
-          label="Customers"
-          value={customers.length}
-          sub={`${activeCustomers} active`}
-          gradient="bg-gradient-to-br from-cyan-600 to-cyan-500"
-          iconBg="bg-cyan-400/40"
-          testId="stat-customers"
-          href="/customers"
-        />
-        <KpiCard
-          icon={AlertTriangle}
-          label="Low Stock"
-          value={lowStockItems.length}
-          sub={`${outOfStock.length} out of stock`}
-          sub2={`${forSaleStock.length} total SKUs`}
-          gradient={lowStockItems.length > 0 ? "bg-gradient-to-br from-amber-500 to-orange-500" : "bg-gradient-to-br from-gray-500 to-gray-400"}
-          iconBg="bg-white/20"
-          testId="stat-low-stock"
-          href="/stock-ledger"
-        />
-        <KpiCard
-          icon={ShoppingCart}
-          label="Pending Orders"
-          value={pendingPOs.length}
-          sub={`${receivedPOs.length} received`}
-          sub2={`${purchaseOrders.length} total POs`}
-          gradient="bg-gradient-to-br from-rose-600 to-rose-500"
-          iconBg="bg-rose-400/40"
-          testId="stat-pending-pos"
-          href="/purchases"
-        />
-        <KpiCard
-          icon={Package}
-          label="Products"
-          value={products.length}
-          sub={`${stock.length} stock items`}
-          gradient="bg-gradient-to-br from-indigo-600 to-indigo-500"
-          iconBg="bg-indigo-400/40"
-          testId="stat-products"
-          href="/products"
-        />
-        <KpiCard
-          icon={Users2}
-          label="Staff"
-          value={staff.length}
-          sub={`${staff.filter(s => s.status === "Active").length} active`}
-          sub2={`${adminUsers.length} admin accounts`}
-          gradient="bg-gradient-to-br from-teal-600 to-teal-500"
-          iconBg="bg-teal-400/40"
-          testId="stat-staff"
-          href="/staff"
-        />
+        {!mounted ? (
+          <>
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-blue-600 to-blue-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-emerald-600 to-emerald-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-violet-600 to-violet-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-cyan-600 to-cyan-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-gray-500 to-gray-400" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-rose-600 to-rose-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-indigo-600 to-indigo-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-teal-600 to-teal-500" />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              icon={PoundSterling}
+              label="Total Revenue"
+              value={fmtCurrency(totalRevenue)}
+              numericValue={totalRevenue}
+              formatter={n => fmtCurrency(n)}
+              sub={`This month: ${fmtCurrency(monthRevenue)}`}
+              sub2={`Today: ${fmtCurrency(todayRevenue)}`}
+              gradient="bg-gradient-to-br from-blue-600 to-blue-500"
+              iconBg="bg-blue-400/40"
+              testId="stat-revenue"
+              href="/sales"
+            />
+            <KpiCard
+              icon={Receipt}
+              label="Sales This Week"
+              value={fmtCurrency(weekRevenue)}
+              numericValue={weekRevenue}
+              formatter={n => fmtCurrency(n)}
+              sub={`${completedSales.length} completed sale${completedSales.length !== 1 ? "s" : ""}`}
+              sub2={`${salesStatusMap["On Credit"] || 0} on credit`}
+              gradient="bg-gradient-to-br from-emerald-600 to-emerald-500"
+              iconBg="bg-emerald-400/40"
+              testId="stat-week-revenue"
+              href="/sales"
+            />
+            <KpiCard
+              icon={Users}
+              label="Leads"
+              value={totalLeads}
+              numericValue={totalLeads}
+              formatter={n => String(Math.round(n))}
+              sub={`${activeLeads} active · ${wonLeads} won`}
+              sub2={`Win rate: ${winRate}%`}
+              gradient="bg-gradient-to-br from-violet-600 to-violet-500"
+              iconBg="bg-violet-400/40"
+              testId="stat-total-leads"
+              href="/leads"
+            />
+            <KpiCard
+              icon={UserCheck}
+              label="Customers"
+              value={customers.length}
+              numericValue={customers.length}
+              formatter={n => String(Math.round(n))}
+              sub={`${activeCustomers} active`}
+              gradient="bg-gradient-to-br from-cyan-600 to-cyan-500"
+              iconBg="bg-cyan-400/40"
+              testId="stat-customers"
+              href="/customers"
+            />
+            <KpiCard
+              icon={AlertTriangle}
+              label="Low Stock"
+              value={lowStockItems.length}
+              numericValue={lowStockItems.length}
+              formatter={n => String(Math.round(n))}
+              sub={`${outOfStock.length} out of stock`}
+              sub2={`${forSaleStock.length} total SKUs`}
+              gradient={lowStockItems.length > 0 ? "bg-gradient-to-br from-amber-500 to-orange-500" : "bg-gradient-to-br from-gray-500 to-gray-400"}
+              iconBg="bg-white/20"
+              testId="stat-low-stock"
+              href="/stock-ledger"
+            />
+            <KpiCard
+              icon={ShoppingCart}
+              label="Pending Orders"
+              value={pendingPOs.length}
+              numericValue={pendingPOs.length}
+              formatter={n => String(Math.round(n))}
+              sub={`${receivedPOs.length} received`}
+              sub2={`${purchaseOrders.length} total POs`}
+              gradient="bg-gradient-to-br from-rose-600 to-rose-500"
+              iconBg="bg-rose-400/40"
+              testId="stat-pending-pos"
+              href="/purchases"
+            />
+            <KpiCard
+              icon={Package}
+              label="Products"
+              value={products.length}
+              numericValue={products.length}
+              formatter={n => String(Math.round(n))}
+              sub={`${stock.length} stock items`}
+              gradient="bg-gradient-to-br from-indigo-600 to-indigo-500"
+              iconBg="bg-indigo-400/40"
+              testId="stat-products"
+              href="/products"
+            />
+            <KpiCard
+              icon={Users2}
+              label="Staff"
+              value={staff.length}
+              numericValue={staff.length}
+              formatter={n => String(Math.round(n))}
+              sub={`${staff.filter(s => s.status === "Active").length} active`}
+              sub2={`${adminUsers.length} admin accounts`}
+              gradient="bg-gradient-to-br from-teal-600 to-teal-500"
+              iconBg="bg-teal-400/40"
+              testId="stat-staff"
+              href="/staff"
+            />
+          </>
+        )}
       </div>
 
       {/* ══ Revenue Chart + Sales Breakdown ══════════════════════════════════ */}
