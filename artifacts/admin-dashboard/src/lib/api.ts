@@ -81,7 +81,9 @@ export async function kvGetAll(namespace: string): Promise<Record<string, unknow
   return await apiFetch(`${BASE}/${encodeURIComponent(namespace)}`);
 }
 
-/** Delete an entire namespace (used when a tenant is deleted). */
+/** Delete an entire namespace (used when a tenant is deleted).
+ *  Uses apiWriteFetch so a failed namespace purge throws instead of being
+ *  silently swallowed — callers can detect and surface the failure. */
 export async function kvDeleteNamespace(namespace: string): Promise<void> {
-  await apiFetch(`${BASE}/${encodeURIComponent(namespace)}`, { method: "DELETE" });
+  await apiWriteFetch(`${BASE}/${encodeURIComponent(namespace)}`, { method: "DELETE" });
 }

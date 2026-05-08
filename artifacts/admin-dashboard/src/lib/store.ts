@@ -317,10 +317,23 @@ function setGlobal<T>(key: string, data: T[]) {
   _apiWrite(key, data).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
-/** Awaitable platform-level write. Resolves only after the server confirms. */
+/** Awaitable platform-level write. Resolves only after the server confirms.
+ *  If the server write fails, the in-memory cache is rolled back to its
+ *  previous value so the UI never shows data that was never persisted. */
 async function setGlobalAsync<T>(key: string, data: T[]): Promise<void> {
+  const prev = _memRaw.get(key);
   _lsCache(key, data);
-  await _apiWrite(key, data);
+  try {
+    await _apiWrite(key, data);
+  } catch (err) {
+    // Revert memory so the UI reflects server reality after a failed write.
+    if (prev !== undefined) {
+      _memRaw.set(key, prev);
+    } else {
+      _memRaw.delete(key);
+    }
+    throw err;
+  }
 }
 
 // ─── Leads API ────────────────────────────────────────────────────────────────
@@ -1514,17 +1527,27 @@ export const deleteTenant = (id: string): void => {
 };
 
 /** Awaitable variant of deleteTenant. Resolves only after the server confirms
- *  both the tenant list update AND the full namespace purge are persisted. */
+ *  the tenant registry update. The data-namespace purge is best-effort:
+ *  it runs after the registry write succeeds and does not cause handleDelete
+ *  to show "Delete failed" if the purge request itself has a transient error. */
 export const deleteTenantAsync = async (id: string): Promise<void> => {
+  // Step 1: remove the tenant record from the authoritative list.
+  // setGlobalAsync throws (and rolls back memory) if the server write fails,
+  // so handleDelete's catch will surface a proper "Delete failed" toast.
   await setGlobalAsync(TENANTS_KEY, getTenants().filter(t => t.id !== id));
-  // Purge every key stored under this tenant's namespace from the database.
-  // This is the authoritative cleanup — the namespace delete is atomic on the server.
-  await kvDeleteNamespace(`t:${id}`);
-  // Also evict all in-memory cache entries for this tenant so stale data
-  // never bleeds into a subsequent session within the same browser tab.
+
+  // Step 2: evict in-memory cache entries immediately so the rest of this
+  // tab session never sees stale data for the deleted tenant.
   for (const k of [..._memRaw.keys()]) {
     if (k.startsWith(`t:${id}:`)) _memRaw.delete(k);
   }
+
+  // Step 3: purge the tenant's data namespace from the database.
+  // Best-effort: a failure here does not undo the registry delete; the orphaned
+  // rows are harmless and will be cleaned up on the next successful attempt.
+  kvDeleteNamespace(`t:${id}`).catch((err) => {
+    console.warn(`[tenant] namespace purge failed for t:${id} — orphaned rows remain:`, err);
+  });
 };
 
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
@@ -7361,6 +7384,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       for (const [key, value] of Object.entries(globalData)) {
         if (value === undefined || value === null) continue;
         if (tenantId !== null && !isPlatformGlobalKey(key)) continue;
+        // Skip keys that have a pending in-flight write — their in-memory value
+        // is newer than what the server returned (race between the write reaching
+        // the server and this GET response arriving). Overwriting with stale
+        // server data here is the root cause of deleted tenants "resurrecting".
+        if (_pendingWrites.has(key)) continue;
         _lsCache(key, value);
       }
     }
@@ -7389,7 +7417,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
       if (tenantData) {
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
-            _lsCache(`t:${tenantId}:${key}`, value);
+            const fullKey = `t:${tenantId}:${key}`;
+            // Skip keys with pending in-flight writes — same resurrection guard
+            // as the global data section above.
+            if (_pendingWrites.has(fullKey)) continue;
+            _lsCache(fullKey, value);
           }
         }
       }
