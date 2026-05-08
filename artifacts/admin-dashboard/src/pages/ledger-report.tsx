@@ -7,7 +7,7 @@ import { Account, getSettings, reconcileAccountingData, SYS_ACCS, getInvoices, g
 import {
   BookOpen, Printer, FileDown, Search, ChevronDown, RefreshCw,
   TrendingUp, TrendingDown, BarChart3, Calendar,
-  ArrowDownCircle, ArrowUpCircle, Pencil,
+  ArrowDownCircle, ArrowUpCircle, ExternalLink,
   ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -891,21 +891,27 @@ export default function LedgerReportPage() {
                     >
                       <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-medium whitespace-nowrap">{row.date}</td>
                       <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[12px] font-mono font-semibold text-primary">{row.reference}</span>
-                          {(() => {
-                            const { url, title } = resolveSourceUrl(row.reference, row.description);
-                            return (
+                        {(() => {
+                          const { url, title } = resolveSourceUrl(row.reference, row.description);
+                          return (
+                            <div className="flex items-center gap-1.5">
                               <button
                                 title={title}
+                                onClick={() => navigate(url)}
+                                className="text-[12px] font-mono font-semibold text-primary hover:underline cursor-pointer text-left"
+                              >
+                                {row.reference}
+                              </button>
+                              <button
+                                title={`Open in new tab: ${row.reference}`}
                                 onClick={() => window.open(`/admin-dashboard${url}`, "_blank")}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
                               >
-                                <Pencil size={11} />
+                                <ExternalLink size={11} />
                               </button>
-                            );
-                          })()}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="text-[13px] font-medium text-foreground leading-tight">{row.description}</div>
