@@ -2457,10 +2457,12 @@ export default function SalesPage() {
     }
   }, [currentTenantId, refresh, toast]);
 
-  // Auto-sync online orders whenever the sales list mounts
+  // Auto-sync online orders once the tenant is known.
+  // Depends on syncOnlineOrders (which captures currentTenantId via useCallback)
+  // so it re-fires whenever the active tenant changes, never with a stale null ID.
   useEffect(() => {
     syncOnlineOrders();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [syncOnlineOrders]);
 
   const clearAdvFilters = () => {
     setFilterArea(""); setFilterCustomer(""); setFilterAgent("");

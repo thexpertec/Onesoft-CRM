@@ -3055,7 +3055,13 @@ export const deleteSale = (id: string): void => {
 };
 
 /** Pull any online orders saved by the tenant store and merge them into admin-sales. Returns count of new records imported. */
-export async function importOnlineSalesFromKv(ns = "global"): Promise<number> {
+export async function importOnlineSalesFromKv(ns: string): Promise<number> {
+  // Guard: never pull from the global namespace.
+  // If ns is missing or "global" it means currentTenantId was null at call-time,
+  // which would import orders from any tenant that fell back to the global bucket
+  // and write them permanently into the wrong tenant's sales — the root cause of
+  // cross-tenant order mixing.
+  if (!ns || ns === "global") return 0;
   try {
     const raw = await kvGet(ns, "online-orders");
     if (!Array.isArray(raw)) return 0;

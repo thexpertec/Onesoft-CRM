@@ -52,7 +52,9 @@ function apiBase(): string {
 }
 
 async function saveOrder(order: Record<string, unknown>, tenantId: string | null): Promise<void> {
-  const ns = tenantId ? encodeURIComponent(`t:${tenantId}`) : "global";
+  // Never write to the global namespace — orders must always be scoped to a tenant.
+  if (!tenantId) return;
+  const ns = encodeURIComponent(`t:${tenantId}`);
   let existing: unknown[] = [];
   try {
     const r = await fetch(`${apiBase()}/kv/${ns}/store-orders`);
@@ -70,11 +72,15 @@ async function saveOrder(order: Record<string, unknown>, tenantId: string | null
 }
 
 async function saveToAdminSales(saleRecord: Record<string, unknown>, tenantId: string | null): Promise<void> {
+  // Never write to the global namespace — orders must always be scoped to a tenant.
+  // A null tenantId means the store page was loaded without a valid tenant context;
+  // writing to "global" in this case is the primary source of cross-tenant mixing.
+  if (!tenantId) return;
+
   const id = saleRecord.id as string;
 
   // 1. Append to the tenant's own online-orders list so the admin sales page can import it.
-  //    Use the tenant namespace when available so orders are never mixed across tenants.
-  const onlineOrdersNs = tenantId ? encodeURIComponent(`t:${tenantId}`) : "global";
+  const onlineOrdersNs = encodeURIComponent(`t:${tenantId}`);
   try {
     let existing: unknown[] = [];
     const r = await fetch(`${apiBase()}/kv/${onlineOrdersNs}/online-orders`);
