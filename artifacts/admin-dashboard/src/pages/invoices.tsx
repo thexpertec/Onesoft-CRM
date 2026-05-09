@@ -14,6 +14,7 @@ import {
   findProductForItem, effectiveItemCost,
   getRawMaterials,
   createInvoicePriceAdjustmentJE,
+  revertInvoiceToDraft,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -1856,7 +1857,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <Send size={12}/> Send
                   </button>
                 )}
-                {(s === "Paid" || s === "Partial") && (
+                {(s === "Paid" || s === "Partial" || s === "Sent" || s === "Overdue") && invoiceType !== "purchase" && (
                   <button onClick={() => setRevertConfirmOpen(true)}
                     className="col-span-2 h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
                     <RotateCcw size={12}/> Revert to Draft
@@ -2004,11 +2005,24 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revert to Draft?</AlertDialogTitle>
-            <AlertDialogDescription>Invoice "{invoice?.invoiceNumber}" will be reverted to Draft. Any recorded payments will be cleared.</AlertDialogDescription>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <p>The following will be permanently undone for <strong className="text-gray-900 dark:text-gray-100">{invoice?.invoiceNumber}</strong>:</p>
+                <ul className="list-disc list-inside space-y-1 pl-1">
+                  <li>All recorded payments &amp; payment history cleared</li>
+                  <li>Journal entries deleted (sale JE, receipts, adjustments)</li>
+                  <li>Linked receipt vouchers reset to draft</li>
+                  <li>Deducted stock restored to inventory</li>
+                </ul>
+                <p className="text-orange-600 dark:text-orange-400 font-medium">This cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (invoice) onStatusChange(invoice.id, "Draft"); setRevertConfirmOpen(false); }}>
+            <AlertDialogAction
+              onClick={() => { if (invoice) onStatusChange(invoice.id, "Draft"); setRevertConfirmOpen(false); }}
+              className="bg-orange-600 hover:bg-orange-700 text-white">
               Revert to Draft
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -2212,6 +2226,14 @@ export function InvoiceFormPage() {
     // if the user clicks multiple status buttons in rapid succession.
     const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
+
+    // ── Full revert for sale invoices — all JEs, vouchers, stock, payments ────
+    if (status === "Draft" && inv.invoiceType !== "purchase") {
+      revertInvoiceToDraft(id);
+      toast({ title: "Reverted to Draft", description: "Payments cleared · journal entries deleted · stock restored" });
+      return;
+    }
+
     const updates: Partial<Invoice> = { status };
     if (amountPaid !== undefined) updates.amountPaid = amountPaid;
     if (status === "Paid" || status === "Partial") {

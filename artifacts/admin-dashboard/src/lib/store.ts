@@ -6902,6 +6902,72 @@ export function createInvoicePriceAdjustmentJE(params: {
 }
 
 /**
+ * Fully reverts a SALE invoice back to Draft in a single atomic operation:
+ *   1. Deletes the original sale JE  (inv.jeId)
+ *   2. Deletes all cash-receipt JEs  (reference "RCPT-{invNo}")
+ *   3. Deletes all price-adj JEs     (reference "ADJ-{invNo}")
+ *   4. Resets any linked Receipt Vouchers to "draft" and unlinks them
+ *   5. Restores deducted stock
+ *   6. Clears amountPaid / paymentHistory / paidAt / jeId on the invoice
+ *   7. Sets invoice status → "Draft"
+ *
+ * No-ops for purchase invoices (they follow a different receive/return flow).
+ */
+export function revertInvoiceToDraft(invoiceId: string): void {
+  const inv = getInvoices().find(i => i.id === invoiceId);
+  if (!inv || inv.invoiceType === "purchase") return;
+
+  const invNo = inv.invoiceNumber;
+  const now   = new Date().toISOString();
+
+  // 1. Wipe all JEs for this invoice ─────────────────────────────────────────
+  const remainingJEs = getJournalEntries().filter(je => {
+    if (inv.jeId && je.id === inv.jeId)       return false; // original sale JE
+    if (je.reference === `RCPT-${invNo}`)     return false; // cash receipt JEs
+    if (je.reference === `ADJ-${invNo}`)      return false; // price-adj JEs
+    return true;
+  });
+  _saveJournalEntries(remainingJEs);
+
+  // 2. Reset linked Receipt Vouchers → draft (their JE was wiped above) ───────
+  const updatedVouchers = getRPVouchers().map(v => {
+    const singleLink = v.linkedInvoiceId === invoiceId;
+    const multiLink  = (v.linkedInvoiceIds ?? []).includes(invoiceId);
+    if (!singleLink && !multiLink) return v;
+    if (v.status !== "posted")     return v;   // already draft — leave alone
+    return {
+      ...v,
+      status:          "draft" as const,
+      journalEntryId:  undefined,
+      // For single-invoice vouchers, remove the link entirely.
+      // For multi-invoice vouchers, remove only this invoice from each line.
+      linkedInvoiceId: singleLink ? undefined : v.linkedInvoiceId,
+      lines:           v.lines.map(l =>
+        l.invoiceId === invoiceId ? { ...l, invoiceId: undefined } : l
+      ),
+      updatedAt: now,
+    };
+  });
+  _saveRPVouchers(updatedVouchers);
+
+  // 3. Restore stock ──────────────────────────────────────────────────────────
+  if (inv.stockDeducted) {
+    restoreStockForSale(inv.items, invNo);
+  }
+
+  // 4. Reset the invoice itself ───────────────────────────────────────────────
+  updateInvoice(invoiceId, {
+    status:         "Draft",
+    amountPaid:     "0",
+    paymentHistory: [],
+    paidAt:         "",
+    stockDeducted:  false,
+    jeId:           undefined,
+    jeUsesAR:       undefined,
+  });
+}
+
+/**
  * Auto-posts a journal entry when a Purchase Order is received.
  *   DR Inventory / Stock  = PO total value
  *   CR Accounts Payable   = PO total value
