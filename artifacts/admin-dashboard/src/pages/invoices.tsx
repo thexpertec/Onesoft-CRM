@@ -13,6 +13,7 @@ import {
   createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
   findProductForItem, effectiveItemCost,
   getRawMaterials,
+  createInvoicePriceAdjustmentJE,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -2148,7 +2149,43 @@ export function InvoiceFormPage() {
       }
 
       editInvoice(id, updates);
-      toast({ title: "Invoice updated" });
+
+      // ── Price-adjustment JE ───────────────────────────────────────────────
+      // If a sale JE has already been posted and the grand total has changed,
+      // automatically create a balancing correction entry (Credit Note / Debit Note).
+      let adjToastShown = false;
+      if (!isPurchase && existing?.jeId) {
+        const oldTotals = computeTotals(
+          existing.items, existing.taxRate, "0",
+          existing.shippingFee, existing.handlingFee,
+        );
+        const newTotals = computeTotals(
+          data.items, data.taxRate, "0",
+          data.shippingFee || "0", data.handlingFee || "0",
+        );
+        const diff = Math.abs(newTotals.total - oldTotals.total);
+        if (diff > 0.01) {
+          const adjJe = createInvoicePriceAdjustmentJE({
+            invoiceNumber: existing.invoiceNumber,
+            customer:      data.customer || existing.customer,
+            date:          data.invoiceDate || existing.invoiceDate,
+            oldTotal:      oldTotals.total,
+            newTotal:      newTotals.total,
+          });
+          if (adjJe) {
+            const sym  = getSettingsCurrencySymbol();
+            const dp   = getSettingsDecimalPlaces();
+            const kind = newTotals.total < oldTotals.total ? "Credit Note" : "Debit Note";
+            toast({
+              title:       `${kind} adjustment posted`,
+              description: `${sym}${diff.toFixed(dp)} difference — JE ADJ-${existing.invoiceNumber} created`,
+            });
+            adjToastShown = true;
+          }
+        }
+      }
+
+      if (!adjToastShown) toast({ title: "Invoice updated" });
       navigate(isPurchase ? "/invoices?type=purchase" : "/invoices");
     } else {
       // New invoice — create first, then apply JE / stock logic

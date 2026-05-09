@@ -6846,6 +6846,62 @@ export function autoPostCashReceiptJE(params: {
 }
 
 /**
+ * Creates a price-adjustment Journal Entry when an invoice's grand total is
+ * revised AFTER the original sale JE has already been posted.
+ *
+ * Price DECREASED  (credit note / reversal):
+ *   DR  Sales Revenue     |  |diff|   — reverse the over-stated revenue
+ *   CR  Customer AR       |  |diff|   — reduce what the customer owes
+ *
+ * Price INCREASED  (debit note / additional charge):
+ *   DR  Customer AR       |  |diff|   — charge the customer more
+ *   CR  Sales Revenue     |  |diff|   — recognise the additional revenue
+ *
+ * Returns null when the difference rounds to zero.
+ */
+export function createInvoicePriceAdjustmentJE(params: {
+  invoiceNumber: string;
+  customer:      string;
+  date:          string;   // YYYY-MM-DD
+  oldTotal:      number;
+  newTotal:      number;
+}): JournalEntry | null {
+  const diff      = parseFloat((params.newTotal - params.oldTotal).toFixed(2));
+  if (Math.abs(diff) < 0.01) return null;
+
+  const isIncrease = diff > 0;
+  const absAmount  = Math.abs(diff);
+
+  const customerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP)
+                    || SYS_ACCS.AR_TRADE;
+  const salesRevId   = SYS_ACCS.GENERAL_SALES_REV;
+
+  const kind    = isIncrease ? "Debit Note" : "Credit Note";
+  const narration = `${kind} – price revision for ${params.invoiceNumber}`;
+
+  const lines: JournalEntryLine[] = isIncrease
+    ? [
+        { id: crypto.randomUUID(), ledgerId: customerArId, narration, debit: absAmount, credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: salesRevId,   narration, debit: 0,         credit: absAmount },
+      ]
+    : [
+        { id: crypto.randomUUID(), ledgerId: salesRevId,   narration, debit: absAmount, credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: customerArId, narration, debit: 0,         credit: absAmount },
+      ];
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `ADJ-${params.invoiceNumber}`,
+    description: narration,
+    lines,
+    status:      "posted",
+    totalDebit:  absAmount,
+    totalCredit: absAmount,
+    isBalanced:  true,
+  });
+}
+
+/**
  * Auto-posts a journal entry when a Purchase Order is received.
  *   DR Inventory / Stock  = PO total value
  *   CR Accounts Payable   = PO total value
