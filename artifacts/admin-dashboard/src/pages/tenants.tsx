@@ -443,6 +443,21 @@ export default function TenantsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-sync whenever the user switches back to this browser tab after being away.
+  // This prevents a long-lived session from accumulating stale in-memory state
+  // and accidentally overwriting the server's tenant list (the root cause of
+  // deleted tenants reappearing and new tenants going missing).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncAllFromServer(null).then(() => reload()).catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleManualRefresh() {
     setIsRefreshing(true);
     try {

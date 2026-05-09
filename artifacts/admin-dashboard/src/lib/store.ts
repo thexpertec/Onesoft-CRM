@@ -1487,14 +1487,20 @@ export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt"
 export const createTenantAsync = async (
   data: Omit<Tenant, "id" | "createdAt" | "updatedAt">,
 ): Promise<Tenant> => {
-  const existing = getTenants();
+  // Always fetch the authoritative list from the server first so we never
+  // append to a stale in-memory snapshot that is missing recent tenants
+  // or still contains recently-deleted ones.
+  const fresh = await kvGet("global", TENANTS_KEY);
+  const existing: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  _lsCache(TENANTS_KEY, existing);          // update memory with server truth
+
   const slugConflict = existing.find(t => t.slug.toLowerCase() === data.slug.toLowerCase());
   if (slugConflict) throw new Error(`A tenant with slug "${data.slug}" already exists.`);
   const usernameConflict = existing.find(t => t.adminUsername.toLowerCase() === data.adminUsername.toLowerCase());
   if (usernameConflict) throw new Error(`A tenant with username "${data.adminUsername}" already exists.`);
   const now = new Date().toISOString();
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
-  await setGlobalAsync(TENANTS_KEY, [...getTenants(), tenant]);
+  await setGlobalAsync(TENANTS_KEY, [...existing, tenant]);
   try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
   return tenant;
 };
@@ -1512,7 +1518,12 @@ export const updateTenantAsync = async (
   id: string,
   updates: Partial<Omit<Tenant, "id" | "createdAt">>,
 ): Promise<Tenant> => {
-  const tenants = getTenants();
+  // Fetch the current server list first so a stale in-memory copy never
+  // resurrects deleted tenants or drops recently-added ones.
+  const fresh = await kvGet("global", TENANTS_KEY);
+  const tenants: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  _lsCache(TENANTS_KEY, tenants);           // sync memory before we mutate
+
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) throw new Error("Tenant not found");
   tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
@@ -1533,9 +1544,16 @@ export const deleteTenant = (id: string): void => {
  *  to show "Delete failed" if the purge request itself has a transient error. */
 export const deleteTenantAsync = async (id: string): Promise<void> => {
   // Step 1: remove the tenant record from the authoritative list.
+  // Always read the server's current list first — using a stale in-memory copy
+  // is exactly what causes deleted tenants to reappear (the stale copy still
+  // contains the "deleted" tenant from a prior session, and writing it back
+  // resurrects it while dropping any tenants added by other sessions).
+  const fresh = await kvGet("global", TENANTS_KEY);
+  const current: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  _lsCache(TENANTS_KEY, current);           // update memory with server truth
   // setGlobalAsync throws (and rolls back memory) if the server write fails,
   // so handleDelete's catch will surface a proper "Delete failed" toast.
-  await setGlobalAsync(TENANTS_KEY, getTenants().filter(t => t.id !== id));
+  await setGlobalAsync(TENANTS_KEY, current.filter(t => t.id !== id));
 
   // Step 2: evict in-memory cache entries immediately so the rest of this
   // tab session never sees stale data for the deleted tenant.
