@@ -7550,6 +7550,23 @@ export function purgeOrphanedVoucherJEs(): number {
  *  4. Run lightweight data-quality passes (orphan-JE purge, dedup).
  *  5. Fire "onesoft:data-synced" so all hooks re-render with fresh data.
  */
+/**
+ * Lightweight fallback: fetch ONLY the tenant registry from the server and
+ * update the in-memory cache.  Used by the login flow as a safety net when
+ * syncAllFromServer (which fetches the entire global namespace in one large
+ * request) fails or is too slow — the tenant list alone is tiny and fast.
+ */
+export async function syncTenantsFromServer(): Promise<void> {
+  try {
+    const fresh = await kvGet("global", TENANTS_KEY);
+    if (Array.isArray(fresh) && fresh.length > 0) {
+      _lsCache(TENANTS_KEY, fresh);
+    }
+  } catch (e) {
+    console.warn("[store] syncTenantsFromServer failed:", e);
+  }
+}
+
 export async function syncAllFromServer(tenantId: string | null): Promise<void> {
   try {
     // Step 1 — Drain pending writes so we read the server's freshest state.

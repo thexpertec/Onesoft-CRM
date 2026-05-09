@@ -16,6 +16,8 @@ import {
   setActiveTenant,
   getActiveTenantId,
   syncAllFromServer,
+  syncTenantsFromServer,
+  getTenants,
   setActivityUser,
   seedDefaultCoaAccounts,
   Tenant,
@@ -231,17 +233,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.removeItem("onesoft_tab_tenant");
 
     // First sync global data from the DB so we have the latest users/tenants.
-    // syncAllFromServer has its own inner try/catch — the catch here is a
-    // defensive backstop so a race or edge-case rejection never propagates to
-    // doLogin's catch (which would show "check your connection" for valid creds).
+    // syncAllFromServer fetches the ENTIRE global namespace in one request — if
+    // that large request fails or is mangled by a proxy, _memRaw["admin-tenants"]
+    // is never populated and every valid credential appears wrong.
+    // After the bulk sync, we always do a targeted single-key fetch for the
+    // tenant list so login is never broken by a large-response failure.
     setIsSyncing(true);
     try {
       await syncAllFromServer(null);
     } catch {
-      // Swallow: we fall back to whatever is in the in-memory cache.
+      // Swallow: fall back to in-memory cache + the targeted fetch below.
     } finally {
       setIsSyncing(false);
     }
+
+    // Always refresh the tenant registry with a targeted single-key fetch.
+    // The bulk syncAllFromServer above fetches ALL 40+ global keys in one
+    // large request that can time out or be truncated by intermediate proxies.
+    // This small follow-up request (~2 KB) guarantees the credential check
+    // below always uses the real server state, not a stale or missing cache.
+    await syncTenantsFromServer();
 
     // Wrap ALL credential checks so no unexpected runtime error surfaces as
     // the scary "Sign in failed — please check your connection" message.
