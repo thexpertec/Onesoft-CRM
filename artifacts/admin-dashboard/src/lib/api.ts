@@ -36,29 +36,6 @@ async function apiFetch(url: string, options?: RequestInit) {
   }
 }
 
-/**
- * Cached read fetch — uses the browser's own HTTP cache with the server's
- * stale-while-revalidate policy. Only safe to use on endpoints that set
- * Cache-Control: private (preventing proxy caching) and have ETags disabled
- * (preventing 304-with-no-body from the proxy).
- * GET /api/kv/:namespace satisfies both conditions.
- */
-async function apiFetchCached(url: string) {
-  try {
-    const res = await fetch(url, {
-      signal: withTimeout(READ_TIMEOUT_MS),
-      // "default" means: use the browser's HTTP cache, respecting the server's
-      // Cache-Control header (private, max-age=30, stale-while-revalidate=300).
-      cache: "default",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (e) {
-    console.warn("[api cached]", url, e);
-    return null;
-  }
-}
 
 /**
  * Write fetch — THROWS on failure so callers know the write did not persist.
@@ -99,11 +76,9 @@ export async function kvDelete(namespace: string, key: string): Promise<void> {
   });
 }
 
-/** Fetch ALL key-value pairs for a namespace in one request.
- *  Uses the cached fetch so the browser serves stale data instantly on reload
- *  while revalidating in the background (stale-while-revalidate=300). */
+/** Fetch ALL key-value pairs for a namespace in one request. */
 export async function kvGetAll(namespace: string): Promise<Record<string, unknown> | null> {
-  return await apiFetchCached(`${BASE}/${encodeURIComponent(namespace)}`);
+  return await apiFetch(`${BASE}/${encodeURIComponent(namespace)}`);
 }
 
 /** Delete an entire namespace (used when a tenant is deleted).
