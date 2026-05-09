@@ -1007,7 +1007,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 </button>
               )}
               {items.map((item, idx) => {
-                const isDelivered = item.itemStatus === "Delivered" && !!item.productName.trim();
+                // For purchase invoices: only lock items after the JE is posted ("Mark as Received"
+                // completed). itemStatus may be "Delivered" from a partial or interrupted flow but
+                // if no jeId exists yet, no accounting/stock entry was finalised — keep editable.
+                const isDelivered = item.itemStatus === "Delivered"
+                  && !!item.productName.trim()
+                  && (invoiceType !== "purchase" || !!jeId);
                 return (
                 <div key={item.id}>
                   {/* Item row */}
