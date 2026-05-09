@@ -3056,12 +3056,22 @@ export const deleteSale = (id: string): void => {
 
 /** Pull any online orders saved by the tenant store and merge them into admin-sales. Returns count of new records imported. */
 export async function importOnlineSalesFromKv(ns: string): Promise<number> {
-  // Guard: never pull from the global namespace.
+  // Guard 1: never pull from the global namespace.
   // If ns is missing or "global" it means currentTenantId was null at call-time,
   // which would import orders from any tenant that fell back to the global bucket
   // and write them permanently into the wrong tenant's sales — the root cause of
   // cross-tenant order mixing.
   if (!ns || ns === "global") return 0;
+
+  // Guard 2: ns MUST exactly match the currently active tenant namespace.
+  // importOnlineSalesFromKv reads from `ns` (built from React's currentTenantId)
+  // but writes via setStored which uses _activeTenantId from the store module.
+  // When manager-dashboard.tsx or login-as-dialog.tsx temporarily overrides
+  // _activeTenantId for a data-reading operation, these two can diverge — causing
+  // online orders from TenantA to be written into TenantB's admin-sales.
+  const activeTenantId = getActiveTenantId();
+  if (!activeTenantId || ns !== `t:${activeTenantId}`) return 0;
+
   try {
     const raw = await kvGet(ns, "online-orders");
     if (!Array.isArray(raw)) return 0;
