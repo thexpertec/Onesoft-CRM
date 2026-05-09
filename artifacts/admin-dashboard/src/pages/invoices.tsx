@@ -49,8 +49,8 @@ const STATUS_STYLE: Record<InvoiceStatus, { bg: string; dot: string; label: stri
 const today = () => new Date().toISOString().slice(0, 10);
 const in30  = () => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); };
 
-const SALE_ORDER_STATUSES     = ["Pending", "Delivered", "Completed", "Cancelled"] as const;
-const PURCHASE_ORDER_STATUSES = ["Pending", "Ordered", "Received", "Partially Received", "Overdue", "Paid", "Cancelled"] as const;
+const SALE_ORDER_STATUSES     = ["Pending", "Partially Delivered", "Delivered", "Completed", "Cancelled"] as const;
+const PURCHASE_ORDER_STATUSES = ["Ordered", "Received", "Partially Received", "Cancelled"] as const;
 
 const lineTotal = (item: SaleItem) => {
   const q = parseFloat(item.qty) || 0;
