@@ -87,3 +87,57 @@ export async function kvGetAll(namespace: string): Promise<Record<string, unknow
 export async function kvDeleteNamespace(namespace: string): Promise<void> {
   await apiWriteFetch(`${BASE}/${encodeURIComponent(namespace)}`, { method: "DELETE" });
 }
+
+// ─── Server-side auth ────────────────────────────────────────────────────────
+
+export interface VerifyTenantResult {
+  ok: true;
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    plan: string;
+    isDemo: boolean;
+    contactEmail: string;
+    demoResetInterval: number;
+    createdAt: string;
+    updatedAt: string;
+    adminUsername: string;
+    [key: string]: unknown;
+  };
+}
+export interface VerifyTenantFail {
+  ok: false;
+  reason: "not_found" | "suspended";
+}
+export type VerifyTenantResponse = VerifyTenantResult | VerifyTenantFail;
+
+/**
+ * Verify tenant credentials directly on the server — no client-side KV sync
+ * required.  The server queries the database and returns the sanitised tenant
+ * object (adminPassword is stripped server-side) so the caller can populate
+ * the session without an additional fetch.
+ *
+ * Returns null only when the network request itself fails so callers can fall
+ * back to the local cache path.
+ */
+export async function verifyTenantCredentials(
+  username: string,
+  password: string
+): Promise<VerifyTenantResponse | null> {
+  try {
+    const res = await fetch("/api/auth/verify-tenant", {
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as VerifyTenantResponse;
+  } catch (e) {
+    console.warn("[api] verifyTenantCredentials failed:", e);
+    return null;
+  }
+}

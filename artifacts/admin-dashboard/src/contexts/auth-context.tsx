@@ -22,6 +22,7 @@ import {
   seedDefaultCoaAccounts,
   Tenant,
 } from "@/lib/store";
+import { verifyTenantCredentials } from "@/lib/api";
 
 // Core auth state (isAuthenticated, userId, tenantId) is stored in localStorage
 // so it survives page refreshes and iframe reloads. The Replit preview pane is
@@ -232,26 +233,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // surface the wrong tenant's data.
     sessionStorage.removeItem("onesoft_tab_tenant");
 
-    // First sync global data from the DB so we have the latest users/tenants.
-    // syncAllFromServer fetches the ENTIRE global namespace in one request — if
-    // that large request fails or is mangled by a proxy, _memRaw["admin-tenants"]
-    // is never populated and every valid credential appears wrong.
-    // After the bulk sync, we always do a targeted single-key fetch for the
-    // tenant list so login is never broken by a large-response failure.
+    // ── Step 1: Server-side tenant credential check (primary path) ────────────
+    // Ask the API server to verify credentials directly against the database.
+    // This bypasses the entire KV-sync pipeline — no large fetches, no caches,
+    // no race conditions.  If the server says yes, the tenant is logged in
+    // immediately without any further credential lookup on the client.
+    const serverCheck = await verifyTenantCredentials(username, password);
+    if (serverCheck !== null) {
+      if (serverCheck.ok) {
+        // Server confirmed the credentials. Reconstruct a minimal Tenant object
+        // from the server response so we can call the normal session setup path.
+        const tenantFromServer = serverCheck.tenant as unknown as Tenant;
+        if (tenantFromServer.status === "suspended") return false;
+
+        setActiveTenant(tenantFromServer.id);
+        setIsSyncing(true);
+        try {
+          await syncAllFromServer(tenantFromServer.id);
+          seedDefaultCoaAccounts();
+        } catch {
+          // Swallow; COA seed retries on next sync.
+        } finally {
+          setIsSyncing(false);
+        }
+
+        const tenantUser = tenantToAdminUser(tenantFromServer);
+        setActivityUser(tenantUser.fullName || tenantUser.username);
+        localStorage.setItem(AUTH_KEY,     "true");
+        localStorage.setItem(AUTH_USER_ID, `tenant:${tenantFromServer.id}`);
+        localStorage.setItem(TENANT_KEY,   tenantFromServer.id);
+        setCurrentUser(tenantUser);
+        setCurrentTenantId(tenantFromServer.id);
+        return true;
+      }
+
+      // Server explicitly said "not found" or "suspended".
+      // Still continue so platform users (superadmin/staff/agent) can log in.
+    }
+
+    // ── Step 2: Sync global data for platform-user checks ─────────────────────
+    // We only reach here when the server check failed the network request
+    // (serverCheck === null) or the credentials didn't match a tenant.
+    // Sync so platform users (superadmin, staff, agents) can be checked locally.
     setIsSyncing(true);
     try {
       await syncAllFromServer(null);
     } catch {
-      // Swallow: fall back to in-memory cache + the targeted fetch below.
+      // Swallow: fall back to in-memory cache.
     } finally {
       setIsSyncing(false);
     }
 
-    // Always refresh the tenant registry with a targeted single-key fetch.
-    // The bulk syncAllFromServer above fetches ALL 40+ global keys in one
-    // large request that can time out or be truncated by intermediate proxies.
-    // This small follow-up request (~2 KB) guarantees the credential check
-    // below always uses the real server state, not a stale or missing cache.
+    // Targeted tenant-list refresh as an extra safety net.
     await syncTenantsFromServer();
 
     // Wrap ALL credential checks so no unexpected runtime error surfaces as
@@ -273,17 +306,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return true;
       }
 
-      // 2. Check tenant registry
+      // 2. Tenant registry — local fallback (server check above is primary)
       const tenant = getTenantByCredentials(username, password);
       if (tenant) {
         if (tenant.status === "suspended") return false;
 
-        // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
-        // If this is done after the sync/seed, _activeTenantId is still null and the COA
-        // gets written to the global (superadmin) namespace, contaminating it.
         setActiveTenant(tenant.id);
-
-        // Sync tenant-specific data from DB
         setIsSyncing(true);
         try {
           await syncAllFromServer(tenant.id);
