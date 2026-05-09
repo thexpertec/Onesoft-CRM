@@ -140,7 +140,7 @@ function LedgerDropdown({
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder="Search ledger…"
-            className="w-full pl-7 pr-3 py-1.5 text-[12px] rounded-lg bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full pl-7 pr-3 py-1.5 text-[12px] rounded-none bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
       </div>
@@ -514,7 +514,7 @@ export default function JournalEntryPage() {
                           value={row.narration}
                           onChange={e => setRow(row.id, "narration", e.target.value)}
                           placeholder="Line narration…"
-                          className="w-full px-2.5 py-2 rounded-lg text-[12px] text-gray-700 dark:text-gray-300 placeholder-gray-300 dark:placeholder-zinc-600 bg-transparent hover:bg-white dark:hover:bg-zinc-800 border border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 focus:bg-blue-50/30 dark:focus:bg-blue-950/10 outline-none transition-colors"
+                          className="w-full px-2.5 py-2 rounded-none text-[12px] text-gray-700 dark:text-gray-300 placeholder-gray-300 dark:placeholder-zinc-600 bg-transparent hover:bg-white dark:hover:bg-zinc-800 border border-transparent hover:border-gray-200 dark:hover:border-zinc-700 focus:border-blue-400 focus:bg-blue-50/30 dark:focus:bg-blue-950/10 outline-none transition-colors"
                         />
                       </td>
 
@@ -527,7 +527,7 @@ export default function JournalEntryPage() {
                           value={row.debit}
                           onChange={e => setDebit(row.id, e.target.value)}
                           placeholder="0.00"
-                          className="w-full px-2.5 py-2 rounded-lg text-[12px] font-mono text-right text-blue-700 dark:text-blue-400 placeholder-gray-200 dark:placeholder-zinc-700 bg-transparent hover:bg-blue-50/40 dark:hover:bg-blue-950/10 border border-transparent hover:border-blue-200 dark:hover:border-blue-900 focus:border-blue-400 focus:bg-blue-50/50 outline-none transition-colors"
+                          className="w-full px-2.5 py-2 rounded-none text-[12px] font-mono text-right text-blue-700 dark:text-blue-400 placeholder-gray-200 dark:placeholder-zinc-700 bg-transparent hover:bg-blue-50/40 dark:hover:bg-blue-950/10 border border-transparent hover:border-blue-200 dark:hover:border-blue-900 focus:border-blue-400 focus:bg-blue-50/50 outline-none transition-colors"
                         />
                       </td>
 
@@ -540,7 +540,7 @@ export default function JournalEntryPage() {
                           value={row.credit}
                           onChange={e => setCredit(row.id, e.target.value)}
                           placeholder="0.00"
-                          className="w-full px-2.5 py-2 rounded-lg text-[12px] font-mono text-right text-orange-600 dark:text-orange-400 placeholder-gray-200 dark:placeholder-zinc-700 bg-transparent hover:bg-orange-50/40 dark:hover:bg-orange-950/10 border border-transparent hover:border-orange-200 dark:hover:border-orange-900 focus:border-orange-400 focus:bg-orange-50/50 outline-none transition-colors"
+                          className="w-full px-2.5 py-2 rounded-none text-[12px] font-mono text-right text-orange-600 dark:text-orange-400 placeholder-gray-200 dark:placeholder-zinc-700 bg-transparent hover:bg-orange-50/40 dark:hover:bg-orange-950/10 border border-transparent hover:border-orange-200 dark:hover:border-orange-900 focus:border-orange-400 focus:bg-orange-50/50 outline-none transition-colors"
                         />
                       </td>
 
@@ -661,7 +661,7 @@ export default function JournalEntryPage() {
                   value={listSearch}
                   onChange={e => setListSearch(e.target.value)}
                   placeholder="Search ref, description…"
-                  className="w-full pl-7 pr-7 py-1.5 text-[12px] border border-gray-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full pl-7 pr-7 py-1.5 text-[12px] border border-gray-200 dark:border-zinc-700 rounded-none bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 {listSearch && <button onClick={() => setListSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><span className="text-[10px]">✕</span></button>}
               </div>

@@ -858,32 +858,32 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     maxResults={20}
                     minDropdownWidth={380}
                     placeholder={invoiceType === "purchase" ? "Search supplier…" : "Search customer…"}
-                    inputClassName="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    inputClassName="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
                 {/* Company */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Company</label>
                   <input value={form.salesOfficer} onChange={e => setF("salesOfficer", e.target.value)} placeholder="Company / organisation name"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Phone */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Phone</label>
                   <input value={form.buyerPhone} onChange={e => setF("buyerPhone", e.target.value)} placeholder="+44…"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Area */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Area / City</label>
                   <input value={form.buyerTown} onChange={e => setF("buyerTown", e.target.value)} placeholder="Town / Area / City"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Address */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Address</label>
                   <textarea rows={2} value={form.buyerAddress} onChange={e => setF("buyerAddress", e.target.value)} placeholder="Street address…"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"/>
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none resize-none"/>
                 </div>
               </div>
             </div>
@@ -903,19 +903,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Title</label>
                   <input value={form.invoiceTitle} onChange={e => setF("invoiceTitle", e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Date + Due Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Date</label>
                     <input type="date" value={form.invoiceDate} onChange={e => setF("invoiceDate", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Due Date</label>
                     <input type="date" value={form.dueDate} onChange={e => setF("dueDate", e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border bg-white dark:bg-zinc-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isOverdue(form as unknown as Invoice) ? "border-red-300 dark:border-red-800 text-red-600 dark:text-red-400" : "border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100"}`}/>
+                      className={`w-full px-3 py-2 rounded-none border bg-white dark:bg-zinc-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isOverdue(form as unknown as Invoice) ? "border-red-300 dark:border-red-800 text-red-600 dark:text-red-400" : "border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100"}`}/>
                   </div>
                 </div>
                 {/* Sales Agent */}
@@ -927,7 +927,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       <select value={form.agentId || ""} onChange={e => {
                         const agent = agents.find(a => a.id === e.target.value);
                         setF("agentId", agent?.id || ""); setF("agentName", agent?.name || "");
-                      }} className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
+                      }} className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
                         <option value="">— None —</option>
                         {agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.agentCode})</option>)}
                       </select>
@@ -939,7 +939,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">VAT / Tax %</label>
                     <input type="number" min="0" max="100" value={form.taxRate} onChange={e => setF("taxRate", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                 )}
                 {/* Sale/Purchase Status */}
@@ -948,7 +948,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     {invoiceType === "purchase" ? "Purchase Status" : "Sale Status"}
                   </label>
                   <select value={form.saleStatus ?? ""} onChange={e => setF("saleStatus", e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="">— Select status —</option>
                     {(invoiceType === "purchase" ? PURCHASE_ORDER_STATUSES : SALE_ORDER_STATUSES).map(st => <option key={st}>{st}</option>)}
                   </select>
@@ -1026,7 +1026,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           onSelect={opt => pickProduct(item.id, opt.value)} options={productOpts} placeholder="Product / service…"
                           maxResults={15} minDropdownWidth={320}
                           onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
-                          inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                          inputClassName="w-full px-2.5 py-1.5 rounded-none border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       )}
                       {item.localName && (
                         <span className="block text-[11px] text-muted-foreground pl-1 leading-tight mt-0.5 font-medium" dir="auto">
@@ -1073,7 +1073,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         readOnly={isDelivered}
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "qty"); } }}
                         title={isDelivered ? "Qty locked — product already delivered" : undefined}
-                        className={`w-full px-2 py-1.5 rounded-lg border text-sm text-center outline-none transition-colors ${
+                        className={`w-full px-2 py-1.5 rounded-none border text-sm text-center outline-none transition-colors ${
                           isDelivered
                             ? "border-emerald-200 dark:border-emerald-700/50 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 cursor-not-allowed font-semibold"
                             : "border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
@@ -1087,7 +1087,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         placeholder="0"
                         data-item-id={item.id} data-field="discount"
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "discount"); } }}
-                        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-center text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        className="w-full px-2 py-1.5 rounded-none border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-center text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                       <button type="button"
                         onClick={() => updateItem(item.id, "discountType", item.discountType === "amt" ? "pct" : "amt")}
                         className="shrink-0 w-8 rounded-lg border border-gray-200 dark:border-zinc-600 bg-gray-50 dark:bg-zinc-700 text-[10px] font-bold text-gray-500 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 transition-colors">
@@ -1253,7 +1253,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">{sym}</span>
                     <input type="number" min="0" step="0.01" value={form.shippingFee} onChange={e => setF("shippingFee", e.target.value)} placeholder="0.00"
-                      className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      className="w-full pl-7 pr-3 py-2.5 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                 </div>
                 <div>
@@ -1261,7 +1261,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">{sym}</span>
                     <input type="number" min="0" step="0.01" value={form.handlingFee} onChange={e => setF("handlingFee", e.target.value)} placeholder="0.00"
-                      className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      className="w-full pl-7 pr-3 py-2.5 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                   </div>
                 </div>
                 <div>

@@ -139,7 +139,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled, invoiceTypeFilter = 
         ref={trigRef} type="button"
         onClick={open ? () => setOpen(false) : openDropdown}
         disabled={disabled}
-        className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
+        className="flex w-full items-center justify-between rounded-none border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <span className={selected ? "text-foreground" : "text-muted-foreground"}>
           {selected ? `${selected.invoiceNumber} — ${selected.customer}` : invoiceTypeFilter === "purchase" ? "Search purchase invoice by number…" : "Search invoice by number…"}
@@ -272,7 +272,7 @@ function AccDropdown({ accounts, value, onChange, placeholder = "Select account�
       <button
         ref={trigRef} type="button"
         onClick={open ? () => setOpen(false) : openDropdown}
-        className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring"
+        className="flex w-full items-center justify-between rounded-none border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring"
       >
         <span className={selected ? "text-foreground" : "text-muted-foreground"}>
           {selected ? `${selected.code ? selected.code + " · " : ""}${selected.name}` : placeholder}
@@ -370,7 +370,7 @@ function PartyDropdown({ contacts, value, onChange, placeholder = "Select…" }:
       <button
         ref={trigRef} type="button"
         onClick={open ? () => setOpen(false) : openDropdown}
-        className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring"
+        className="flex w-full items-center justify-between rounded-none border border-input bg-background px-3 py-[7px] text-sm ring-offset-background hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring"
       >
         <span className={value ? "text-foreground" : "text-muted-foreground"}>
           {value ? displayLabel : placeholder}
@@ -831,7 +831,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
                   <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                    className="w-full rounded-none border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="space-y-1.5">
                   <div>
@@ -1020,7 +1020,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
                   <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                    className="w-full rounded-none border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="space-y-1.5">
                   <div>
@@ -1277,7 +1277,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Date *</label>
                   <input type="date" value={date} onChange={e => setDate(e.target.value)}
                     disabled={isPosted}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60" />
+                    className="w-full rounded-none border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60" />
                 </div>
                 {invBalance !== null && (
                   <div>
@@ -1393,7 +1393,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
               value={narr} onChange={e => setNarr(e.target.value)} rows={2}
               disabled={isPosted}
               placeholder="General remarks about this voucher…"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-60"
+              className="w-full rounded-none border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-60"
             />
           </div>
 
