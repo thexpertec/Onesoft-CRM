@@ -25,7 +25,7 @@ import {
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
   DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
-  Calculator, Upload, RefreshCw, Tag,
+  Calculator, Upload, RefreshCw, Tag, Lock,
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -73,7 +73,7 @@ const blankItem = (): SaleItem => ({
   id: crypto.randomUUID(),
   productName: "", sku: "", qty: "1", unit: "",
   unitPrice: "", discount: "0", discountType: "pct", notes: "",
-  itemStatus: "Delivered",
+  itemStatus: "Pending",
 });
 
 
@@ -1004,19 +1004,28 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <Plus size={15}/> Add first item
                 </button>
               )}
-              {items.map((item, idx) => (
+              {items.map((item, idx) => {
+                const isDelivered = item.itemStatus === "Delivered" && !!item.productName.trim();
+                return (
                 <div key={item.id}>
                   {/* Item row */}
-                  <div className={`grid ${invoiceType !== "purchase" ? "grid-cols-[28px_1fr_110px_80px_110px_100px_36px_156px]" : "grid-cols-[28px_1fr_110px_80px_110px_100px_36px]"} gap-0 px-4 py-3 items-center hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors`}>
+                  <div className={`grid ${invoiceType !== "purchase" ? "grid-cols-[28px_1fr_110px_80px_110px_100px_36px_156px]" : "grid-cols-[28px_1fr_110px_80px_110px_100px_36px]"} gap-0 px-4 py-3 items-center transition-colors ${isDelivered ? "bg-emerald-50/40 dark:bg-emerald-950/10" : "hover:bg-gray-50/50 dark:hover:bg-zinc-800/30"}`}>
                     {/* # */}
                     <span className="text-sm font-bold text-gray-500 dark:text-zinc-400">{idx + 1}</span>
                     {/* Product */}
                     <div className="pl-1 pr-2" data-item-product={item.id}>
-                      <Combobox value={item.productName} onChange={v => pickProduct(item.id, v)}
-                        onSelect={opt => pickProduct(item.id, opt.value)} options={productOpts} placeholder="Product / service…"
-                        maxResults={15} minDropdownWidth={320}
-                        onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
-                        inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      {isDelivered ? (
+                        <div className="flex items-center gap-1.5">
+                          <Lock size={11} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.productName}</span>
+                        </div>
+                      ) : (
+                        <Combobox value={item.productName} onChange={v => pickProduct(item.id, v)}
+                          onSelect={opt => pickProduct(item.id, opt.value)} options={productOpts} placeholder="Product / service…"
+                          maxResults={15} minDropdownWidth={320}
+                          onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "product"); } }}
+                          inputClassName="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                      )}
                       {item.localName && (
                         <span className="block text-[11px] text-muted-foreground pl-1 leading-tight mt-0.5 font-medium" dir="auto">
                           {item.localName}
@@ -1054,12 +1063,20 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                         </div>
                       );
                     })()}
-                    {/* Qty */}
+                    {/* Qty — locked when item is Delivered */}
                     <div className="px-1">
-                      <input type="number" min="0" value={item.qty} onChange={e => updateItem(item.id, "qty", e.target.value)}
+                      <input type="number" min="0" value={item.qty}
+                        onChange={e => { if (!isDelivered) updateItem(item.id, "qty", e.target.value); }}
                         data-item-id={item.id} data-field="qty"
+                        readOnly={isDelivered}
                         onKeyDown={e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); focusNextItemField(item.id, "qty"); } }}
-                        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-center text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        title={isDelivered ? "Qty locked — product already delivered" : undefined}
+                        className={`w-full px-2 py-1.5 rounded-lg border text-sm text-center outline-none transition-colors ${
+                          isDelivered
+                            ? "border-emerald-200 dark:border-emerald-700/50 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 cursor-not-allowed font-semibold"
+                            : "border-gray-200 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                        }`}
+                      />
                     </div>
                     {/* Discount */}
                     <div className="px-1 flex gap-1">
@@ -1079,11 +1096,18 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <div className="px-1 text-right">
                       <span className="text-[15px] font-bold font-mono text-gray-900 dark:text-gray-100">{sym}{lineTotal(item).toFixed(dp)}</span>
                     </div>
-                    {/* Delete */}
+                    {/* Delete — blocked when item is Delivered */}
                     <div className="flex justify-center">
-                      <button onClick={() => removeItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
-                        <X size={14}/>
-                      </button>
+                      {isDelivered ? (
+                        <span title="Cannot remove a delivered item"
+                          className="p-1 text-emerald-400 dark:text-emerald-600 cursor-not-allowed">
+                          <Lock size={13}/>
+                        </span>
+                      ) : (
+                        <button onClick={() => removeItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
+                          <X size={14}/>
+                        </button>
+                      )}
                     </div>
                   </div>
                   {/* Variant picker — pill row, shown when the selected product has variants */}
@@ -1210,7 +1234,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     Add item
                   </button>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>{/* /section 2 */}
 
