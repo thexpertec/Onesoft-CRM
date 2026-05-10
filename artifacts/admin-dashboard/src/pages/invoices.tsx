@@ -15,6 +15,7 @@ import {
   getRawMaterials,
   createInvoicePriceAdjustmentJE,
   revertInvoiceToDraft,
+  getRPVouchers,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -776,6 +777,10 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   }, []);
 
   const handleSave = (overrideStatus?: InvoiceStatus) => {
+    if (isPaymentLocked) {
+      toast({ title: "Invoice locked", description: "Remove the linked payment voucher's Journal Entry before editing this invoice.", variant: "destructive" });
+      return;
+    }
     // If the invoice was "Paid" but edits have created an outstanding balance, demote to "Partial"
     const statusOverride: InvoiceStatus | undefined = overrideStatus
       ?? (invoice && invoice.status === "Paid" && balance > 0.005 ? "Partial" : undefined);
@@ -802,6 +807,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const s   = inv?.status;
   const jeId = invoice?.jeId;
   const savedHistory = invoice?.paymentHistory ?? [];
+
+  // ── Payment lock: block edits if any R/P voucher has been posted against this invoice ──
+  const linkedPayments = useMemo(() => {
+    if (isNew || !invoice) return [];
+    return getRPVouchers().filter(v =>
+      v.linkedInvoiceId === invoice.id ||
+      (v.linkedInvoiceIds ?? []).includes(invoice.id) ||
+      v.lines.some(l => l.invoiceId === invoice.id)
+    );
+  }, [isNew, invoice?.id]);
+  const isPaymentLocked = linkedPayments.length > 0;
 
   return (
     <div className="-mx-5 md:-mx-8 -my-6 md:-my-8 min-h-full bg-gray-50 dark:bg-zinc-950 flex flex-col">
@@ -832,6 +848,24 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
         </div>
 
       </div>
+
+      {/* ══ Payment Lock Banner ════════════════════════════════════════════════ */}
+      {isPaymentLocked && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border-b-2 border-amber-400 dark:border-amber-600 px-4 md:px-6 py-3 flex items-start gap-3">
+          <Lock size={18} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+              Invoice locked — payment recorded
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              {linkedPayments.length === 1
+                ? `${linkedPayments[0].voucherNumber} has been posted against this invoice.`
+                : `${linkedPayments.length} payment vouchers have been posted against this invoice.`}
+              {" "}To edit, go to <strong>Accounts → Receipt &amp; Payment Vouchers</strong>, open the voucher, and delete its Journal Entry first.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ══ Body ═══════════════════════════════════════════════════════════════ */}
       <div className="flex-1 px-4 md:px-6 py-5 pb-28">
@@ -1976,6 +2010,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <CheckCircle size={14}/> Create Invoice
               </button>
             </>
+          ) : isPaymentLocked ? (
+            /* Locked — payment voucher posted; editing disabled */
+            <button
+              disabled
+              title="Delete the linked payment voucher's Journal Entry first to unlock editing"
+              className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold text-gray-400 dark:text-zinc-500 bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 cursor-not-allowed opacity-60 shadow-none"
+            >
+              <Lock size={14}/> Locked
+            </button>
           ) : (
             /* Existing invoice: single Save button preserving current status */
             <button
