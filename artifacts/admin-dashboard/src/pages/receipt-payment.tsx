@@ -9,7 +9,7 @@ import {
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer, getRPVouchers } from "@/lib/store";
+import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer, getRPVouchers, getPaymentAccounts, SYS_PA_CASH } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -618,6 +618,33 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       return { ...l, amount: receiving.toFixed(2) };
     });
   }, [computedArLines, recvBankTotal, isNewReceipt]);
+
+  // ── Auto-prefill bank lines with Cash + outstanding when supplier/buyer is chosen ──
+  // Fires once the total becomes non-zero and the line is still blank (pristine).
+  // User can freely change account or amount after auto-fill.
+  useEffect(() => {
+    if (!isNewPayment || totalDue <= 0) return;
+    const isPristine = payBankLines.length === 1 && !payBankLines[0].accountId && !payBankLines[0].amount;
+    if (!isPristine) return;
+    const cashPA      = getPaymentAccounts().find(pa => pa.id === SYS_PA_CASH);
+    const cashLedgerId = cashPA?.ledgerAccountId ?? SYS_ACCS.CASH;
+    const cashAcc     = accounts.find(a => a.id === cashLedgerId);
+    if (!cashAcc) return;
+    setPayBankLines([{ id: crypto.randomUUID(), accountId: cashLedgerId, accountName: cashAcc.name, description: "", amount: totalDue.toFixed(2) }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalDue, isNewPayment]);
+
+  useEffect(() => {
+    if (!isNewReceipt || totalReceivable <= 0) return;
+    const isPristine = recvBankLines.length === 1 && !recvBankLines[0].accountId && !recvBankLines[0].amount;
+    if (!isPristine) return;
+    const cashPA       = getPaymentAccounts().find(pa => pa.id === SYS_PA_CASH);
+    const cashLedgerId = cashPA?.ledgerAccountId ?? SYS_ACCS.CASH;
+    const cashAcc      = accounts.find(a => a.id === cashLedgerId);
+    if (!cashAcc) return;
+    setRecvBankLines([{ id: crypto.randomUUID(), accountId: cashLedgerId, accountName: cashAcc.name, description: "", amount: totalReceivable.toFixed(2) }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalReceivable, isNewReceipt]);
 
   const setLine = (id: string, patch: Partial<LineRow>) =>
     setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
