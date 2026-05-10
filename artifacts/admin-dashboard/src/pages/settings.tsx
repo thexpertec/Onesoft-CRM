@@ -29,6 +29,7 @@ import {
   AppSettings, LegalDocument, BankAccount, getSettings, saveSettings,
   clearAccountingLedger, clearAllStoredModules,
   getStoredModuleSnapshot, restoreStoredModuleSnapshot,
+  getMasterDataSnapshot, isMasterDataEmpty, restoreMasterDataSnapshot, MasterDataBundle,
 } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { UI_PRESETS, SCALE_LABELS, getPresetFonts, type UiPreset } from "@/lib/ui-presets";
@@ -597,6 +598,11 @@ export default function SettingsPage() {
 
   const logoInputRef  = useRef<HTMLInputElement>(null);
   const importRef     = useRef<HTMLInputElement>(null);
+  const masterRef     = useRef<HTMLInputElement>(null);
+
+  const [masterImportError, setMasterImportError] = useState<string | null>(null);
+  const [masterConfirmOpen, setMasterConfirmOpen] = useState(false);
+  const [pendingBundle, setPendingBundle]         = useState<MasterDataBundle | null>(null);
 
   // Re-read settings on mount so any backfill that ran after the lazy initializer is applied
   useEffect(() => {
@@ -665,6 +671,61 @@ export default function SettingsPage() {
       }
     };
     reader.readAsText(file);
+  }
+
+  // ── Master data export ───────────────────────────────────────────────────────
+  function handleMasterExport() {
+    const bundle = getMasterDataSnapshot();
+    const totalRecords = Object.values(bundle.data).reduce((s, arr) => s + (arr?.length ?? 0), 0);
+    if (totalRecords === 0) {
+      toast({ title: "Nothing to export", description: "No catalogue or contact data found in this account.", variant: "destructive" });
+      return;
+    }
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `onesoft-master-data-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Master data downloaded", description: `${totalRecords} records exported across ${Object.keys(bundle.data).length} categories.` });
+  }
+
+  // ── Master data import ───────────────────────────────────────────────────────
+  function handleMasterImportFile(file: File) {
+    setMasterImportError(null);
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const raw = JSON.parse(e.target?.result as string) as MasterDataBundle;
+        if (raw._format !== "onesoft-master-data-v1") {
+          setMasterImportError("This file is not a valid master data backup. Use the full backup/restore for other file types.");
+          return;
+        }
+        if (!isMasterDataEmpty()) {
+          setMasterImportError("This account already has data. Master data can only be imported into a completely empty (new) account to prevent data loss.");
+          return;
+        }
+        setPendingBundle(raw);
+        setMasterConfirmOpen(true);
+      } catch {
+        setMasterImportError("Could not read the file. Please make sure it is a valid JSON master data backup.");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so the same file can be re-selected if needed
+    if (masterRef.current) masterRef.current.value = "";
+  }
+
+  function confirmMasterImport() {
+    if (!pendingBundle) return;
+    const { count, breakdown } = restoreMasterDataSnapshot(pendingBundle);
+    const lines = Object.entries(breakdown)
+      .map(([k, n]) => `${k.replace("admin-", "").replace(/-/g, " ")}: ${n}`)
+      .join(", ");
+    toast({ title: "Master data imported", description: `${count} records restored — ${lines}.` });
+    setPendingBundle(null);
+    setMasterConfirmOpen(false);
   }
 
   // ── Nuke all ────────────────────────────────────────────────────────────────
@@ -2057,6 +2118,99 @@ export default function SettingsPage() {
                     Backup includes: leads, customers, products, stock, purchases, sales, documents, HRM staff, roles, users, and settings.
                   </p>
                 </div>
+
+                {/* ── Master Data Transfer ─────────────────────────────── */}
+                <div>
+                  <SectionHeader
+                    title="Master Data Transfer"
+                    desc="Export your catalogue and contacts as a portable file. Import it into a new, empty tenant to quickly set it up with the same products, customers, and suppliers."
+                  />
+
+                  {/* What's included chips */}
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {[
+                      { label: "Categories",   color: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300" },
+                      { label: "Brands",        color: "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300" },
+                      { label: "Attributes",    color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300" },
+                      { label: "Units",         color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300" },
+                      { label: "Products",      color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" },
+                      { label: "Customers",     color: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" },
+                      { label: "Suppliers",     color: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300" },
+                      { label: "Raw Materials", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" },
+                    ].map(({ label, color }) => (
+                      <span key={label} className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium ${color}`}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-3">
+                    <Button onClick={handleMasterExport} className="gap-2 h-9 text-[13px] bg-blue-600 hover:bg-blue-700 text-white">
+                      <Download size={14} />
+                      Download Master Data
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="gap-2 h-9 text-[13px]"
+                      onClick={() => { setMasterImportError(null); masterRef.current?.click(); }}
+                    >
+                      <Upload size={14} />
+                      Upload to This Account
+                    </Button>
+                    <input
+                      ref={masterRef} type="file" accept=".json" className="hidden"
+                      onChange={e => e.target.files?.[0] && handleMasterImportFile(e.target.files[0])}
+                    />
+                  </div>
+
+                  {/* Upload restriction notice */}
+                  <div className="mt-3 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-lg px-3 py-2.5">
+                    <AlertTriangle size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                      <strong>Upload is only allowed on new (empty) accounts.</strong> If this account already contains any products, customers, or other catalogue data, the upload will be blocked to prevent overwriting your existing records.
+                    </p>
+                  </div>
+
+                  {/* Error banner */}
+                  {masterImportError && (
+                    <div className="mt-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg px-3 py-2.5">
+                      <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">{masterImportError}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Master import confirmation dialog */}
+                <AlertDialog open={masterConfirmOpen} onOpenChange={setMasterConfirmOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <Upload size={16} className="text-blue-600" /> Import Master Data?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription asChild>
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          <p>This will import the following into this account:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {pendingBundle && Object.entries(pendingBundle.data).map(([k, arr]) => (
+                              <li key={k}>
+                                <strong>{k.replace("admin-", "").replace(/-/g, " ")}</strong>: {(arr as unknown[]).length} record{(arr as unknown[]).length !== 1 ? "s" : ""}
+                              </li>
+                            ))}
+                          </ul>
+                          <p>Exported on: <strong>{pendingBundle ? new Date(pendingBundle._exportedAt).toLocaleString() : "—"}</strong></p>
+                          <p className="text-foreground font-medium">This action cannot be undone. Continue?</p>
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => { setPendingBundle(null); }}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction className="bg-blue-600 hover:bg-blue-700 text-white" onClick={confirmMasterImport}>
+                        Yes, Import Data
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Accounting Ledger Reset */}
                 {isSuperAdmin && (

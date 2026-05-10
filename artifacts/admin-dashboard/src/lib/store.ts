@@ -5342,6 +5342,75 @@ export function restoreStoredModuleSnapshot(data: Record<string, unknown>): numb
   return count;
 }
 
+// ─── Master-data transfer ─────────────────────────────────────────────────────
+// Subset used to migrate catalogue & contacts from one tenant to another.
+// Intentionally excludes transactional data (sales, purchases, JEs, HRM, etc.).
+export const MASTER_DATA_KEYS = [
+  "admin-product-categories",
+  "admin-brands",
+  "admin-attributes",
+  "admin-units",
+  "admin-products",
+  "admin-customers",     // customers + suppliers (isSupplier flag)
+  "admin-raw-materials", // not in ALL_STORE_KEYS — handled separately
+] as const;
+
+export type MasterDataKey = typeof MASTER_DATA_KEYS[number];
+
+export interface MasterDataBundle {
+  _format:     "onesoft-master-data-v1";
+  _exportedAt: string;
+  data:        Partial<Record<MasterDataKey, unknown[]>>;
+}
+
+/** Reads all master-data arrays for the current tenant into a portable bundle. */
+export function getMasterDataSnapshot(): MasterDataBundle {
+  const data: Partial<Record<MasterDataKey, unknown[]>> = {};
+  MASTER_DATA_KEYS.forEach(k => {
+    const raw = _lsGet(tenantKey(k));
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) data[k] = parsed;
+    } catch { /* skip */ }
+  });
+  return { _format: "onesoft-master-data-v1", _exportedAt: new Date().toISOString(), data };
+}
+
+/**
+ * Returns true only when every master-data key is empty (no records at all).
+ * Used to gate restore so it only runs on a brand-new / blank tenant.
+ */
+export function isMasterDataEmpty(): boolean {
+  return MASTER_DATA_KEYS.every(k => {
+    const raw = _lsGet(tenantKey(k));
+    if (!raw) return true;
+    try {
+      const parsed = JSON.parse(raw);
+      return !Array.isArray(parsed) || parsed.length === 0;
+    } catch { return true; }
+  });
+}
+
+/**
+ * Writes a master-data bundle into the current tenant.
+ * Each key is written to memory + server (never localStorage directly).
+ * Returns a breakdown of how many records were restored per key.
+ */
+export function restoreMasterDataSnapshot(bundle: MasterDataBundle): { count: number; breakdown: Record<string, number> } {
+  const breakdown: Record<string, number> = {};
+  MASTER_DATA_KEYS.forEach(k => {
+    const arr = bundle.data[k];
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    const sk = tenantKey(k);
+    _lsSet(sk, arr);
+    _apiWrite(sk, arr).catch(() => { /* handled via onesoft:write-error event */ });
+    breakdown[k] = arr.length;
+  });
+  try { window.dispatchEvent(new CustomEvent("onesoft:data-synced")); } catch { /* SSR guard */ }
+  return { count: Object.values(breakdown).reduce((s, n) => s + n, 0), breakdown };
+}
+
 /**
  * Resets the accounting ledger to zero:
  *  1. Deletes all journal entries.
