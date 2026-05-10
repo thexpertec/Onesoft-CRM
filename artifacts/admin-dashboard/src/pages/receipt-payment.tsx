@@ -992,7 +992,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                             <input type="text" value={l.description}
                               onChange={e => setPayBankLines(prev => prev.map(r => r.id === l.id ? { ...r, description: e.target.value } : r))}
                               placeholder="Cheque #, IBAN, ref…"
-                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
+                              className="w-full rounded border border-input hover:border-ring focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
                           </td>
                           <td className="px-2 py-1.5 text-right">
                             <input type="number" min="0" step="0.01" value={l.amount}
@@ -1181,7 +1181,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                             <input type="text" value={l.description}
                               onChange={e => setRecvBankLines(prev => prev.map(r => r.id === l.id ? { ...r, description: e.target.value } : r))}
                               placeholder="Cheque #, IBAN, ref…"
-                              className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
+                              className="w-full rounded border border-input hover:border-ring focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />
                           </td>
                           <td className="px-2 py-1.5 text-right">
                             <input type="number" min="0" step="0.01" value={l.amount}
@@ -1380,7 +1380,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
                               : <input type="text" value={l.description}
                                   onChange={e => setLine(l.id, { description: e.target.value })}
                                   placeholder="Ref. / Cheque"
-                                  className="w-full rounded border border-transparent hover:border-input focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />}
+                                  className="w-full rounded border border-input hover:border-ring focus:border-ring focus:ring-1 focus:ring-ring px-2 py-1 text-sm bg-transparent outline-none" />}
                           </td>
                           <td className="px-2 py-1.5 text-right">
                             {isPosted
