@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from "react";
 import { useAccounts, useJournalEntries } from "@/hooks/use-data";
-import { getCashBankLedgers, getJournalEntries } from "@/lib/store";
+import { getCashBankLedgers, getJournalEntries, getSettings } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Printer, Calendar, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -161,7 +161,264 @@ export default function RpSummaryPage() {
   }, [paymentRows, paySearch]);
 
   // ── Print ──────────────────────────────────────────────────────────────────
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const s           = getSettings();
+    const generatedAt = new Date().toLocaleString();
+    const addrParts   = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+    const phoneParts  = [s.phoneHull,   s.phoneIslamabad  ].filter(Boolean).join(" / ");
+    const locationLine = [addrParts, phoneParts].filter(Boolean).join(" | ");
+
+    // ── Build column header cells ──────────────────────────────────────────
+    const colHeaders = cbCols.map(c => `<th class="num">${c.name}</th>`).join("");
+
+    // ── Opening / Closing row builders ────────────────────────────────────
+    const buildSpecialRow = (label: string, balances: Record<ColId, number>, cls: string) => {
+      const cells = cbCols.map(c => {
+        const v = balances[c.id] ?? 0;
+        const color = v < 0 ? "style=\"color:#991b1b\"" : "";
+        return `<td class="num" ${color}>${v === 0 ? "0.00" : Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>`;
+      }).join("");
+      return `<tr class="${cls}"><td class="sl">—</td><td>${label}</td>${cells}</tr>`;
+    };
+
+    // ── Transaction row builder ───────────────────────────────────────────
+    const buildRows = (rows: SummaryRow[], startIdx: number) =>
+      rows.map((r, i) => {
+        const cells = cbCols.map(c => {
+          const v = r.amounts[c.id] ?? 0;
+          return `<td class="num">${v > 0 ? v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td>`;
+        }).join("");
+        return `<tr class="${(i + startIdx) % 2 === 1 ? "alt-row" : ""}"><td class="sl">${i + 1}</td><td>${r.head}</td>${cells}</tr>`;
+      }).join("");
+
+    // ── Total row builder ─────────────────────────────────────────────────
+    const buildTotalRow = (totals: Record<ColId, number>, label: string, cls: string) => {
+      const cells = cbCols.map(c => {
+        const v = totals[c.id] ?? 0;
+        return `<td class="num"><strong>${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td>`;
+      }).join("");
+      return `<tr class="${cls}"><td colspan="2"><strong>${label}</strong></td>${cells}</tr>`;
+    };
+
+    // ── Subtotal row ──────────────────────────────────────────────────────
+    const buildSubTotalRow = (subTotal: number, colorCls: string) =>
+      `<tr class="subtotal-row">
+        <td colspan="${2 + cbCols.length}">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Sub Total</span>
+            <strong class="${colorCls}" style="font-size:14px;">${sym}${Math.abs(subTotal).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp})}</strong>
+          </div>
+        </td>
+      </tr>`;
+
+    // ── Empty row ─────────────────────────────────────────────────────────
+    const buildEmptyRow = (label: string, colCount: number) =>
+      `<tr><td colspan="${2 + colCount}" style="text-align:center;color:#9ca3af;padding:20px 10px;font-size:10px;">${label}</td></tr>`;
+
+    // ── Build table HTML (receipt side) ──────────────────────────────────
+    const recTableHtml = `
+      <table>
+        <thead>
+          <tr>
+            <th class="sl-col">Sl</th>
+            <th>Voucher Head</th>
+            ${colHeaders}
+          </tr>
+        </thead>
+        <tbody>
+          ${buildSpecialRow("Opening Balance", openingBalance, "special-row")}
+          ${receiptRows.length > 0 ? buildRows(receiptRows, 1) : buildEmptyRow("No receipt transactions found for this period", cbCols.length)}
+        </tbody>
+        <tfoot>
+          ${buildTotalRow(recTotals, "Total", "total-row rec-total")}
+          ${buildSubTotalRow(recSubTotal, "sub-rec")}
+        </tfoot>
+      </table>`;
+
+    // ── Build table HTML (payment side) ──────────────────────────────────
+    const payTableHtml = `
+      <table>
+        <thead>
+          <tr>
+            <th class="sl-col">Sl</th>
+            <th>Voucher Head</th>
+            ${colHeaders}
+          </tr>
+        </thead>
+        <tbody>
+          ${paymentRows.length > 0 ? buildRows(paymentRows, 0) : buildEmptyRow("No payment transactions found for this period", cbCols.length)}
+          ${buildSpecialRow("Closing Balance", closingBalance, "closing-row")}
+        </tbody>
+        <tfoot>
+          ${buildTotalRow(payTotals, "Total", "total-row pay-total")}
+          ${buildSubTotalRow(paySubTotal, "sub-pay")}
+        </tfoot>
+      </table>`;
+
+    // ── Balance check section ─────────────────────────────────────────────
+    const balanceCards = cbCols.map(c => {
+      const ob    = openingBalance[c.id] ?? 0;
+      const rec   = recTotals[c.id] ?? 0;
+      const pay   = payTotals[c.id] ?? 0;
+      const close = closingBalance[c.id] ?? 0;
+      const fv = (n: number) => Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp});
+      return `
+        <div class="bal-card">
+          <div class="bal-label">${c.name}</div>
+          <div class="bal-value ${close < 0 ? "neg" : ""}">${sym}${fv(close)}</div>
+          <div class="bal-sub">${sym}${fv(ob)} + ${sym}${fv(rec)} − ${sym}${fv(pay)}</div>
+        </div>`;
+    }).join("");
+
+    const netCashFlow = recSubTotal - paySubTotal;
+    const fv2 = (n: number) => Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp});
+    const balanceSectionHtml = `
+      <div class="balance-section">
+        <div class="bal-inner">
+          <span class="bal-title">Balance Check</span>
+          <div class="bal-cards">
+            ${balanceCards}
+            <div class="bal-card net-card">
+              <div class="bal-label">Net Cash Flow</div>
+              <div class="bal-value ${netCashFlow < 0 ? "neg" : "pos"}">
+                ${netCashFlow >= 0 ? "+" : ""}${sym}${fv2(netCashFlow)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Receipt &amp; Payment Summary – ${from} to ${to}</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm 14mm 16mm 14mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; }
+
+    /* ── Print toolbar ── */
+    .print-bar { display: flex; justify-content: center; gap: 12px; padding: 14px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+    .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-primary { background: #1e3a8a; color: white; }
+    .btn-secondary { background: white; color: #374151; border: 1px solid #d1d5db; }
+    @media print { .print-bar { display: none !important; } }
+
+    /* ── Page wrapper ── */
+    .page { padding: 0 2px; }
+
+    /* ── Company Header ── */
+    .header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 10px; border-bottom: 2.5px solid #059669; margin-bottom: 12px; }
+    .company { font-size: 18px; font-weight: 800; color: #059669; letter-spacing: -0.5px; }
+    .company-sub { font-size: 10px; color: #6b7280; margin-top: 2px; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { font-size: 15px; font-weight: 700; color: #111; }
+    .doc-title .period { font-size: 10px; color: #6b7280; margin-top: 4px; }
+    .doc-title .printed { font-size: 9px; color: #9ca3af; margin-top: 2px; }
+
+    /* ── Two-column grid ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .panel-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    .panel-title.rec { color: #059669; }
+    .panel-title.pay { color: #dc2626; }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    thead tr { background: #1e3a8a; color: #fff; }
+    thead th { padding: 7px 8px; text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+    thead th.num { text-align: right; }
+    thead th.sl-col { width: 28px; text-align: center; }
+    tbody td { padding: 5.5px 8px; border-bottom: 1px solid #f0f0f0; }
+    tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody td.sl { text-align: center; color: #9ca3af; font-size: 10px; }
+    .alt-row td { background: #f9fafb; }
+    .special-row td { background: #eff6ff !important; font-weight: 600; color: #1e40af; }
+    .closing-row td { background: #eff6ff !important; font-weight: 600; color: #1e40af; border-top: 2px solid #bfdbfe; }
+    tfoot td { padding: 6px 8px; }
+    tfoot td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .total-row td { border-top: 2px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+    .rec-total td { background: #f0fdf4; color: #065f46; }
+    .pay-total td { background: #fff5f5; color: #991b1b; }
+    .subtotal-row td { padding: 5px 8px; font-weight: 700; font-size: 11px; }
+    .rec-total ~ .subtotal-row td, .subtotal-row.rec-st td { background: #dcfce7; }
+    .pay-total ~ .subtotal-row td, .subtotal-row.pay-st td { background: #fee2e2; }
+    .sub-rec { color: #065f46; }
+    .sub-pay { color: #991b1b; }
+
+    /* ── Balance check ── */
+    .balance-section { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 14px; }
+    .bal-inner { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .bal-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; white-space: nowrap; }
+    .bal-cards { display: flex; gap: 20px; flex-wrap: wrap; }
+    .bal-card { text-align: center; }
+    .bal-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #6b7280; margin-bottom: 2px; }
+    .bal-value { font-size: 13px; font-weight: 800; color: #111; }
+    .bal-value.neg { color: #dc2626; }
+    .bal-value.pos { color: #16a34a; }
+    .bal-sub { font-size: 9px; color: #9ca3af; margin-top: 1px; }
+    .net-card { border-left: 1px solid #e5e7eb; padding-left: 20px; }
+
+    /* ── Footer ── */
+    .footer { margin-top: 14px; padding-top: 7px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar (hidden on print) -->
+  <div class="print-bar">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+  </div>
+
+  <div class="page" style="padding:16px 18px;">
+
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <div class="company">${s.companyName || "Onesoft"}</div>
+        <div class="company-sub">${locationLine}</div>
+      </div>
+      <div class="doc-title">
+        <h1>Receipt &amp; Payment Summary</h1>
+        <div class="period">Period: ${from} &mdash; ${to}</div>
+        <div class="printed">Printed: ${generatedAt}</div>
+      </div>
+    </div>
+
+    <!-- Two-column report -->
+    <div class="two-col">
+      <div>
+        <div class="panel-title rec">Receipt</div>
+        ${recTableHtml}
+      </div>
+      <div>
+        <div class="panel-title pay">Payment</div>
+        ${payTableHtml}
+      </div>
+    </div>
+
+    <!-- Balance Check -->
+    ${balanceSectionHtml}
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>${s.companyName || "Onesoft"} &nbsp;&middot;&nbsp; Receipt &amp; Payment Summary &nbsp;&middot;&nbsp; ${from} to ${to}</span>
+      <span>All amounts in ${sym} &nbsp;&middot;&nbsp; Generated: ${generatedAt}</span>
+    </div>
+
+  </div>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=1100,height=800");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  };
 
   // ── Panel renderer ─────────────────────────────────────────────────────────
   const renderPanel = (
