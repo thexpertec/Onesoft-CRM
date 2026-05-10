@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders, useInvoices } from "@/hooks/use-data";
+import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders, useInvoices, useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getAdminUsers, getSettings } from "@/lib/store";
+import { getAdminUsers, getSettings, getCashBankLedgers, SYS_ACCS } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,6 +254,8 @@ export default function Dashboard() {
   const { products }          = useProducts();
   const { purchaseOrders }    = usePurchaseOrders();
   const { invoices }          = useInvoices();
+  const { accounts }          = useAccounts();
+  const { entries }           = useJournalEntries();
   const { addCustomer }       = useCustomers();
   const { currentUser, isAuthenticated } = useAuth();
   const { toast }             = useToast();
@@ -395,6 +397,62 @@ export default function Dashboard() {
 
   // ── Admin users ────────────────────────────────────────────────────────────
   const adminUsers = useMemo(() => getAdminUsers(), []);
+
+  // ── Financial position balances (AR / AP / Cash & Bank) ────────────────────
+  const { arBalance, apBalance, cashBankBalance, cashBankBreakdown } = useMemo(() => {
+    // Recursively collect all account IDs under a group
+    function getGroupIds(rootId: string): Set<string> {
+      const ids = new Set<string>([rootId]);
+      const walk = (pid: string) => {
+        accounts.forEach(a => {
+          if (a.parentId === pid && !ids.has(a.id)) {
+            ids.add(a.id);
+            walk(a.id);
+          }
+        });
+      };
+      walk(rootId);
+      return ids;
+    }
+
+    // Sum opening balances + posted JE movements for a group.
+    // creditNormal=true  → liabilities (AP): balance = credit - debit
+    // creditNormal=false → assets      (AR, CB): balance = debit - credit
+    function groupBalance(rootId: string, creditNormal: boolean): number {
+      const ids = getGroupIds(rootId);
+      const ledgers = accounts.filter(a => ids.has(a.id) && a.accountType === "Ledger");
+      let bal = ledgers.reduce((s, a) => s + (parseFloat(String(a.openingBalance ?? 0)) || 0), 0);
+      for (const je of entries) {
+        if ((je as any).status !== "posted") continue;
+        for (const line of ((je as any).lines ?? [])) {
+          if (!ids.has(line.ledgerId)) continue;
+          bal += (line.debit || 0) - (line.credit || 0);
+        }
+      }
+      return creditNormal ? -bal : bal;
+    }
+
+    const arBalance = groupBalance(SYS_ACCS.AR_GROUP, false);
+    const apBalance = groupBalance(SYS_ACCS.AP_GROUP, true);
+
+    // Cash & Bank — per-ledger breakdown
+    const cbLedgers = getCashBankLedgers();
+    const cbMap: Record<string, number> = {};
+    cbLedgers.forEach(a => { cbMap[a.id] = parseFloat(String(a.openingBalance ?? 0)) || 0; });
+    for (const je of entries) {
+      if ((je as any).status !== "posted") continue;
+      for (const line of ((je as any).lines ?? [])) {
+        if (!(line.ledgerId in cbMap)) continue;
+        cbMap[line.ledgerId] = (cbMap[line.ledgerId] || 0) + (line.debit || 0) - (line.credit || 0);
+      }
+    }
+    const cashBankBalance = Object.values(cbMap).reduce((s, v) => s + v, 0);
+    const cashBankBreakdown = cbLedgers
+      .map(a => ({ name: a.name, balance: cbMap[a.id] ?? 0 }))
+      .filter(x => x.balance !== 0 || cbLedgers.length <= 4);
+
+    return { arBalance, apBalance, cashBankBalance, cashBankBreakdown };
+  }, [accounts, entries]);
 
   // ── Recents ────────────────────────────────────────────────────────────────
   const recentSales = useMemo(() =>
@@ -687,6 +745,59 @@ export default function Dashboard() {
             />
           </>
         )}
+      </div>
+
+      {/* ══ Financial Position ════════════════════════════════════════════════ */}
+      <div>
+        <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+          <Banknote size={14} /> Financial Position
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {/* Accounts Receivable */}
+          <KpiCard
+            icon={TrendingUp}
+            label="Accounts Receivable"
+            value={fmtCurrency(Math.max(0, arBalance))}
+            numericValue={Math.max(0, arBalance)}
+            formatter={n => fmtCurrency(n)}
+            sub="Owed to you by customers"
+            sub2={arBalance < 0 ? "Credit balance (over-collected)" : undefined}
+            gradient="bg-gradient-to-br from-blue-500 to-cyan-500"
+            iconBg="bg-blue-400/40"
+            href="/accounting/ledger"
+          />
+          {/* Accounts Payable */}
+          <KpiCard
+            icon={CreditCard}
+            label="Accounts Payable"
+            value={fmtCurrency(Math.max(0, apBalance))}
+            numericValue={Math.max(0, apBalance)}
+            formatter={n => fmtCurrency(n)}
+            sub="Owed by you to suppliers"
+            sub2={apBalance < 0 ? "Debit balance (over-paid)" : undefined}
+            gradient="bg-gradient-to-br from-orange-500 to-amber-500"
+            iconBg="bg-orange-400/40"
+            href="/accounting/ledger"
+          />
+          {/* Cash & Bank */}
+          <KpiCard
+            icon={Banknote}
+            label="Cash & Bank Balance"
+            value={fmtCurrency(cashBankBalance)}
+            numericValue={cashBankBalance}
+            formatter={n => fmtCurrency(n)}
+            sub={
+              cashBankBreakdown.length > 0
+                ? cashBankBreakdown.slice(0, 3).map(x => `${x.name}: ${fmtCurrency(x.balance)}`).join(" · ")
+                : "No accounts configured"
+            }
+            gradient={cashBankBalance >= 0
+              ? "bg-gradient-to-br from-emerald-600 to-teal-500"
+              : "bg-gradient-to-br from-red-500 to-rose-600"}
+            iconBg="bg-emerald-400/40"
+            href="/accounting/ledger"
+          />
+        </div>
       </div>
 
       {/* ══ Revenue Chart + Sales Breakdown ══════════════════════════════════ */}
