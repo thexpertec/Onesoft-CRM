@@ -209,6 +209,23 @@ export function isTenantCached(tenantId: string): boolean {
  */
 const _pendingWrites = new Map<string, Promise<void>>();
 
+/**
+ * Wall-clock timestamp (Date.now()) of the most recent SUCCESSFULLY COMPLETED
+ * write per storageKey.  This plugs the gap in the _pendingWrites guard:
+ *
+ * Problem: _pendingWrites is cleared as soon as the server write resolves.
+ * If a kvGetAll/kvGet GET response was already in flight (started before the
+ * write), it can arrive AFTER the write completes and overwrite _memRaw with
+ * stale data — silently reverting the user's create/delete/edit.
+ *
+ * Fix: record the exact moment each write succeeded.  In every sync function,
+ * record when the GET request was sent (getStartedAt).  If
+ *   _lastWriteCompletedAt[key] > getStartedAt
+ * the in-memory value is known-newer than what the server returned, so we
+ * keep our value and discard the server's response for that key.
+ */
+const _lastWriteCompletedAt = new Map<string, number>();
+
 /** Read from in-memory cache. Returns null if not yet synced from server. */
 function _lsGet(storageKey: string): string | null {
   return _memRaw.get(storageKey) ?? null;
@@ -253,7 +270,13 @@ function _apiWrite(storageKey: string, value: unknown): Promise<void> {
     ns = "global";
     key = storageKey;
   }
-  const p: Promise<void> = kvPut(ns, key, value).catch((err) => {
+  const p: Promise<void> = kvPut(ns, key, value).then(() => {
+    // Record the exact moment this write succeeded.  Any kvGetAll/kvGet
+    // response that was already in-flight when the write completed and carries
+    // a timestamp EARLIER than this will be discarded by the sync guard below,
+    // preventing stale server data from overwriting the post-write _memRaw.
+    _lastWriteCompletedAt.set(storageKey, Date.now());
+  }).catch((err) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[kv] server write FAILED for ${ns}/${key}:`, msg);
     // Dispatch a UI-visible event so components / toasts can react.
@@ -7645,8 +7668,15 @@ export function purgeOrphanedVoucherJEs(): number {
  */
 export async function syncTenantsFromServer(): Promise<void> {
   try {
+    // Record when this GET was sent so we can discard stale responses (see
+    // _lastWriteCompletedAt for the full explanation).
+    const getStartedAt = Date.now();
     const fresh = await kvGet("global", TENANTS_KEY);
     if (Array.isArray(fresh) && fresh.length > 0) {
+      // Guard: if a write to the tenants key completed AFTER this GET was
+      // sent, our in-memory value is newer — keep it and drop the response.
+      if (_pendingWrites.has(TENANTS_KEY)) return;
+      if ((_lastWriteCompletedAt.get(TENANTS_KEY) ?? 0) > getStartedAt) return;
       _lsCache(TENANTS_KEY, fresh);
     }
   } catch (e) {
@@ -7667,16 +7697,29 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     // admin-customers, …) that may exist there from earlier single-tenant
     // versions of the app must not pollute the cache for a tenant session
     // and must never surface to that tenant's UI.
+    //
+    // Record the wall-clock instant BEFORE firing the GET so that any write
+    // that completes while the request is in-flight is detectable (see
+    // _lastWriteCompletedAt).  We stamp here — after the drain — so a write
+    // that was pending (and is now settled) is NOT treated as newer than this
+    // GET: if it completed before the drain finished the timestamp is ≤ now.
+    const globalGetStartedAt = Date.now();
     const globalData = await kvGetAll("global");
     if (globalData) {
       for (const [key, value] of Object.entries(globalData)) {
         if (value === undefined || value === null) continue;
         if (tenantId !== null && !isPlatformGlobalKey(key)) continue;
-        // Skip keys that have a pending in-flight write — their in-memory value
-        // is newer than what the server returned (race between the write reaching
-        // the server and this GET response arriving). Overwriting with stale
-        // server data here is the root cause of deleted tenants "resurrecting".
+        // Guard 1 — in-flight write: the PUT hasn't reached the server yet;
+        // our in-memory value is definitely newer.
         if (_pendingWrites.has(key)) continue;
+        // Guard 2 — recently completed write: a write for this key succeeded
+        // AFTER this GET was sent (the GET was in-flight while the write
+        // completed).  The server response therefore still reflects the
+        // pre-write state.  Keep our post-write _memRaw and discard the
+        // stale response — this is the root fix for the ABA race that caused
+        // deleted tenants to reappear, new tenants to vanish, and changed
+        // passwords to be rejected on the next login.
+        if ((_lastWriteCompletedAt.get(key) ?? 0) > globalGetStartedAt) continue;
         _lsCache(key, value);
       }
     }
@@ -7701,14 +7744,18 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     // Step 3 — Tenant-scoped data.
     if (tenantId) {
       const ns = `t:${tenantId}`;
+      // Same timing stamp as the global GET above — record before the request
+      // so we can detect writes that completed while it was in-flight.
+      const tenantGetStartedAt = Date.now();
       const tenantData = await kvGetAll(ns);
       if (tenantData) {
         for (const [key, value] of Object.entries(tenantData)) {
           if (value !== undefined && value !== null) {
             const fullKey = `t:${tenantId}:${key}`;
-            // Skip keys with pending in-flight writes — same resurrection guard
-            // as the global data section above.
+            // Guard 1 — in-flight write.
             if (_pendingWrites.has(fullKey)) continue;
+            // Guard 2 — recently completed write (same ABA-race fix as above).
+            if ((_lastWriteCompletedAt.get(fullKey) ?? 0) > tenantGetStartedAt) continue;
             _lsCache(fullKey, value);
           }
         }
