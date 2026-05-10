@@ -5378,16 +5378,28 @@ export function getMasterDataSnapshot(): MasterDataBundle {
 }
 
 /**
- * Returns true only when every master-data key is empty (no records at all).
- * Used to gate restore so it only runs on a brand-new / blank tenant.
+ * Returns true only when every master-data key is effectively empty.
+ * System-seeded records (Walk-in customer, etc.) are excluded so a freshly
+ * initialised tenant is correctly recognised as "new / blank".
  */
 export function isMasterDataEmpty(): boolean {
+  // IDs of auto-seeded system records that every new tenant gets — they must
+  // not count as "user data" for the purposes of the empty-account guard.
+  const SYSTEM_RECORD_IDS = new Set([SYS_WALKIN_CUSTOMER_ID]);
+
   return MASTER_DATA_KEYS.every(k => {
     const raw = _lsGet(tenantKey(k));
     if (!raw) return true;
     try {
       const parsed = JSON.parse(raw);
-      return !Array.isArray(parsed) || parsed.length === 0;
+      if (!Array.isArray(parsed)) return true;
+      // Filter out known system-seeded records before counting
+      const userRecords = parsed.filter(
+        (r: unknown) =>
+          typeof r !== "object" || r === null ||
+          !SYSTEM_RECORD_IDS.has((r as { id?: string }).id ?? "")
+      );
+      return userRecords.length === 0;
     } catch { return true; }
   });
 }
