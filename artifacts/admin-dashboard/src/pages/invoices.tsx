@@ -1878,33 +1878,40 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     stockReceiveInProgress.current = true;
                     setStockJustReceived(true);
                     receiveStockForPurchase(invoice!.items, invoice!.invoiceNumber, "Purchase");
-                    const _invTotal = invoice!.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
-                      + (parseFloat(invoice!.shippingFee)||0) + (parseFloat(invoice!.handlingFee)||0);
-                    const _allProds = getProducts();
-                    const _catMap   = new Map<string, number>();
-                    for (const it of invoice!.items) {
-                      const p   = _allProds.find(p => p.sku === it.sku || p.name === it.productName);
-                      const cat = p?.category?.trim() || "Uncategorised";
-                      _catMap.set(cat, (_catMap.get(cat) || 0) + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0));
+                    // Only create a new JE if one wasn't already posted when the invoice
+                    // was created/sent (accrual entry). If jeId exists, AP & inventory
+                    // are already recorded — just mark stock as received.
+                    let _jeId = invoice!.jeId;
+                    if (!_jeId) {
+                      const _invTotal = invoice!.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
+                        + (parseFloat(invoice!.shippingFee)||0) + (parseFloat(invoice!.handlingFee)||0);
+                      const _allProds = getProducts();
+                      const _catMap   = new Map<string, number>();
+                      for (const it of invoice!.items) {
+                        const p   = _allProds.find(p => p.sku === it.sku || p.name === it.productName);
+                        const cat = p?.category?.trim() || "Uncategorised";
+                        _catMap.set(cat, (_catMap.get(cat) || 0) + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0));
+                      }
+                      const _suppName    = (invoice!.customer || "").toLowerCase();
+                      const _crm         = getCustomers();
+                      const _suppContact = _crm.find(c =>
+                        (c.name || "").toLowerCase() === _suppName ||
+                        (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === _suppName
+                      );
+                      const _je = autoPostPurchaseJE({
+                        poNumber: invoice!.invoiceNumber, supplier: invoice!.customer,
+                        date: new Date().toISOString().slice(0, 10), total: _invTotal,
+                        supplierLedgerId: _suppContact?.ledgerAccountId,
+                        categoryLines: Array.from(_catMap.entries()).map(([category, total]) => ({ category, total })),
+                      });
+                      if (_je) _jeId = _je.id;
                     }
-                    const _suppName    = (invoice!.customer || "").toLowerCase();
-                    const _crm         = getCustomers();
-                    const _suppContact = _crm.find(c =>
-                      (c.name || "").toLowerCase() === _suppName ||
-                      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === _suppName
-                    );
-                    const _je = autoPostPurchaseJE({
-                      poNumber: invoice!.invoiceNumber, supplier: invoice!.customer,
-                      date: new Date().toISOString().slice(0, 10), total: _invTotal,
-                      supplierLedgerId: _suppContact?.ledgerAccountId,
-                      categoryLines: Array.from(_catMap.entries()).map(([category, total]) => ({ category, total })),
-                    });
                     updateInvoice(invoice!.id, {
                       stockReceived: true, stockDeducted: true,
                       saleStatus:    "Received",
-                      jeId:          _je?.id ?? invoice!.jeId,
+                      jeId:          _jeId,
                     });
-                    toast({ title: "Goods Received — Inventory & Ledger Updated", description: `Stock for ${invoice!.invoiceNumber} added. Journal entry posted to Inventory & Payables.` });
+                    toast({ title: "Goods Received — Inventory Updated", description: `Stock for ${invoice!.invoiceNumber} added.${invoice!.jeId ? " (Ledger entry already posted.)" : " Journal entry posted to Inventory & Payables."}` });
                   }}
                     disabled={stockJustReceived}
                     className={`col-span-2 h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${stockJustReceived ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed" : "border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"}`}>
@@ -2153,29 +2160,55 @@ export function InvoiceFormPage() {
     return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
   };
 
-  /** Receive stock + post purchase JE for a purchase invoice — idempotent (guarded by stockDeducted) */
+  /** Helper: resolve supplier ledger account from CRM */
+  const resolveSupplierLedgerId = useCallback((supplierName: string): string | undefined => {
+    const crm = getCustomers();
+    const lc  = supplierName.toLowerCase();
+    return crm.find(c =>
+      (c.name || "").toLowerCase() === lc ||
+      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === lc
+    )?.ledgerAccountId;
+  }, []);
+
+  /**
+   * Post an accrual JE for a purchase invoice when it is issued (Sent/Partial/Paid)
+   * but stock has NOT yet been received — Dr Inventory, Cr AP.
+   * Idempotent: returns null if the invoice already has a jeId.
+   */
+  const postPurchaseInvoiceJE = useCallback((inv: Invoice): JournalEntry | null => {
+    if (inv.jeId) return null;
+    if (inv.invoiceType !== "purchase") return null;
+    const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
+      + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+    if (total <= 0) return null;
+    return autoPostPurchaseJE({
+      poNumber: inv.invoiceNumber, supplier: inv.customer,
+      date: inv.invoiceDate || new Date().toISOString().slice(0, 10),
+      total,
+      supplierLedgerId: resolveSupplierLedgerId(inv.customer || ""),
+      categoryLines: buildPurchaseCatLines(inv.items),
+      label: "Purchase Invoice",
+    });
+  }, [resolveSupplierLedgerId]);
+
+  /** Receive stock for a purchase invoice — idempotent (guarded by stockDeducted).
+   *  JE is skipped here when an accrual JE already exists (jeId set). */
   const receivePurchaseStock = useCallback((inv: Invoice) => {
     if (inv.stockDeducted) return null;
     if (inv.invoiceType !== "purchase") return null;
     receiveStockForPurchase(inv.items, inv.invoiceNumber, "Purchase");
+    // If an accrual JE was already posted when the invoice was created/sent,
+    // do NOT create a second JE — inventory & AP are already recorded.
+    if (inv.jeId) return null;
     const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
       + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
-    // Look up the supplier's exact ledger account ID from the CRM so the JE
-    // posts to their specific sub-ledger rather than the generic AP fallback —
-    // this works even if the contact was set up under AR instead of AP.
-    const supplierName = (inv.customer || "").toLowerCase();
-    const crm = getCustomers();
-    const supplierContact = crm.find(c =>
-      (c.name || "").toLowerCase() === supplierName ||
-      (c.name + (c.company ? ` (${c.company})` : "")).toLowerCase() === supplierName
-    );
     return autoPostPurchaseJE({
       poNumber: inv.invoiceNumber, supplier: inv.customer,
       date: new Date().toISOString().slice(0, 10), total,
-      supplierLedgerId: supplierContact?.ledgerAccountId,
+      supplierLedgerId: resolveSupplierLedgerId(inv.customer || ""),
       categoryLines: buildPurchaseCatLines(inv.items),
     });
-  }, []);
+  }, [resolveSupplierLedgerId]);
 
   /** Deduct stock + post sale JE for a sale invoice — idempotent (guarded by jeId / stockDeducted) */
   const postSaleJE = useCallback((inv: Invoice, extraUpdates: Partial<Invoice>) => {
@@ -2224,6 +2257,17 @@ export function InvoiceFormPage() {
           updates.stockReceived = true;
           updates.stockDeducted = true;
           if (je) updates.jeId = je.id;
+        }
+        // Accrual JE: post immediately when invoice reaches any active status
+        // (even before stock arrives) so it appears in ledger reports.
+        if (!existing?.jeId && !updates.jeId) {
+          const activeStatuses = ["Sent", "Partial", "Paid", "Overdue"];
+          const newStatus = String(data.status || existing?.status || "");
+          if (activeStatuses.includes(newStatus)) {
+            const tempInv = { ...existing!, ...data, id } as Invoice;
+            const je = postPurchaseInvoiceJE(tempInv);
+            if (je) updates.jeId = je.id;
+          }
         }
       } else {
         // Sale: post JE + deduct stock if status is active and JE not yet posted
@@ -2280,7 +2324,14 @@ export function InvoiceFormPage() {
         extraUpdates.stockReceived = true;
         extraUpdates.stockDeducted = true;
         if (je) extraUpdates.jeId = je.id;
-      } else if (!isPurchase) {
+      } else if (isPurchase) {
+        // New purchase invoice with active status — post accrual JE immediately
+        const activeStatuses = ["Sent", "Partial", "Paid", "Overdue"];
+        if (activeStatuses.includes(String(data.status || ""))) {
+          const je = postPurchaseInvoiceJE(inv);
+          if (je) extraUpdates.jeId = je.id;
+        }
+      } else {
         postSaleJE(inv, extraUpdates);
       }
 
@@ -2288,7 +2339,7 @@ export function InvoiceFormPage() {
       toast({ title: "Invoice created", description: inv.invoiceNumber });
       navigate(isPurchase ? "/invoices?type=purchase" : "/invoices");
     }
-  }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock, postSaleJE]);
+  }, [editInvoice, addInvoice, toast, navigate, receivePurchaseStock, postPurchaseInvoiceJE, postSaleJE]);
 
   const handleStatusChange = useCallback((id: string, status: InvoiceStatus, amountPaid?: string) => {
     // Read directly from in-memory cache for the freshest state — React state may be stale

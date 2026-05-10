@@ -7002,6 +7002,8 @@ export function autoPostPurchaseJE(params: {
   supplierLedgerId?: string;   // specific supplier's subsidiary ledger (preferred)
   /** Per-category breakdown — drives per-category Inventory JE lines */
   categoryLines?: Array<{ category: string; total: number }>;
+  /** Override the verb in the JE description — defaults to "Purchase Receipt" */
+  label?: string;
 }): JournalEntry | null {
   if (params.total <= 0) return null;
   const s = getSettings();
@@ -7054,10 +7056,11 @@ export function autoPostPurchaseJE(params: {
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
   const totalCredit = parseFloat(lines.reduce((s, l) => s + l.credit, 0).toFixed(2));
 
+  const label = params.label ?? "Purchase Receipt";
   return createJournalEntry({
     date:        params.date,
     reference:   `AUTO-${params.poNumber}`,
-    description: `Purchase Receipt: ${params.poNumber} – ${params.supplier}`,
+    description: `${label}: ${params.poNumber} – ${params.supplier}`,
     lines,
     status:      "posted",
     totalDebit,
