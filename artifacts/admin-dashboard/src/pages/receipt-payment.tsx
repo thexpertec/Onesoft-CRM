@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, CheckCircle, Search, FileText, ArrowDownCircle,
   ArrowUpCircle, X, Pencil, ChevronDown, Eye, AlertTriangle, CreditCard,
-  User, Phone, Building2, Hash,
+  User, Phone, Building2, Hash, Printer,
 } from "lucide-react";
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
 import { useRPVouchers, useAccounts } from "@/hooks/use-data";
@@ -73,6 +73,253 @@ function isUnderCashBank(accounts: Account[], acc: Account): boolean {
     cur = cur.parentId ? accounts.find(a => a.id === cur!.parentId) : undefined;
   }
   return false;
+}
+
+// ─── Voucher Print ────────────────────────────────────────────────────────────
+
+function printVoucher(v: RPVoucher): void {
+  const s           = getSettings();
+  const sym         = getSettingsCurrencySymbol();
+  const generatedAt = new Date().toLocaleString();
+  const isReceipt   = v.voucherType === "receipt";
+  const typeLabel   = isReceipt ? "Receipt Voucher" : "Payment Voucher";
+  const accentColor = isReceipt ? "#059669" : "#dc2626";
+  const accentLight = isReceipt ? "#f0fdf4" : "#fff5f5";
+  const accentBorder = isReceipt ? "#bbf7d0" : "#fecaca";
+
+  const addrParts   = [s.addressHull, s.addressIslamabad].filter(Boolean).join(" & ");
+  const phoneParts  = [s.phoneHull,   s.phoneIslamabad  ].filter(Boolean).join(" / ");
+  const locationLine = [addrParts, phoneParts].filter(Boolean).join("  |  ");
+
+  const fmtN = (n: number) =>
+    Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // ── COA lines (debit/credit side) ────────────────────────────────────────
+  const buildLinesHtml = (lines: RPVoucher["lines"], side: "Dr" | "Cr") => {
+    if (!lines || lines.length === 0) return "";
+    return lines.filter(l => l.amount > 0).map((l, i) => `
+      <tr class="${i % 2 === 1 ? "alt" : ""}">
+        <td class="sl">${i + 1}</td>
+        <td>${l.accountName || "—"}</td>
+        <td>${l.description || "—"}</td>
+        <td class="num ${side === "Dr" ? "dr" : "cr"}">${side}</td>
+        <td class="num amt">${sym} ${fmtN(l.amount)}</td>
+      </tr>`).join("");
+  };
+
+  // ── Bank/Cash lines ───────────────────────────────────────────────────────
+  const bankLines = v.bankLines && v.bankLines.length > 0 ? v.bankLines : [{
+    id: "", accountId: v.cashBankAccountId, accountName: v.cashBankAccountName,
+    description: isReceipt ? "Amount received" : "Amount paid", amount: v.totalAmount,
+  } as RPVoucher["lines"][0]];
+
+  const bankSide: "Dr" | "Cr" = isReceipt ? "Dr" : "Cr";
+  const coaSide:  "Dr" | "Cr" = isReceipt ? "Cr" : "Dr";
+
+  // Receipt: Cash/Bank is DEBITED (money comes in), AR/Income is CREDITED
+  // Payment: AP/Expense is DEBITED, Cash/Bank is CREDITED (money goes out)
+  const debitHtml  = isReceipt
+    ? buildLinesHtml(bankLines as RPVoucher["lines"], "Dr")
+    : buildLinesHtml(v.lines, "Dr");
+  const creditHtml = isReceipt
+    ? buildLinesHtml(v.lines, "Cr")
+    : buildLinesHtml(bankLines as RPVoucher["lines"], "Cr");
+
+  const allLinesHtml = debitHtml + creditHtml;
+
+  // ── Linked invoice info ───────────────────────────────────────────────────
+  const linkedIds = v.linkedInvoiceIds?.length ? v.linkedInvoiceIds
+    : v.linkedInvoiceId ? [v.linkedInvoiceId] : [];
+  const linkedInvoices = linkedIds.length
+    ? getInvoices().filter(i => linkedIds.includes(i.id))
+    : [];
+  const linkedHtml = linkedInvoices.length
+    ? `<div class="info-row"><span class="info-label">Invoice Ref</span><span class="info-value">${linkedInvoices.map(i => i.invoiceNumber).join(", ")}</span></div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>${typeLabel} – ${v.voucherNumber}</title>
+  <style>
+    @page { size: A4; margin: 14mm 15mm 18mm 15mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; }
+
+    /* Print toolbar */
+    .print-bar { display: flex; justify-content: center; gap: 12px; padding: 14px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+    .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-primary { background: ${accentColor}; color: white; }
+    .btn-secondary { background: white; color: #374151; border: 1px solid #d1d5db; }
+    @media print { .print-bar { display: none !important; } }
+
+    .page { padding: 0 2px; }
+
+    /* Header */
+    .header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 10px; border-bottom: 2.5px solid ${accentColor}; margin-bottom: 14px; }
+    .company { font-size: 19px; font-weight: 800; color: ${accentColor}; letter-spacing: -0.5px; }
+    .company-sub { font-size: 10px; color: #6b7280; margin-top: 3px; }
+    .doc-box { text-align: right; }
+    .doc-type { font-size: 16px; font-weight: 800; color: #111; }
+    .doc-num  { font-size: 12px; font-weight: 700; color: ${accentColor}; margin-top: 3px; font-family: 'Courier New', monospace; }
+    .doc-meta { font-size: 9px; color: #9ca3af; margin-top: 3px; }
+
+    /* Status badge */
+    .status-posted { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 9px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; background: #d1fae5; color: #065f46; }
+    .status-draft  { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 9px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; background: #fef3c7; color: #92400e; }
+
+    /* Info grid */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+    .info-col  { padding: 10px 14px; }
+    .info-col:first-child { border-right: 1px solid #e5e7eb; }
+    .info-row  { display: flex; flex-direction: column; margin-bottom: 8px; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; margin-bottom: 2px; }
+    .info-value { font-size: 12px; font-weight: 600; color: #111; }
+    .info-value.mono { font-family: 'Courier New', monospace; }
+    .info-value.muted { color: #6b7280; font-weight: 400; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px; }
+    thead tr { background: #1e3a8a; color: #fff; }
+    thead th { padding: 7px 10px; text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+    thead th.num { text-align: right; }
+    thead th.sl { width: 30px; text-align: center; }
+    tbody td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody td.sl { text-align: center; color: #9ca3af; font-size: 10px; }
+    tbody td.dr  { color: #065f46; font-weight: 700; }
+    tbody td.cr  { color: #991b1b; font-weight: 700; }
+    tbody td.amt { color: #111; font-weight: 600; }
+    .alt td { background: #f9fafb; }
+
+    /* Total band */
+    .total-band { display: flex; justify-content: flex-end; align-items: center; gap: 20px; padding: 10px 14px; background: ${accentLight}; border: 1px solid ${accentBorder}; border-radius: 6px; margin-top: 10px; }
+    .total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; }
+    .total-value { font-size: 18px; font-weight: 800; color: ${accentColor}; font-variant-numeric: tabular-nums; }
+
+    /* Narration */
+    .narration-box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 9px 12px; margin-top: 12px; }
+    .narration-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; margin-bottom: 4px; }
+    .narration-text  { font-size: 11px; color: #374151; }
+
+    /* Signatures */
+    .sig-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 30px; }
+    .sig-box { border-top: 1px solid #d1d5db; padding-top: 6px; }
+    .sig-label { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Footer */
+    .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-bar">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+  </div>
+
+  <div class="page" style="padding:16px 18px;">
+
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <div class="company">${s.companyName || "Onesoft"}</div>
+        <div class="company-sub">${locationLine}</div>
+      </div>
+      <div class="doc-box">
+        <div class="doc-type">${typeLabel}</div>
+        <div class="doc-num">${v.voucherNumber}</div>
+        <div class="doc-meta">
+          <span class="status-${v.status}">${v.status.toUpperCase()}</span>
+          &nbsp;&nbsp;Printed: ${generatedAt}
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Grid -->
+    <div class="info-grid">
+      <div class="info-col">
+        <div class="info-row">
+          <span class="info-label">Party / ${isReceipt ? "Received From" : "Paid To"}</span>
+          <span class="info-value">${v.partyName || "—"}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Date</span>
+          <span class="info-value">${v.date}</span>
+        </div>
+        ${linkedHtml}
+      </div>
+      <div class="info-col">
+        <div class="info-row">
+          <span class="info-label">Cash / Bank Account</span>
+          <span class="info-value">${v.cashBankAccountName || "—"}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Reference / Cheque #</span>
+          <span class="info-value mono">${v.reference || "—"}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Voucher Type</span>
+          <span class="info-value">${typeLabel}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Journal Lines -->
+    <table>
+      <thead>
+        <tr>
+          <th class="sl">Sl</th>
+          <th>Account</th>
+          <th>Description / Narration</th>
+          <th class="num" style="width:40px;">Dr/Cr</th>
+          <th class="num" style="width:130px;">Amount (${sym})</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allLinesHtml || `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:16px;">No lines recorded</td></tr>`}
+      </tbody>
+    </table>
+
+    <!-- Total -->
+    <div class="total-band">
+      <span class="total-label">Total ${isReceipt ? "Received" : "Paid"}</span>
+      <span class="total-value">${sym} ${fmtN(v.totalAmount)}</span>
+    </div>
+
+    ${v.narration ? `
+    <!-- Narration -->
+    <div class="narration-box">
+      <div class="narration-label">Narration / Remarks</div>
+      <div class="narration-text">${v.narration}</div>
+    </div>` : ""}
+
+    <!-- Signature section -->
+    <div class="sig-row">
+      <div class="sig-box"><div class="sig-label">Prepared By</div></div>
+      <div class="sig-box"><div class="sig-label">Approved By</div></div>
+      <div class="sig-box"><div class="sig-label">${isReceipt ? "Received By" : "Paid By"}</div></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>${s.companyName || "Onesoft"} &nbsp;&middot;&nbsp; ${typeLabel} &nbsp;&middot;&nbsp; ${v.voucherNumber}</span>
+      <span>This is a system-generated voucher &nbsp;&middot;&nbsp; ${generatedAt}</span>
+    </div>
+
+  </div>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=850,height=760");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
 
 // ─── Account Dropdown (portal-based to avoid clipping) ───────────────────────
@@ -1801,6 +2048,11 @@ export default function ReceiptPaymentPage() {
                       title={v.status === "draft" ? "Edit" : "View"}
                       className="p-1.5 rounded hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors">
                       {v.status === "draft" ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    <button onClick={() => printVoucher(v)}
+                      title="Print voucher"
+                      className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                      <Printer className="h-4 w-4" />
                     </button>
                     <button onClick={() => setDeleteId(v.id)}
                       title={v.status === "posted" ? "Delete (reverses JE & invoice payments)" : "Delete"}
