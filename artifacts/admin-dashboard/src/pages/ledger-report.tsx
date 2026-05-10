@@ -161,57 +161,57 @@ type LedgerRow = {
  *   SLIP-*               →  Salary Slip
  *   JE-YYYYMM-NNN        →  Manual Journal Entry
  */
-function resolveSourceUrl(reference: string, _description: string): { url: string; title: string } {
+type SourceResult = { url: string; title: string; found: boolean };
+
+function resolveSourceUrl(reference: string, _description: string): SourceResult {
   const srcRef = reference.startsWith("AUTO-") ? reference.slice(5) : reference;
 
   // ── AUTO-SAL-* → POS sale or sale invoice ──────────────────────────────────
   if (reference.startsWith("AUTO-SAL-") || srcRef.startsWith("SAL-")) {
-    // Try POS sale first
     const sale = getSales().find(s => s.saleNumber === srcRef);
-    if (sale) return { url: `/sales?open=${sale.id}`, title: `Open POS Sale: ${srcRef}` };
-    // Fall back to credit-sale invoice
+    if (sale) return { url: `/sales?open=${sale.id}`, title: `Open POS Sale: ${srcRef}`, found: true };
     const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
-    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Sale Invoice: ${srcRef}` };
-    return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Open Sale: ${srcRef}` };
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Sale Invoice: ${srcRef}`, found: true };
+    return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Sale not found: ${srcRef}`, found: false };
   }
 
   // ── AUTO-PO-* → purchase invoice ───────────────────────────────────────────
   if (reference.startsWith("AUTO-PO-") || srcRef.startsWith("PO-")) {
     const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
-    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Purchase Invoice: ${srcRef}` };
-    return { url: `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Invoice: ${srcRef}` };
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Purchase Invoice: ${srcRef}`, found: true };
+    return { url: `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`, title: `Purchase invoice not found: ${srcRef}`, found: false };
   }
 
   // ── AUTO-SR-* → sale return ────────────────────────────────────────────────
   if (reference.startsWith("AUTO-SR-") || srcRef.startsWith("SR-")) {
     const sr = getSaleReturns().find(r => r.returnNumber === srcRef);
-    if (sr) return { url: `/returns?open=${sr.id}`, title: `Open Sale Return: ${srcRef}` };
-    return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Open Sale Return: ${srcRef}` };
+    if (sr) return { url: `/returns?open=${sr.id}`, title: `Open Sale Return: ${srcRef}`, found: true };
+    return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Sale return not found: ${srcRef}`, found: false };
   }
 
   // ── AUTO-PR-* → purchase return ────────────────────────────────────────────
   if (reference.startsWith("AUTO-PR-") || srcRef.startsWith("PR-")) {
     const pr = getPurchaseReturns().find(r => r.returnNumber === srcRef);
-    if (pr) return { url: `/returns?tab=purchase&open=${pr.id}`, title: `Open Purchase Return: ${srcRef}` };
-    return { url: `/returns?tab=purchase&q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Return: ${srcRef}` };
+    if (pr) return { url: `/returns?tab=purchase&open=${pr.id}`, title: `Open Purchase Return: ${srcRef}`, found: true };
+    return { url: `/returns?tab=purchase&q=${encodeURIComponent(srcRef)}`, title: `Purchase return not found: ${srcRef}`, found: false };
   }
 
   // ── RV-* / PV-* → receipt / payment voucher ───────────────────────────────
   if (reference.startsWith("RV-") || reference.startsWith("PV-")) {
     const v = getRPVouchers().find(v => v.voucherNumber === reference);
-    if (v) return { url: `/receipt-payment?open=${v.id}`, title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}` };
-    return { url: `/receipt-payment?q=${encodeURIComponent(reference)}`, title: `Open Voucher: ${reference}` };
+    if (v) return { url: `/receipt-payment?open=${v.id}`, title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}`, found: true };
+    return { url: `/receipt-payment?q=${encodeURIComponent(reference)}`, title: `Voucher not found: ${reference}`, found: false };
   }
 
   // ── SLIP-* → salary ────────────────────────────────────────────────────────
   if (reference.startsWith("SLIP-") || srcRef.startsWith("SLIP-")) {
-    return { url: `/salary`, title: `Open Salary Slip: ${srcRef}` };
+    return { url: `/salary`, title: `Open Salary Slip: ${srcRef}`, found: true };
   }
 
   // ── Default: manual journal entry ──────────────────────────────────────────
   const je = getJournalEntries().find(j => j.reference === reference);
-  if (je) return { url: `/journal-entry?open=${je.id}`, title: `Open Journal Entry: ${reference}` };
-  return { url: `/journal-entry?q=${encodeURIComponent(reference)}`, title: `Open Journal Entry: ${reference}` };
+  if (je) return { url: `/journal-entry?open=${je.id}`, title: `Open Journal Entry: ${reference}`, found: true };
+  return { url: `/journal-entry?q=${encodeURIComponent(reference)}`, title: `Journal entry not found: ${reference}`, found: false };
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -894,23 +894,56 @@ export default function LedgerReportPage() {
                       <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-medium whitespace-nowrap">{row.date}</td>
                       <td className="px-4 py-2.5">
                         {(() => {
-                          const { url, title } = resolveSourceUrl(row.reference, row.description);
+                          const { url, title, found } = resolveSourceUrl(row.reference, row.description);
+                          const handleOpen = () => {
+                            if (!found) {
+                              toast({
+                                title: "Source document not found",
+                                description: `${row.reference} — the original record may have been deleted or not yet synced.`,
+                                variant: "destructive",
+                                duration: 5000,
+                              });
+                              return;
+                            }
+                            navigate(url);
+                          };
+                          const handleOpenTab = () => {
+                            if (!found) {
+                              toast({
+                                title: "Source document not found",
+                                description: `${row.reference} — the original record may have been deleted or not yet synced.`,
+                                variant: "destructive",
+                                duration: 5000,
+                              });
+                              return;
+                            }
+                            window.open(`/admin-dashboard${url}`, "_blank");
+                          };
                           return (
                             <div className="flex items-center gap-1.5">
                               <button
-                                title={title}
-                                onClick={() => navigate(url)}
-                                className="text-[12px] font-mono font-semibold text-primary hover:underline cursor-pointer text-left"
+                                title={found ? title : `⚠ Source not found: ${row.reference}`}
+                                onClick={handleOpen}
+                                className={`text-[12px] font-mono font-semibold hover:underline cursor-pointer text-left ${
+                                  found ? "text-primary" : "text-amber-500 line-through decoration-amber-400"
+                                }`}
                               >
                                 {row.reference}
                               </button>
-                              <button
-                                title={`Open in new tab: ${row.reference}`}
-                                onClick={() => window.open(`/admin-dashboard${url}`, "_blank")}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
-                              >
-                                <ExternalLink size={11} />
-                              </button>
+                              {!found && (
+                                <span title="Source document not found — record may have been deleted" className="text-amber-500 flex-shrink-0">
+                                  ⚠
+                                </span>
+                              )}
+                              {found && (
+                                <button
+                                  title={`Open in new tab: ${row.reference}`}
+                                  onClick={handleOpenTab}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
+                                >
+                                  <ExternalLink size={11} />
+                                </button>
+                              )}
                             </div>
                           );
                         })()}
