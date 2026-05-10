@@ -776,9 +776,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   }, []);
 
   const handleSave = (overrideStatus?: InvoiceStatus) => {
+    // If the invoice was "Paid" but edits have created an outstanding balance, demote to "Partial"
+    const statusOverride: InvoiceStatus | undefined = overrideStatus
+      ?? (invoice && invoice.status === "Paid" && balance > 0.005 ? "Partial" : undefined);
     onSave({
       ...form,
-      ...(overrideStatus ? { status: overrideStatus } : {}),
+      ...(statusOverride ? { status: statusOverride } : {}),
       pricingMode:     invoiceType !== "purchase" ? pricingMode : undefined,
       items,
       paymentHistory:  payHistory,
@@ -1753,14 +1756,32 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <Receipt size={14} className="text-emerald-400"/>
                   <span className="text-[13px] font-bold text-white uppercase tracking-wider">Payments</span>
                 </div>
-                {jeId && (
-                  <button
-                    onClick={() => navigate(`/journal-entry?q=${encodeURIComponent(invoice?.invoiceNumber || "")}`)}
-                    title="View journal entry"
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[11px] font-bold text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
-                    <BookOpen size={11}/> JE Posted ↗
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {jeId && (
+                    <button
+                      onClick={() => navigate(`/journal-entry?q=${encodeURIComponent(invoice?.invoiceNumber || "")}`)}
+                      title="View journal entry"
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[11px] font-bold text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+                      <BookOpen size={11}/> JE Posted ↗
+                    </button>
+                  )}
+                  {balance > 0.005 && s !== "Cancelled" && (
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          invoiceId:     invoice!.id,
+                          invoiceNumber: invoice!.invoiceNumber,
+                          customer:      form.customer,
+                          amount:        balance.toFixed(dp),
+                          type:          invoiceType === "purchase" ? "payment" : "receipt",
+                        });
+                        navigate(`/receipt-payment?${params.toString()}`);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-[11px] font-bold text-white transition-colors">
+                      <DollarSign size={11}/> {invoiceType === "purchase" ? "Pay Outstanding" : "Collect Outstanding"}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="px-5 py-4">
                 <div className="grid grid-cols-3 gap-3 mb-4">
@@ -1915,7 +1936,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           )}
 
           {/* Collect / Pay — navigate to receipt-payment page with invoice pre-filled */}
-          {!isNew && s !== "Paid" && s !== "Cancelled" && (
+          {!isNew && s !== "Cancelled" && balance > 0.005 && (
             <button
               onClick={() => {
                 const params = new URLSearchParams({
