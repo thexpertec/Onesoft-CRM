@@ -78,10 +78,10 @@
 
   --background: 210 20% 98%;
   --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
+  --border: 214 25% 82%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-border: 214 25% 82%;
   --sidebar: 221 83% 13%;
   --sidebar-foreground: 210 40% 92%;
   --sidebar-border: 221 83% 20%;
@@ -92,7 +92,7 @@
   --sidebar-ring: 221 83% 53%;
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-border: 214 25% 82%;
   --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
   --secondary: 210 40% 94%;
@@ -103,7 +103,7 @@
   --accent-foreground: 222 47% 11%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --input: 214 32% 91%;
+  --input: 214 22% 62%;
   --ring: 221 83% 53%;
   --chart-1: 221 83% 53%;
   --chart-2: 142 71% 45%;
