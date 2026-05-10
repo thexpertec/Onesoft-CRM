@@ -175,6 +175,13 @@ function resolveSourceUrl(reference: string, _description: string): SourceResult
     return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Sale not found: ${srcRef}`, found: false };
   }
 
+  // ── AUTO-INV-* → sale invoice ───────────────────────────────────────────────
+  if (reference.startsWith("AUTO-INV-") || srcRef.startsWith("INV-")) {
+    const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Invoice: ${srcRef}`, found: true };
+    return { url: `/invoices?q=${encodeURIComponent(srcRef)}`, title: `Invoice not found: ${srcRef}`, found: false };
+  }
+
   // ── AUTO-PO-* → purchase invoice ───────────────────────────────────────────
   if (reference.startsWith("AUTO-PO-") || srcRef.startsWith("PO-")) {
     const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
