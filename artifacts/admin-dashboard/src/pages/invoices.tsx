@@ -868,7 +868,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       )}
 
       {/* ══ Body ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex-1 px-4 md:px-6 py-5 pb-28">
+      <div className={`flex-1 px-4 md:px-6 py-5 pb-28${isPaymentLocked ? " pointer-events-none select-none opacity-50" : ""}`}>
         <div className="max-w-7xl mx-auto space-y-4">
 
           {/* ── Section 1: Customer + Invoice Details (2 columns) ───────────── */}
