@@ -7,7 +7,7 @@ import {
   AlertTriangle, Check, ChevronRight, X, Eye, EyeOff,
   FilePlus2, FileText, Star, ChevronDown, MoreVertical, Info, RotateCcw,
   PanelRight, Maximize2, LayoutTemplate, GripVertical, RotateCw, Link2, Printer, Pencil, ExternalLink,
-  Plus, CreditCard, Moon, Sun, ChevronUp, Sliders,
+  Plus, CreditCard, Moon, Sun, ChevronUp, Sliders, Shield, Lock,
 } from "lucide-react";
 import RichTextEditor from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import {
   clearAccountingLedger, clearAllStoredModules,
   getStoredModuleSnapshot, restoreStoredModuleSnapshot,
   getMasterDataSnapshot, isMasterDataEmpty, restoreMasterDataSnapshot, MasterDataBundle,
+  getAdminUsers,
 } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { UI_PRESETS, SCALE_LABELS, getPresetFonts, type UiPreset } from "@/lib/ui-presets";
@@ -89,8 +90,128 @@ function SectionHeader({ title, desc }: { title: string; desc?: string }) {
   );
 }
 
+// ─── 2FA / password-gate dialog ───────────────────────────────────────────────
+function TfaGateDialog({
+  open, onOpenChange, actionTitle, actionDesc, onVerified,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  actionTitle: string;
+  actionDesc:  string;
+  onVerified: () => void;
+}) {
+  const { currentUser } = useAuth();
+  const [password, setPassword]   = useState("");
+  const [showPw,   setShowPw]     = useState(false);
+  const [error,    setError]      = useState("");
+  const [attempts, setAttempts]   = useState(0);
+  const [busy,     setBusy]       = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setPassword(""); setError(""); setAttempts(0); setShowPw(false);
+      setTimeout(() => inputRef.current?.focus(), 120);
+    }
+  }, [open]);
+
+  function verify() {
+    if (!password.trim()) { setError("Please enter your password."); return; }
+    setBusy(true);
+    // Slight delay gives tactile feedback that verification is happening
+    setTimeout(() => {
+      const users = getAdminUsers();
+      const match = users.find(u => u.id === currentUser?.id && u.password === password);
+      setBusy(false);
+      if (match) {
+        onOpenChange(false);
+        onVerified();
+      } else {
+        const n = attempts + 1;
+        setAttempts(n);
+        setPassword("");
+        setError(n >= 3
+          ? `Incorrect password (${n} failed attempts). Double-check Caps Lock and try again.`
+          : "Incorrect password. Please try again.");
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    }, 450);
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center shrink-0">
+              <Shield size={16} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            Verification Required
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                This is a destructive action that cannot be undone. Re-enter your admin password to confirm your identity before proceeding.
+              </p>
+              {/* Action summary box */}
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50/70 dark:bg-amber-950/20 px-3.5 py-2.5">
+                <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <Lock size={12} className="shrink-0" /> {actionTitle}
+                </p>
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-400/70 mt-0.5 leading-relaxed">{actionDesc}</p>
+              </div>
+              {/* Password field */}
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-[13px] font-medium">Your Password</Label>
+                <div className="relative">
+                  <input
+                    ref={inputRef}
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError(""); }}
+                    onKeyDown={e => e.key === "Enter" && !busy && verify()}
+                    placeholder="Enter your admin password"
+                    className="w-full h-9 px-3 pr-10 text-[13px] rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPw(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+                {error && (
+                  <p className="flex items-start gap-1.5 text-[12px] text-red-600 dark:text-red-400">
+                    <AlertTriangle size={11} className="mt-0.5 shrink-0" /> {error}
+                  </p>
+                )}
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => { setPassword(""); setError(""); }}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+            onClick={e => { e.preventDefault(); verify(); }}
+            disabled={!password.trim() || busy}
+          >
+            {busy
+              ? <><RefreshCw size={13} className="animate-spin" /> Verifying…</>
+              : <><Shield size={13} /> Confirm Identity</>}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 // ─── Accounting Ledger reset row ──────────────────────────────────────────────
-function LedgerResetRow({ onReset }: { onReset: () => void }) {
+function LedgerResetRow({ onReset, onIntercept }: { onReset: () => void; onIntercept?: () => void }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/10 px-4 py-3 flex items-center justify-between gap-4">
@@ -105,12 +226,13 @@ function LedgerResetRow({ onReset }: { onReset: () => void }) {
         </p>
       </div>
       <button
-        onClick={() => setConfirm(true)}
+        onClick={() => onIntercept ? onIntercept() : setConfirm(true)}
         className="flex-shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-amber-700 hover:text-red-700 dark:text-amber-300 dark:hover:text-red-400 px-3 py-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 border border-amber-300 hover:border-red-300 dark:border-amber-700 dark:hover:border-red-700 transition-colors"
       >
         <RotateCcw size={13} />
         Reset to Zero
       </button>
+      {/* Confirm dialog — only used when NOT intercepted by TFA gate */}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -603,6 +725,11 @@ export default function SettingsPage() {
   const [masterImportError, setMasterImportError] = useState<string | null>(null);
   const [masterConfirmOpen, setMasterConfirmOpen] = useState(false);
   const [pendingBundle, setPendingBundle]         = useState<MasterDataBundle | null>(null);
+
+  // 2FA gates for destructive actions
+  const [ledgerTfaOpen,    setLedgerTfaOpen]    = useState(false);
+  const [nukeTfaOpen,      setNukeTfaOpen]      = useState(false);
+  const [ledgerConfirmOpen, setLedgerConfirmOpen] = useState(false);
 
   // Re-read settings on mount so any backfill that ran after the lazy initializer is applied
   useEffect(() => {
@@ -2219,10 +2346,13 @@ export default function SettingsPage() {
                       title="Reset Accounting Ledger"
                       desc="Reset all account balances to zero. Journal entries are deleted and all opening balances are set to 0. The Chart of Accounts structure is preserved."
                     />
-                    <LedgerResetRow onReset={() => {
-                      clearAccountingLedger();
-                      toast({ title: "Accounting ledger reset to zero", description: "All journal entries deleted and opening balances set to 0." });
-                    }} />
+                    <LedgerResetRow
+                      onReset={() => {
+                        clearAccountingLedger();
+                        toast({ title: "Accounting ledger reset to zero", description: "All journal entries deleted and opening balances set to 0." });
+                      }}
+                      onIntercept={() => setLedgerTfaOpen(true)}
+                    />
                   </div>
                 )}
 
@@ -2240,7 +2370,7 @@ export default function SettingsPage() {
                         <Button
                           variant="destructive"
                           className="mt-3 gap-2 h-9 text-[13px]"
-                          onClick={() => setNukeOpen(true)}
+                          onClick={() => setNukeTfaOpen(true)}
                         >
                           <Trash2 size={14} />
                           Wipe All Data
@@ -2268,6 +2398,58 @@ export default function SettingsPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+
+                {/* ── 2FA gate: Ledger Reset ─────────────────────────────── */}
+                <TfaGateDialog
+                  open={ledgerTfaOpen}
+                  onOpenChange={setLedgerTfaOpen}
+                  actionTitle="Reset All Ledger Balances to Zero"
+                  actionDesc="Deletes every journal entry and sets all account opening balances to 0. The Chart of Accounts structure is preserved, but all values are permanently cleared."
+                  onVerified={() => setLedgerConfirmOpen(true)}
+                />
+
+                {/* Ledger confirm (shown after TFA passes) */}
+                <AlertDialog open={ledgerConfirmOpen} onOpenChange={setLedgerConfirmOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                        <AlertTriangle size={18} /> Reset Accounting Ledger to Zero?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription asChild>
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          <p>Identity verified. This will permanently:</p>
+                          <ul className="list-disc pl-4 space-y-1">
+                            <li>Delete <strong>all journal entries</strong> (POS, invoices, purchases, and manual)</li>
+                            <li>Set <strong>all account opening balances to £0</strong></li>
+                          </ul>
+                          <p className="font-medium text-foreground">The Chart of Accounts structure is preserved. This cannot be undone.</p>
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={() => {
+                          setLedgerConfirmOpen(false);
+                          clearAccountingLedger();
+                          toast({ title: "Accounting ledger reset to zero", description: "All journal entries deleted and opening balances set to 0." });
+                        }}
+                      >
+                        Yes, Reset All Ledger Values to Zero
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                {/* ── 2FA gate: Wipe All Data ────────────────────────────── */}
+                <TfaGateDialog
+                  open={nukeTfaOpen}
+                  onOpenChange={setNukeTfaOpen}
+                  actionTitle="Wipe All Data"
+                  actionDesc="Permanently deletes every record across all modules — leads, customers, products, sales, purchases, staff, users, and settings. This cannot be undone."
+                  onVerified={() => setNukeOpen(true)}
+                />
 
               </div>
             )}
