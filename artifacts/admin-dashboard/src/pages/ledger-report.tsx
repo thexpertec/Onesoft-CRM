@@ -581,8 +581,8 @@ export default function LedgerReportPage() {
     <table>
       <thead>
         <tr>
-          <th style="width:90px">Date</th>
-          <th style="width:90px">Ref #</th>
+          <th style="width:110px">Date</th>
+          <th style="width:160px">Ref #</th>
           <th>Description / Narration</th>
           <th class="num" style="width:110px">Debit (${sym})</th>
           <th class="num" style="width:110px">Credit (${sym})</th>
@@ -842,7 +842,7 @@ export default function LedgerReportPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border">
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[100px]">
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[120px]">
                       <button
                         type="button"
                         onClick={() => setDateOrder(o => o === "asc" ? "desc" : "asc")}
@@ -856,7 +856,7 @@ export default function LedgerReportPage() {
                         </span>
                       </button>
                     </th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[110px]">Ref #</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[175px]">Ref #</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Description / Narration</th>
                     <th className="text-right px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[120px]">Debit</th>
                     <th className="text-right px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[120px]">Credit</th>
@@ -866,7 +866,7 @@ export default function LedgerReportPage() {
                 <tbody>
                   {/* Opening Balance row */}
                   <tr className="bg-slate-50/80 dark:bg-slate-900/30 border-b border-dashed border-border">
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground font-medium">{from}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground font-medium whitespace-nowrap">{from}</td>
                     <td className="px-4 py-2.5" />
                     <td className="px-4 py-2.5">
                       <span className="inline-flex items-center gap-1.5">
