@@ -147,66 +147,68 @@ type LedgerRow = {
  * Resolve which app page originated a ledger entry and return the URL to open
  * for viewing / editing it directly (not a filtered list).
  *
- * Reference patterns created by the system:
- *   AUTO-SAL-YYYYMM-NNN  →  POS Sale or Invoice Sale
- *   AUTO-PO-YYYYMM-NNN   →  Purchase Receipt (purchase invoice)
+ * Strategy: use the REFERENCE PREFIX as the primary routing key (not the
+ * description text), so every sub-entry of a transaction (e.g. "AR transit
+ * cleared", "VAT leg", "COGS leg") routes back to the same source document.
+ *
+ * Reference patterns:
+ *   AUTO-SAL-YYYYMM-NNN  →  POS Sale (try first) or Sale Invoice
+ *   AUTO-PO-YYYYMM-NNN   →  Purchase Invoice
  *   AUTO-SR-YYYYMM-NNN   →  Sale Return
  *   AUTO-PR-YYYYMM-NNN   →  Purchase Return
- *   RV-NNNNNN / PV-NNNNNN → Receipt / Payment Voucher
+ *   RV-NNNNNN            →  Receipt Voucher
+ *   PV-NNNNNN            →  Payment Voucher
+ *   SLIP-*               →  Salary Slip
  *   JE-YYYYMM-NNN        →  Manual Journal Entry
  */
-function resolveSourceUrl(reference: string, description: string): { url: string; title: string } {
+function resolveSourceUrl(reference: string, _description: string): { url: string; title: string } {
   const srcRef = reference.startsWith("AUTO-") ? reference.slice(5) : reference;
-  const desc   = description.trim();
 
-  // Invoice (credit) sale  →  /invoices/:id
-  if (desc.startsWith("Invoice Sale:")) {
+  // ── AUTO-SAL-* → POS sale or sale invoice ──────────────────────────────────
+  if (reference.startsWith("AUTO-SAL-") || srcRef.startsWith("SAL-")) {
+    // Try POS sale first
+    const sale = getSales().find(s => s.saleNumber === srcRef);
+    if (sale) return { url: `/sales?open=${sale.id}`, title: `Open POS Sale: ${srcRef}` };
+    // Fall back to credit-sale invoice
     const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
-    if (inv) return { url: `/invoices/${inv.id}`, title: `Edit Sale Invoice: ${srcRef}` };
-    return { url: `/invoices?q=${encodeURIComponent(srcRef)}`, title: `Open Sale Invoice: ${srcRef}` };
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Sale Invoice: ${srcRef}` };
+    return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Open Sale: ${srcRef}` };
   }
 
-  // Purchase receipt  →  /invoices/:id
-  if (desc.startsWith("Purchase Receipt:")) {
+  // ── AUTO-PO-* → purchase invoice ───────────────────────────────────────────
+  if (reference.startsWith("AUTO-PO-") || srcRef.startsWith("PO-")) {
     const inv = getInvoices().find(i => i.invoiceNumber === srcRef);
-    if (inv) return { url: `/invoices/${inv.id}`, title: `Edit Purchase Invoice: ${srcRef}` };
+    if (inv) return { url: `/invoices/${inv.id}`, title: `Open Purchase Invoice: ${srcRef}` };
     return { url: `/invoices?type=purchase&q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Invoice: ${srcRef}` };
   }
 
-  // POS sale  →  /sales?open=:id
-  if (desc.startsWith("POS Sale:") || desc.startsWith("POS –")) {
-    const sale = getSales().find(s => s.saleNumber === srcRef);
-    if (sale) return { url: `/sales?open=${sale.id}`, title: `Open POS Sale: ${srcRef}` };
-    return { url: `/sales?q=${encodeURIComponent(srcRef)}`, title: `Open POS Sale: ${srcRef}` };
-  }
-
-  // Sale return  →  /returns?open=:id
-  if (desc.startsWith("Sale Return:")) {
+  // ── AUTO-SR-* → sale return ────────────────────────────────────────────────
+  if (reference.startsWith("AUTO-SR-") || srcRef.startsWith("SR-")) {
     const sr = getSaleReturns().find(r => r.returnNumber === srcRef);
     if (sr) return { url: `/returns?open=${sr.id}`, title: `Open Sale Return: ${srcRef}` };
     return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Open Sale Return: ${srcRef}` };
   }
 
-  // Purchase return  →  /returns?tab=purchase&open=:id
-  if (desc.startsWith("Purchase Return:")) {
+  // ── AUTO-PR-* → purchase return ────────────────────────────────────────────
+  if (reference.startsWith("AUTO-PR-") || srcRef.startsWith("PR-")) {
     const pr = getPurchaseReturns().find(r => r.returnNumber === srcRef);
     if (pr) return { url: `/returns?tab=purchase&open=${pr.id}`, title: `Open Purchase Return: ${srcRef}` };
-    return { url: `/returns?q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Return: ${srcRef}` };
+    return { url: `/returns?tab=purchase&q=${encodeURIComponent(srcRef)}`, title: `Open Purchase Return: ${srcRef}` };
   }
 
-  // Receipt / Payment voucher  →  /receipt-payment?open=:id
+  // ── RV-* / PV-* → receipt / payment voucher ───────────────────────────────
   if (reference.startsWith("RV-") || reference.startsWith("PV-")) {
     const v = getRPVouchers().find(v => v.voucherNumber === reference);
     if (v) return { url: `/receipt-payment?open=${v.id}`, title: `Open ${reference.startsWith("RV-") ? "Receipt" : "Payment"} Voucher: ${reference}` };
     return { url: `/receipt-payment?q=${encodeURIComponent(reference)}`, title: `Open Voucher: ${reference}` };
   }
 
-  // Salary slip
-  if (desc.startsWith("Salary Slip") || srcRef.startsWith("SLIP-")) {
-    return { url: `/salary`, title: `Open Salary: ${srcRef}` };
+  // ── SLIP-* → salary ────────────────────────────────────────────────────────
+  if (reference.startsWith("SLIP-") || srcRef.startsWith("SLIP-")) {
+    return { url: `/salary`, title: `Open Salary Slip: ${srcRef}` };
   }
 
-  // Default: manual journal entry  →  /journal-entry?open=:id
+  // ── Default: manual journal entry ──────────────────────────────────────────
   const je = getJournalEntries().find(j => j.reference === reference);
   if (je) return { url: `/journal-entry?open=${je.id}`, title: `Open Journal Entry: ${reference}` };
   return { url: `/journal-entry?q=${encodeURIComponent(reference)}`, title: `Open Journal Entry: ${reference}` };
