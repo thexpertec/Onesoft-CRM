@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   getSales, getInvoices, getSaleReturns, getPurchaseReturns,
-  getJournalEntries, getRPVouchers, getPaymentAccounts,
+  getJournalEntries, getRPVouchers, getPaymentAccounts, getPurchaseOrders,
   type Sale, type Invoice, type SaleReturn, type PurchaseReturn,
   type JournalEntry, type RPVoucher,
 } from "@/lib/store";
@@ -182,14 +182,66 @@ function buildRows(): TxnRow[] {
   }
 
   // 5. Journal Entries
+  // Build a lookup: journalEntry.id → { party, payAccount } from every source record
+  const jePartyMap = new Map<string, { party: string; payAccount: string }>();
+  for (const v of getRPVouchers()) {
+    if (v.journalEntryId) {
+      jePartyMap.set(v.journalEntryId, {
+        party:      v.partyName || "",
+        payAccount: v.cashBankAccountName || v.bankLines?.[0]?.accountName || "",
+      });
+    }
+  }
+  for (const inv of getInvoices()) {
+    if ((inv as any).jeId) {
+      jePartyMap.set((inv as any).jeId, {
+        party:      inv.customer || "",
+        payAccount: inv.paymentMethod || "",
+      });
+    }
+  }
+  for (const s of getSales()) {
+    if (s.jeId) {
+      jePartyMap.set(s.jeId, {
+        party:      s.customer || "Walk-in",
+        payAccount: s.paymentMethod || "",
+      });
+    }
+  }
+  for (const sr of getSaleReturns()) {
+    if ((sr as any).jeId) {
+      jePartyMap.set((sr as any).jeId, {
+        party:      (sr as any).customer || "",
+        payAccount: (sr as any).refundMethod || "",
+      });
+    }
+  }
+  for (const pr of getPurchaseReturns()) {
+    if ((pr as any).jeId) {
+      jePartyMap.set((pr as any).jeId, {
+        party:      (pr as any).supplier || "",
+        payAccount: (pr as any).refundMethod || "",
+      });
+    }
+  }
+  for (const po of getPurchaseOrders()) {
+    if (po.jeId) {
+      jePartyMap.set(po.jeId, {
+        party:      po.supplier || "",
+        payAccount: "",
+      });
+    }
+  }
+
   for (const je of getJournalEntries()) {
+    const linked = jePartyMap.get(je.id);
     rows.push({
       id:         je.id,
       date:       je.date,
       type:       "Journal Entry",
       reference:  je.reference,
-      party:      "",
-      payAccount: "",
+      party:      linked?.party      ?? "",
+      payAccount: linked?.payAccount ?? "",
       credit:     je.totalCredit,
       debit:      je.totalDebit,
       status:     je.status,
