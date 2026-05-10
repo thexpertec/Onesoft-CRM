@@ -1253,6 +1253,18 @@ export default function SettingsPage() {
                         </div>
                       </div>
 
+                      {/* ── Unit Conversion Strip ── */}
+                      <div className="flex items-center justify-between py-3 px-4 bg-gray-50 dark:bg-muted/30 rounded-lg border border-gray-100 dark:border-border">
+                        <div>
+                          <p className="text-[13px] font-medium text-gray-700 dark:text-gray-300">Show Unit Conversion on Purchase Invoices</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Display the unit conversion row (e.g. Box × 12) below each line item on purchase invoices</p>
+                        </div>
+                        <Switch
+                          checked={form.showInvoiceUnitConversion !== false}
+                          onCheckedChange={v => set("showInvoiceUnitConversion", v)}
+                        />
+                      </div>
+
                       <Field label="Default Payment Terms" hint="Pre-fills the Payment Terms field on every new invoice.">
                         <Input
                           value={form.invoiceTerms}

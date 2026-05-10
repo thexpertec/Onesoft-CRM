@@ -4978,6 +4978,8 @@ export type AppSettings = {
   invoiceColsRTL?:           boolean;  // reverse items table column order (RTL layout for Arabic/Urdu invoices)
   // ── Invoice product name field ──
   invoiceProductNameField?:  "name" | "localName"; // which product name field to use in invoice line items
+  // ── Invoice unit conversion strip ──
+  showInvoiceUnitConversion?: boolean; // show/hide the unit conversion row on purchase invoices
   // ── Invoice label customisation ──
   invoiceLabels?:             Partial<InvoiceLabels>;
   invoiceLabelStyles?:        Record<string, LabelStyle>;
@@ -5152,6 +5154,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   printFooterShowContact:   true,
   invoiceColsRTL:           false,
   invoiceProductNameField:  "name",
+  showInvoiceUnitConversion: true,
 };
 
 export function getSettings(): AppSettings {

@@ -1176,7 +1176,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     );
                   })()}
                   {/* Unit conversion strip — purchase invoices only */}
-                  {invoiceType === "purchase" && item.productName && (() => {
+                  {invoiceType === "purchase" && settings.showInvoiceUnitConversion !== false && item.productName && (() => {
                     const factor    = parseFloat(item.conversionFactor || "") || 1;
                     const rawQty    = parseFloat(item.qty) || 0;
                     const stockQty  = rawQty * factor;
