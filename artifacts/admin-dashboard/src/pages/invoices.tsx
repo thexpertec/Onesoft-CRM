@@ -820,9 +820,11 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const linkedPayments = useMemo(() => {
     if (isNew || !invoice) return [];
     return getRPVouchers().filter(v =>
-      v.linkedInvoiceId === invoice.id ||
-      (v.linkedInvoiceIds ?? []).includes(invoice.id) ||
-      v.lines.some(l => l.invoiceId === invoice.id)
+      v.status === "posted" && (
+        v.linkedInvoiceId === invoice.id ||
+        (v.linkedInvoiceIds ?? []).includes(invoice.id) ||
+        v.lines.some(l => l.invoiceId === invoice.id)
+      )
     );
   }, [isNew, invoice?.id, invoice?.updatedAt]);
   const isPaymentLocked = linkedPayments.length > 0;
