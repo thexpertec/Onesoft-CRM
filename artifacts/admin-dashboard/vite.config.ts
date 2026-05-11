@@ -62,6 +62,9 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    headers: {
+      "X-Robots-Tag": "noindex, nofollow",
+    },
     proxy: {
       "/api": {
         target: "http://localhost:8080",
@@ -77,5 +80,8 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    headers: {
+      "X-Robots-Tag": "noindex, nofollow",
+    },
   },
 });
