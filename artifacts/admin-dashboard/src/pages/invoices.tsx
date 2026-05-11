@@ -1045,15 +1045,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 </button>
               )}
               {items.map((item, idx) => {
-                // For purchase invoices: only lock items once stock has actually been received
-                // (saleStatus "Received" / "Partially Received"). An "Ordered" PO is still
-                // in-flight and must stay fully editable even when an accrual JE already exists.
+                // Items are locked only once the order has actually been fulfilled:
+                //   Purchase — saleStatus "Received" / "Partially Received" (stock arrived, JE posted)
+                //   Sale     — saleStatus anything except "Pending" (goods not yet dispatched)
+                // Both "Ordered" (purchase) and "Pending" (sale) are in-flight states where the
+                // invoice must stay fully editable and JE values must sync on every save.
                 const isDelivered = item.itemStatus === "Delivered"
                   && !!item.productName.trim()
-                  && (invoiceType !== "purchase"
-                      || (!!jeId
-                          && form.saleStatus !== "Ordered"
-                          && form.saleStatus !== ""));
+                  && (invoiceType === "purchase"
+                      ? (!!jeId && form.saleStatus !== "Ordered" && form.saleStatus !== "")
+                      : form.saleStatus !== "Pending");
                 return (
                 <div key={item.id}>
                   {/* Item row */}
