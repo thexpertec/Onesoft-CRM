@@ -6,7 +6,7 @@ import {
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
   BankAccount, ProductVariant, Product,
-  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices,
+  getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices, getJournalEntries,
   deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
   autoPostPurchaseJE,
@@ -2601,6 +2601,28 @@ export function InvoiceFormPage() {
 
   const handleDelete = useCallback((id: string) => {
     const inv = getInvoices().find(i => i.id === id);
+
+    // For pre-fulfilment invoices (Draft / sale "Pending" / purchase "Ordered"),
+    // automatically clean up any linked JE records before attempting deletion.
+    // This ensures the financial-blocker check in deleteInvoice passes cleanly,
+    // and the ledger stays consistent with no orphaned entries.
+    const isPreFulfilment =
+      inv?.status === "Draft" ||
+      (inv?.invoiceType !== "purchase" && inv?.saleStatus === "Pending") ||
+      (inv?.invoiceType === "purchase" && inv?.saleStatus === "Ordered");
+
+    if (inv && isPreFulfilment) {
+      const invNum = inv.invoiceNumber;
+      const linkedJEs = getJournalEntries().filter(je =>
+        je.id === inv.jeId ||
+        (je.reference?.includes(invNum)) ||
+        je.lines.some(l => l.narration?.includes(invNum))
+      );
+      for (const je of linkedJEs) {
+        try { deleteJournalEntry(je.id); } catch { /* ignore cascade errors */ }
+      }
+    }
+
     try {
       removeInvoice(id);
     } catch (err) {
