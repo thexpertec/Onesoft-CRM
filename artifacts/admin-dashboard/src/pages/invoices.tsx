@@ -1883,7 +1883,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             (invoiceType !== "purchase" && !!invoice?.stockDeducted) ||
             (invoiceType !== "purchase" && isPaymentLocked)
           ) && (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2 pointer-events-auto opacity-100">
               <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
               <div className="grid grid-cols-2 gap-2">
                 {invoiceType === "purchase" && !isNew && s !== ("Cancelled" as InvoiceStatus) && (
