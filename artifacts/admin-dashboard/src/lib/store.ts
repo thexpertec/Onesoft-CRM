@@ -1518,7 +1518,14 @@ export const createTenantAsync = async (
   // in-memory state that is already newer (e.g. from a just-completed write
   // whose _lastWriteCompletedAt guard would otherwise protect it).
   const fresh = await kvGet("global", TENANTS_KEY);
-  const existing: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  // SAFETY: if the server read failed (kvGet returns null on network error),
+  // do NOT fall back to the stale in-memory list — that would silently drop
+  // any tenants created after the last sync and corrupt the registry.
+  // Instead, throw so the UI shows a clear error and no write is attempted.
+  if (fresh === null || fresh === undefined) {
+    throw new Error("Could not reach the server to read the current tenant list. Please check your connection and try again.");
+  }
+  const existing: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : [];
 
   const slugConflict = existing.find(t => t.slug.toLowerCase() === data.slug.toLowerCase());
   if (slugConflict) throw new Error(`A tenant with slug "${data.slug}" already exists.`);
@@ -1548,7 +1555,11 @@ export const updateTenantAsync = async (
   // resurrects deleted tenants or drops recently-added ones.
   // NOTE: no intermediate _lsCache — see createTenantAsync for the reason.
   const fresh = await kvGet("global", TENANTS_KEY);
-  const tenants: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  // SAFETY: never fall back to stale memory if the server read failed.
+  if (fresh === null || fresh === undefined) {
+    throw new Error("Could not reach the server to read the current tenant list. Please check your connection and try again.");
+  }
+  const tenants: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : [];
 
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) throw new Error("Tenant not found");
@@ -1576,7 +1587,11 @@ export const deleteTenantAsync = async (id: string): Promise<void> => {
   // resurrects it while dropping any tenants added by other sessions).
   // NOTE: no intermediate _lsCache — see createTenantAsync for the reason.
   const fresh = await kvGet("global", TENANTS_KEY);
-  const current: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
+  // SAFETY: never fall back to stale memory if the server read failed.
+  if (fresh === null || fresh === undefined) {
+    throw new Error("Could not reach the server to read the current tenant list. Please check your connection and try again.");
+  }
+  const current: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : [];
   // setGlobalAsync throws (and rolls back memory) if the server write fails,
   // so handleDelete's catch will surface a proper "Delete failed" toast.
   const filtered = current.filter(t => t.id !== id);
