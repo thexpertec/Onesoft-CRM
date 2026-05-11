@@ -7098,6 +7098,74 @@ export function revertInvoiceToDraft(invoiceId: string): void {
 }
 
 /**
+ * Reverts only the stock deduction for a sale invoice — independent of payments.
+ * Restores the deducted quantities back to inventory and resets saleStatus to
+ * "Pending" (goods are no longer considered dispatched).  JEs and vouchers are
+ * left untouched; only stock flags on the invoice are cleared.
+ */
+export function revertInvoiceStock(invoiceId: string): void {
+  const inv = getInvoices().find(i => i.id === invoiceId);
+  if (!inv || inv.invoiceType === "purchase" || !inv.stockDeducted) return;
+
+  restoreStockForSale(inv.items, inv.invoiceNumber);
+
+  updateInvoice(invoiceId, {
+    stockDeducted: false,
+    saleStatus:    "Pending",
+  });
+}
+
+/**
+ * Reverts only the payment side of a sale invoice — independent of stock.
+ * Deletes all cash-receipt JEs (RCPT-*), resets linked R/P vouchers to draft,
+ * and clears amountPaid / paymentHistory.  The accrual JE (jeId) and stock
+ * flags are left untouched so the sale is still recognised in the ledger.
+ */
+export function revertInvoicePayments(invoiceId: string): void {
+  const inv = getInvoices().find(i => i.id === invoiceId);
+  if (!inv || inv.invoiceType === "purchase") return;
+
+  const invNo = inv.invoiceNumber;
+  const now   = new Date().toISOString();
+
+  // 1. Delete all cash-receipt JEs for this invoice (RCPT-*)
+  const remainingJEs = getJournalEntries().filter(je =>
+    je.reference !== `RCPT-${invNo}`
+  );
+  _saveJournalEntries(remainingJEs);
+
+  // 2. Reset linked R/P vouchers → draft
+  const updatedVouchers = getRPVouchers().map(v => {
+    const singleLink = v.linkedInvoiceId === invoiceId;
+    const multiLink  = (v.linkedInvoiceIds ?? []).includes(invoiceId);
+    if (!singleLink && !multiLink) return v;
+    if (v.status !== "posted")     return v;
+    return {
+      ...v,
+      status:          "draft" as const,
+      journalEntryId:  undefined,
+      linkedInvoiceId: singleLink ? undefined : v.linkedInvoiceId,
+      lines:           v.lines.map(l =>
+        l.invoiceId === invoiceId ? { ...l, invoiceId: undefined } : l
+      ),
+      updatedAt: now,
+    };
+  });
+  _saveRPVouchers(updatedVouchers);
+
+  // 3. Reset payment fields — roll status back to Sent if fully/partially paid
+  const newStatus: InvoiceStatus =
+    inv.status === "Paid" || inv.status === "Partial" ? "Sent" : inv.status;
+
+  updateInvoice(invoiceId, {
+    amountPaid:     "0",
+    paymentHistory: [],
+    paidAt:         "",
+    status:         newStatus,
+  });
+}
+
+/**
  * Reverts a delivered (or partially-delivered) sale invoice back to "Pending" fulfilment.
  * Mirrors revertInvoiceToDraft but keeps the invoice in "Sent" status so it
  * remains an active receivable — only the delivery and payment side is unwound:
