@@ -16,6 +16,7 @@ import {
   getRawMaterials,
   createInvoicePriceAdjustmentJE,
   revertInvoiceToDraft,
+  revertInvoiceDelivery,
   getRPVouchers,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -487,8 +488,9 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   );
   const [items, setItems]       = useState<SaleItem[]>(() => invoice?.items ?? [blankItem()]);
   const [payHistory, setPayHist]= useState<PaymentRecord[]>(() => invoice?.paymentHistory ?? []);
-  const [deleteOpen, setDeleteOpen]         = useState(false);
+  const [deleteOpen, setDeleteOpen]               = useState(false);
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
+  const [revertDeliveryOpen, setRevertDeliveryOpen] = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
   const [collectPayOpen, setCollectPayOpen] = useState(false);
   const [docsOpen, setDocsOpen]            = useState(false);
@@ -1872,7 +1874,8 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           {!isNew && (
             (invoiceType === "purchase" && s !== ("Cancelled" as InvoiceStatus)) ||
             (s === "Draft" && invoiceType !== "purchase") ||
-            s === "Paid" || s === "Partial"
+            s === "Paid" || s === "Partial" ||
+            (invoiceType !== "purchase" && (form.saleStatus === "Delivered" || form.saleStatus === "Partially Delivered"))
           ) && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 p-4 space-y-2">
               <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status Actions</p>
@@ -1933,6 +1936,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   <button onClick={() => setRevertConfirmOpen(true)}
                     className="col-span-2 h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
                     <RotateCcw size={12}/> Revert to Draft
+                  </button>
+                )}
+                {invoiceType !== "purchase" && (form.saleStatus === "Delivered" || form.saleStatus === "Partially Delivered") && (
+                  <button onClick={() => setRevertDeliveryOpen(true)}
+                    className="col-span-2 h-9 rounded-lg border border-orange-200 dark:border-orange-800 text-xs font-bold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center justify-center gap-1.5 transition-colors">
+                    <RotateCcw size={12}/> Revert Delivery
                   </button>
                 )}
               </div>
@@ -2105,6 +2114,42 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
               onClick={() => { if (invoice) onStatusChange(invoice.id, "Draft"); setRevertConfirmOpen(false); }}
               className="bg-orange-600 hover:bg-orange-700 text-white">
               Revert to Draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={revertDeliveryOpen} onOpenChange={setRevertDeliveryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert Delivery?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <p>The following will be permanently undone for <strong className="text-gray-900 dark:text-gray-100">{invoice?.invoiceNumber}</strong>:</p>
+                <ul className="list-disc list-inside space-y-1 pl-1">
+                  <li>Deducted stock restored to inventory</li>
+                  <li>All recorded payments &amp; payment history cleared</li>
+                  <li>Journal entries deleted (sale JE, receipts, adjustments)</li>
+                  <li>Linked receipt vouchers reset to draft</li>
+                  <li>Sale status reset to <strong>Pending</strong></li>
+                </ul>
+                <p className="text-sm text-gray-500 dark:text-gray-400">The invoice itself remains active (Sent) — only the delivery and payment side is reversed.</p>
+                <p className="text-orange-600 dark:text-orange-400 font-medium">This cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (invoice) {
+                  revertInvoiceDelivery(invoice.id);
+                  toast({ title: "Delivery reverted", description: "Stock restored · payments cleared · journal entries deleted" });
+                }
+                setRevertDeliveryOpen(false);
+              }}
+              className="bg-orange-600 hover:bg-orange-700 text-white">
+              Revert Delivery
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

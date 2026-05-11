@@ -7098,6 +7098,70 @@ export function revertInvoiceToDraft(invoiceId: string): void {
 }
 
 /**
+ * Reverts a delivered (or partially-delivered) sale invoice back to "Pending" fulfilment.
+ * Mirrors revertInvoiceToDraft but keeps the invoice in "Sent" status so it
+ * remains an active receivable — only the delivery and payment side is unwound:
+ *
+ *   • All JEs deleted (sale JE, receipt JEs, price-adj JEs)
+ *   • Linked receipt vouchers reset to draft
+ *   • Deducted stock restored to inventory
+ *   • Payments + payment history cleared
+ *   • saleStatus reset to "Pending", stockDeducted = false
+ */
+export function revertInvoiceDelivery(invoiceId: string): void {
+  const inv = getInvoices().find(i => i.id === invoiceId);
+  if (!inv || inv.invoiceType === "purchase") return;
+
+  const invNo = inv.invoiceNumber;
+  const now   = new Date().toISOString();
+
+  // 1. Wipe all JEs for this invoice (sale JE, receipt JEs, price-adj JEs)
+  const remainingJEs = getJournalEntries().filter(je => {
+    if (inv.jeId && je.id === inv.jeId)    return false;
+    if (je.reference === `RCPT-${invNo}`)  return false;
+    if (je.reference === `ADJ-${invNo}`)   return false;
+    return true;
+  });
+  _saveJournalEntries(remainingJEs);
+
+  // 2. Reset linked Receipt Vouchers → draft
+  const updatedVouchers = getRPVouchers().map(v => {
+    const singleLink = v.linkedInvoiceId === invoiceId;
+    const multiLink  = (v.linkedInvoiceIds ?? []).includes(invoiceId);
+    if (!singleLink && !multiLink) return v;
+    if (v.status !== "posted")     return v;
+    return {
+      ...v,
+      status:          "draft" as const,
+      journalEntryId:  undefined,
+      linkedInvoiceId: singleLink ? undefined : v.linkedInvoiceId,
+      lines:           v.lines.map(l =>
+        l.invoiceId === invoiceId ? { ...l, invoiceId: undefined } : l
+      ),
+      updatedAt: now,
+    };
+  });
+  _saveRPVouchers(updatedVouchers);
+
+  // 3. Restore deducted stock
+  if (inv.stockDeducted) {
+    restoreStockForSale(inv.items, invNo);
+  }
+
+  // 4. Reset invoice — keep status "Sent" (still an active receivable),
+  //    rewind saleStatus to "Pending" and clear all payment / stock flags.
+  updateInvoice(invoiceId, {
+    saleStatus:     "Pending",
+    amountPaid:     "0",
+    paymentHistory: [],
+    paidAt:         "",
+    stockDeducted:  false,
+    jeId:           undefined,
+    jeUsesAR:       undefined,
+  });
+}
+
+/**
  * Auto-posts a journal entry when a Purchase Order is received.
  *   DR Inventory / Stock  = PO total value
  *   CR Accounts Payable   = PO total value
