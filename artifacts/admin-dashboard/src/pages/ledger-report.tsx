@@ -804,7 +804,7 @@ export default function LedgerReportPage() {
                         partyName:   account?.name ?? "",
                         amount:      outstanding.toFixed(2),
                       });
-                      navigate(`/receipt-payment?${p.toString()}`);
+                      window.open(`/receipt-payment?${p.toString()}`, "_blank");
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
                     title={closingBalance === 0 ? "Create a payment voucher for this account" : `Pay outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
@@ -823,7 +823,7 @@ export default function LedgerReportPage() {
                         partyName:   account?.name ?? "",
                         amount:      outstanding.toFixed(2),
                       });
-                      navigate(`/receipt-payment?${p.toString()}`);
+                      window.open(`/receipt-payment?${p.toString()}`, "_blank");
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
                     title={closingBalance === 0 ? "Create a receipt voucher for this account" : `Receive outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
@@ -930,7 +930,7 @@ export default function LedgerReportPage() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 title={found ? title : `⚠ Source not found: ${row.reference}`}
-                                onClick={handleOpen}
+                                onClick={handleOpenTab}
                                 className={`text-[12px] font-mono font-semibold hover:underline cursor-pointer text-left ${
                                   found ? "text-primary" : "text-amber-500 line-through decoration-amber-400"
                                 }`}
@@ -941,15 +941,6 @@ export default function LedgerReportPage() {
                                 <span title="Source document not found — record may have been deleted" className="text-amber-500 flex-shrink-0">
                                   ⚠
                                 </span>
-                              )}
-                              {found && (
-                                <button
-                                  title={`Open in new tab: ${row.reference}`}
-                                  onClick={handleOpenTab}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary flex-shrink-0"
-                                >
-                                  <ExternalLink size={11} />
-                                </button>
                               )}
                             </div>
                           );
