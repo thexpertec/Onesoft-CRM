@@ -12,7 +12,7 @@ import {
   getAdminUsers, updateAdminUser,
   getStaff, updateStaff,
   getSalesAgents, updateSalesAgent,
-  getTenants, updateTenant,
+  getTenants, updateTenantAsync,
 } from "@/lib/store";
 
 type Props = { open: boolean; onClose: () => void };
@@ -39,6 +39,15 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
 
   function close() { reset(); onClose(); }
 
+  // For tenant admins, currentUser.id is "tenant:{uuid}" while Tenant.id is
+  // just "{uuid}" — extract the raw UUID for all tenant-keyed lookups.
+  function getRawTenantId(): string {
+    if (!currentUser) return "";
+    return currentUser.id.startsWith("tenant:")
+      ? currentUser.id.slice(7)
+      : currentUser.id;
+  }
+
   function getStoredPassword(): string {
     if (!currentUser) return "";
     const role = currentUser.role;
@@ -46,7 +55,8 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
       return getAdminUsers().find(u => u.id === currentUser.id)?.password ?? "";
     }
     if (role === "admin") {
-      return getTenants().find(t => t.id === currentUser.id)?.adminPassword ?? "";
+      const tenantId = getRawTenantId();
+      return getTenants().find(t => t.id === tenantId)?.adminPassword ?? "";
     }
     if (role === "staff") {
       return getStaff().find(s => s.id === currentUser.id)?.password ?? "";
@@ -79,7 +89,11 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
       if (role === "superadmin" || role === "manager") {
         updateAdminUser(currentUser.id, { password: next });
       } else if (role === "admin") {
-        updateTenant(currentUser.id, { adminPassword: next });
+        // Use the raw tenant UUID (not the "tenant:{uuid}" composite id) and
+        // await the async variant so the new password is persisted to the
+        // server before we close the dialog.
+        const tenantId = getRawTenantId();
+        await updateTenantAsync(tenantId, { adminPassword: next });
       } else if (role === "staff") {
         updateStaff(currentUser.id, { password: next });
       } else if (role === "sales_agent") {

@@ -1513,9 +1513,12 @@ export const createTenantAsync = async (
   // Always fetch the authoritative list from the server first so we never
   // append to a stale in-memory snapshot that is missing recent tenants
   // or still contains recently-deleted ones.
+  // NOTE: we intentionally do NOT _lsCache the kvGet result — doing so would
+  // overwrite _memRaw with the server read BEFORE our write, losing any
+  // in-memory state that is already newer (e.g. from a just-completed write
+  // whose _lastWriteCompletedAt guard would otherwise protect it).
   const fresh = await kvGet("global", TENANTS_KEY);
   const existing: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
-  _lsCache(TENANTS_KEY, existing);          // update memory with server truth
 
   const slugConflict = existing.find(t => t.slug.toLowerCase() === data.slug.toLowerCase());
   if (slugConflict) throw new Error(`A tenant with slug "${data.slug}" already exists.`);
@@ -1543,9 +1546,9 @@ export const updateTenantAsync = async (
 ): Promise<Tenant> => {
   // Fetch the current server list first so a stale in-memory copy never
   // resurrects deleted tenants or drops recently-added ones.
+  // NOTE: no intermediate _lsCache — see createTenantAsync for the reason.
   const fresh = await kvGet("global", TENANTS_KEY);
   const tenants: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
-  _lsCache(TENANTS_KEY, tenants);           // sync memory before we mutate
 
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) throw new Error("Tenant not found");
@@ -1571,12 +1574,14 @@ export const deleteTenantAsync = async (id: string): Promise<void> => {
   // is exactly what causes deleted tenants to reappear (the stale copy still
   // contains the "deleted" tenant from a prior session, and writing it back
   // resurrects it while dropping any tenants added by other sessions).
+  // NOTE: no intermediate _lsCache — see createTenantAsync for the reason.
   const fresh = await kvGet("global", TENANTS_KEY);
   const current: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : getTenants();
-  _lsCache(TENANTS_KEY, current);           // update memory with server truth
   // setGlobalAsync throws (and rolls back memory) if the server write fails,
   // so handleDelete's catch will surface a proper "Delete failed" toast.
-  await setGlobalAsync(TENANTS_KEY, current.filter(t => t.id !== id));
+  const filtered = current.filter(t => t.id !== id);
+  if (filtered.length === current.length) throw new Error("Tenant not found in registry");
+  await setGlobalAsync(TENANTS_KEY, filtered);
 
   // Step 2: evict in-memory cache entries immediately so the rest of this
   // tab session never sees stale data for the deleted tenant.

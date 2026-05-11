@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { getTenants, updateTenant } from "@/lib/store";
+import { getTenants, updateTenantAsync } from "@/lib/store";
 import { seedDataIntoTenant } from "@/lib/demo-seed";
 import { useToast } from "./use-toast";
 
@@ -17,7 +17,7 @@ export function useDemoReset() {
 
   useEffect(() => { tenantIdRef.current = currentTenantId; }, [currentTenantId]);
 
-  const checkAndReset = useCallback(() => {
+  const checkAndReset = useCallback(async () => {
     const tid = tenantIdRef.current;
     if (!tid) return;
 
@@ -30,7 +30,7 @@ export function useDemoReset() {
 
     try {
       seedDataIntoTenant(tid, tenant.name);
-      updateTenant(tid, { demoLastReset: new Date().toISOString() });
+      await updateTenantAsync(tid, { demoLastReset: new Date().toISOString() });
       toast({
         title:       "Demo data reset",
         description: `${tenant.name} has been restored to its original demo state.`,
