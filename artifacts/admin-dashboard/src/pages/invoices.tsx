@@ -1954,16 +1954,21 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       {/* ══ BOTTOM STICKY ACTION BAR ════════════════════════════════════════ */}
       <div className="fixed bottom-0 left-0 right-0 md:left-[54px] md:right-[54px] z-30 px-4 md:px-6 py-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border-t border-gray-200 dark:border-zinc-800 flex items-center justify-between gap-3">
 
-        {/* Left — danger zone */}
+        {/* Left — danger zone: only available before fulfilment (Draft / Pending / Ordered) */}
         {!isNew && (
+          s === "Draft" ||
+          (invoiceType !== "purchase" && form.saleStatus === "Pending") ||
+          (invoiceType === "purchase" && form.saleStatus === "Ordered")
+        ) ? (
           <button
             onClick={() => setDeleteOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/50 text-sm font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
           >
             <Trash2 size={14}/> Delete
           </button>
+        ) : (
+          <div />
         )}
-        {isNew && <div />}
 
         {/* Right — primary actions */}
         <div className="flex items-center gap-2">
