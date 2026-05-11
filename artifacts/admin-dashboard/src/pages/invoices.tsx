@@ -10,7 +10,8 @@ import {
   deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
   autoPostPurchaseJE,
-  createJournalEntry, updateInvoice, updateProduct, getInvoiceProductName,
+  createJournalEntry, updateJournalEntry, deleteJournalEntry,
+  updateInvoice, updateProduct, getInvoiceProductName,
   findProductForItem, effectiveItemCost,
   getRawMaterials,
   createInvoicePriceAdjustmentJE,
@@ -1044,12 +1045,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 </button>
               )}
               {items.map((item, idx) => {
-                // For purchase invoices: only lock items after the JE is posted ("Mark as Received"
-                // completed). itemStatus may be "Delivered" from a partial or interrupted flow but
-                // if no jeId exists yet, no accounting/stock entry was finalised — keep editable.
+                // For purchase invoices: only lock items once stock has actually been received
+                // (saleStatus "Received" / "Partially Received"). An "Ordered" PO is still
+                // in-flight and must stay fully editable even when an accrual JE already exists.
                 const isDelivered = item.itemStatus === "Delivered"
                   && !!item.productName.trim()
-                  && (invoiceType !== "purchase" || !!jeId);
+                  && (invoiceType !== "purchase"
+                      || (!!jeId
+                          && form.saleStatus !== "Ordered"
+                          && form.saleStatus !== ""));
                 return (
                 <div key={item.id}>
                   {/* Item row */}
@@ -2267,6 +2271,43 @@ export function InvoiceFormPage() {
             const tempInv = { ...existing!, ...data, id } as Invoice;
             const je = postPurchaseInvoiceJE(tempInv);
             if (je) updates.jeId = je.id;
+          }
+        }
+
+        // ── JE auto-sync for Ordered (pre-receipt) invoices ───────────────────
+        // If a JE was already posted (accrual) but stock has not yet been received,
+        // the invoice is still fully editable. When the total changes, re-sync
+        // the existing JE in-place so ledger reports stay accurate.
+        if (!isReceived && existing?.jeId && !updates.jeId) {
+          const oldTotal = (existing.items ?? []).reduce(
+            (s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0
+          ) + (parseFloat(existing.shippingFee || "0") || 0)
+            + (parseFloat(existing.handlingFee || "0") || 0);
+          const newTotal = (data.items ?? []).reduce(
+            (s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0
+          ) + (parseFloat(data.shippingFee || "0") || 0)
+            + (parseFloat(data.handlingFee || "0") || 0);
+
+          if (Math.abs(newTotal - oldTotal) > 0.005 && newTotal > 0) {
+            // Create a temporary invoice without jeId so postPurchaseInvoiceJE
+            // builds fresh lines; then apply those lines to the ORIGINAL JE
+            // (preserving its id so all ledger report links remain valid).
+            const tempInv = { ...existing!, ...data, id, jeId: undefined } as Invoice;
+            const freshJE = postPurchaseInvoiceJE(tempInv);
+            if (freshJE) {
+              updateJournalEntry(existing.jeId, {
+                date:        freshJE.date,
+                description: freshJE.description,
+                lines:       freshJE.lines,
+                totalDebit:  freshJE.totalDebit,
+                totalCredit: freshJE.totalCredit,
+                isBalanced:  freshJE.isBalanced,
+                status:      "posted",
+              });
+              // freshJE was saved to the store by postPurchaseInvoiceJE — remove
+              // the duplicate so only the updated original JE remains.
+              deleteJournalEntry(freshJE.id);
+            }
           }
         }
       } else {
