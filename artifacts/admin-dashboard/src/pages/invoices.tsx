@@ -495,6 +495,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
   const [revertDeliveryOpen,  setRevertDeliveryOpen]  = useState(false);
   const [revertStockOpen,     setRevertStockOpen]     = useState(false);
   const [revertPaymentsOpen,  setRevertPaymentsOpen]  = useState(false);
+  const [revertAllOpen,       setRevertAllOpen]       = useState(false);
   const [payInput, setPayInput]       = useState(invoice?.amountPaid ?? "");
   const [collectPayOpen, setCollectPayOpen] = useState(false);
   const [docsOpen, setDocsOpen]            = useState(false);
@@ -1938,51 +1939,14 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <Send size={12}/> Send
                   </button>
                 )}
-                {(s === "Paid" || s === "Partial" || s === "Sent" || s === "Overdue") && invoiceType !== "purchase" && (() => {
-                  const blocked = isPaymentLocked || !!invoice?.stockDeducted;
-                  const hint = isPaymentLocked && !!invoice?.stockDeducted
-                    ? "Revert inventory & payments first"
-                    : isPaymentLocked
-                      ? "Revert payments first"
-                      : !!invoice?.stockDeducted
-                        ? "Revert inventory first"
-                        : "";
-                  return (
-                    <div className="col-span-2 space-y-1">
-                      <button
-                        onClick={() => !blocked && setRevertConfirmOpen(true)}
-                        disabled={blocked}
-                        className={`w-full h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors
-                          ${blocked
-                            ? "border-gray-100 dark:border-zinc-800 text-gray-300 dark:text-zinc-600 cursor-not-allowed bg-gray-50 dark:bg-zinc-900"
-                            : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer"
-                          }`}>
-                        <RotateCcw size={12}/> Revert to Draft
-                      </button>
-                      {blocked && (
-                        <p className="text-[10px] text-center text-amber-500 dark:text-amber-400">{hint}</p>
-                      )}
-                    </div>
-                  );
-                })()}
-                {invoiceType !== "purchase" && (form.saleStatus === "Delivered" || form.saleStatus === "Partially Delivered") && (
-                  <button onClick={() => setRevertDeliveryOpen(true)}
-                    className="col-span-2 h-9 rounded-lg border border-orange-200 dark:border-orange-800 text-xs font-bold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <RotateCcw size={12}/> Revert Delivery
-                  </button>
-                )}
-                {/* ── Granular revert: Stock only ──────────────────────────────── */}
-                {invoiceType !== "purchase" && !!invoice?.stockDeducted && (
-                  <button onClick={() => setRevertStockOpen(true)}
-                    className="col-span-2 h-9 rounded-lg border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <RotateCcw size={12}/> Revert Inventory
-                  </button>
-                )}
-                {/* ── Granular revert: Payments only ───────────────────────────── */}
-                {invoiceType !== "purchase" && isPaymentLocked && (
-                  <button onClick={() => setRevertPaymentsOpen(true)}
-                    className="col-span-2 h-9 rounded-lg border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center justify-center gap-1.5 transition-colors">
-                    <RotateCcw size={12}/> Revert Payments
+                {/* ── Single "Revert to Draft" — handles payments, inventory, JEs ── */}
+                {(s === "Paid" || s === "Partial" || s === "Sent" || s === "Overdue" ||
+                  form.saleStatus === "Delivered" || form.saleStatus === "Partially Delivered" ||
+                  !!invoice?.stockDeducted || isPaymentLocked
+                ) && invoiceType !== "purchase" && (
+                  <button onClick={() => setRevertAllOpen(true)}
+                    className="col-span-2 h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
+                    <RotateCcw size={12}/> Revert to Draft
                   </button>
                 )}
               </div>
@@ -2159,6 +2123,43 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             <AlertDialogAction
               onClick={() => { if (invoice) onStatusChange(invoice.id, "Draft"); setRevertConfirmOpen(false); }}
               className="bg-orange-600 hover:bg-orange-700 text-white">
+              Revert to Draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Revert All → Draft confirm ───────────────────────────────────── */}
+      <AlertDialog open={revertAllOpen} onOpenChange={setRevertAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert to Draft?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <p>For <strong className="text-gray-900 dark:text-gray-100">{invoice?.invoiceNumber}</strong>, this will undo everything in one step:</p>
+                <ul className="list-disc list-inside space-y-1 pl-1">
+                  {isPaymentLocked && <li>Reset all linked payment vouchers to draft</li>}
+                  {isPaymentLocked && <li>Delete all cash-receipt journal entries</li>}
+                  {!!invoice?.stockDeducted && <li>Restore all deducted quantities back to inventory</li>}
+                  <li>Delete the original sale journal entry</li>
+                  <li>Clear payment history and collected amounts</li>
+                  <li>Reset invoice status to <strong>Draft</strong></li>
+                </ul>
+                <p className="text-red-600 dark:text-red-400 font-medium">This cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (invoice) {
+                  revertInvoiceToDraft(invoice.id);
+                  toast({ title: "Invoice reverted to Draft", description: "Payments, inventory, and journal entries have been unwound." });
+                }
+                setRevertAllOpen(false);
+              }}
+              className="bg-gray-800 hover:bg-gray-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white">
               Revert to Draft
             </AlertDialogAction>
           </AlertDialogFooter>
