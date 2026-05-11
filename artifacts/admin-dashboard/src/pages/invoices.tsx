@@ -824,7 +824,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       (v.linkedInvoiceIds ?? []).includes(invoice.id) ||
       v.lines.some(l => l.invoiceId === invoice.id)
     );
-  }, [isNew, invoice?.id]);
+  }, [isNew, invoice?.id, invoice?.updatedAt]);
   const isPaymentLocked = linkedPayments.length > 0;
 
   return (

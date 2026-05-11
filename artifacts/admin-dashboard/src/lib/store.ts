@@ -7088,6 +7088,7 @@ export function revertInvoiceToDraft(invoiceId: string): void {
   // 4. Reset the invoice itself ───────────────────────────────────────────────
   updateInvoice(invoiceId, {
     status:         "Draft",
+    saleStatus:     "Pending",
     amountPaid:     "0",
     paymentHistory: [],
     paidAt:         "",
