@@ -1938,12 +1938,33 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     <Send size={12}/> Send
                   </button>
                 )}
-                {(s === "Paid" || s === "Partial" || s === "Sent" || s === "Overdue") && invoiceType !== "purchase" && (
-                  <button onClick={() => setRevertConfirmOpen(true)}
-                    className="col-span-2 h-9 rounded-lg border border-gray-200 dark:border-zinc-700 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors">
-                    <RotateCcw size={12}/> Revert to Draft
-                  </button>
-                )}
+                {(s === "Paid" || s === "Partial" || s === "Sent" || s === "Overdue") && invoiceType !== "purchase" && (() => {
+                  const blocked = isPaymentLocked || !!invoice?.stockDeducted;
+                  const hint = isPaymentLocked && !!invoice?.stockDeducted
+                    ? "Revert inventory & payments first"
+                    : isPaymentLocked
+                      ? "Revert payments first"
+                      : !!invoice?.stockDeducted
+                        ? "Revert inventory first"
+                        : "";
+                  return (
+                    <div className="col-span-2 space-y-1">
+                      <button
+                        onClick={() => !blocked && setRevertConfirmOpen(true)}
+                        disabled={blocked}
+                        className={`w-full h-9 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors
+                          ${blocked
+                            ? "border-gray-100 dark:border-zinc-800 text-gray-300 dark:text-zinc-600 cursor-not-allowed bg-gray-50 dark:bg-zinc-900"
+                            : "border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer"
+                          }`}>
+                        <RotateCcw size={12}/> Revert to Draft
+                      </button>
+                      {blocked && (
+                        <p className="text-[10px] text-center text-amber-500 dark:text-amber-400">{hint}</p>
+                      )}
+                    </div>
+                  );
+                })()}
                 {invoiceType !== "purchase" && (form.saleStatus === "Delivered" || form.saleStatus === "Partially Delivered") && (
                   <button onClick={() => setRevertDeliveryOpen(true)}
                     className="col-span-2 h-9 rounded-lg border border-orange-200 dark:border-orange-800 text-xs font-bold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center justify-center gap-1.5 transition-colors">
