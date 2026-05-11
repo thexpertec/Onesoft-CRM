@@ -7825,13 +7825,16 @@ export async function syncTenantsFromServer(): Promise<void> {
     // _lastWriteCompletedAt for the full explanation).
     const getStartedAt = Date.now();
     const fresh = await kvGet("global", TENANTS_KEY);
-    if (Array.isArray(fresh) && fresh.length > 0) {
-      // Guard: if a write to the tenants key completed AFTER this GET was
-      // sent, our in-memory value is newer — keep it and drop the response.
-      if (_pendingWrites.has(TENANTS_KEY)) return;
-      if ((_lastWriteCompletedAt.get(TENANTS_KEY) ?? 0) > getStartedAt) return;
-      _lsCache(TENANTS_KEY, fresh);
-    }
+    // Only update memory if the server returned a real array — including an
+    // empty array ([]). A null response means the fetch itself failed, so we
+    // keep whatever is already in memory rather than clobbering it with nothing.
+    if (fresh === null || fresh === undefined) return;
+    if (!Array.isArray(fresh)) return;
+    // Guard: if a write to the tenants key completed AFTER this GET was
+    // sent, our in-memory value is newer — keep it and drop the response.
+    if (_pendingWrites.has(TENANTS_KEY)) return;
+    if ((_lastWriteCompletedAt.get(TENANTS_KEY) ?? 0) > getStartedAt) return;
+    _lsCache(TENANTS_KEY, fresh);
   } catch (e) {
     console.warn("[store] syncTenantsFromServer failed:", e);
   }
@@ -7858,8 +7861,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     // GET: if it completed before the drain finished the timestamp is ≤ now.
     const globalGetStartedAt = Date.now();
     const globalData = await kvGetAll("global");
-    if (globalData) {
-      for (const [key, value] of Object.entries(globalData)) {
+    // Only process if the server returned real data — null means the network
+    // request itself failed. Never seed/write based on a failed read.
+    const globalFetchSucceeded = globalData !== null && globalData !== undefined;
+    if (globalFetchSucceeded) {
+      for (const [key, value] of Object.entries(globalData!)) {
         if (value === undefined || value === null) continue;
         if (tenantId !== null && !isPlatformGlobalKey(key)) continue;
         // Guard 1 — in-flight write: the PUT hasn't reached the server yet;
@@ -7875,6 +7881,8 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         if ((_lastWriteCompletedAt.get(key) ?? 0) > globalGetStartedAt) continue;
         _lsCache(key, value);
       }
+    } else {
+      console.warn("[sync] kvGetAll('global') returned null — skipping cache update and superadmin seed to avoid corrupting memory with stale data.");
     }
 
     // Step 2b — Ensure the default superadmin exists in the DB.
@@ -7882,7 +7890,10 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     // write. This is the ONLY place that may persist the superadmin seed to the
     // server; ensureDefaultSuperadmin() is intentionally memory-only so that it
     // cannot corrupt the DB at module-load time (before any sync has run).
-    {
+    // IMPORTANT: only run if the global fetch actually succeeded — if the fetch
+    // returned null (network failure), dbUsers would be empty and we'd
+    // incorrectly write a bare superadmin record, overwriting all real users.
+    if (globalFetchSucceeded) {
       const dbUsers: AdminUser[] = getGlobal<AdminUser>(USERS_KEY);
       const hasSuperInDb = dbUsers.some(u => u.id === "u-superadmin");
       if (!hasSuperInDb) {

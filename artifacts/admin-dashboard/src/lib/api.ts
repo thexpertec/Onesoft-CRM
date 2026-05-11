@@ -55,9 +55,20 @@ async function apiWriteFetch(url: string, options: RequestInit): Promise<void> {
   }
 }
 
-/** Read a single key from a namespace. Returns parsed value or null. */
+/**
+ * Read a single key from a namespace.
+ * Retries once after a short delay on failure so transient Neon cold-starts
+ * or brief Replit network blips don't produce a false null — which callers
+ * like createTenantAsync/deleteTenantAsync now treat as a hard error.
+ */
 export async function kvGet(namespace: string, key: string): Promise<unknown> {
-  const data = await apiFetch(`${BASE}/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`);
+  const url = `${BASE}/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`;
+  let data = await apiFetch(url);
+  if (data === null) {
+    // Wait 1.5 s then retry once before giving up.
+    await new Promise(r => setTimeout(r, 1500));
+    data = await apiFetch(url);
+  }
   return data?.value ?? null;
 }
 
