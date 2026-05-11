@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useSearch } from "wouter";
-import { useSales, useCustomers, useStock, useSaleReturns } from "@/hooks/use-data";
+import { useSales, useCustomers, useStock, useSaleReturns, useInvoices } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  Sale, SaleItem, SaleStatus, SalePayment, SaleReturn,
+  Sale, SaleItem, SaleStatus, SalePayment, SaleReturn, Invoice,
   SALE_STATUSES,
   getProducts, getCustomers, getProductCategories, getSales, getSalesAgents, Product, ProductVariant,
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
@@ -46,6 +46,11 @@ const STATUS_BG: Record<string, string> = {
   Refunded:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
   Returned:    "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
   Cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  // Invoice-specific statuses
+  Sent:        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+  Paid:        "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  Partial:     "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+  Overdue:     "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
 };
 
 /** Returns the human-readable status label for display.
@@ -119,8 +124,8 @@ const CHIP_COLORS: Record<string, string> = {
   rose:    "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
 };
 
-// ─── Unified row type: Sale rows + adapted Sale Return rows ───────────────────
-type SaleRowData = Sale & { _returnRef?: SaleReturn };
+// ─── Unified row type: Sale rows + adapted Sale Return rows + adapted Invoice rows ──
+type SaleRowData = Sale & { _returnRef?: SaleReturn; _invoiceRef?: Invoice };
 
 /** Adapt a SaleReturn into a display-compatible SaleRowData for the unified table. */
 function adaptReturn(r: SaleReturn): SaleRowData {
@@ -156,6 +161,57 @@ function adaptReturn(r: SaleReturn): SaleRowData {
     createdAt:           r.createdAt,
     updatedAt:           r.updatedAt,
     _returnRef:          r,
+  };
+}
+
+/** Compute the grand total for a sale Invoice (items − discounts + tax + shipping + handling). */
+function invoiceTotalFull(inv: Invoice): number {
+  const sub     = inv.items.reduce((s, i) => s + (parseFloat(i.qty)||0) * (parseFloat(i.unitPrice)||0), 0);
+  const discAmt = inv.items.reduce((s, i) => {
+    const q = parseFloat(i.qty)||0, p = parseFloat(i.unitPrice)||0, d = parseFloat(i.discount)||0;
+    return s + (i.discountType === "amt" ? Math.min(d, q * p) : q * p * d / 100);
+  }, 0);
+  const after = sub - discAmt;
+  const tax   = after * (parseFloat(inv.taxRate)||0) / 100;
+  const ship  = parseFloat(inv.shippingFee)||0;
+  const hand  = parseFloat(inv.handlingFee)||0;
+  return after + tax + ship + hand;
+}
+
+/** Map Invoice status to the nearest SaleStatus for filter compatibility. */
+function invStatusToSaleStatus(s: string): SaleStatus {
+  if (s === "Paid")      return "Completed";
+  if (s === "Cancelled") return "Cancelled";
+  if (s === "Draft")     return "Draft";
+  return "Pending";
+}
+
+/** Adapt a sale Invoice into a display-compatible SaleRowData for the unified table. */
+function adaptInvoice(inv: Invoice): SaleRowData {
+  return {
+    id:                  inv.id,
+    saleNumber:          inv.invoiceNumber,
+    saleDate:            inv.invoiceDate,
+    customer:            inv.customer,
+    orderType:           "Invoice" as "Invoice",
+    status:              invStatusToSaleStatus(inv.status),
+    items:               inv.items,
+    paymentMethod:       inv.paymentMethod,
+    amountPaid:          inv.amountPaid,
+    taxRate:             inv.taxRate,
+    invoiceDiscount:     "0",
+    invoiceDiscountType: "pct",
+    deliveryCharges:     "0",
+    saleMode:            "Retail",
+    deliveryStatus:      "Delivered",
+    paidAt:              inv.paidAt,
+    stockDeducted:       inv.stockDeducted,
+    notes:               inv.notes,
+    agentId:             inv.agentId,
+    agentName:           inv.agentName,
+    createdAt:           inv.createdAt,
+    updatedAt:           inv.updatedAt,
+    _invoiceRef:         inv,
   };
 }
 
@@ -2381,6 +2437,8 @@ export default function SalesPage() {
   const { sales, addSale, editSale, removeSale, refresh } = useSales();
   const { customers, addCustomer } = useCustomers();
   const { saleReturns } = useSaleReturns();
+  const { invoices: allInvoices } = useInvoices();
+  const saleInvoices = useMemo(() => allInvoices.filter(i => i.invoiceType !== "purchase"), [allInvoices]);
   /** Map: saleId → { count, qty } summarising returns against that sale.
    *  Drives the "Returned" badge on the sales list so users can see at-a-
    *  glance which sales have any return activity. */
@@ -2536,6 +2594,7 @@ export default function SalesPage() {
 
   const cellValue = (sale: SaleRowData, field: string): string => {
     const ret = sale._returnRef;
+    const inv = sale._invoiceRef;
     if (ret) {
       if (field === "itemCount") return String(ret.items.length);
       if (field === "total")     return ret.grandTotal.toFixed(dp);
@@ -2544,6 +2603,33 @@ export default function SalesPage() {
       if (field === "payStatus") return "Refunded";
       if (field === "orderStage") return "Refunded";
       if (field === "status")    return ret.status === "posted" ? "Completed" : "Draft";
+    }
+    if (inv) {
+      if (field === "itemCount") {
+        const q = inv.items.reduce((s, i) => s + (parseFloat(i.qty)||0), 0);
+        return Number.isInteger(q) ? String(q) : q.toFixed(1);
+      }
+      if (field === "total")      return invoiceTotalFull(inv).toFixed(dp);
+      if (field === "balance") {
+        const total = invoiceTotalFull(inv);
+        const paid  = parseFloat(inv.amountPaid||"0");
+        return Math.max(0, total - paid).toFixed(dp);
+      }
+      if (field === "payStatus") {
+        const s = inv.status;
+        if (s === "Cancelled" || s === "Draft") return "N/A";
+        if (s === "Paid")    return "Paid";
+        if (s === "Partial") return "Partial";
+        if (s === "Overdue") return "On Credit";
+        const paid = parseFloat(inv.amountPaid||"0");
+        const total = invoiceTotalFull(inv);
+        if (paid >= total && total > 0) return "Paid";
+        if (paid > 0)                   return "Partial";
+        return "Unpaid";
+      }
+      if (field === "orderStage") return inv.saleStatus || "—";
+      if (field === "status")     return inv.status;   // show actual invoice status
+      return String((inv as unknown as Record<string, string>)[field] ?? (sale as unknown as Record<string, string>)[field] ?? "");
     }
     if (field === "itemCount") {
       const totalQty = sale.items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
@@ -3005,20 +3091,24 @@ export default function SalesPage() {
 
   // ── List filtering ──
   const filtered = useMemo(() => {
-    // Merge sales + adapted sale returns
-    const adaptedReturns: SaleRowData[] = saleReturns.map(adaptReturn);
-    let rows: SaleRowData[] = [...sales, ...adaptedReturns];
+    // Merge sales + adapted sale returns + adapted sale invoices
+    const adaptedReturns: SaleRowData[]  = saleReturns.map(adaptReturn);
+    const adaptedInvoices: SaleRowData[] = saleInvoices.map(adaptInvoice);
+    let rows: SaleRowData[] = [...sales, ...adaptedReturns, ...adaptedInvoices];
 
     // Type filter
     if (typeFilter !== "All") {
       if (typeFilter === "Sale Return") {
         rows = rows.filter(s => !!s._returnRef);
+      } else if (typeFilter === "Invoice") {
+        // Show both adapted Invoices AND POS-Invoice typed sales
+        rows = rows.filter(s => !s._returnRef && (!!s._invoiceRef || (s.orderType ?? "POS") === "Invoice"));
       } else {
-        rows = rows.filter(s => !s._returnRef && ((s.orderType ?? "POS") === typeFilter));
+        rows = rows.filter(s => !s._returnRef && !s._invoiceRef && ((s.orderType ?? "POS") === typeFilter));
       }
     }
 
-    // Status pill filter (skip for return rows — they use their own status)
+    // Status pill filter
     if (statusFilter !== "All") rows = rows.filter(s => s.status === statusFilter);
 
     // Text search
@@ -3067,29 +3157,42 @@ export default function SalesPage() {
     }
 
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [sales, saleReturns, typeFilter, statusFilter, search,
+  }, [sales, saleReturns, saleInvoices, typeFilter, statusFilter, search,
       filterArea, filterCustomer, filterAgent, filterDateFrom, filterDateTo, filterPayMode, filterPayStatus,
       agentIdAreaMap]);
 
   const counts: Record<string, number> = useMemo(() => {
-    const c: Record<string, number> = { All: sales.length + saleReturns.length };
-    SALE_STATUSES.forEach(s => { c[s] = sales.filter(x => x.status === s).length; });
+    const c: Record<string, number> = { All: sales.length + saleReturns.length + saleInvoices.length };
+    SALE_STATUSES.forEach(s => {
+      c[s] = sales.filter(x => x.status === s).length
+            + saleInvoices.filter(i => invStatusToSaleStatus(i.status) === s).length;
+    });
     c["Sale Return"] = saleReturns.length;
     return c;
-  }, [sales, saleReturns]);
+  }, [sales, saleReturns, saleInvoices]);
 
   const revenue = useMemo(() =>
-    sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotalFull(s), 0), [sales]);
+    sales.filter(s => s.status === "Completed").reduce((sum, s) => sum + saleTotalFull(s), 0)
+    + saleInvoices.filter(i => i.status === "Paid").reduce((sum, i) => sum + invoiceTotalFull(i), 0),
+  [sales, saleInvoices]);
 
   const filteredSums = useMemo(() => ({
     items: filtered.reduce((s, sale) => {
       if (sale._returnRef) return s + sale._returnRef.items.reduce((q, i) => q + (parseFloat(String(i.qty)) || 0), 0);
       return s + sale.items.reduce((q, i) => q + (parseFloat(i.qty) || 0), 0);
     }, 0),
-    total: filtered.reduce((s, sale) => s + (sale._returnRef ? sale._returnRef.grandTotal : saleTotalFull(sale)), 0),
-    paid:  filtered.reduce((s, sale) => s + (sale._returnRef ? sale._returnRef.grandTotal : parseFloat(sale.amountPaid || "0") || 0), 0),
+    total: filtered.reduce((s, sale) => {
+      if (sale._returnRef)  return s + sale._returnRef.grandTotal;
+      if (sale._invoiceRef) return s + invoiceTotalFull(sale._invoiceRef);
+      return s + saleTotalFull(sale);
+    }, 0),
+    paid: filtered.reduce((s, sale) => {
+      if (sale._returnRef) return s + sale._returnRef.grandTotal;
+      return s + (parseFloat(sale.amountPaid || "0") || 0);
+    }, 0),
     balance: filtered.reduce((s, sale) => {
       if (sale._returnRef) return s;
+      if (sale._invoiceRef) return s + Math.max(0, invoiceTotalFull(sale._invoiceRef) - (parseFloat(sale._invoiceRef.amountPaid||"0")||0));
       return s + Math.max(0, saleTotalFull(sale) - (parseFloat(sale.amountPaid || "0") || 0));
     }, 0),
   }), [filtered]);
@@ -3289,6 +3392,7 @@ export default function SalesPage() {
           };
           const count = t === "All" ? counts["All"]
             : t === "Sale Return" ? (counts["Sale Return"] ?? 0)
+            : t === "Invoice" ? (sales.filter(s => (s.orderType ?? "POS") === "Invoice").length + saleInvoices.length)
             : sales.filter(s => (s.orderType ?? "POS") === t).length;
           return (
             <button key={t} aria-pressed={isActive}
@@ -3548,21 +3652,24 @@ export default function SalesPage() {
               {search || statusFilter !== "All" || typeFilter !== "All" ? "No sales match your filters." : "No sales yet — click Open POS to create your first sale."}
             </td></tr>
           ) : filtered.map((sale, ri) => {
-            const isReturnRow = !!sale._returnRef;
+            const isReturnRow  = !!sale._returnRef;
+            const isInvoiceRow = !!sale._invoiceRef;
             return (
             <tr key={sale.id}
               className={`border-b transition-colors group ${
                 isReturnRow
                   ? "border-rose-100 dark:border-rose-900/40 bg-rose-50/30 dark:bg-rose-950/10 hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
+                  : isInvoiceRow
+                  ? "border-violet-100 dark:border-violet-900/40 bg-violet-50/20 dark:bg-violet-950/10 hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
                   : activeCell?.id === sale.id ? "border-gray-100 dark:border-border bg-blue-50/30 dark:bg-blue-950/10"
                   : ri % 2 === 0 ? "border-gray-100 dark:border-border bg-white dark:bg-card hover:bg-blue-50/20 dark:hover:bg-blue-950/10"
                   : "border-gray-100 dark:border-border bg-gray-50/50 dark:bg-muted/10 hover:bg-blue-50/20 dark:hover:bg-blue-950/10"
               }`}>
               <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 font-mono select-none" style={wrapText ? { minHeight: CELL_H } : { height: CELL_H }}>{ri + 1}</td>
               {COLS.map((c, ci) => {
-                const isA = !isReturnRow && activeCell?.id === sale.id && activeCell.col === ci;
+                const isA = !isReturnRow && !isInvoiceRow && activeCell?.id === sale.id && activeCell.col === ci;
                 const rawVal = cellValue(sale, c.field);
-                const canEdit = !isReturnRow && can("Edit Sales") && c.type !== "readonly";
+                const canEdit = !isReturnRow && !isInvoiceRow && can("Edit Sales") && c.type !== "readonly";
                 return (
                   <td key={c.field}
                     className={`border-r border-gray-100 dark:border-border relative p-0 ${c.type === "readonly" ? "bg-gray-50/40 dark:bg-gray-800/10" : isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEdit ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
@@ -3677,13 +3784,18 @@ export default function SalesPage() {
                       title="View return" onClick={() => navigate(`/returns?q=${encodeURIComponent(sale.saleNumber)}`)}>
                       <Eye size={13} />
                     </button>
+                  ) : isInvoiceRow ? (
+                    <button className="p-1 rounded text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors"
+                      title="Open Invoice" onClick={() => navigate(`/invoices/${sale.id}`)}>
+                      <Eye size={13} />
+                    </button>
                   ) : (
                     <button className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
                       title="Open POS" onClick={() => openDetail(sale.id)}>
                       <Eye size={13} />
                     </button>
                   )}
-                  {!isReturnRow && can("Delete Sales") && (
+                  {!isReturnRow && !isInvoiceRow && can("Delete Sales") && (
                     <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       title="Delete" onClick={() => setDeleteId(sale.id)}>
                       <Trash2 size={13} />
