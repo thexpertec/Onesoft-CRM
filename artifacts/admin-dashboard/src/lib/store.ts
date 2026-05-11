@@ -1496,15 +1496,6 @@ export const getTenantByCredentials = (username: string, password: string): Tena
     t => t.adminUsername.toLowerCase() === username.toLowerCase() && t.adminPassword === password
   );
 
-export const createTenant = (data: Omit<Tenant, "id" | "createdAt" | "updatedAt">): Tenant => {
-  const now = new Date().toISOString();
-  const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
-  setGlobal(TENANTS_KEY, [...getTenants(), tenant]);
-  // Seed the new tenant's COA from the system template (runs after module init is complete)
-  try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
-  return tenant;
-};
-
 /** Awaitable variant: resolves only after the server has stored the new list.
  *  Use this from UI flows where the user must see a confirmation/error toast. */
 export const createTenantAsync = async (
@@ -1538,15 +1529,6 @@ export const createTenantAsync = async (
   return tenant;
 };
 
-export const updateTenant = (id: string, updates: Partial<Omit<Tenant, "id" | "createdAt">>): Tenant => {
-  const tenants = getTenants();
-  const idx = tenants.findIndex(t => t.id === id);
-  if (idx === -1) throw new Error("Tenant not found");
-  tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
-  setGlobal(TENANTS_KEY, tenants);
-  return tenants[idx];
-};
-
 export const updateTenantAsync = async (
   id: string,
   updates: Partial<Omit<Tenant, "id" | "createdAt">>,
@@ -1566,13 +1548,6 @@ export const updateTenantAsync = async (
   tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
   await setGlobalAsync(TENANTS_KEY, tenants);
   return tenants[idx];
-};
-
-export const deleteTenant = (id: string): void => {
-  setGlobal(TENANTS_KEY, getTenants().filter(t => t.id !== id));
-  // Best-effort namespace purge — fire-and-forget is acceptable here because
-  // the tenant record itself is already gone from the authoritative list.
-  kvDeleteNamespace(`t:${id}`).catch(() => {});
 };
 
 /** Awaitable variant of deleteTenant. Resolves only after the server confirms
