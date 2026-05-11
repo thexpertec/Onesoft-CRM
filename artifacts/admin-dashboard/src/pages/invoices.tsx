@@ -1807,7 +1807,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div className="flex items-center gap-2">
                   {jeId && (
                     <button
-                      onClick={() => window.open(new URL(`journal-entry?q=${encodeURIComponent(invoice?.invoiceNumber || "")}`, window.location.href).href, "_blank")}
+                      onClick={() => window.open(window.location.origin + import.meta.env.BASE_URL + `journal-entry?q=${encodeURIComponent(invoice?.invoiceNumber || "")}`, "_blank")}
                       title="View journal entry"
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[11px] font-bold text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
                       <BookOpen size={11}/> JE Posted ↗
@@ -1823,7 +1823,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                           amount:        balance.toFixed(dp),
                           type:          invoiceType === "purchase" ? "payment" : "receipt",
                         });
-                        window.open(new URL(`receipt-payment?${params.toString()}`, window.location.href).href, "_blank");
+                        window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${params.toString()}`, "_blank");
                       }}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-[11px] font-bold text-white transition-colors">
                       <DollarSign size={11}/> {invoiceType === "purchase" ? "Pay Outstanding" : "Collect Outstanding"}
@@ -2013,7 +2013,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   amount:        balance.toFixed(dp),
                   type:          invoiceType === "purchase" ? "payment" : "receipt",
                 });
-                window.open(new URL(`receipt-payment?${params.toString()}`, window.location.href).href, "_blank");
+                window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${params.toString()}`, "_blank");
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
             >

@@ -804,7 +804,7 @@ export default function LedgerReportPage() {
                         partyName:   account?.name ?? "",
                         amount:      outstanding.toFixed(2),
                       });
-                      window.open(new URL(`receipt-payment?${p.toString()}`, window.location.href).href, "_blank");
+                      window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${p.toString()}`, "_blank");
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
                     title={closingBalance === 0 ? "Create a payment voucher for this account" : `Pay outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
@@ -823,7 +823,7 @@ export default function LedgerReportPage() {
                         partyName:   account?.name ?? "",
                         amount:      outstanding.toFixed(2),
                       });
-                      window.open(new URL(`receipt-payment?${p.toString()}`, window.location.href).href, "_blank");
+                      window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${p.toString()}`, "_blank");
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition-colors print:hidden"
                     title={closingBalance === 0 ? "Create a receipt voucher for this account" : `Receive outstanding balance ${sym} ${Math.abs(absBalance(closingBalance, debitNormal)).toFixed(2)}`}
