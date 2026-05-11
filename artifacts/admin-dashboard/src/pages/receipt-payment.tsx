@@ -1742,8 +1742,12 @@ export default function ReceiptPaymentPage() {
 
   // ── Auto-open form when arriving from an invoice or ledger ──────────────────
   useLayoutEffect(() => {
-    if (!searchStr) return;
-    const p = new URLSearchParams(searchStr);
+    // Read directly from window.location.search — avoids wouter initialization
+    // timing issues where useSearch() may return "" on the first render when
+    // the page is opened in a new tab with the Router base path stripping.
+    const rawSearch = window.location.search;
+    if (!rawSearch) return;
+    const p = new URLSearchParams(rawSearch);
 
     // Direct open: ?open=<voucherId>  (from ledger / transaction-history)
     const openId = p.get("open");
