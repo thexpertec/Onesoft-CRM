@@ -133,8 +133,18 @@ const VARIANT_HEADER_ALIASES: Record<VariantField, string[]> = {
 
 const VARIANT_COLS = Object.keys(VARIANT_HEADER_ALIASES) as VariantField[];
 
+// Template uses only the simplified variant columns — old Attr1/2/3 pairs are
+// kept in the parser aliases for backward compat but excluded from the download.
+const TEMPLATE_VARIANT_COLS: VariantField[] = [
+  "variantName",
+  "variantAttrName", "variantAttrValue",
+  "variantSku", "variantBarcode",
+  "variantPrice", "variantPurchasePrice", "variantCostPrice", "variantWholesalePrice",
+  "variantStock", "variantCondition",
+];
+
 function downloadTemplate() {
-  const allHeaders = [...CSV_HEADER_LABELS, ...VARIANT_COLS];
+  const allHeaders = [...CSV_HEADER_LABELS, ...TEMPLATE_VARIANT_COLS];
 
   // Product base fields — 21 columns
   // T-Shirt: uses variantAttrName + variantAttrValue (one row per variant)
@@ -142,25 +152,25 @@ function downloadTemplate() {
     "T-Shirt", "", "", "TSH-001", "", "Onesoft", "Clothing", "Tops", "", "", "Pcs",
     "15.00", "18.00", "25.00", "20.00", "", "5", "", "Active", "New", "Comfortable cotton T-shirt",
   ];
-  // variantName | variantAttrName | variantAttrValue | attr1Name | attr1Val | attr2Name | attr2Val | attr3Name | attr3Val | variantSku | variantBarcode | variantPrice | variantPurchasePrice | variantCostPrice | variantWholesalePrice | variantStock | variantCondition
-  const tshirtVar1 = ["", "Color", "Red",  "", "", "", "", "", "", "TSH-001-RED",  "", "25.00", "15.00", "18.00", "20.00", "10", "New"];
-  const tshirtVar2 = ["", "Color", "Blue", "", "", "", "", "", "", "TSH-001-BLU",  "", "25.00", "15.00", "18.00", "20.00", "8",  "New"];
-  const tshirtVar3 = ["", "Size",  "S",    "", "", "", "", "", "", "",              "", "", "", "", "", "20", ""];
-  const tshirtVar4 = ["", "Size",  "M",    "", "", "", "", "", "", "",              "", "", "", "", "", "20", ""];
+  // variantName | variantAttrName | variantAttrValue | variantSku | variantBarcode | variantPrice | variantPurchasePrice | variantCostPrice | variantWholesalePrice | variantStock | variantCondition
+  const tshirtVar1 = ["", "Color", "Red",  "TSH-001-RED", "", "25.00", "15.00", "18.00", "20.00", "10", "New"];
+  const tshirtVar2 = ["", "Color", "Blue", "TSH-001-BLU", "", "25.00", "15.00", "18.00", "20.00", "8",  "New"];
+  const tshirtVar3 = ["", "Size",  "S",    "", "", "", "", "", "", "20", ""];
+  const tshirtVar4 = ["", "Size",  "M",    "", "", "", "", "", "", "20", ""];
 
   // Phone example: variantAttrName="Model", value = full model string
   const phoneBase = [
     "Galaxy A01", "", "", "GAL-A01", "", "Samsung", "Phones", "Android", "", "", "Pcs",
     "80.00", "95.00", "129.99", "109.99", "", "3", "", "Active", "New", "Compact Android smartphone",
   ];
-  const phoneVar1 = ["", "Model", "Galaxy A01 | 16GB | Black", "", "", "", "", "", "", "GAL-A01-BLK-16", "", "129.99", "80.00", "95.00", "", "12", "New"];
-  const phoneVar2 = ["", "Model", "Galaxy A01 | 32GB | Blue",  "", "", "", "", "", "", "GAL-A01-BLU-32",  "", "139.99", "85.00", "100.00", "", "8", "New"];
+  const phoneVar1 = ["", "Model", "Galaxy A01 | 16GB | Black", "GAL-A01-BLK-16", "", "129.99", "80.00", "95.00", "", "12", "New"];
+  const phoneVar2 = ["", "Model", "Galaxy A01 | 32GB | Blue",  "GAL-A01-BLU-32",  "", "139.99", "85.00", "100.00", "", "8", "New"];
 
   // Standalone product — no variants
   const standalone = [
     "Onesoft CRM Licence", "", "", "SOFT-001", "", "Onesoft", "Software", "CRM", "", "", "Licence",
     "600.00", "750.00", "999.00", "799.00", "0", "5", "", "Active", "New", "Cloud-based CRM solution",
-    ...Array(17).fill(""),
+    ...Array(11).fill(""),
   ];
 
   const rows = [
@@ -1312,7 +1322,7 @@ export default function ProductsPage() {
               <p className="text-muted-foreground leading-relaxed">Use <span className="font-semibold text-foreground">the same parent SKU</span> across rows — each row adds a variant. Fill the variant columns on the right side of the template:</p>
               <div className="rounded bg-muted/60 border border-border divide-y divide-border text-[10px] text-foreground overflow-hidden">
                 <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-muted/80 text-[9px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">
-                  <span>name / sku</span><span>variantAttr1Name · Value</span><span>variantSku</span>
+                  <span>name / sku</span><span>variantAttrName · variantAttrValue</span><span>variantSku</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1 px-3 py-1.5 font-mono">
                   <span className="truncate">T-Shirt / TSH-001</span>
@@ -1332,7 +1342,7 @@ export default function ProductsPage() {
               </div>
               <div className="rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300 space-y-1">
                 <p className="font-semibold">Variant columns (added after the standard columns):</p>
-                <p className="leading-relaxed font-mono text-[10px]">variantAttr1Name · variantAttr1Value · variantAttr2Name · variantAttr2Value · variantSku · variantPrice · variantStock · variantCondition</p>
+                <p className="leading-relaxed font-mono text-[10px]">variantAttrName · variantAttrValue · variantSku · variantBarcode · variantPrice · variantPurchasePrice · variantCostPrice · variantWholesalePrice · variantStock · variantCondition</p>
               </div>
               <p className="text-[11px] text-muted-foreground/70">Rows with the same parent SKU are grouped into one product with multiple variants. Each variant can have its own SKU, price and stock level. Download the <span className="font-semibold">Template</span> to see a working example.</p>
             </div>
