@@ -102,6 +102,7 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
 
 // ── Variant-level import columns ─────────────────────────────────────────────
 type VariantField =
+  | "variantName"
   | "variantAttr1Name" | "variantAttr1Value"
   | "variantAttr2Name" | "variantAttr2Value"
   | "variantAttr3Name" | "variantAttr3Value"
@@ -110,6 +111,7 @@ type VariantField =
   | "variantStock" | "variantCondition";
 
 const VARIANT_HEADER_ALIASES: Record<VariantField, string[]> = {
+  variantName:          ["variantname","vname","varname","variant_name","variantlabel","varlabel"],
   variantAttr1Name:     ["variantattr1name","attr1name","attribute1name","varattr1name","attr1","attribute1"],
   variantAttr1Value:    ["variantattr1value","attr1value","attr1val","varattr1value","varattr1val"],
   variantAttr2Name:     ["variantattr2name","attr2name","attribute2name","varattr2name","attr2","attribute2"],
@@ -136,22 +138,32 @@ function downloadTemplate() {
     "T-Shirt", "", "", "TSH-001", "", "Onesoft", "Clothing", "Tops", "", "", "Pcs",
     "15.00", "18.00", "25.00", "20.00", "", "5", "", "Active", "New", "Comfortable cotton T-shirt",
   ];
-  // Variant row 1: Color=Red, Size=M
-  const varRow1 = ["Color","Red","Size","M","","", "TSH-001-RED-M","","25.00","15.00","18.00","20.00","10","New"];
-  // Variant row 2: Color=Blue, Size=L (same parent SKU → continuation)
-  const varRow2 = ["Color","Blue","Size","L","","", "TSH-001-BLU-L","","25.00","15.00","18.00","20.00","8","New"];
+  // Variant row 1 — using variantName (simple single-column label)
+  const varRow1 = ["Red / M","Color","Red","Size","M","","", "TSH-001-RED-M","","25.00","15.00","18.00","20.00","10","New"];
+  // Variant row 2 — same parent SKU → continuation
+  const varRow2 = ["Blue / L","Color","Blue","Size","L","","", "TSH-001-BLU-L","","25.00","15.00","18.00","20.00","8","New"];
+
+  // Phone example — using variantName only (no attr name/value columns needed)
+  const phoneBase = [
+    "Galaxy A01", "", "", "GAL-A01", "", "Samsung", "Phones", "Android", "", "", "Pcs",
+    "80.00", "95.00", "129.99", "109.99", "", "3", "", "Active", "New", "Compact Android smartphone",
+  ];
+  const phoneVar1 = ["Galaxy A01 | 16GB | Black","","","","","","", "GAL-A01-BLK-16","","129.99","80.00","95.00","","12","New"];
+  const phoneVar2 = ["Galaxy A01 | 32GB | Blue","","","","","","",  "GAL-A01-BLU-32","","139.99","85.00","100.00","","8","New"];
 
   // Standalone product (no variants) — all variant columns empty
   const standalone = [
     "Onesoft CRM Licence", "", "", "SOFT-001", "", "Onesoft", "Software", "CRM", "", "", "Licence",
     "600.00", "750.00", "999.00", "799.00", "0", "5", "", "Active", "New", "Cloud-based CRM solution",
-    ...Array(14).fill(""),
+    ...Array(15).fill(""),
   ];
 
   const rows = [
     allHeaders.join(","),
     [...tshirtBase, ...varRow1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
     [...tshirtBase, ...varRow2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...phoneBase,  ...phoneVar1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...phoneBase,  ...phoneVar2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
     standalone.map(v => `"${v.replace(/"/g, '""')}"`).join(","),
   ];
   const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -636,9 +648,10 @@ export default function ProductsPage() {
           const groupRows  = [r, ...(continuationsByKey.get(parentKey) ?? [])];
 
           // Build variants array if any row in the group has attribute data.
-          // A row qualifies even when variantAttr1Name is blank — the value alone
-          // is enough to declare a variant (name defaults to "Variant").
+          // variantName is the simplest option — a single column holding the full label.
+          // variantAttr1Value (with or without a name) is the attribute-pair approach.
           const hasExplicitVariants = groupRows.some(gr =>
+            gr.variantName?.trim() ||
             gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim()
           );
           // Implicit variant detection: continuation rows with model values but no explicit variantAttr cols
@@ -650,20 +663,26 @@ export default function ProductsPage() {
           if (hasVariants) {
             variants = groupRows
               .filter(gr =>
+                gr.variantName?.trim() ||
                 gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim() ||
                 (!hasExplicitVariants && gr.model?.trim())
               )
               .map(gr => {
                 const attrs: Record<string, string> = {};
-                // Accept value-only columns: fall back to "Variant" when no name given
-                if (gr.variantAttr1Value?.trim()) {
-                  attrs[gr.variantAttr1Name?.trim() || "Variant"] = gr.variantAttr1Value.trim();
-                }
-                if (gr.variantAttr2Value?.trim()) {
-                  attrs[gr.variantAttr2Name?.trim() || "Variant"] = gr.variantAttr2Value.trim();
-                }
-                if (gr.variantAttr3Value?.trim()) {
-                  attrs[gr.variantAttr3Name?.trim() || "Variant"] = gr.variantAttr3Value.trim();
+                // variantName: simplest approach — single column, full label used as-is
+                if (gr.variantName?.trim()) {
+                  attrs["Name"] = gr.variantName.trim();
+                } else {
+                  // Attribute-pair approach: fall back to "Variant" key when name is blank
+                  if (gr.variantAttr1Value?.trim()) {
+                    attrs[gr.variantAttr1Name?.trim() || "Variant"] = gr.variantAttr1Value.trim();
+                  }
+                  if (gr.variantAttr2Value?.trim()) {
+                    attrs[gr.variantAttr2Name?.trim() || "Variant2"] = gr.variantAttr2Value.trim();
+                  }
+                  if (gr.variantAttr3Value?.trim()) {
+                    attrs[gr.variantAttr3Name?.trim() || "Variant3"] = gr.variantAttr3Value.trim();
+                  }
                 }
                 // Fallback: use model as variant attribute when no explicit attr cols used
                 if (Object.keys(attrs).length === 0 && gr.model?.trim()) {
@@ -2583,7 +2602,7 @@ export default function ProductsPage() {
                 Key columns: <code className="font-mono">name</code> (required) ·{" "}
                 <code className="font-mono">sku</code> · <code className="font-mono">costPrice</code> ·{" "}
                 <code className="font-mono">retailPrice</code> · <code className="font-mono">status</code><br />
-                Variant columns: <code className="font-mono">variantAttr1Name</code> · <code className="font-mono">variantAttr1Value</code> · <code className="font-mono">variantSku</code> · <code className="font-mono">variantPrice</code><br />
+                Variant columns: <code className="font-mono">variantName</code> (simplest — full label in one cell) or <code className="font-mono">variantAttr1Name</code> · <code className="font-mono">variantAttr1Value</code> · <code className="font-mono">variantSku</code> · <code className="font-mono">variantPrice</code><br />
                 Use multiple rows with the same SKU for multi-variant products. Download the template for a full example.
               </p>
             </div>
@@ -2673,11 +2692,14 @@ export default function ProductsPage() {
                       return importRows.map(row => {
                       // ── Continuation (variant) row — rendered as indented sub-row ──
                       if (row._isContinuation) {
-                        const explicitAttrs = [
-                          row.variantAttr1Name && row.variantAttr1Value ? `${row.variantAttr1Name}: ${row.variantAttr1Value}` : null,
-                          row.variantAttr2Name && row.variantAttr2Value ? `${row.variantAttr2Name}: ${row.variantAttr2Value}` : null,
-                          row.variantAttr3Name && row.variantAttr3Value ? `${row.variantAttr3Name}: ${row.variantAttr3Value}` : null,
-                        ].filter(Boolean).join(" · ");
+                        // variantName takes priority as a simple single-cell label
+                        const explicitAttrs = row.variantName?.trim()
+                          ? row.variantName.trim()
+                          : [
+                              row.variantAttr1Name && row.variantAttr1Value ? `${row.variantAttr1Name}: ${row.variantAttr1Value}` : row.variantAttr1Value?.trim() ? row.variantAttr1Value.trim() : null,
+                              row.variantAttr2Name && row.variantAttr2Value ? `${row.variantAttr2Name}: ${row.variantAttr2Value}` : null,
+                              row.variantAttr3Name && row.variantAttr3Value ? `${row.variantAttr3Name}: ${row.variantAttr3Value}` : null,
+                            ].filter(Boolean).join(" · ");
                         // Fallback: show model when no explicit variant attrs
                         const attrDisplay = explicitAttrs || (row.model ? `Model: ${row.model}` : "—");
                         const parentBrand    = lastParentRow?.brand    || "";
