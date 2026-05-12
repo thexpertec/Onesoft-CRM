@@ -103,6 +103,7 @@ const HEADER_ALIASES: Record<EditableField, string[]> = {
 // ── Variant-level import columns ─────────────────────────────────────────────
 type VariantField =
   | "variantName"
+  | "variantAttrName" | "variantAttrValue"
   | "variantAttr1Name" | "variantAttr1Value"
   | "variantAttr2Name" | "variantAttr2Value"
   | "variantAttr3Name" | "variantAttr3Value"
@@ -112,6 +113,8 @@ type VariantField =
 
 const VARIANT_HEADER_ALIASES: Record<VariantField, string[]> = {
   variantName:          ["variantname","vname","varname","variant_name","variantlabel","varlabel"],
+  variantAttrName:      ["variantattrname","attrname","attributename","variantattributename"],
+  variantAttrValue:     ["variantattrvalue","attrvalue","attributevalue","variantattributevalue"],
   variantAttr1Name:     ["variantattr1name","attr1name","attribute1name","varattr1name","attr1","attribute1"],
   variantAttr1Value:    ["variantattr1value","attr1value","attr1val","varattr1value","varattr1val"],
   variantAttr2Name:     ["variantattr2name","attr2name","attribute2name","varattr2name","attr2","attribute2"],
@@ -133,35 +136,39 @@ const VARIANT_COLS = Object.keys(VARIANT_HEADER_ALIASES) as VariantField[];
 function downloadTemplate() {
   const allHeaders = [...CSV_HEADER_LABELS, ...VARIANT_COLS];
 
-  // Product base fields for T-Shirt example (21 columns)
+  // Product base fields — 21 columns
+  // T-Shirt: uses variantAttrName + variantAttrValue (one row per variant)
   const tshirtBase = [
     "T-Shirt", "", "", "TSH-001", "", "Onesoft", "Clothing", "Tops", "", "", "Pcs",
     "15.00", "18.00", "25.00", "20.00", "", "5", "", "Active", "New", "Comfortable cotton T-shirt",
   ];
-  // Variant row 1 — using variantName (simple single-column label)
-  const varRow1 = ["Red / M","Color","Red","Size","M","","", "TSH-001-RED-M","","25.00","15.00","18.00","20.00","10","New"];
-  // Variant row 2 — same parent SKU → continuation
-  const varRow2 = ["Blue / L","Color","Blue","Size","L","","", "TSH-001-BLU-L","","25.00","15.00","18.00","20.00","8","New"];
+  // variantName | variantAttrName | variantAttrValue | attr1Name | attr1Val | attr2Name | attr2Val | attr3Name | attr3Val | variantSku | variantBarcode | variantPrice | variantPurchasePrice | variantCostPrice | variantWholesalePrice | variantStock | variantCondition
+  const tshirtVar1 = ["", "Color", "Red",  "", "", "", "", "", "", "TSH-001-RED",  "", "25.00", "15.00", "18.00", "20.00", "10", "New"];
+  const tshirtVar2 = ["", "Color", "Blue", "", "", "", "", "", "", "TSH-001-BLU",  "", "25.00", "15.00", "18.00", "20.00", "8",  "New"];
+  const tshirtVar3 = ["", "Size",  "S",    "", "", "", "", "", "", "",              "", "", "", "", "", "20", ""];
+  const tshirtVar4 = ["", "Size",  "M",    "", "", "", "", "", "", "",              "", "", "", "", "", "20", ""];
 
-  // Phone example — using variantName only (no attr name/value columns needed)
+  // Phone example: variantAttrName="Model", value = full model string
   const phoneBase = [
     "Galaxy A01", "", "", "GAL-A01", "", "Samsung", "Phones", "Android", "", "", "Pcs",
     "80.00", "95.00", "129.99", "109.99", "", "3", "", "Active", "New", "Compact Android smartphone",
   ];
-  const phoneVar1 = ["Galaxy A01 | 16GB | Black","","","","","","", "GAL-A01-BLK-16","","129.99","80.00","95.00","","12","New"];
-  const phoneVar2 = ["Galaxy A01 | 32GB | Blue","","","","","","",  "GAL-A01-BLU-32","","139.99","85.00","100.00","","8","New"];
+  const phoneVar1 = ["", "Model", "Galaxy A01 | 16GB | Black", "", "", "", "", "", "", "GAL-A01-BLK-16", "", "129.99", "80.00", "95.00", "", "12", "New"];
+  const phoneVar2 = ["", "Model", "Galaxy A01 | 32GB | Blue",  "", "", "", "", "", "", "GAL-A01-BLU-32",  "", "139.99", "85.00", "100.00", "", "8", "New"];
 
-  // Standalone product (no variants) — all variant columns empty
+  // Standalone product — no variants
   const standalone = [
     "Onesoft CRM Licence", "", "", "SOFT-001", "", "Onesoft", "Software", "CRM", "", "", "Licence",
     "600.00", "750.00", "999.00", "799.00", "0", "5", "", "Active", "New", "Cloud-based CRM solution",
-    ...Array(15).fill(""),
+    ...Array(17).fill(""),
   ];
 
   const rows = [
     allHeaders.join(","),
-    [...tshirtBase, ...varRow1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
-    [...tshirtBase, ...varRow2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...tshirtBase, ...tshirtVar1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...tshirtBase, ...tshirtVar2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...tshirtBase, ...tshirtVar3].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
+    [...tshirtBase, ...tshirtVar4].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
     [...phoneBase,  ...phoneVar1].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
     [...phoneBase,  ...phoneVar2].map(v => `"${v.replace(/"/g, '""')}"`).join(","),
     standalone.map(v => `"${v.replace(/"/g, '""')}"`).join(","),
@@ -652,6 +659,7 @@ export default function ProductsPage() {
           // variantAttr1Value (with or without a name) is the attribute-pair approach.
           const hasExplicitVariants = groupRows.some(gr =>
             gr.variantName?.trim() ||
+            gr.variantAttrName?.trim() || gr.variantAttrValue?.trim() ||
             gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim()
           );
           // Implicit variant detection: continuation rows with model values but no explicit variantAttr cols
@@ -664,16 +672,20 @@ export default function ProductsPage() {
             variants = groupRows
               .filter(gr =>
                 gr.variantName?.trim() ||
+                gr.variantAttrName?.trim() || gr.variantAttrValue?.trim() ||
                 gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim() ||
                 (!hasExplicitVariants && gr.model?.trim())
               )
               .map(gr => {
                 const attrs: Record<string, string> = {};
-                // variantName: simplest approach — single column, full label used as-is
+                // variantName: single column full label
                 if (gr.variantName?.trim()) {
                   attrs["Name"] = gr.variantName.trim();
+                } else if (gr.variantAttrValue?.trim()) {
+                  // Simple single-pair columns (variantAttrName + variantAttrValue)
+                  attrs[gr.variantAttrName?.trim() || "Variant"] = gr.variantAttrValue.trim();
                 } else {
-                  // Attribute-pair approach: fall back to "Variant" key when name is blank
+                  // Legacy three-pair columns (backward compat)
                   if (gr.variantAttr1Value?.trim()) {
                     attrs[gr.variantAttr1Name?.trim() || "Variant"] = gr.variantAttr1Value.trim();
                   }
@@ -2602,8 +2614,8 @@ export default function ProductsPage() {
                 Key columns: <code className="font-mono">name</code> (required) ·{" "}
                 <code className="font-mono">sku</code> · <code className="font-mono">costPrice</code> ·{" "}
                 <code className="font-mono">retailPrice</code> · <code className="font-mono">status</code><br />
-                Variant columns: <code className="font-mono">variantName</code> (simplest — full label in one cell) or <code className="font-mono">variantAttr1Name</code> · <code className="font-mono">variantAttr1Value</code> · <code className="font-mono">variantSku</code> · <code className="font-mono">variantPrice</code><br />
-                Use multiple rows with the same SKU for multi-variant products. Download the template for a full example.
+                Variant columns: <code className="font-mono">variantAttrName</code> · <code className="font-mono">variantAttrValue</code> · <code className="font-mono">variantSku</code> · <code className="font-mono">variantPrice</code> · <code className="font-mono">variantStock</code><br />
+                One row per variant value — repeat the same SKU with a different <code className="font-mono">variantAttrValue</code> for each option. Download the template for a full example.
               </p>
             </div>
           ) : (
@@ -2692,9 +2704,11 @@ export default function ProductsPage() {
                       return importRows.map(row => {
                       // ── Continuation (variant) row — rendered as indented sub-row ──
                       if (row._isContinuation) {
-                        // variantName takes priority as a simple single-cell label
+                        // Build a human-readable label for the preview row
                         const explicitAttrs = row.variantName?.trim()
                           ? row.variantName.trim()
+                          : row.variantAttrValue?.trim()
+                          ? (row.variantAttrName?.trim() ? `${row.variantAttrName}: ${row.variantAttrValue}` : row.variantAttrValue)
                           : [
                               row.variantAttr1Name && row.variantAttr1Value ? `${row.variantAttr1Name}: ${row.variantAttr1Value}` : row.variantAttr1Value?.trim() ? row.variantAttr1Value.trim() : null,
                               row.variantAttr2Name && row.variantAttr2Value ? `${row.variantAttr2Name}: ${row.variantAttr2Value}` : null,
