@@ -10,6 +10,8 @@ const READ_TIMEOUT_MS  = 10_000;
 /** Milliseconds before a write fetch gives up and throws. */
 const WRITE_TIMEOUT_MS = 15_000;
 
+const KV_API_KEY = (import.meta.env.VITE_KV_API_SECRET as string) ?? "";
+
 function withTimeout(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
 }
@@ -25,7 +27,7 @@ async function apiFetch(url: string, options?: RequestInit) {
       signal: withTimeout(READ_TIMEOUT_MS),
       cache: "no-store",
       ...options,
-      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+      headers: { "Content-Type": "application/json", "X-Api-Key": KV_API_KEY, ...(options?.headers ?? {}) },
     });
     if (res.status === 304) return null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -46,7 +48,7 @@ async function apiWriteFetch(url: string, options: RequestInit): Promise<void> {
   const res = await fetch(url, {
     signal: withTimeout(WRITE_TIMEOUT_MS),
     ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    headers: { "Content-Type": "application/json", "X-Api-Key": KV_API_KEY, ...(options.headers ?? {}) },
   });
   if (!res.ok) {
     let detail = "";

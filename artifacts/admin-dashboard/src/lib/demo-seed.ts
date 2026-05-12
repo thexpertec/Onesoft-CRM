@@ -4,8 +4,8 @@
  *  Safe to run multiple times (idempotent — clears old demo data first).
  * ──────────────────────────────────────────────────────────────────────────── */
 
-import { kvPut, kvDeleteNamespace } from "./api";
-import { getTenants, isTenantCached } from "./store";
+import { kvPut, kvGet, kvDeleteNamespace } from "./api";
+import { isTenantCached } from "./store";
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";
 export const DEMO_TENANT_SLUG = "premier-demo";
@@ -75,9 +75,12 @@ export async function seedDemoTenant(): Promise<string> {
     createdAt: iso(90),
     updatedAt: iso(0),
   };
-  // Write the tenant record to the global namespace
-  const existing = getTenants();
-  await kvPut("global", "admin-tenants", [...existing.filter(x => x.id !== DEMO_TENANT_ID), tenant]);
+  // Always fetch the authoritative tenant list from the server — never rely on
+  // a potentially stale in-memory copy that could silently drop tenants added
+  // in another session since the last sync.
+  const freshRaw = await kvGet("global", "admin-tenants");
+  const existing: unknown[] = Array.isArray(freshRaw) ? freshRaw : [];
+  await kvPut("global", "admin-tenants", [...existing.filter((x: unknown) => (x as { id?: string }).id !== DEMO_TENANT_ID), tenant]);
   seedDataIntoTenant(DEMO_TENANT_ID, "Premier Furnishings Ltd.");
   return DEMO_TENANT_ID;
 }

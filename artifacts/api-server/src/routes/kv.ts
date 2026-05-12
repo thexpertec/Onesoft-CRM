@@ -3,6 +3,17 @@ import { query } from "../lib/db.js";
 
 const router = Router();
 
+const KV_API_SECRET = process.env["KV_API_SECRET"];
+
+router.use((req, res, next) => {
+  if (!KV_API_SECRET) { next(); return; }
+  const provided = req.headers["x-api-key"];
+  if (provided !== KV_API_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+});
+
 // GET /api/kv  → [{ namespace, keyCount, updatedAt }]  (all namespaces summary)
 router.get("/", async (_req, res) => {
   try {

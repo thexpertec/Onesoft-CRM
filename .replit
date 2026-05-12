@@ -27,3 +27,9 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+KV_API_SECRET = "ad3932b770d947fb86fe7dd7136897ea89b37423175f4a8fbf3047dd920a9844"
+VITE_KV_API_SECRET = "ad3932b770d947fb86fe7dd7136897ea89b37423175f4a8fbf3047dd920a9844"
