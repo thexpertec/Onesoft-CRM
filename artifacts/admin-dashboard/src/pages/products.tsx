@@ -17,7 +17,8 @@ import { useLocation, useSearch } from "wouter";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+import { EditableCell, ExcelGridShell, ColDef, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
+const CELL_H = 72;
 import { ProductImagesDialog } from "@/components/product-images-dialog";
 import { ProductEditSheet } from "@/components/product-edit-sheet";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -1904,7 +1905,7 @@ export default function ProductsPage() {
                     <img
                       src={prod.thumbnail ?? prod.images![0]}
                       alt={prod.name}
-                      className="w-14 h-14 object-cover rounded-md mx-auto shadow-sm border border-gray-200 dark:border-zinc-700"
+                      className="w-16 h-16 object-cover rounded-md mx-auto shadow-sm border border-gray-200 dark:border-zinc-700"
                     />
                   ) : (
                     <div className="w-14 h-14 rounded-md mx-auto bg-gray-100 dark:bg-zinc-800 border border-dashed border-gray-200 dark:border-zinc-700 flex items-center justify-center">
