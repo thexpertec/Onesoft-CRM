@@ -3,7 +3,7 @@ import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
   Crown, Zap, Rocket, Shield, Search, Layers, FlaskConical, RefreshCw,
-  History, PlusCircle, MinusCircle, ChevronDown, ChevronUp, Eraser,
+  History, PlusCircle, MinusCircle, ChevronDown, ChevronUp, Eraser, Download,
 } from "lucide-react";
 import {
   seedDemoTenant, clearDemoTenant, isDemoSeeded, DEMO_TENANT_ID,
@@ -14,6 +14,7 @@ import {
   getTenants, getTenantActivities, TenantActivityEntry,
   createTenantAsync, updateTenantAsync, deleteTenantAsync,
   cleanTenantTransactions, cleanTenantMasterData, checkTenantTransactionBlocks,
+  exportTenantBackup,
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
@@ -428,6 +429,7 @@ export default function TenantsPage() {
   const [masterCleanId,     setMasterCleanId]     = useState<string | null>(null);
   const [isMasterCleaning,  setIsMasterCleaning]  = useState(false);
   const [masterBlockInfo,   setMasterBlockInfo]   = useState<{ label: string; count: number }[] | null>(null);
+  const [downloadingId,     setDownloadingId]     = useState<string | null>(null);
   const [pwGateOpen,    setPwGateOpen]    = useState(false);
   const [pwGateLabel,   setPwGateLabel]   = useState("");
   const [pwGateAction,  setPwGateAction]  = useState<(() => void) | null>(null);
@@ -549,6 +551,33 @@ export default function TenantsPage() {
     setPwGateLabel(label);
     setPwGateAction(() => action);
     setPwGateOpen(true);
+  }
+
+  async function handleDownloadBackup(tenant: Tenant) {
+    setDownloadingId(tenant.id);
+    try {
+      const backup = await exportTenantBackup(tenant.id, tenant);
+      const json   = JSON.stringify(backup, null, 2);
+      const blob   = new Blob([json], { type: "application/json" });
+      const url    = URL.createObjectURL(blob);
+      const date   = new Date().toISOString().split("T")[0];
+      const a      = document.createElement("a");
+      a.href       = url;
+      a.download   = `${tenant.slug}-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      const keyCount = Object.keys(backup.data).length;
+      toast({
+        title: "Backup downloaded",
+        description: `${tenant.name} — ${keyCount} data module${keyCount !== 1 ? "s" : ""} saved to ${a.download}`,
+      });
+    } catch (e) {
+      toast({ title: "Backup failed", description: String(e), variant: "destructive" });
+    } finally {
+      setDownloadingId(null);
+    }
   }
 
   async function handleCleanMasterData(tenantId: string) {
@@ -952,6 +981,22 @@ export default function TenantsPage() {
                     onClick={() => requirePassword(`remove all master data from "${t.name}"`, () => setMasterCleanId(t.id))}
                   >
                     <Trash2 size={11} /> Remove Master Data
+                  </Button>
+                </div>
+
+                {/* Download backup row */}
+                <div className="pt-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={downloadingId === t.id}
+                    className="w-full h-7 gap-1.5 text-[11px] text-sky-600 dark:text-sky-400 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/20 border border-dashed border-sky-200 dark:border-sky-800 disabled:opacity-60"
+                    onClick={() => handleDownloadBackup(t)}
+                  >
+                    {downloadingId === t.id
+                      ? <><RefreshCw size={10} className="animate-spin" /> Exporting…</>
+                      : <><Download size={11} /> Download Backup</>
+                    }
                   </Button>
                 </div>
 

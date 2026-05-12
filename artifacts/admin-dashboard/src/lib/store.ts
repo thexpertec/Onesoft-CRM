@@ -1836,6 +1836,36 @@ export async function cleanTenantMasterData(tenantId: string): Promise<void> {
   }
 }
 
+/**
+ * Exports the complete data snapshot for a tenant by fetching the entire
+ * namespace from the server in one request.  The result is a self-contained
+ * JSON envelope that can be saved to disk and later imported into any tenant.
+ *
+ * Format:
+ *   { version, exportedAt, tenant: { …registry fields }, data: { [key]: value } }
+ *
+ * `data` contains every key stored under `t:{tenantId}` at the time of export.
+ * Nothing is filtered — transactions AND master data are both included so a
+ * backup taken at any point in the workflow is complete.
+ */
+export async function exportTenantBackup(
+  tenantId: string,
+  tenantMeta: Tenant
+): Promise<{
+  version: string;
+  exportedAt: string;
+  tenant: Tenant;
+  data: Record<string, unknown>;
+}> {
+  const raw = await kvGetAll(`t:${tenantId}`);
+  return {
+    version: "1",
+    exportedAt: new Date().toISOString(),
+    tenant: tenantMeta,
+    data: raw ?? {},
+  };
+}
+
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
 export const getTenantStats = (tenantId: string): Record<string, number> => {
   const keys: string[] = [
