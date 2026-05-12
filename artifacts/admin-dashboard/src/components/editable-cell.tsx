@@ -246,14 +246,18 @@ export function ExcelGridShell({
   tableId,
   children,
   extraLeadingCol,
+  numberHeader,
   extraAfterNumberCol,
+  extraAfterNumberCol2,
 }: {
   cols: ColDef[];
   totalMinW: number;
   tableId?: string;
   children: React.ReactNode;
   extraLeadingCol?: { width: number; header?: React.ReactNode };
+  numberHeader?: React.ReactNode;
   extraAfterNumberCol?: { width: number; header?: React.ReactNode };
+  extraAfterNumberCol2?: { width: number; header?: React.ReactNode };
 }) {
   const storageKey = tableId ? `onesoft-col-widths:${tableId}` : null;
 
@@ -303,12 +307,13 @@ export function ExcelGridShell({
     >
       <table
         className="border-collapse text-[13px] w-full"
-        style={{ tableLayout: "fixed", minWidth: `${Math.max(totalMinW, dynamicTotal) + 48 + 90 + (extraLeadingCol?.width ?? 0) + (extraAfterNumberCol?.width ?? 0)}px` }}
+        style={{ tableLayout: "fixed", minWidth: `${Math.max(totalMinW, dynamicTotal) + 48 + 90 + (extraLeadingCol?.width ?? 0) + (extraAfterNumberCol?.width ?? 0) + (extraAfterNumberCol2?.width ?? 0)}px` }}
       >
         <colgroup>
           {extraLeadingCol && <col style={{ width: `${extraLeadingCol.width}px` }} />}
           <col style={{ width: "48px" }} />
           {extraAfterNumberCol && <col style={{ width: `${extraAfterNumberCol.width}px` }} />}
+          {extraAfterNumberCol2 && <col style={{ width: `${extraAfterNumberCol2.width}px` }} />}
           {cols.map(c => <col key={c.field} style={{ width: `${widths[c.field] ?? c.minW}px` }} />)}
           <col style={{ width: "90px" }} />
         </colgroup>
@@ -319,10 +324,15 @@ export function ExcelGridShell({
                 {extraLeadingCol.header ?? null}
               </th>
             )}
-            <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">#</th>
+            <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none">{numberHeader ?? "#"}</th>
             {extraAfterNumberCol && (
               <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none" style={{ width: `${extraAfterNumberCol.width}px` }}>
                 {extraAfterNumberCol.header ?? null}
+              </th>
+            )}
+            {extraAfterNumberCol2 && (
+              <th className="border-b border-r border-gray-200 dark:border-border bg-gray-50 dark:bg-muted/60 text-[11px] font-bold text-gray-400 text-center py-2 select-none" style={{ width: `${extraAfterNumberCol2.width}px` }}>
+                {extraAfterNumberCol2.header ?? null}
               </th>
             )}
             {cols.map(c => (

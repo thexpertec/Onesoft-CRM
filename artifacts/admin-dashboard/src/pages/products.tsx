@@ -1803,7 +1803,9 @@ export default function ProductsPage() {
               </div>
             ) : undefined,
           }}
-          extraAfterNumberCol={{ width: 72, header: "IMG" }}
+          numberHeader="Sr."
+          extraAfterNumberCol={{ width: 50, header: "Variants" }}
+          extraAfterNumberCol2={{ width: 72, header: "IMG" }}
         >
 
           {/* New row */}
@@ -1811,6 +1813,7 @@ export default function ProductsPage() {
             <tr className={`border-b border-gray-100 dark:border-border ${NEW_ROW_BG}`}>
               <td className="border-r border-gray-100 dark:border-border w-7" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-200 dark:border-border text-center text-[11px] text-amber-400 font-bold" style={{ height: `${CELL_H}px` }}>★</td>
+              <td className="border-r border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }} />
               <td className="border-r border-gray-100 dark:border-border" style={{ height: `${CELL_H}px` }} />
               {visibleCols.map((c, ci) => {
                 const isA = newRowActive === ci;
@@ -1860,6 +1863,7 @@ export default function ProductsPage() {
             <tr key={`skel-${i}`} className={i % 2 === 0 ? "bg-white dark:bg-card" : "bg-gray-50/50 dark:bg-muted/10"}>
               <td className="px-2 py-2 w-8"><div className="h-4 w-4 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse mx-auto" /></td>
               <td className="px-2 py-2 w-8"><div className="h-4 w-4 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse mx-auto" /></td>
+              <td className="px-2 py-2 w-12"><div className="h-4 w-6 rounded bg-gray-200 dark:bg-zinc-700 animate-pulse mx-auto" /></td>
               <td className="px-2 py-2"><div className="h-7 w-7 rounded-lg bg-gray-200 dark:bg-zinc-700 animate-pulse" /></td>
               {visibleCols.map((_, ci) => (
                 <td key={ci} className="px-2 py-2">
@@ -1872,7 +1876,7 @@ export default function ProductsPage() {
 
           {/* Existing rows */}
           {!isSyncing && displayRows.length === 0 ? (
-            <tr><td colSpan={visibleCols.length + 3} className="text-center py-16 text-muted-foreground text-sm">
+            <tr><td colSpan={visibleCols.length + 4} className="text-center py-16 text-muted-foreground text-sm">
               {search || statusFilter !== "All" || filterCategory || filterBrand || filterStockStatus !== "all" || filterMinPrice || filterMaxPrice
                 ? "No products match your current filters."
                 : <span>No products yet. Click <strong>Add Product</strong> to get started.</span>}
@@ -1931,7 +1935,13 @@ export default function ProductsPage() {
                   ) : null}
                 </td>
 
+                {/* Sr. — serial number */}
                 <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-gray-300 dark:text-muted-foreground/50 font-mono select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
+                  {ri + 1}
+                </td>
+
+                {/* Variants — count + expand/collapse */}
+                <td className="border-r border-gray-100 dark:border-border text-center select-none align-middle" style={wrapText ? { minHeight: `${CELL_H}px` } : { height: `${CELL_H}px` }}>
                   {hasVariants ? (
                     <button type="button" onClick={() => toggleExpand(prod.id)}
                       className="flex items-center justify-center gap-0.5 w-full h-full text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
@@ -1940,7 +1950,9 @@ export default function ProductsPage() {
                       <ChevronDown size={11} className={`transition-transform duration-150 ${isExpanded ? "" : "-rotate-90"}`} />
                       <span className="text-[10px] font-bold">{prod.variants!.length}</span>
                     </button>
-                  ) : ri + 1}
+                  ) : (
+                    <span className="text-[10px] text-gray-300 dark:text-zinc-700">—</span>
+                  )}
                 </td>
 
                 {/* Product image thumbnail */}
@@ -2204,10 +2216,12 @@ export default function ProductsPage() {
                   <tr key={v.id} className="border-b border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/10">
                     {/* checkbox col */}
                     <td className="border-r border-blue-100 dark:border-blue-900/30 w-8" />
-                    {/* # col — indent indicator */}
+                    {/* Sr. col — sub-row indent indicator */}
                     <td className="border-r border-blue-100 dark:border-blue-900/30 text-center align-middle" style={{ height: "36px" }}>
                       <span className="text-[10px] text-blue-400 dark:text-blue-600 font-mono select-none">↳{vi + 1}</span>
                     </td>
+                    {/* Variants col — empty for sub-rows */}
+                    <td className="border-r border-blue-100 dark:border-blue-900/30" style={{ height: "36px" }} />
                     {/* IMG col */}
                     <td className="border-r border-blue-100 dark:border-blue-900/30 text-center align-middle p-1" style={{ height: "36px" }}>
                       {v.image ? (
@@ -2482,7 +2496,7 @@ export default function ProductsPage() {
 
           {/* Add row */}
           {can("Add Products") && !newRow && (
-            <tr><td colSpan={visibleCols.length + 2}>
+            <tr><td colSpan={visibleCols.length + 3}>
               <button onClick={() => { setNewRow(BLANK()); setNewRowActive(0); }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors"
                 data-testid="btn-add-row">
