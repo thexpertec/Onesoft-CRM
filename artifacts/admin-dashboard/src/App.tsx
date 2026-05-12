@@ -32,6 +32,7 @@ const InvoicesPage          = lazy(() => import("@/pages/invoices"));
 const InvoiceFormPage       = lazy(() => import("@/pages/invoices").then(m => ({ default: m.InvoiceFormPage })));
 const CalcInvoicePage       = lazy(() => import("@/pages/calc-invoice"));
 const StockLedgerPage       = lazy(() => import("@/pages/stock-ledger"));
+const ProductStockReportPage = lazy(() => import("@/pages/product-stock-report"));
 const StaffPage             = lazy(() => import("@/pages/staff"));
 const StaffNewPage          = lazy(() => import("@/pages/staff-new"));
 const StaffEditPage         = lazy(() => import("@/pages/staff-edit"));
@@ -209,6 +210,7 @@ function Router() {
                   <Route path="/suppliers/new"      component={SupplierNewPage} />
                   <Route path="/customers/:id/edit" component={CustomerEditPage} />
                   <Route path="/customers"          component={CustomersPage} />
+                  <Route path="/product-stock-report" component={ProductStockReportPage} />
                   <Route path="/products/new"       component={ProductNewPage} />
                   <Route path="/products"           component={ProductsPage} />
                   <Route path="/brands"             component={BrandsPage} />

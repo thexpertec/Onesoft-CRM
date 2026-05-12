@@ -261,7 +261,8 @@ const PRODUCTS_COLUMNS: MegaColumn[] = [
     desc: "Media & inventory",
     links: [
       { label: "Media Library", href: "/media",        icon: ImageIcon, desc: "Product images & files"       },
-      { label: "Stock Ledger",  href: "/stock-ledger", icon: BookOpen,  desc: "Movement history per product" },
+      { label: "Stock Ledger",  href: "/stock-ledger",        icon: BookOpen,    desc: "Movement history per product"          },
+      { label: "Stock Report",  href: "/product-stock-report", icon: BarChart3,   desc: "Products, variants & stock summary"    },
     ],
   },
 ];
@@ -352,7 +353,7 @@ const OTHER_NAV: NavItem[] = [
 ];
 
 const CRM_ROUTES           = ["/leads", "/customers"];
-const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger"];
+const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger", "/product-stock-report"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
@@ -1313,7 +1314,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/attributes"     icon={SlidersHorizontal} label="Attributes" />
                   <NavLink href="/units"          icon={Ruler}             label="Units" />
                   <NavLink href="/media"          icon={ImageIcon}         label="Media Library" />
-                  <NavLink href="/stock-ledger"   icon={BookOpen}          label="Stock Ledger" />
+                  <NavLink href="/stock-ledger"         icon={BookOpen}  label="Stock Ledger" />
+                  <NavLink href="/product-stock-report" icon={BarChart3} label="Stock Report" />
                 </>}
 
                 {/* Manufacturing */}
