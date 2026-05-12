@@ -635,8 +635,12 @@ export default function ProductsPage() {
           const parentKey  = (r.sku.trim() || r.name.trim()).toLowerCase();
           const groupRows  = [r, ...(continuationsByKey.get(parentKey) ?? [])];
 
-          // Build variants array if any row in the group has attribute data
-          const hasExplicitVariants = groupRows.some(gr => gr.variantAttr1Name?.trim());
+          // Build variants array if any row in the group has attribute data.
+          // A row qualifies even when variantAttr1Name is blank — the value alone
+          // is enough to declare a variant (name defaults to "Variant").
+          const hasExplicitVariants = groupRows.some(gr =>
+            gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim()
+          );
           // Implicit variant detection: continuation rows with model values but no explicit variantAttr cols
           const hasImplicitModelVariants = groupRows.length > 1 && !hasExplicitVariants
             && groupRows.some(gr => gr.model?.trim());
@@ -645,12 +649,22 @@ export default function ProductsPage() {
           let productAttributes: string[] | undefined;
           if (hasVariants) {
             variants = groupRows
-              .filter(gr => gr.variantAttr1Name?.trim() || (!hasExplicitVariants && gr.model?.trim()))
+              .filter(gr =>
+                gr.variantAttr1Name?.trim() || gr.variantAttr1Value?.trim() ||
+                (!hasExplicitVariants && gr.model?.trim())
+              )
               .map(gr => {
                 const attrs: Record<string, string> = {};
-                if (gr.variantAttr1Name?.trim()) attrs[gr.variantAttr1Name.trim()] = gr.variantAttr1Value?.trim() ?? "";
-                if (gr.variantAttr2Name?.trim()) attrs[gr.variantAttr2Name.trim()] = gr.variantAttr2Value?.trim() ?? "";
-                if (gr.variantAttr3Name?.trim()) attrs[gr.variantAttr3Name.trim()] = gr.variantAttr3Value?.trim() ?? "";
+                // Accept value-only columns: fall back to "Variant" when no name given
+                if (gr.variantAttr1Value?.trim()) {
+                  attrs[gr.variantAttr1Name?.trim() || "Variant"] = gr.variantAttr1Value.trim();
+                }
+                if (gr.variantAttr2Value?.trim()) {
+                  attrs[gr.variantAttr2Name?.trim() || "Variant"] = gr.variantAttr2Value.trim();
+                }
+                if (gr.variantAttr3Value?.trim()) {
+                  attrs[gr.variantAttr3Name?.trim() || "Variant"] = gr.variantAttr3Value.trim();
+                }
                 // Fallback: use model as variant attribute when no explicit attr cols used
                 if (Object.keys(attrs).length === 0 && gr.model?.trim()) {
                   attrs["Model"] = gr.model.trim();
