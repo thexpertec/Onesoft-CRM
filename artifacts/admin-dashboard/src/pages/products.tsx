@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useProducts, useStock } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty } from "@/lib/store";
+import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty, generateEan13 } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useToast } from "@/hooks/use-toast";
@@ -715,7 +715,7 @@ export default function ProductsPage() {
                   attributes: attrs,
                   model:            gr.model?.trim()                 || undefined,
                   sku:              gr.variantSku?.trim()            || undefined,
-                  barcode:          gr.variantBarcode?.trim()         || undefined,
+                  barcode:          gr.variantBarcode?.trim()         || generateEan13(),
                   price:            gr.variantPrice?.trim()           || gr.price?.trim() || r.price || "0",
                   purchasePrice:    gr.variantPurchasePrice?.trim()   || gr.purchasePrice?.trim() || undefined,
                   costPrice:        gr.variantCostPrice?.trim()       || gr.costPrice?.trim()     || undefined,

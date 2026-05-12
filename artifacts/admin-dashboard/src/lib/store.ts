@@ -2546,18 +2546,26 @@ export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedA
     const conflict = skuConflict(data.sku);
     if (conflict) throw new Error(`SKU "${data.sku}" is already used by "${conflict}".`);
   }
-  // Auto-generate SKU for any variants that are missing one
+  // Auto-generate SKU and barcode for any variants that are missing them.
+  // Products with variants do NOT get a product-level barcode — each variant
+  // carries its own scannable barcode.
   if (data.variants?.length) {
     data = {
       ...data,
-      variants: data.variants.map(v =>
-        v.sku?.trim() ? v : { ...v, sku: generateProductSku(`${data.name} ${Object.values(v.attributes ?? {}).join(" ")}`) }
-      ),
+      variants: data.variants.map(v => ({
+        ...v,
+        sku:     v.sku?.trim()     ? v.sku     : generateProductSku(`${data.name} ${Object.values(v.attributes ?? {}).join(" ")}`),
+        barcode: v.barcode?.trim() ? v.barcode : generateEan13(),
+      })),
     };
   }
   const item: Product = {
     ...data,
-    barcode: data.barcode?.trim() || generateEan13(),
+    // Products with variants carry barcodes at variant level — don't auto-assign
+    // a product-level barcode in that case (keep user-supplied value if any).
+    barcode: data.variants?.length
+      ? (data.barcode?.trim() || undefined)
+      : (data.barcode?.trim() || generateEan13()),
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -2590,16 +2598,19 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
     const conflict = skuConflict(updates.sku, id);
     if (conflict) throw new Error(`SKU "${updates.sku}" is already used by "${conflict}".`);
   }
-  // Auto-generate SKU for any variants that are missing one, then validate uniqueness.
+  // Auto-generate SKU and barcode for any variants that are missing them, then
+  // validate SKU uniqueness.
   // Skipping unchanged SKUs prevents false "duplicate" errors when editing other
   // variant fields while a product already has any pre-existing shared SKUs.
   if (updates.variants) {
     const productName = updates.name ?? items[i].name;
     updates = {
       ...updates,
-      variants: updates.variants.map(v =>
-        v.sku?.trim() ? v : { ...v, sku: generateProductSku(`${productName} ${Object.values(v.attributes ?? {}).join(" ")}`) }
-      ),
+      variants: updates.variants.map(v => ({
+        ...v,
+        sku:     v.sku?.trim()     ? v.sku     : generateProductSku(`${productName} ${Object.values(v.attributes ?? {}).join(" ")}`),
+        barcode: v.barcode?.trim() ? v.barcode : generateEan13(),
+      })),
     };
     const storedVariantSkus = new Map(
       (items[i].variants ?? []).map(v => [v.id, (v.sku ?? "").trim().toLowerCase()])
