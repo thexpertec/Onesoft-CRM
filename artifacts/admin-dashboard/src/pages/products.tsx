@@ -1351,96 +1351,6 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {/* ── Stats toggle bar ──────────────────────────────────────────────── */}
-      <button
-        onClick={toggleStats}
-        className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-gray-200 dark:border-border bg-gray-50/70 dark:bg-muted/30 hover:bg-gray-100/80 dark:hover:bg-muted/50 transition-colors group select-none"
-      >
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-muted-foreground">
-          <BarChart2 size={13} className="text-blue-400" />
-          <span>Stats &amp; Filters</span>
-          {!statsOpen && statusFilter !== "All" && (
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
-              {pills.find(p => p.filter === statusFilter)?.label} active
-            </span>
-          )}
-        </div>
-        <ChevronDown
-          size={14}
-          className={`text-gray-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      {/* ── Stats summary bar + KPI pills (collapsible) ──────────────────── */}
-      {statsOpen && (
-        <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              {
-                icon: <Wallet size={15} className="text-indigo-500" />,
-                label: "Inventory Value",
-                value: `${sym}${stats.invValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
-                sub: "cost × stock qty",
-                border: "border-indigo-200 dark:border-indigo-800",
-                bg: "bg-indigo-50/60 dark:bg-indigo-950/30",
-              },
-              {
-                icon: <Tag size={15} className="text-emerald-500" />,
-                label: "Retail Value",
-                value: `${sym}${stats.retailValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
-                sub: "retail × stock qty",
-                border: "border-emerald-200 dark:border-emerald-800",
-                bg: "bg-emerald-50/60 dark:bg-emerald-950/30",
-              },
-              {
-                icon: <BarChart2 size={15} className="text-blue-500" />,
-                label: "Avg Margin",
-                value: `${stats.avgMargin.toFixed(1)}%`,
-                sub: products.length > 0 ? `across ${products.filter(p => parseFloat(p.price ?? "0") > 0).length} priced products` : "no products",
-                border: "border-blue-200 dark:border-blue-800",
-                bg: "bg-blue-50/60 dark:bg-blue-950/30",
-              },
-              {
-                icon: stats.unrealisedProfit >= 0
-                  ? <TrendingUp size={15} className="text-green-500" />
-                  : <TrendingDown size={15} className="text-red-500" />,
-                label: "Unrealised Profit",
-                value: `${sym}${Math.abs(stats.unrealisedProfit).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
-                sub: stats.unrealisedProfit >= 0 ? "retail − cost value" : "cost exceeds retail",
-                border: stats.unrealisedProfit >= 0 ? "border-green-200 dark:border-green-800" : "border-red-200 dark:border-red-800",
-                bg:     stats.unrealisedProfit >= 0 ? "bg-green-50/60 dark:bg-green-950/30"    : "bg-red-50/60 dark:bg-red-950/30",
-              },
-            ].map(s => (
-              <div key={s.label} className={`rounded-xl border ${s.border} ${s.bg} px-4 py-3 flex items-start gap-3`}>
-                <div className="mt-0.5 flex-shrink-0">{s.icon}</div>
-                <div className="min-w-0">
-                  <p className="text-[11px] text-muted-foreground font-medium truncate">{s.label}</p>
-                  <p className="text-[18px] font-bold tracking-tight leading-tight">{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground/70 truncate">{s.sub}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* KPI pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {pills.map(k => {
-              const isActive = statusFilter === k.filter;
-              return (
-                <button key={k.label} aria-pressed={isActive}
-                  onClick={() => setStatusFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
-                  title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}>
-                  {k.label}: <span>{k.value}</span>
-                  {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Toolbar — two explicit rows */}
       <div className="flex flex-col gap-2">
 
@@ -2516,6 +2426,96 @@ export default function ProductsPage() {
           )}
         </ExcelGridShell>
       </div>
+
+      {/* ── Stats toggle bar ──────────────────────────────────────────────── */}
+      <button
+        onClick={toggleStats}
+        className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-gray-200 dark:border-border bg-gray-50/70 dark:bg-muted/30 hover:bg-gray-100/80 dark:hover:bg-muted/50 transition-colors group select-none"
+      >
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-muted-foreground">
+          <BarChart2 size={13} className="text-blue-400" />
+          <span>Stats &amp; Filters</span>
+          {!statsOpen && statusFilter !== "All" && (
+            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
+              {pills.find(p => p.filter === statusFilter)?.label} active
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          size={14}
+          className={`text-gray-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {/* ── Stats summary bar + KPI pills (collapsible) ──────────────────── */}
+      {statsOpen && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              {
+                icon: <Wallet size={15} className="text-indigo-500" />,
+                label: "Inventory Value",
+                value: `${sym}${stats.invValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+                sub: "cost × stock qty",
+                border: "border-indigo-200 dark:border-indigo-800",
+                bg: "bg-indigo-50/60 dark:bg-indigo-950/30",
+              },
+              {
+                icon: <Tag size={15} className="text-emerald-500" />,
+                label: "Retail Value",
+                value: `${sym}${stats.retailValue.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+                sub: "retail × stock qty",
+                border: "border-emerald-200 dark:border-emerald-800",
+                bg: "bg-emerald-50/60 dark:bg-emerald-950/30",
+              },
+              {
+                icon: <BarChart2 size={15} className="text-blue-500" />,
+                label: "Avg Margin",
+                value: `${stats.avgMargin.toFixed(1)}%`,
+                sub: products.length > 0 ? `across ${products.filter(p => parseFloat(p.price ?? "0") > 0).length} priced products` : "no products",
+                border: "border-blue-200 dark:border-blue-800",
+                bg: "bg-blue-50/60 dark:bg-blue-950/30",
+              },
+              {
+                icon: stats.unrealisedProfit >= 0
+                  ? <TrendingUp size={15} className="text-green-500" />
+                  : <TrendingDown size={15} className="text-red-500" />,
+                label: "Unrealised Profit",
+                value: `${sym}${Math.abs(stats.unrealisedProfit).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}`,
+                sub: stats.unrealisedProfit >= 0 ? "retail − cost value" : "cost exceeds retail",
+                border: stats.unrealisedProfit >= 0 ? "border-green-200 dark:border-green-800" : "border-red-200 dark:border-red-800",
+                bg:     stats.unrealisedProfit >= 0 ? "bg-green-50/60 dark:bg-green-950/30"    : "bg-red-50/60 dark:bg-red-950/30",
+              },
+            ].map(s => (
+              <div key={s.label} className={`rounded-xl border ${s.border} ${s.bg} px-4 py-3 flex items-start gap-3`}>
+                <div className="mt-0.5 flex-shrink-0">{s.icon}</div>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground font-medium truncate">{s.label}</p>
+                  <p className="text-[18px] font-bold tracking-tight leading-tight">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground/70 truncate">{s.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* KPI pills */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {pills.map(k => {
+              const isActive = statusFilter === k.filter;
+              return (
+                <button key={k.label} aria-pressed={isActive}
+                  onClick={() => setStatusFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
+                  title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}>
+                  {k.label}: <span>{k.value}</span>
+                  {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>

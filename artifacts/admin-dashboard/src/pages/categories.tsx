@@ -556,23 +556,6 @@ export default function CategoriesPage() {
         )}
       </div>
 
-      {/* Stats */}
-      <div className="flex items-center gap-5 text-sm text-muted-foreground border-b border-border pb-3 flex-wrap">
-        <span className="flex items-center gap-1.5 font-medium text-foreground">
-          <FolderOpen size={15} className="text-primary" />
-          {topLevelCount} {topLevelCount === 1 ? "category" : "categories"}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <GitBranch size={13} className="text-muted-foreground" />
-          {subCount} sub-{subCount === 1 ? "category" : "categories"}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <GitBranch size={13} className="text-muted-foreground/70" />
-          {subSubCount} sub-sub-{subSubCount === 1 ? "category" : "categories"}
-        </span>
-        <span className="flex items-center gap-1.5"><Tag size={13} /> Organise products into a three-level tree</span>
-      </div>
-
       {/* Toolbar */}
       <div className="flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs">
@@ -645,6 +628,23 @@ export default function CategoriesPage() {
             <Plus size={13} /> Add categories
           </button>
         )}
+      </div>
+
+      {/* Stats summary */}
+      <div className="flex items-center gap-5 text-sm text-muted-foreground border border-border rounded-lg px-4 py-2.5 flex-wrap bg-muted/20">
+        <span className="flex items-center gap-1.5 font-medium text-foreground">
+          <FolderOpen size={15} className="text-primary" />
+          {topLevelCount} {topLevelCount === 1 ? "category" : "categories"}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <GitBranch size={13} className="text-muted-foreground" />
+          {subCount} sub-{subCount === 1 ? "category" : "categories"}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <GitBranch size={13} className="text-muted-foreground/70" />
+          {subSubCount} sub-sub-{subSubCount === 1 ? "category" : "categories"}
+        </span>
+        <span className="flex items-center gap-1.5"><Tag size={13} /> Three-level hierarchy</span>
       </div>
 
       {/* ─── Bulk-edit dialog ───────────────────────────────────────────────── */}

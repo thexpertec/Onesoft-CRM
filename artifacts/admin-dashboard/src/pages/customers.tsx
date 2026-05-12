@@ -638,7 +638,6 @@ export default function CustomersPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {activeTab === "Customers" && (
         <>
-          {kpiPills(buyers, "blue")}
           {toolbar(false, filteredBuyers.length, buyers.length)}
 
           <div ref={tableRef}>
@@ -730,6 +729,7 @@ export default function CustomersPage() {
               )}
             </ExcelGridShell>
           </div>
+          {kpiPills(buyers, "blue")}
         </>
       )}
 
@@ -738,7 +738,6 @@ export default function CustomersPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {activeTab === "Suppliers" && (
         <>
-          {kpiPills(suppliers, "orange")}
           {toolbar(true, filteredSuppliers.length, suppliers.length)}
 
           <div ref={tableRef}>
@@ -829,6 +828,7 @@ export default function CustomersPage() {
               </table>
             </div>
           </div>
+          {kpiPills(suppliers, "orange")}
         </>
       )}
 

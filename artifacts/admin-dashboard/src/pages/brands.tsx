@@ -134,25 +134,6 @@ export default function BrandsPage() {
         )}
       </div>
 
-      {/* KPI pills */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {pills.map(k => {
-          const isActive = statusFilter === k.filter;
-          return (
-            <button key={k.label} aria-pressed={isActive}
-              onClick={() => setStatusFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
-              title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}>
-              {k.label}: <span>{k.value}</span>
-              {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
-            </button>
-          );
-        })}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-          <Bookmark size={11} /> {brands.length} {brands.length === 1 ? "brand" : "brands"} total
-        </div>
-      </div>
-
       {/* Toolbar */}
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
@@ -295,6 +276,25 @@ export default function BrandsPage() {
             </td></tr>
           )}
         </ExcelGridShell>
+      </div>
+
+      {/* KPI summary */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {pills.map(k => {
+          const isActive = statusFilter === k.filter;
+          return (
+            <button key={k.label} aria-pressed={isActive}
+              onClick={() => setStatusFilter(prev => prev === k.filter && k.filter !== "All" ? "All" : k.filter)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all hover:scale-[1.04] hover:shadow-sm ${k.color} ${isActive ? `ring-2 ring-offset-1 ${k.activeRing} shadow-sm font-bold` : "ring-0 opacity-80 hover:opacity-100"}`}
+              title={isActive && k.filter !== "All" ? "Click to clear filter" : `Filter by ${k.label}`}>
+              {k.label}: <span>{k.value}</span>
+              {isActive && k.filter !== "All" && <span className="ml-0.5 opacity-60 text-[10px]">×</span>}
+            </button>
+          );
+        })}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+          <Bookmark size={11} /> {brands.length} {brands.length === 1 ? "brand" : "brands"} total
+        </div>
       </div>
 
       {/* Delete confirm */}

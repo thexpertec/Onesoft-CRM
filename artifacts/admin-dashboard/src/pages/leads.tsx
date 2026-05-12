@@ -1213,24 +1213,6 @@ export default function Leads() {
         </div>
       )}
 
-      {/* ── KPI pills ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { label: "Total",       value: kpis.total,      color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",              filter: () => { setStatusFilter("All"); setRelevanceFilter("All"); } },
-          { label: "New",         value: kpis.new,        color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                   filter: () => setStatusFilter("New") },
-          { label: "In Progress", value: kpis.inProgress, color: "bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400",                       filter: () => setStatusFilter("Meeting Scheduled") },
-          { label: "Qualified",   value: kpis.qualified,  color: "bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400",                   filter: () => setStatusFilter("Qualified") },
-          { label: "Won",         value: kpis.won,        color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",        filter: () => setStatusFilter("Won") },
-          ...(kpis.overdue > 0 ? [{ label: `${kpis.overdue} Overdue`, value: null, color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 cursor-pointer", filter: () => {} }] : []),
-          ...(kpis.upcoming > 0 ? [{ label: `${kpis.upcoming} Reminders`, value: null, color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 cursor-pointer", filter: () => {} }] : []),
-        ].map(k => (
-          <button key={k.label} onClick={k.filter}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-opacity hover:opacity-80 ${k.color}`}>
-            {k.label}{k.value !== null && <span>: {k.value}</span>}
-          </button>
-        ))}
-      </div>
-
       {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
       <div className="space-y-2">
         {/* Row 1: Search + Status + Relevance + actions */}
@@ -1749,6 +1731,24 @@ export default function Leads() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ── KPI summary ────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: "Total",       value: kpis.total,      color: "bg-gray-100 dark:bg-muted text-gray-600 dark:text-muted-foreground",              filter: () => { setStatusFilter("All"); setRelevanceFilter("All"); } },
+          { label: "New",         value: kpis.new,        color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",                   filter: () => setStatusFilter("New") },
+          { label: "In Progress", value: kpis.inProgress, color: "bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400",                       filter: () => setStatusFilter("Meeting Scheduled") },
+          { label: "Qualified",   value: kpis.qualified,  color: "bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400",                   filter: () => setStatusFilter("Qualified") },
+          { label: "Won",         value: kpis.won,        color: "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400",        filter: () => setStatusFilter("Won") },
+          ...(kpis.overdue > 0 ? [{ label: `${kpis.overdue} Overdue`, value: null, color: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 cursor-pointer", filter: () => {} }] : []),
+          ...(kpis.upcoming > 0 ? [{ label: `${kpis.upcoming} Reminders`, value: null, color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 cursor-pointer", filter: () => {} }] : []),
+        ].map(k => (
+          <button key={k.label} onClick={k.filter}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-opacity hover:opacity-80 ${k.color}`}>
+            {k.label}{k.value !== null && <span>: {k.value}</span>}
+          </button>
+        ))}
       </div>
 
       {/* ── Lead detail sheet ─────────────────────────────────────────────────── */}
