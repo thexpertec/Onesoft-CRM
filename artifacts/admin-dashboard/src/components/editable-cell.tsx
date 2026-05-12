@@ -299,7 +299,7 @@ export function ExcelGridShell({
   return (
     <div
       className="rounded-xl border border-gray-200 dark:border-border overflow-auto bg-white dark:bg-card shadow-sm"
-      style={{ maxHeight: "calc(100vh - 290px)" }}
+      style={{ maxHeight: "calc(100vh - 145px)", minHeight: "calc(100vh - 145px)" }}
     >
       <table
         className="border-collapse text-[13px] w-full"
