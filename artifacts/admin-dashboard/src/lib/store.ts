@@ -1543,11 +1543,41 @@ export const getTenantByCredentials = (username: string, password: string): Tena
     t => t.adminUsername.toLowerCase() === username.toLowerCase() && t.adminPassword === password
   );
 
+/**
+ * Mutex for tenant registry mutations (create / update / delete).
+ *
+ * WHY THIS EXISTS — the resurrection race:
+ * Each mutation does a read-modify-write cycle:
+ *   1. kvGet("global", "admin-tenants")  ← reads current list from Neon
+ *   2. modify (add / patch / filter)
+ *   3. kvPut("global", "admin-tenants")  ← writes updated list to Neon
+ *
+ * If two mutations overlap (e.g. user deletes tenant A, then quickly deletes
+ * tenant B before step 3 of the first delete has committed to Neon), the
+ * second call's kvGet at step 1 may still read the pre-first-delete list
+ * [A, B, C] from the server.  It then writes [A, C] — resurrecting A.
+ *
+ * The fix: chain all mutations onto a single promise so each kvGet is
+ * guaranteed to start only AFTER the previous kvPut has resolved.
+ */
+let _tenantMutex: Promise<void> = Promise.resolve();
+
+function _withTenantLock<T>(fn: () => Promise<T>): Promise<T> {
+  // Append to the tail of the chain — this call will not start until every
+  // earlier mutation has fully resolved or rejected.
+  const result = _tenantMutex.then(fn);
+  // Advance the tail with a void wrapper so a rejected `result` does NOT
+  // prevent the next caller from running (the rejection is propagated only
+  // to `result`, not to `_tenantMutex`).
+  _tenantMutex = result.then(() => {}, () => {});
+  return result;
+}
+
 /** Awaitable variant: resolves only after the server has stored the new list.
  *  Use this from UI flows where the user must see a confirmation/error toast. */
-export const createTenantAsync = async (
+export const createTenantAsync = (
   data: Omit<Tenant, "id" | "createdAt" | "updatedAt">,
-): Promise<Tenant> => {
+): Promise<Tenant> => _withTenantLock(async () => {
   // Always fetch the authoritative list from the server first so we never
   // append to a stale in-memory snapshot that is missing recent tenants
   // or still contains recently-deleted ones.
@@ -1579,12 +1609,12 @@ export const createTenantAsync = async (
     actor: _activityUser,
   });
   return tenant;
-};
+});
 
-export const updateTenantAsync = async (
+export const updateTenantAsync = (
   id: string,
   updates: Partial<Omit<Tenant, "id" | "createdAt">>,
-): Promise<Tenant> => {
+): Promise<Tenant> => _withTenantLock(async () => {
   // Fetch the current server list first so a stale in-memory copy never
   // resurrects deleted tenants or drops recently-added ones.
   // NOTE: no intermediate _lsCache — see createTenantAsync for the reason.
@@ -1600,13 +1630,13 @@ export const updateTenantAsync = async (
   tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
   await setGlobalAsync(TENANTS_KEY, tenants);
   return tenants[idx];
-};
+});
 
 /** Awaitable variant of deleteTenant. Resolves only after the server confirms
  *  the tenant registry update. The data-namespace purge is best-effort:
  *  it runs after the registry write succeeds and does not cause handleDelete
  *  to show "Delete failed" if the purge request itself has a transient error. */
-export const deleteTenantAsync = async (id: string): Promise<void> => {
+export const deleteTenantAsync = (id: string): Promise<void> => _withTenantLock(async () => {
   // Step 1: remove the tenant record from the authoritative list.
   // Always read the server's current list first — using a stale in-memory copy
   // is exactly what causes deleted tenants to reappear (the stale copy still
@@ -1648,7 +1678,7 @@ export const deleteTenantAsync = async (id: string): Promise<void> => {
   kvDeleteNamespace(`t:${id}`).catch((err) => {
     console.warn(`[tenant] namespace purge failed for t:${id} — orphaned rows remain:`, err);
   });
-};
+});
 
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
 export const getTenantStats = (tenantId: string): Record<string, number> => {

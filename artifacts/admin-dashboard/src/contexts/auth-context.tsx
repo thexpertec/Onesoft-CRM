@@ -219,7 +219,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       seedDefaultCoaAccounts();
       // After sync, re-read the user in case their record was updated in DB
       const refreshed = getAdminUserById(userId);
-      if (refreshed) setCurrentUser(refreshed);
+      if (refreshed) {
+        setCurrentUser(refreshed);
+        // Restore the activity-user name so actions taken after a page refresh
+        // are attributed correctly (without this it always shows "by System").
+        setActivityUser(refreshed.fullName || refreshed.username);
+      }
       setIsSyncing(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
