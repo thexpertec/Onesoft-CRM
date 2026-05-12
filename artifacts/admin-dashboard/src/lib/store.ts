@@ -1,4 +1,4 @@
-import { kvPut, kvGetAll, kvGet, kvDeleteNamespace } from "./api";
+import { kvPut, kvGetAll, kvGet, kvDelete, kvDeleteNamespace } from "./api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -1679,6 +1679,50 @@ export const deleteTenantAsync = (id: string): Promise<void> => _withTenantLock(
     console.warn(`[tenant] namespace purge failed for t:${id} — orphaned rows remain:`, err);
   });
 });
+
+/**
+ * Wipes all transactional / financial data for a tenant while preserving
+ * master data (customers, products, COA structure, settings, HR, etc.).
+ *
+ * Cleared:  sales, invoices, purchase orders, sale returns, purchase returns,
+ *           stock levels, stock ledger, journal entries, receipt/payment
+ *           vouchers, manufacturing orders, activity log.
+ *
+ * Kept:     customers, products, brands, categories, units, attributes,
+ *           payment accounts, chart of accounts, settings, HRM records,
+ *           sales agents, media library, shareholders, investment plans, etc.
+ */
+export async function cleanTenantTransactions(tenantId: string): Promise<void> {
+  const TRANSACTION_KEYS = [
+    "admin-sales",
+    "admin-invoices",
+    "admin-purchase-orders",
+    "admin-sale-returns",
+    "admin-purchase-returns",
+    "admin-stock",
+    "admin-stock-ledger",
+    "admin-journal-entries",
+    "admin-rp-vouchers",
+    "admin-manufacturing-orders",
+    "admin-activity-log",
+  ];
+
+  const ns = `t:${tenantId}`;
+
+  // Clear from server (parallel — order doesn't matter for independent keys)
+  await Promise.all(
+    TRANSACTION_KEYS.map(key =>
+      kvDelete(ns, key).catch(err =>
+        console.warn(`[cleanTenant] delete ${ns}/${key} failed:`, err)
+      )
+    )
+  );
+
+  // Evict from in-memory cache so the current tab sees empty lists immediately
+  for (const key of TRANSACTION_KEYS) {
+    _memRaw.delete(`${ns}:${key}`);
+  }
+}
 
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
 export const getTenantStats = (tenantId: string): Record<string, number> => {

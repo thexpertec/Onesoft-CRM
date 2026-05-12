@@ -3,7 +3,7 @@ import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
   Crown, Zap, Rocket, Shield, Search, Layers, FlaskConical, RefreshCw,
-  History, PlusCircle, MinusCircle, ChevronDown, ChevronUp,
+  History, PlusCircle, MinusCircle, ChevronDown, ChevronUp, Eraser,
 } from "lucide-react";
 import {
   seedDemoTenant, clearDemoTenant, isDemoSeeded, DEMO_TENANT_ID,
@@ -13,6 +13,7 @@ import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, getTenantActivities, TenantActivityEntry,
   createTenantAsync, updateTenantAsync, deleteTenantAsync,
+  cleanTenantTransactions,
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
@@ -421,6 +422,8 @@ export default function TenantsPage() {
   const [isRefreshing,  setIsRefreshing]  = useState(false);
   const [activities,    setActivities]    = useState<TenantActivityEntry[]>(() => getTenantActivities());
   const [activityOpen,  setActivityOpen]  = useState(true);
+  const [cleanId,       setCleanId]       = useState<string | null>(null);
+  const [isCleaning,    setIsCleaning]    = useState(false);
 
   const reload = () => {
     setTenants(getTenants());
@@ -533,6 +536,23 @@ export default function TenantsPage() {
     if (currentTenantId === tenant.id) switchTenant(null);
     reload();
     toast({ title: `Demo data cleared from "${tenant.name}"`, variant: "destructive" });
+  }
+
+  async function handleCleanTransactions(tenantId: string) {
+    setIsCleaning(true);
+    try {
+      await cleanTenantTransactions(tenantId);
+      const t = tenants.find(x => x.id === tenantId);
+      toast({
+        title: `Transactions cleared`,
+        description: `All invoices, sales, purchases, and accounts data removed from "${t?.name ?? tenantId}".`,
+      });
+    } catch (e) {
+      toast({ title: "Clean failed", description: String(e), variant: "destructive" });
+    } finally {
+      setIsCleaning(false);
+      setCleanId(null);
+    }
   }
 
   const filtered = useMemo(() =>
@@ -868,6 +888,18 @@ export default function TenantsPage() {
                   </Button>
                 </div>
 
+                {/* Clean transactions row — always visible */}
+                <div className="pt-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full h-7 gap-1.5 text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800"
+                    onClick={() => setCleanId(t.id)}
+                  >
+                    <Eraser size={11} /> Clean Transactions
+                  </Button>
+                </div>
+
                 {/* COA seed row — always visible for non-active-context tenants */}
                 {!isActive && (
                   <div className="pt-1.5">
@@ -1068,6 +1100,50 @@ export default function TenantsPage() {
               onClick={() => deleteId && handleDelete(deleteId)}
             >
               Delete Tenant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Clean transactions confirmation ──────────────────────────────────── */}
+      <AlertDialog open={!!cleanId} onOpenChange={() => setCleanId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Eraser size={16} className="text-orange-500" /> Clean Transactions?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This will permanently erase all transactional data for{" "}
+                  <strong className="text-foreground">
+                    "{tenants.find(t => t.id === cleanId)?.name}"
+                  </strong>:
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-[12px]">
+                  <li>Sales &amp; invoices</li>
+                  <li>Purchase orders &amp; returns</li>
+                  <li>Sale returns</li>
+                  <li>Stock levels &amp; ledger</li>
+                  <li>Journal entries &amp; vouchers (accounts)</li>
+                  <li>Manufacturing orders</li>
+                  <li>Activity log</li>
+                </ul>
+                <p className="font-medium text-orange-600 dark:text-orange-400">
+                  Master data (customers, products, COA, settings, HR) is kept intact.
+                  This cannot be undone.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCleaning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCleaning}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => cleanId && handleCleanTransactions(cleanId)}
+            >
+              {isCleaning ? "Cleaning…" : "Yes, Clean Transactions"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
