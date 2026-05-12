@@ -764,7 +764,7 @@ export default function Dashboard() {
             sub2={arBalance < 0 ? "Credit balance (over-collected)" : undefined}
             gradient="bg-gradient-to-br from-blue-500 to-cyan-500"
             iconBg="bg-blue-400/40"
-            href="/accounting/ledger"
+            href="/ledger-report"
           />
           {/* Accounts Payable */}
           <KpiCard
@@ -777,7 +777,7 @@ export default function Dashboard() {
             sub2={apBalance < 0 ? "Debit balance (over-paid)" : undefined}
             gradient="bg-gradient-to-br from-orange-500 to-amber-500"
             iconBg="bg-orange-400/40"
-            href="/accounting/ledger"
+            href="/ledger-report"
           />
           {/* Cash & Bank */}
           <KpiCard
@@ -795,7 +795,7 @@ export default function Dashboard() {
               ? "bg-gradient-to-br from-emerald-600 to-teal-500"
               : "bg-gradient-to-br from-red-500 to-rose-600"}
             iconBg="bg-emerald-400/40"
-            href="/accounting/ledger"
+            href="/payment-accounts"
           />
         </div>
       </div>
