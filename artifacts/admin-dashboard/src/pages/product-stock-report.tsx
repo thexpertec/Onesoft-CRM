@@ -87,19 +87,31 @@ type CsvRow = {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function KpiCard({ icon: Icon, label, value, sub, color }: {
+function KpiCard({ icon: Icon, label, value, sub, accent }: {
   icon: React.ElementType; label: string; value: string | number;
-  sub?: string; color: string;
+  sub?: string;
+  accent: {
+    bar: string;       // top accent bar colour
+    iconBg: string;    // icon container bg
+    iconColor: string; // icon colour class
+    valueCls: string;  // value text colour
+  };
 }) {
   return (
-    <div className={`rounded-xl border border-border bg-white dark:bg-card p-4 flex items-center gap-3 shadow-sm`}>
-      <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center shrink-0`}>
-        <Icon size={18} className="text-white" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="text-[22px] font-extrabold text-foreground leading-none tabular-nums">{value}</p>
-        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    <div className="relative rounded-2xl border border-border bg-white dark:bg-card shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col">
+      {/* coloured top accent bar */}
+      <div className={`h-1 w-full ${accent.bar}`} />
+      <div className="flex flex-col gap-3 px-4 pt-3 pb-4 flex-1">
+        {/* icon */}
+        <div className={`w-9 h-9 rounded-xl ${accent.iconBg} flex items-center justify-center shrink-0`}>
+          <Icon size={16} className={accent.iconColor} />
+        </div>
+        {/* value */}
+        <div className="min-w-0">
+          <p className={`text-[26px] font-black tabular-nums leading-none tracking-tight ${accent.valueCls}`}>{value}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">{label}</p>
+          {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 leading-snug">{sub}</p>}
+        </div>
       </div>
     </div>
   );
@@ -440,16 +452,36 @@ export default function ProductStockReportPage() {
       </div>
 
       {/* ── KPI cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        <KpiCard icon={Package}      label="Products"    value={kpi.total}          color="bg-blue-500"    />
-        <KpiCard icon={Layers}       label="Variants"    value={kpi.totalVariants}  color="bg-indigo-500"  />
-        <KpiCard icon={Tag}          label="Categories"  value={kpi.uniqueCats}     color="bg-violet-500"  />
-        <KpiCard icon={CheckCircle2} label="In Stock"    value={kpi.inStock}        color="bg-emerald-500" />
-        <KpiCard icon={AlertTriangle} label="Low Stock"   value={kpi.lowStock}      color="bg-amber-500"   />
-        <KpiCard icon={Boxes}        label="Out of Stock" value={kpi.outOfStock}    color="bg-red-500"     />
-        <KpiCard icon={TrendingUp}   label="Stock Value"
-          value={`${sym}${kpi.stockValue >= 1000 ? (kpi.stockValue / 1000).toFixed(1) + "K" : kpi.stockValue.toFixed(0)}`}
-          sub="est. at purchase price" color="bg-teal-500"
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+        <KpiCard
+          icon={Package} label="Products" value={kpi.total}
+          accent={{ bar: "bg-blue-500", iconBg: "bg-blue-50 dark:bg-blue-950/60", iconColor: "text-blue-600 dark:text-blue-400", valueCls: "text-blue-700 dark:text-blue-300" }}
+        />
+        <KpiCard
+          icon={Layers} label="Variants" value={kpi.totalVariants}
+          accent={{ bar: "bg-indigo-500", iconBg: "bg-indigo-50 dark:bg-indigo-950/60", iconColor: "text-indigo-600 dark:text-indigo-400", valueCls: "text-indigo-700 dark:text-indigo-300" }}
+        />
+        <KpiCard
+          icon={Tag} label="Categories" value={kpi.uniqueCats}
+          accent={{ bar: "bg-violet-500", iconBg: "bg-violet-50 dark:bg-violet-950/60", iconColor: "text-violet-600 dark:text-violet-400", valueCls: "text-violet-700 dark:text-violet-300" }}
+        />
+        <KpiCard
+          icon={CheckCircle2} label="In Stock" value={kpi.inStock}
+          accent={{ bar: "bg-emerald-500", iconBg: "bg-emerald-50 dark:bg-emerald-950/60", iconColor: "text-emerald-600 dark:text-emerald-400", valueCls: "text-emerald-700 dark:text-emerald-300" }}
+        />
+        <KpiCard
+          icon={AlertTriangle} label="Low Stock" value={kpi.lowStock}
+          accent={{ bar: "bg-amber-500", iconBg: "bg-amber-50 dark:bg-amber-950/60", iconColor: "text-amber-600 dark:text-amber-400", valueCls: "text-amber-700 dark:text-amber-300" }}
+        />
+        <KpiCard
+          icon={Boxes} label="Out of Stock" value={kpi.outOfStock}
+          accent={{ bar: "bg-red-500", iconBg: "bg-red-50 dark:bg-red-950/60", iconColor: "text-red-600 dark:text-red-400", valueCls: "text-red-700 dark:text-red-300" }}
+        />
+        <KpiCard
+          icon={TrendingUp} label="Stock Value"
+          value={`${sym}${kpi.stockValue >= 1_000_000 ? (kpi.stockValue / 1_000_000).toFixed(1) + "M" : kpi.stockValue >= 1000 ? (kpi.stockValue / 1000).toFixed(1) + "K" : kpi.stockValue.toFixed(0)}`}
+          sub="est. at purchase price"
+          accent={{ bar: "bg-teal-500", iconBg: "bg-teal-50 dark:bg-teal-950/60", iconColor: "text-teal-600 dark:text-teal-400", valueCls: "text-teal-700 dark:text-teal-300" }}
         />
       </div>
 
