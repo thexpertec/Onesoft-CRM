@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
-  getProducts, getStock, getProductCategories, getBrands,
-  getProductDepartments, getSettings, getProductStockQty,
+  getProductCategories, getProductStockQty,
   type Product, type ProductVariant, type StockItem,
+  type ProductCategory,
 } from "@/lib/store";
+import { useProducts, useStock, useBrands, useProductDepartments } from "@/hooks/use-data";
 import { fmtMoney, getSettingsCurrencySymbol } from "@/lib/currencies";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -602,13 +603,27 @@ export default function ProductStockReportPage() {
   const [filterStock,  setFilterStock]  = useState("all"); // all | low | out | ok
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set());
 
-  // ── raw data (read once) ─────────────────────────────────────────────────
-  const allProducts   = useMemo(() => getProducts(), []);
-  const allStock      = useMemo(() => getStock(), []);
-  const allCategories = useMemo(() => getProductCategories(), []);
-  const allBrands     = useMemo(() => getBrands().map(b => b.name), []);
-  const allDepts      = useMemo(() => getProductDepartments().map(d => d.name), []);
-  const sym           = useMemo(() => getSettingsCurrencySymbol(), []);
+  // ── reactive data (subscribes to onesoft:data-synced + storage events) ───
+  const { products: allProducts }                   = useProducts();
+  const { stock: allStock }                         = useStock();
+  const { brands: brandsRaw }                       = useBrands();
+  const { productDepartments: deptsRaw }            = useProductDepartments();
+  const [allCategories, setAllCategories]           = useState<ProductCategory[]>([]);
+
+  const refreshCategories = useCallback(() => setAllCategories(getProductCategories()), []);
+  useEffect(() => {
+    refreshCategories();
+    window.addEventListener("storage", refreshCategories);
+    window.addEventListener("onesoft:data-synced", refreshCategories);
+    return () => {
+      window.removeEventListener("storage", refreshCategories);
+      window.removeEventListener("onesoft:data-synced", refreshCategories);
+    };
+  }, [refreshCategories]);
+
+  const allBrands = useMemo(() => brandsRaw.map(b => b.name), [brandsRaw]);
+  const allDepts  = useMemo(() => deptsRaw.map(d => d.name), [deptsRaw]);
+  const sym       = useMemo(() => getSettingsCurrencySymbol(), []);
 
   // ── enrich products with stock ───────────────────────────────────────────
   const enriched: EnrichedProduct[] = useMemo(() => {
@@ -768,7 +783,7 @@ export default function ProductStockReportPage() {
   // ── unique filter options ────────────────────────────────────────────────
   const catOptions   = useMemo(() => [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort(), [allProducts]);
   const brandOptions = useMemo(() => allBrands.length ? allBrands : [...new Set(allProducts.map(p => p.brand).filter(Boolean))].sort(), [allBrands, allProducts]);
-  const deptOptions  = useMemo(() => allDepts.length  ? allDepts  : [...new Set(allProducts.map(p => p.department).filter(Boolean))].sort(), [allDepts, allProducts]);
+  const deptOptions  = useMemo(() => allDepts.length  ? allDepts  : [...new Set(allProducts.map(p => p.department).filter((d): d is string => Boolean(d)))].sort(), [allDepts, allProducts]);
 
   return (
     <div className="space-y-5 pb-10">
