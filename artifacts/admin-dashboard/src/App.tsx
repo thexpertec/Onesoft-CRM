@@ -1,5 +1,5 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { useEffect, Component } from "react";
+import { useEffect, Component, lazy, Suspense } from "react";
 import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs } from "@/lib/store";
 import type { ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -8,88 +8,101 @@ import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
-import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
-import Login from "@/pages/login";
 
-import Dashboard from "@/pages/dashboard";
-import ManagerDashboard from "@/pages/manager-dashboard";
-import Leads from "@/pages/leads";
-import LeadsReportPage from "@/pages/leads-report";
-import Documents from "@/pages/documents";
-import DocumentDetail from "@/pages/document-detail";
-import NewDocument from "@/pages/new-document";
-import ShareDocument from "@/pages/share-document";
-import ShareInvoicePage from "@/pages/share-invoice";
-import UsersPage from "@/pages/users";
-import SalesPage from "@/pages/sales";
-import InvoicesPage, { InvoiceFormPage } from "@/pages/invoices";
-import CalcInvoicePage from "@/pages/calc-invoice";
-import StockLedgerPage from "@/pages/stock-ledger";
-import StaffPage from "@/pages/staff";
-import StaffNewPage from "@/pages/staff-new";
-import StaffEditPage from "@/pages/staff-edit";
-import HrmRolesPage from "@/pages/hrm-roles";
-import HrmOrgPage from "@/pages/hrm-org";
-import SalaryPage from "@/pages/salary";
-import SalaryTemplatePage from "@/pages/salary-template";
-import SalaryAllowancesPage from "@/pages/salary-allowances";
-import SalaryDeductionsPage from "@/pages/salary-deductions";
-import AdvanceSalaryPage from "@/pages/advance-salary";
-import MyApplicationPage from "@/pages/my-application";
-import ManageApplicationPage from "@/pages/manage-application";
-import AttendancePage from "@/pages/attendance";
-import CustomersPage from "@/pages/customers";
-import CustomerNewPage from "@/pages/customer-new";
-import SupplierNewPage from "@/pages/supplier-new";
-import CustomerEditPage from "@/pages/customer-edit";
-import ProductsPage from "@/pages/products";
-import ProductNewPage from "@/pages/product-new";
-import CategoriesPage from "@/pages/categories";
-import ProductGroupsPage from "@/pages/product-groups";
-import BrandsPage from "@/pages/brands";
-import ProductDepartmentsPage from "@/pages/product-departments";
-import AttributesPage from "@/pages/attributes";
-import UnitsPage from "@/pages/units";
-import ShareholdersPage from "@/pages/shareholders";
-import InvestmentPlansPage from "@/pages/investment-plans";
-import MediaLibraryPage from "@/pages/media";
-import SettingsPage from "@/pages/settings";
-import PrintTemplatesPage from "@/pages/print-templates";
-import InvoiceTemplatePage from "@/pages/invoice-template";
-import TenantsPage from "@/pages/tenants";
-import ModuleGroupsPage from "@/pages/module-groups";
-import ChartOfAccountsPage from "@/pages/chart-of-accounts";
-import JournalEntryPage from "@/pages/journal-entry";
-import BalanceSheetPage from "@/pages/balance-sheet";
-import LedgerReportPage from "@/pages/ledger-report";
-import PlsReportPage from "@/pages/pls-report";
-import TrialBalancePage from "@/pages/trial-balance";
-import TrialBalance6ColPage from "@/pages/trial-balance-6col";
-import ExpenseReportPage from "@/pages/expense-report";
-import IncomeReportPage from "@/pages/income-report";
-import ReceiptPaymentPage from "@/pages/receipt-payment";
-import RpSummaryPage from "@/pages/rp-summary";
-import TransactionHistoryPage from "@/pages/transaction-history";
-import SaleReturnPage from "@/pages/sale-return";
-import PurchaseReturnPage from "@/pages/purchase-return";
-import ReturnsPage from "@/pages/returns";
-import SalesAgentsPage from "@/pages/sales-agents";
-import AgentNewPage from "@/pages/agent-new";
-import AgentPerformancePage from "@/pages/agent-performance";
-import AreasPage from "@/pages/areas";
-import RawMaterialsPage from "@/pages/raw-materials";
-import ManufacturingPage from "@/pages/manufacturing";
-import ProductionGuidePage from "@/pages/production-guide";
-import WebsiteCmsPage from "@/pages/website-cms";
-import RepairPage from "@/pages/repair";
-import RepairReportPage from "@/pages/repair-report";
-import PaymentAccountsPage from "@/pages/payment-accounts";
-import DatabaseViewerPage from "@/pages/database-viewer";
+// Eagerly loaded — needed on first paint (login page, 404, auth shell)
+import Login from "@/pages/login";
+import NotFound from "@/pages/not-found";
+
+// All page-level components are lazy-loaded so the initial JS bundle only
+// contains the shell (auth, layout, routing). Each page chunk is fetched
+// on-demand the first time a user navigates there.
+const Dashboard             = lazy(() => import("@/pages/dashboard"));
+const ManagerDashboard      = lazy(() => import("@/pages/manager-dashboard"));
+const Leads                 = lazy(() => import("@/pages/leads"));
+const LeadsReportPage       = lazy(() => import("@/pages/leads-report"));
+const Documents             = lazy(() => import("@/pages/documents"));
+const DocumentDetail        = lazy(() => import("@/pages/document-detail"));
+const NewDocument           = lazy(() => import("@/pages/new-document"));
+const ShareDocument         = lazy(() => import("@/pages/share-document"));
+const ShareInvoicePage      = lazy(() => import("@/pages/share-invoice"));
+const UsersPage             = lazy(() => import("@/pages/users"));
+const SalesPage             = lazy(() => import("@/pages/sales"));
+const InvoicesPage          = lazy(() => import("@/pages/invoices"));
+const InvoiceFormPage       = lazy(() => import("@/pages/invoices").then(m => ({ default: m.InvoiceFormPage })));
+const CalcInvoicePage       = lazy(() => import("@/pages/calc-invoice"));
+const StockLedgerPage       = lazy(() => import("@/pages/stock-ledger"));
+const StaffPage             = lazy(() => import("@/pages/staff"));
+const StaffNewPage          = lazy(() => import("@/pages/staff-new"));
+const StaffEditPage         = lazy(() => import("@/pages/staff-edit"));
+const HrmRolesPage          = lazy(() => import("@/pages/hrm-roles"));
+const HrmOrgPage            = lazy(() => import("@/pages/hrm-org"));
+const SalaryPage            = lazy(() => import("@/pages/salary"));
+const SalaryTemplatePage    = lazy(() => import("@/pages/salary-template"));
+const SalaryAllowancesPage  = lazy(() => import("@/pages/salary-allowances"));
+const SalaryDeductionsPage  = lazy(() => import("@/pages/salary-deductions"));
+const AdvanceSalaryPage     = lazy(() => import("@/pages/advance-salary"));
+const MyApplicationPage     = lazy(() => import("@/pages/my-application"));
+const ManageApplicationPage = lazy(() => import("@/pages/manage-application"));
+const AttendancePage        = lazy(() => import("@/pages/attendance"));
+const CustomersPage         = lazy(() => import("@/pages/customers"));
+const CustomerNewPage       = lazy(() => import("@/pages/customer-new"));
+const SupplierNewPage       = lazy(() => import("@/pages/supplier-new"));
+const CustomerEditPage      = lazy(() => import("@/pages/customer-edit"));
+const ProductsPage          = lazy(() => import("@/pages/products"));
+const ProductNewPage        = lazy(() => import("@/pages/product-new"));
+const CategoriesPage        = lazy(() => import("@/pages/categories"));
+const ProductGroupsPage     = lazy(() => import("@/pages/product-groups"));
+const BrandsPage            = lazy(() => import("@/pages/brands"));
+const ProductDepartmentsPage = lazy(() => import("@/pages/product-departments"));
+const AttributesPage        = lazy(() => import("@/pages/attributes"));
+const UnitsPage             = lazy(() => import("@/pages/units"));
+const ShareholdersPage      = lazy(() => import("@/pages/shareholders"));
+const InvestmentPlansPage   = lazy(() => import("@/pages/investment-plans"));
+const MediaLibraryPage      = lazy(() => import("@/pages/media"));
+const SettingsPage          = lazy(() => import("@/pages/settings"));
+const PrintTemplatesPage    = lazy(() => import("@/pages/print-templates"));
+const InvoiceTemplatePage   = lazy(() => import("@/pages/invoice-template"));
+const TenantsPage           = lazy(() => import("@/pages/tenants"));
+const ModuleGroupsPage      = lazy(() => import("@/pages/module-groups"));
+const ChartOfAccountsPage   = lazy(() => import("@/pages/chart-of-accounts"));
+const JournalEntryPage      = lazy(() => import("@/pages/journal-entry"));
+const BalanceSheetPage      = lazy(() => import("@/pages/balance-sheet"));
+const LedgerReportPage      = lazy(() => import("@/pages/ledger-report"));
+const PlsReportPage         = lazy(() => import("@/pages/pls-report"));
+const TrialBalancePage      = lazy(() => import("@/pages/trial-balance"));
+const TrialBalance6ColPage  = lazy(() => import("@/pages/trial-balance-6col"));
+const ExpenseReportPage     = lazy(() => import("@/pages/expense-report"));
+const IncomeReportPage      = lazy(() => import("@/pages/income-report"));
+const ReceiptPaymentPage    = lazy(() => import("@/pages/receipt-payment"));
+const RpSummaryPage         = lazy(() => import("@/pages/rp-summary"));
+const TransactionHistoryPage = lazy(() => import("@/pages/transaction-history"));
+const SaleReturnPage        = lazy(() => import("@/pages/sale-return"));
+const PurchaseReturnPage    = lazy(() => import("@/pages/purchase-return"));
+const ReturnsPage           = lazy(() => import("@/pages/returns"));
+const SalesAgentsPage       = lazy(() => import("@/pages/sales-agents"));
+const AgentNewPage          = lazy(() => import("@/pages/agent-new"));
+const AgentPerformancePage  = lazy(() => import("@/pages/agent-performance"));
+const AreasPage             = lazy(() => import("@/pages/areas"));
+const RawMaterialsPage      = lazy(() => import("@/pages/raw-materials"));
+const ManufacturingPage     = lazy(() => import("@/pages/manufacturing"));
+const ProductionGuidePage   = lazy(() => import("@/pages/production-guide"));
+const WebsiteCmsPage        = lazy(() => import("@/pages/website-cms"));
+const RepairPage            = lazy(() => import("@/pages/repair"));
+const RepairReportPage      = lazy(() => import("@/pages/repair-report"));
+const PaymentAccountsPage   = lazy(() => import("@/pages/payment-accounts"));
+const DatabaseViewerPage    = lazy(() => import("@/pages/database-viewer"));
 
 const queryClient = new QueryClient();
 
-// Error boundary — prevents any page crash from showing a blank screen
+function PageSkeleton() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+    </div>
+  );
+}
+
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -136,8 +149,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated]);
 
-  // Silently backfill any products that were saved without a SKU
-  // and post opening-balance JEs for customers that pre-date this feature
   useEffect(() => {
     if (isAuthenticated) {
       backfillMissingSKUs();
@@ -146,9 +157,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated]);
 
-  // Listen for server write failures and show a visible warning toast.
-  // This catches ALL fire-and-forget setStored / setGlobal failures that
-  // previously were silent — data appeared saved but was lost on page refresh.
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ key: string; message: string }>).detail;
@@ -177,92 +185,98 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/share/:id" component={ShareDocument} />
-      <Route path="/invoice-view/:id" component={ShareInvoicePage} />
+      <Route path="/share/:id">
+        <Suspense fallback={<PageSkeleton />}><ShareDocument /></Suspense>
+      </Route>
+      <Route path="/invoice-view/:id">
+        <Suspense fallback={<PageSkeleton />}><ShareInvoicePage /></Suspense>
+      </Route>
       <Route>
         <RequireAuth>
           <Layout>
             <PageErrorBoundary>
-            <Switch>
-              <Route path="/" component={HomeRoute} />
-              <Route path="/manager-dashboard" component={ManagerDashboard} />
-              <Route path="/leads-report" component={LeadsReportPage} />
-              <Route path="/leads" component={Leads} />
-              <Route path="/documents" component={Documents} />
-              <Route path="/documents/new" component={NewDocument} />
-              <Route path="/documents/edit/:id" component={NewDocument} />
-              <Route path="/documents/:id" component={DocumentDetail} />
-              <Route path="/customers/new" component={CustomerNewPage} />
-              <Route path="/suppliers/new" component={SupplierNewPage} />
-              <Route path="/customers/:id/edit" component={CustomerEditPage} />
-              <Route path="/customers" component={CustomersPage} />
-              <Route path="/products/new" component={ProductNewPage} />
-              <Route path="/products" component={ProductsPage} />
-              <Route path="/brands" component={BrandsPage} />
-              <Route path="/product-departments" component={ProductDepartmentsPage} />
-              <Route path="/categories" component={CategoriesPage} />
-              <Route path="/product-groups" component={ProductGroupsPage} />
-              <Route path="/attributes" component={AttributesPage} />
-              <Route path="/units" component={UnitsPage} />
-              <Route path="/shareholders" component={ShareholdersPage} />
-              <Route path="/investment-plans" component={InvestmentPlansPage} />
-              <Route path="/purchases" component={PurchasesRedirect} />
-              <Route path="/media" component={MediaLibraryPage} />
-              <Route path="/invoices/new" component={InvoiceFormPage} />
-              <Route path="/invoices/:id" component={InvoiceFormPage} />
-              <Route path="/invoices" component={InvoicesPage} />
-              <Route path="/calc-invoice" component={CalcInvoicePage} />
-              <Route path="/sales-agents/new" component={AgentNewPage} />
-              <Route path="/sales-agents" component={SalesAgentsPage} />
-              <Route path="/agent-performance" component={AgentPerformancePage} />
-              <Route path="/areas" component={AreasPage} />
-              <Route path="/raw-materials" component={RawMaterialsPage} />
-              <Route path="/manufacturing" component={ManufacturingPage} />
-              <Route path="/production-guide" component={ProductionGuidePage} />
-              <Route path="/sales/new" component={SalesPage} />
-              <Route path="/sales" component={SalesPage} />
-              <Route path="/stock-ledger" component={StockLedgerPage} />
-              <Route path="/staff/:id/edit" component={StaffEditPage} />
-              <Route path="/staff/new" component={StaffNewPage} />
-              <Route path="/staff" component={StaffPage} />
-              <Route path="/roles" component={HrmRolesPage} />
-              <Route path="/hrm-org" component={HrmOrgPage} />
-              <Route path="/salary" component={SalaryPage} />
-              <Route path="/salary-template" component={SalaryTemplatePage} />
-              <Route path="/salary-allowances" component={SalaryAllowancesPage} />
-              <Route path="/salary-deductions" component={SalaryDeductionsPage} />
-              <Route path="/advance-salary" component={AdvanceSalaryPage} />
-              <Route path="/my-application" component={MyApplicationPage} />
-              <Route path="/manage-application" component={ManageApplicationPage} />
-              <Route path="/attendance" component={AttendancePage} />
-              <Route path="/users" component={UsersPage} />
-              <Route path="/tenants" component={TenantsPage} />
-              <Route path="/module-groups" component={ModuleGroupsPage} />
-              <Route path="/database" component={DatabaseViewerPage} />
-              <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
-              <Route path="/journal-entry" component={JournalEntryPage} />
-              <Route path="/balance-sheet" component={BalanceSheetPage} />
-              <Route path="/ledger-report" component={LedgerReportPage} />
-              <Route path="/pls-report" component={PlsReportPage} />
-              <Route path="/trial-balance" component={TrialBalancePage} />
-              <Route path="/trial-balance-6col" component={TrialBalance6ColPage} />
-              <Route path="/income-report" component={IncomeReportPage} />
-              <Route path="/expense-report" component={ExpenseReportPage} />
-              <Route path="/receipt-payment" component={ReceiptPaymentPage} />
-              <Route path="/rp-summary" component={RpSummaryPage} />
-              <Route path="/transaction-history" component={TransactionHistoryPage} />
-              <Route path="/payment-accounts" component={PaymentAccountsPage} />
-              <Route path="/returns" component={ReturnsPage} />
-              <Route path="/sale-return" component={SaleReturnPage} />
-              <Route path="/purchase-return" component={PurchaseReturnPage} />
-              <Route path="/website-cms" component={WebsiteCmsPage} />
-              <Route path="/repair" component={RepairPage} />
-              <Route path="/repair-report" component={RepairReportPage} />
-              <Route path="/settings" component={SettingsPage} />
-              <Route path="/print-templates" component={PrintTemplatesPage} />
-              <Route path="/invoice-template" component={InvoiceTemplatePage} />
-              <Route component={NotFound} />
-            </Switch>
+              <Suspense fallback={<PageSkeleton />}>
+                <Switch>
+                  <Route path="/" component={HomeRoute} />
+                  <Route path="/manager-dashboard" component={ManagerDashboard} />
+                  <Route path="/leads-report"       component={LeadsReportPage} />
+                  <Route path="/leads"              component={Leads} />
+                  <Route path="/documents/new"      component={NewDocument} />
+                  <Route path="/documents/edit/:id" component={NewDocument} />
+                  <Route path="/documents/:id"      component={DocumentDetail} />
+                  <Route path="/documents"          component={Documents} />
+                  <Route path="/customers/new"      component={CustomerNewPage} />
+                  <Route path="/suppliers/new"      component={SupplierNewPage} />
+                  <Route path="/customers/:id/edit" component={CustomerEditPage} />
+                  <Route path="/customers"          component={CustomersPage} />
+                  <Route path="/products/new"       component={ProductNewPage} />
+                  <Route path="/products"           component={ProductsPage} />
+                  <Route path="/brands"             component={BrandsPage} />
+                  <Route path="/product-departments" component={ProductDepartmentsPage} />
+                  <Route path="/categories"         component={CategoriesPage} />
+                  <Route path="/product-groups"     component={ProductGroupsPage} />
+                  <Route path="/attributes"         component={AttributesPage} />
+                  <Route path="/units"              component={UnitsPage} />
+                  <Route path="/shareholders"       component={ShareholdersPage} />
+                  <Route path="/investment-plans"   component={InvestmentPlansPage} />
+                  <Route path="/purchases"          component={PurchasesRedirect} />
+                  <Route path="/media"              component={MediaLibraryPage} />
+                  <Route path="/invoices/new"       component={InvoiceFormPage} />
+                  <Route path="/invoices/:id"       component={InvoiceFormPage} />
+                  <Route path="/invoices"           component={InvoicesPage} />
+                  <Route path="/calc-invoice"       component={CalcInvoicePage} />
+                  <Route path="/sales-agents/new"   component={AgentNewPage} />
+                  <Route path="/sales-agents"       component={SalesAgentsPage} />
+                  <Route path="/agent-performance"  component={AgentPerformancePage} />
+                  <Route path="/areas"              component={AreasPage} />
+                  <Route path="/raw-materials"      component={RawMaterialsPage} />
+                  <Route path="/manufacturing"      component={ManufacturingPage} />
+                  <Route path="/production-guide"   component={ProductionGuidePage} />
+                  <Route path="/sales/new"          component={SalesPage} />
+                  <Route path="/sales"              component={SalesPage} />
+                  <Route path="/stock-ledger"       component={StockLedgerPage} />
+                  <Route path="/staff/:id/edit"     component={StaffEditPage} />
+                  <Route path="/staff/new"          component={StaffNewPage} />
+                  <Route path="/staff"              component={StaffPage} />
+                  <Route path="/roles"              component={HrmRolesPage} />
+                  <Route path="/hrm-org"            component={HrmOrgPage} />
+                  <Route path="/salary"             component={SalaryPage} />
+                  <Route path="/salary-template"    component={SalaryTemplatePage} />
+                  <Route path="/salary-allowances"  component={SalaryAllowancesPage} />
+                  <Route path="/salary-deductions"  component={SalaryDeductionsPage} />
+                  <Route path="/advance-salary"     component={AdvanceSalaryPage} />
+                  <Route path="/my-application"     component={MyApplicationPage} />
+                  <Route path="/manage-application" component={ManageApplicationPage} />
+                  <Route path="/attendance"         component={AttendancePage} />
+                  <Route path="/users"              component={UsersPage} />
+                  <Route path="/tenants"            component={TenantsPage} />
+                  <Route path="/module-groups"      component={ModuleGroupsPage} />
+                  <Route path="/database"           component={DatabaseViewerPage} />
+                  <Route path="/chart-of-accounts"  component={ChartOfAccountsPage} />
+                  <Route path="/journal-entry"      component={JournalEntryPage} />
+                  <Route path="/balance-sheet"      component={BalanceSheetPage} />
+                  <Route path="/ledger-report"      component={LedgerReportPage} />
+                  <Route path="/pls-report"         component={PlsReportPage} />
+                  <Route path="/trial-balance"      component={TrialBalancePage} />
+                  <Route path="/trial-balance-6col" component={TrialBalance6ColPage} />
+                  <Route path="/income-report"      component={IncomeReportPage} />
+                  <Route path="/expense-report"     component={ExpenseReportPage} />
+                  <Route path="/receipt-payment"    component={ReceiptPaymentPage} />
+                  <Route path="/rp-summary"         component={RpSummaryPage} />
+                  <Route path="/transaction-history" component={TransactionHistoryPage} />
+                  <Route path="/payment-accounts"   component={PaymentAccountsPage} />
+                  <Route path="/returns"            component={ReturnsPage} />
+                  <Route path="/sale-return"        component={SaleReturnPage} />
+                  <Route path="/purchase-return"    component={PurchaseReturnPage} />
+                  <Route path="/website-cms"        component={WebsiteCmsPage} />
+                  <Route path="/repair"             component={RepairPage} />
+                  <Route path="/repair-report"      component={RepairReportPage} />
+                  <Route path="/settings"           component={SettingsPage} />
+                  <Route path="/print-templates"    component={PrintTemplatesPage} />
+                  <Route path="/invoice-template"   component={InvoiceTemplatePage} />
+                  <Route component={NotFound} />
+                </Switch>
+              </Suspense>
             </PageErrorBoundary>
           </Layout>
         </RequireAuth>

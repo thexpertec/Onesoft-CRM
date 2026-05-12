@@ -57,13 +57,38 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: "es2020",
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libraries into separate async chunks so the
+        // initial bundle stays small. Each chunk is only fetched when a
+        // feature that needs it is first visited.
+        manualChunks(id: string) {
+          if (id.includes("@react-pdf/renderer"))                      return "vendor-pdf";
+          if (id.includes("/xlsx/"))                                   return "vendor-excel";
+          if (id.includes("/recharts/") || id.includes("/d3-"))        return "vendor-charts";
+          if (id.includes("@tiptap"))                                  return "vendor-editor";
+          if (id.includes("/html5-qrcode/") || id.includes("/jsbarcode/")) return "vendor-scan";
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/")
+          ) return "vendor-react";
+          if (
+            id.includes("@radix-ui") ||
+            id.includes("/lucide-react/") ||
+            id.includes("/framer-motion/")
+          ) return "vendor-ui";
+        },
+      },
+    },
   },
   server: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
     headers: {
-      "X-Robots-Tag": "noindex, nofollow",
+      "X-Robots-Tag": "index, follow",
     },
     proxy: {
       "/api": {
@@ -81,7 +106,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     headers: {
-      "X-Robots-Tag": "noindex, nofollow",
+      "X-Robots-Tag": "index, follow",
     },
   },
 });

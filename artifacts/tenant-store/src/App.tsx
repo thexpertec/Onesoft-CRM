@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,17 +8,27 @@ import { CartProvider } from "@/lib/cart";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
-import { HomePage } from "@/pages/home";
-import { ShopPage } from "@/pages/shop";
-import { ProductDetailPage } from "@/pages/product-detail";
-import { CategoryPage } from "@/pages/category";
-import { CheckoutPage } from "@/pages/checkout";
-import { ServicesPage } from "@/pages/services";
-import { AboutPage } from "@/pages/about";
-import { ContactPage } from "@/pages/contact";
 import NotFound from "@/pages/not-found";
 
+// Lazy-loaded page components — fetched on-demand as the user navigates
+const HomePage         = lazy(() => import("@/pages/home").then(m => ({ default: m.HomePage })));
+const ShopPage         = lazy(() => import("@/pages/shop").then(m => ({ default: m.ShopPage })));
+const ProductDetailPage = lazy(() => import("@/pages/product-detail").then(m => ({ default: m.ProductDetailPage })));
+const CategoryPage     = lazy(() => import("@/pages/category").then(m => ({ default: m.CategoryPage })));
+const CheckoutPage     = lazy(() => import("@/pages/checkout").then(m => ({ default: m.CheckoutPage })));
+const ServicesPage     = lazy(() => import("@/pages/services").then(m => ({ default: m.ServicesPage })));
+const AboutPage        = lazy(() => import("@/pages/about").then(m => ({ default: m.AboutPage })));
+const ContactPage      = lazy(() => import("@/pages/contact").then(m => ({ default: m.ContactPage })));
+
 const queryClient = new QueryClient();
+
+function PageSkeleton() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 // ── Inner router (all routes relative to /{tenantId}) ──────────────────────────
 function StoreRouter() {
@@ -25,18 +36,20 @@ function StoreRouter() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950">
       <Header />
       <main className="flex-1">
-        <Switch>
-          <Route path="/"        component={HomePage} />
-          <Route path="/home"    component={HomePage} />
-          <Route path="/shop"    component={ShopPage} />
-          <Route path="/product/:id" component={ProductDetailPage} />
-          <Route path="/category/:slug" component={CategoryPage} />
-          <Route path="/checkout"  component={CheckoutPage} />
-          <Route path="/services"  component={ServicesPage} />
-          <Route path="/about"     component={AboutPage} />
-          <Route path="/contact"   component={ContactPage} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<PageSkeleton />}>
+          <Switch>
+            <Route path="/"               component={HomePage} />
+            <Route path="/home"           component={HomePage} />
+            <Route path="/shop"           component={ShopPage} />
+            <Route path="/product/:id"    component={ProductDetailPage} />
+            <Route path="/category/:slug" component={CategoryPage} />
+            <Route path="/checkout"       component={CheckoutPage} />
+            <Route path="/services"       component={ServicesPage} />
+            <Route path="/about"          component={AboutPage} />
+            <Route path="/contact"        component={ContactPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </main>
       <Footer />
       <CartDrawer />

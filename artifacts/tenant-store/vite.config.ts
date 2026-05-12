@@ -57,6 +57,23 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: "es2020",
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/")
+          ) return "vendor-react";
+          if (
+            id.includes("@radix-ui") ||
+            id.includes("/lucide-react/") ||
+            id.includes("/framer-motion/")
+          ) return "vendor-ui";
+        },
+      },
+    },
   },
   server: {
     port,
