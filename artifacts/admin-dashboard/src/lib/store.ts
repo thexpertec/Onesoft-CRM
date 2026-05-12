@@ -83,9 +83,10 @@ let _activeTenantId: string | null = null;
  * was loaded from the global namespace (or from a previously-active tenant).
  */
 const PLATFORM_GLOBAL_KEYS: ReadonlySet<string> = new Set([
-  "admin-tenants",        // TENANTS_KEY  — cross-tenant tenant registry
-  "admin-users",          // USERS_KEY    — superadmin / platform users
-  "admin-module-groups",  // MODULE_GROUPS_KEY — platform RBAC config
+  "admin-tenants",           // TENANTS_KEY  — cross-tenant tenant registry
+  "admin-users",             // USERS_KEY    — superadmin / platform users
+  "admin-module-groups",     // MODULE_GROUPS_KEY — platform RBAC config
+  "admin-tenant-activity",   // TENANT_ACTIVITY_KEY — platform-level create/delete log
 ]);
 
 /** True when `key` belongs in the global namespace under any session. */
@@ -1471,6 +1472,52 @@ export type Tenant = {
 };
 
 const TENANTS_KEY = "admin-tenants";
+const TENANT_ACTIVITY_KEY = "admin-tenant-activity";
+const MAX_TENANT_ACTIVITY = 500;
+
+// ─── Tenant Activity Log ───────────────────────────────────────────────────────
+export type TenantActivityEntry = {
+  id:         string;
+  action:     "created" | "deleted";
+  tenantId:   string;
+  tenantName: string;
+  tenantSlug: string;
+  plan:       string;
+  status:     string;
+  actor:      string;
+  timestamp:  string;
+};
+
+/** Append one event to the platform-level tenant activity log (persisted to DB). */
+async function _appendTenantActivity(entry: Omit<TenantActivityEntry, "id" | "timestamp">): Promise<void> {
+  try {
+    const fresh = await kvGet("global", TENANT_ACTIVITY_KEY);
+    const existing: TenantActivityEntry[] = Array.isArray(fresh) ? (fresh as TenantActivityEntry[]) : [];
+    const newEntry: TenantActivityEntry = {
+      ...entry,
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+    };
+    const updated = [newEntry, ...existing].slice(0, MAX_TENANT_ACTIVITY);
+    _lsCache(TENANT_ACTIVITY_KEY, updated);
+    // Fire-and-forget — activity log failure must never block the main action.
+    kvPut("global", TENANT_ACTIVITY_KEY, updated).catch(e =>
+      console.warn("[tenant-activity] persist failed:", e)
+    );
+  } catch (e) {
+    console.warn("[tenant-activity] append failed:", e);
+  }
+}
+
+/** Read the tenant activity log from the in-memory cache (populated on sync). */
+export function getTenantActivities(): TenantActivityEntry[] {
+  try {
+    const raw = _lsGet(TENANT_ACTIVITY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as TenantActivityEntry[]) : [];
+  } catch { return []; }
+}
 
 export const tenantToAdminUser = (t: Tenant): AdminUser => ({
   id:        `tenant:${t.id}`,
@@ -1526,6 +1573,11 @@ export const createTenantAsync = async (
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   await setGlobalAsync(TENANTS_KEY, [...existing, tenant]);
   try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
+  _appendTenantActivity({
+    action: "created", tenantId: tenant.id, tenantName: tenant.name,
+    tenantSlug: tenant.slug, plan: tenant.plan, status: tenant.status,
+    actor: _activityUser,
+  });
   return tenant;
 };
 
@@ -1567,11 +1619,22 @@ export const deleteTenantAsync = async (id: string): Promise<void> => {
     throw new Error("Could not reach the server to read the current tenant list. Please check your connection and try again.");
   }
   const current: Tenant[] = Array.isArray(fresh) ? (fresh as Tenant[]) : [];
+  // Capture tenant details BEFORE filtering so we can log them.
+  const deletedTenant = current.find(t => t.id === id);
   // setGlobalAsync throws (and rolls back memory) if the server write fails,
   // so handleDelete's catch will surface a proper "Delete failed" toast.
   const filtered = current.filter(t => t.id !== id);
   if (filtered.length === current.length) throw new Error("Tenant not found in registry");
   await setGlobalAsync(TENANTS_KEY, filtered);
+
+  // Log the delete event (fire-and-forget — never blocks the main flow).
+  if (deletedTenant) {
+    _appendTenantActivity({
+      action: "deleted", tenantId: deletedTenant.id, tenantName: deletedTenant.name,
+      tenantSlug: deletedTenant.slug, plan: deletedTenant.plan, status: deletedTenant.status,
+      actor: _activityUser,
+    });
+  }
 
   // Step 2: evict in-memory cache entries immediately so the rest of this
   // tab session never sees stale data for the deleted tenant.

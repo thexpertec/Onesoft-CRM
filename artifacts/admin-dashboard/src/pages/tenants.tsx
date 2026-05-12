@@ -3,6 +3,7 @@ import {
   Building2, Plus, Pencil, Trash2, LogIn, Users, ShoppingCart,
   Package, BarChart3, AlertTriangle, Check, X, Eye, EyeOff,
   Crown, Zap, Rocket, Shield, Search, Layers, FlaskConical, RefreshCw,
+  History, PlusCircle, MinusCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   seedDemoTenant, clearDemoTenant, isDemoSeeded, DEMO_TENANT_ID,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/demo-seed";
 import {
   Tenant, TenantStatus, TenantPlan,
-  getTenants,
+  getTenants, getTenantActivities, TenantActivityEntry,
   createTenantAsync, updateTenantAsync, deleteTenantAsync,
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
@@ -418,10 +419,13 @@ export default function TenantsPage() {
   const [demoLoading,   setDemoLoading]   = useState(false);
   const [seedingId,     setSeedingId]     = useState<string | null>(null);
   const [isRefreshing,  setIsRefreshing]  = useState(false);
+  const [activities,    setActivities]    = useState<TenantActivityEntry[]>(() => getTenantActivities());
+  const [activityOpen,  setActivityOpen]  = useState(true);
 
   const reload = () => {
     setTenants(getTenants());
     setDemoSeeded(isDemoSeeded());
+    setActivities(getTenantActivities());
   };
 
   // After every server sync completes, re-read the latest tenant list
@@ -918,6 +922,124 @@ export default function TenantsPage() {
           })}
         </div>
       )}
+
+      {/* ── Activity Report ─────────────────────────────────────────────────── */}
+      <div className="border border-gray-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setActivityOpen(o => !o)}
+          className="w-full flex items-center justify-between px-5 py-3.5 bg-gray-50 dark:bg-zinc-900/60 hover:bg-gray-100 dark:hover:bg-zinc-800/60 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <History size={15} className="text-blue-500" />
+            <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">
+              Tenant Activity Report
+            </span>
+            <span className="text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold px-2 py-0.5 rounded-full">
+              {activities.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-muted-foreground hidden sm:block">
+              {activities.length > 0
+                ? `Last event: ${new Date(activities[0].timestamp).toLocaleString()}`
+                : "No events recorded yet"}
+            </span>
+            {activityOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+          </div>
+        </button>
+
+        {activityOpen && (
+          <div className="divide-y divide-gray-100 dark:divide-zinc-800/60">
+            {activities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
+                <History size={32} strokeWidth={0.8} className="text-gray-300 dark:text-zinc-600" />
+                <p className="text-[13px]">No activity recorded yet.</p>
+                <p className="text-[11px] text-gray-400">Create or delete a tenant to start the log.</p>
+              </div>
+            ) : (
+              <>
+                {/* Header row */}
+                <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr] gap-x-4 px-5 py-2 bg-gray-50/80 dark:bg-zinc-900/40 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                  <div className="w-20">Action</div>
+                  <div>Tenant</div>
+                  <div>Slug</div>
+                  <div>Plan</div>
+                  <div>Status</div>
+                  <div>Timestamp</div>
+                </div>
+
+                {activities.map((ev) => {
+                  const isCreated = ev.action === "created";
+                  return (
+                    <div
+                      key={ev.id}
+                      className={`grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr] gap-x-4 items-center px-5 py-3 text-[12px] transition-colors hover:bg-gray-50/60 dark:hover:bg-zinc-800/30 ${
+                        isCreated
+                          ? "border-l-2 border-emerald-400"
+                          : "border-l-2 border-red-400"
+                      }`}
+                    >
+                      {/* Action badge */}
+                      <div className="w-20">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                          isCreated
+                            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
+                            : "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
+                        }`}>
+                          {isCreated
+                            ? <PlusCircle size={10} />
+                            : <MinusCircle size={10} />}
+                          {isCreated ? "Created" : "Deleted"}
+                        </span>
+                      </div>
+
+                      {/* Tenant name + actor */}
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200 leading-tight">{ev.tenantName}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">by {ev.actor}</p>
+                      </div>
+
+                      {/* Slug */}
+                      <div className="font-mono text-[11px] text-gray-500 dark:text-zinc-400 truncate">
+                        {ev.tenantSlug}
+                      </div>
+
+                      {/* Plan */}
+                      <div>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          ev.plan === "enterprise"   ? "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300" :
+                          ev.plan === "professional" ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" :
+                                                       "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                        }`}>
+                          {ev.plan === "enterprise" ? <Crown size={9} /> : ev.plan === "professional" ? <Rocket size={9} /> : <Zap size={9} />}
+                          {ev.plan.charAt(0).toUpperCase() + ev.plan.slice(1)}
+                        </span>
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          ev.status === "active"    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" :
+                          ev.status === "suspended" ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800" :
+                                                      "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                        }`}>
+                          {ev.status.charAt(0).toUpperCase() + ev.status.slice(1)}
+                        </span>
+                      </div>
+
+                      {/* Timestamp */}
+                      <div className="text-gray-500 dark:text-zinc-400 text-[11px]">
+                        <p>{new Date(ev.timestamp).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-muted-foreground">{new Date(ev.timestamp).toLocaleTimeString()}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
       <TenantModal
