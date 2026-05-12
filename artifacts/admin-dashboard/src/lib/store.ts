@@ -1603,6 +1603,7 @@ export const createTenantAsync = (
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   await setGlobalAsync(TENANTS_KEY, [...existing, tenant]);
   try { seedTenantCOA(tenant.id); } catch (e) { console.warn("[COA seed] failed:", e); }
+  try { seedDirectorForTenant(tenant.id); } catch (e) { console.warn("[Director seed] failed:", e); }
   _appendTenantActivity({
     action: "created", tenantId: tenant.id, tenantName: tenant.name,
     tenantSlug: tenant.slug, plan: tenant.plan, status: tenant.status,
@@ -6567,6 +6568,55 @@ export function seedTenantCOA(tenantId: string): void {
 
   _lsSet(tenantCoaKey, tenantAccounts);
   _apiWrite(tenantCoaKey, tenantAccounts).catch(() => { /* handled via onesoft:write-error event */ });
+}
+
+/**
+ * Seeds a default "Director" staff account into a tenant namespace.
+ * No-ops if the tenant already has at least one staff member.
+ * Returns the credentials that were created, or null if skipped.
+ */
+export function seedDirectorForTenant(tenantId: string): { username: string; password: string } | null {
+  const prev = _activeTenantId;
+  _activeTenantId = tenantId;
+  try {
+    // Skip if staff already exist
+    const existing = getStaff();
+    if (existing.length > 0) return null;
+
+    // Ensure a "Director" role with full access exists
+    let roles = getStaffRoles();
+    let directorRole = roles.find(r => r.name.toLowerCase() === "director");
+    if (!directorRole) {
+      directorRole = createStaffRole({
+        name: "Director",
+        description: "Directors and senior management with full access",
+        permissions: "all",
+        color: "#6366f1",
+      });
+    }
+
+    // Create the Director staff member
+    const username = "director";
+    const password = "Director@123";
+    createStaff({
+      name: "Director",
+      department: "Management",
+      designation: "Director",
+      role: directorRole.name,
+      status: "Active",
+      email: "",
+      phone: "",
+      joinDate: new Date().toISOString().slice(0, 10),
+      notes: "Default director account — created automatically on tenant setup.",
+      username,
+      password,
+      loginEnabled: true,
+    });
+
+    return { username, password };
+  } finally {
+    _activeTenantId = prev;
+  }
 }
 
 /**

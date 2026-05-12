@@ -19,6 +19,7 @@ import {
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
   syncAllFromServer,
+  seedDirectorForTenant,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -711,6 +712,45 @@ export default function TenantsPage() {
     }
   }
 
+  function handleSeedDirector(tenant: Tenant) {
+    try {
+      const result = seedDirectorForTenant(tenant.id);
+      if (result) {
+        setStatsCache(s => ({ ...s, [tenant.id]: undefined as unknown as Record<string, number> }));
+        toast({
+          title: `Director created for "${tenant.name}"`,
+          description: `Login: ${result.username}  ·  Password: ${result.password}`,
+        });
+      } else {
+        toast({
+          title: `Staff already exist in "${tenant.name}"`,
+          description: "Director seed skipped — this tenant already has staff members.",
+        });
+      }
+    } catch (e) {
+      toast({ title: "Director seed failed", description: String(e), variant: "destructive" });
+    }
+  }
+
+  // Auto-seed a Director for every tenant that has zero staff on page load
+  useEffect(() => {
+    if (!isSuperAdmin || tenants.length === 0) return;
+    let seeded = 0;
+    for (const t of tenants) {
+      try {
+        const result = seedDirectorForTenant(t.id);
+        if (result) seeded++;
+      } catch { /* best-effort */ }
+    }
+    if (seeded > 0) {
+      toast({
+        title: `Director accounts seeded`,
+        description: `Created a Director (director / Director@123) for ${seeded} tenant${seeded !== 1 ? "s" : ""} that had no staff.`,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenants.length]);
+
   function handleExitSwitch() {
     switchTenant(null);
     toast({ title: "Returned to platform view" });
@@ -1010,6 +1050,20 @@ export default function TenantsPage() {
                       onClick={() => handleSeedCOA(t)}
                     >
                       <BarChart3 size={11} /> Seed / Rebuild COA
+                    </Button>
+                  </div>
+                )}
+
+                {/* Director seed row — repair for tenants with no staff */}
+                {!isActive && (
+                  <div className="pt-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-7 gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 border border-dashed border-indigo-200 dark:border-indigo-800"
+                      onClick={() => handleSeedDirector(t)}
+                    >
+                      <Crown size={11} /> Seed Director Account
                     </Button>
                   </div>
                 )}
