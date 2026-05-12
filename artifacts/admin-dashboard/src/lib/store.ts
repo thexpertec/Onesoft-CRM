@@ -1724,6 +1724,118 @@ export async function cleanTenantTransactions(tenantId: string): Promise<void> {
   }
 }
 
+/**
+ * Checks whether a tenant has any transactional records that would block
+ * master-data removal. Reads each transaction key from the server so the
+ * result is always authoritative — never reliant on a stale in-memory cache.
+ *
+ * Returns an array of { label, count } entries for every non-empty category.
+ * An empty array means it is safe to remove master data.
+ */
+export async function checkTenantTransactionBlocks(
+  tenantId: string
+): Promise<{ label: string; count: number }[]> {
+  const ns = `t:${tenantId}`;
+  const CHECKS = [
+    { key: "admin-sales",               label: "Sales"                },
+    { key: "admin-invoices",            label: "Invoices"             },
+    { key: "admin-purchase-orders",     label: "Purchase Orders"      },
+    { key: "admin-sale-returns",        label: "Sale Returns"         },
+    { key: "admin-purchase-returns",    label: "Purchase Returns"     },
+    { key: "admin-manufacturing-orders",label: "Manufacturing Orders" },
+    { key: "admin-journal-entries",     label: "Journal Entries"      },
+    { key: "admin-rp-vouchers",         label: "Receipt/Payment Vouchers" },
+  ];
+
+  const results = await Promise.all(
+    CHECKS.map(async ({ key, label }) => {
+      const data = await kvGet(ns, key).catch(() => null);
+      const count = Array.isArray(data) ? (data as unknown[]).length : 0;
+      return { label, count };
+    })
+  );
+  return results.filter(r => r.count > 0);
+}
+
+/**
+ * Removes all master / reference data for a tenant.
+ *
+ * BLOCKED if any transactional records exist (sales, invoices, POs, etc.).
+ * The caller must run `cleanTenantTransactions` first.
+ *
+ * Cleared:  customers, products, brands, categories, product groups,
+ *           product departments, attributes, units, sales agents,
+ *           payment accounts, chart of accounts, raw materials,
+ *           manufacturing recipes, shareholders, investment plans,
+ *           cities, areas, media library, leads, requirement docs,
+ *           team members, and all HRM records.
+ *
+ * Kept:     company settings, tenant registry entry.
+ */
+export async function cleanTenantMasterData(tenantId: string): Promise<void> {
+  // Guard: block if any transactions exist.
+  const blocks = await checkTenantTransactionBlocks(tenantId);
+  if (blocks.length > 0) {
+    const details = blocks.map(b => `${b.label} (${b.count})`).join(", ");
+    throw new Error(
+      `Cannot remove master data while transactions exist: ${details}.\n` +
+      `Please run "Clean Transactions" first.`
+    );
+  }
+
+  const MASTER_KEYS = [
+    "admin-customers",
+    "admin-products",
+    "admin-brands",
+    "admin-product-categories",
+    "admin-product-groups",
+    "admin-product-departments",
+    "admin-attributes",
+    "admin-units",
+    "admin-sales-agents",
+    "admin-payment-accounts",
+    "admin-chart-of-accounts",
+    "admin-raw-materials",
+    "admin-manufacturing-recipes",
+    "admin-shareholders",
+    "admin-investment-plans",
+    "admin-cities",
+    "admin-areas",
+    "admin-media-library",
+    "admin-leads",
+    "admin-req-docs",
+    "admin-team-members",
+    "admin-hrm-staff",
+    "admin-hrm-roles",
+    "admin-hrm-departments",
+    "admin-hrm-designations",
+    "admin-hrm-jobs",
+    "admin-hrm-applicants",
+    "admin-hrm-interviews",
+    "admin-hrm-salary-slips",
+    "admin-hrm-attendance",
+    "admin-hrm-salary-templates",
+    "admin-hrm-salary-allowance-cats",
+    "admin-hrm-salary-deduction-cats",
+    "admin-hrm-advance-salary",
+  ];
+
+  const ns = `t:${tenantId}`;
+
+  await Promise.all(
+    MASTER_KEYS.map(key =>
+      kvDelete(ns, key).catch(err =>
+        console.warn(`[cleanMaster] delete ${ns}/${key} failed:`, err)
+      )
+    )
+  );
+
+  // Evict from in-memory cache immediately
+  for (const key of MASTER_KEYS) {
+    _memRaw.delete(`${ns}:${key}`);
+  }
+}
+
 /** Returns estimated record counts for a tenant (reads all namespaced keys). */
 export const getTenantStats = (tenantId: string): Record<string, number> => {
   const keys: string[] = [

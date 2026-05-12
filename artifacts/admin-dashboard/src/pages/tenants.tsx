@@ -13,7 +13,7 @@ import {
   Tenant, TenantStatus, TenantPlan,
   getTenants, getTenantActivities, TenantActivityEntry,
   createTenantAsync, updateTenantAsync, deleteTenantAsync,
-  cleanTenantTransactions,
+  cleanTenantTransactions, cleanTenantMasterData, checkTenantTransactionBlocks,
   getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
@@ -425,6 +425,9 @@ export default function TenantsPage() {
   const [activityOpen,  setActivityOpen]  = useState(true);
   const [cleanId,       setCleanId]       = useState<string | null>(null);
   const [isCleaning,    setIsCleaning]    = useState(false);
+  const [masterCleanId,     setMasterCleanId]     = useState<string | null>(null);
+  const [isMasterCleaning,  setIsMasterCleaning]  = useState(false);
+  const [masterBlockInfo,   setMasterBlockInfo]   = useState<{ label: string; count: number }[] | null>(null);
   const [pwGateOpen,    setPwGateOpen]    = useState(false);
   const [pwGateLabel,   setPwGateLabel]   = useState("");
   const [pwGateAction,  setPwGateAction]  = useState<(() => void) | null>(null);
@@ -546,6 +549,33 @@ export default function TenantsPage() {
     setPwGateLabel(label);
     setPwGateAction(() => action);
     setPwGateOpen(true);
+  }
+
+  async function handleCleanMasterData(tenantId: string) {
+    setIsMasterCleaning(true);
+    try {
+      await cleanTenantMasterData(tenantId);
+      const t = tenants.find(x => x.id === tenantId);
+      toast({
+        title: "Master data removed",
+        description: `All reference data cleared from "${t?.name ?? tenantId}". Transactions were already empty.`,
+      });
+    } catch (e) {
+      const msg = String(e);
+      // Parse which modules are blocking and surface a structured error dialog
+      if (msg.includes("transactions exist:")) {
+        // Extract { label, count } blocks from the error for display
+        setMasterCleanId(null);
+        checkTenantTransactionBlocks(tenantId)
+          .then(blocks => setMasterBlockInfo(blocks))
+          .catch(() => setMasterBlockInfo([]));
+      } else {
+        toast({ title: "Remove master data failed", description: msg, variant: "destructive" });
+      }
+    } finally {
+      setIsMasterCleaning(false);
+      setMasterCleanId(null);
+    }
   }
 
   async function handleCleanTransactions(tenantId: string) {
@@ -913,6 +943,18 @@ export default function TenantsPage() {
                   </Button>
                 </div>
 
+                {/* Remove master data row */}
+                <div className="pt-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full h-7 gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border border-dashed border-rose-200 dark:border-rose-800"
+                    onClick={() => requirePassword(`remove all master data from "${t.name}"`, () => setMasterCleanId(t.id))}
+                  >
+                    <Trash2 size={11} /> Remove Master Data
+                  </Button>
+                </div>
+
                 {/* COA seed row — always visible for non-active-context tenants */}
                 {!isActive && (
                   <div className="pt-1.5">
@@ -1126,6 +1168,87 @@ export default function TenantsPage() {
         actionLabel={pwGateLabel}
         onConfirm={() => pwGateAction && pwGateAction()}
       />
+
+      {/* ── Remove master data confirmation ─────────────────────────────────── */}
+      <AlertDialog open={!!masterCleanId} onOpenChange={() => setMasterCleanId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 size={16} className="text-rose-500" /> Remove Master Data?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This will permanently erase all reference / master data for{" "}
+                  <strong className="text-foreground">
+                    "{tenants.find(t => t.id === masterCleanId)?.name}"
+                  </strong>:
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-[12px]">
+                  <li>Customers &amp; suppliers</li>
+                  <li>Products, brands, categories, groups, departments</li>
+                  <li>Units, attributes</li>
+                  <li>Sales agents &amp; team members</li>
+                  <li>Payment accounts &amp; chart of accounts</li>
+                  <li>Raw materials &amp; manufacturing recipes</li>
+                  <li>Shareholders &amp; investment plans</li>
+                  <li>Cities, areas, media library, leads</li>
+                  <li>All HRM records (staff, roles, payroll, attendance…)</li>
+                </ul>
+                <p className="font-medium text-rose-600 dark:text-rose-400">
+                  Company settings are kept. This is irreversible and will fail
+                  if any transactions still exist — clean those first.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMasterCleaning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isMasterCleaning}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={() => masterCleanId && handleCleanMasterData(masterCleanId)}
+            >
+              {isMasterCleaning ? "Removing…" : "Yes, Remove Master Data"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Master data blocked by transactions — error dialog ───────────────── */}
+      <AlertDialog open={!!masterBlockInfo} onOpenChange={() => setMasterBlockInfo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-amber-500" /> Cannot Remove Master Data
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  The following modules still have transactional records linked to this
+                  tenant's master data. Remove them first using{" "}
+                  <strong className="text-foreground">Clean Transactions</strong>.
+                </p>
+                {masterBlockInfo && masterBlockInfo.length > 0 && (
+                  <ul className="space-y-1">
+                    {masterBlockInfo.map(b => (
+                      <li key={b.label} className="flex items-center justify-between text-[12px] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-1.5">
+                        <span className="font-medium text-amber-800 dark:text-amber-300">{b.label}</span>
+                        <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">{b.count} record{b.count !== 1 ? "s" : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => setMasterBlockInfo(null)}>
+              Understood
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Clean transactions confirmation ──────────────────────────────────── */}
       <AlertDialog open={!!cleanId} onOpenChange={() => setCleanId(null)}>
