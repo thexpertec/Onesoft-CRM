@@ -35,6 +35,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocation } from "wouter";
+import { ConfirmPasswordDialog } from "@/components/confirm-password-dialog";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PLAN_META: Record<TenantPlan, { label: string; color: string; icon: React.ElementType }> = {
@@ -406,7 +407,7 @@ function TenantModal({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TenantsPage() {
-  const { switchTenant, currentTenantId, isSuperAdmin, isSyncing } = useAuth();
+  const { switchTenant, currentTenantId, isSuperAdmin, isSyncing, currentUser } = useAuth();
   const { toast }   = useToast();
   const [, navigate] = useLocation();
 
@@ -424,6 +425,9 @@ export default function TenantsPage() {
   const [activityOpen,  setActivityOpen]  = useState(true);
   const [cleanId,       setCleanId]       = useState<string | null>(null);
   const [isCleaning,    setIsCleaning]    = useState(false);
+  const [pwGateOpen,    setPwGateOpen]    = useState(false);
+  const [pwGateLabel,   setPwGateLabel]   = useState("");
+  const [pwGateAction,  setPwGateAction]  = useState<(() => void) | null>(null);
 
   const reload = () => {
     setTenants(getTenants());
@@ -536,6 +540,12 @@ export default function TenantsPage() {
     if (currentTenantId === tenant.id) switchTenant(null);
     reload();
     toast({ title: `Demo data cleared from "${tenant.name}"`, variant: "destructive" });
+  }
+
+  function requirePassword(label: string, action: () => void) {
+    setPwGateLabel(label);
+    setPwGateAction(() => action);
+    setPwGateOpen(true);
   }
 
   async function handleCleanTransactions(tenantId: string) {
@@ -872,7 +882,10 @@ export default function TenantsPage() {
                         ? "bg-amber-500 hover:bg-amber-600 text-white"
                         : "bg-blue-600 hover:bg-blue-700 text-white"
                     }`}
-                    onClick={() => isActive ? handleExitSwitch() : handleSwitch(t)}
+                    onClick={() => isActive
+                      ? handleExitSwitch()
+                      : requirePassword(`switch to "${t.name}"`, () => handleSwitch(t))
+                    }
                     disabled={t.status === "suspended"}
                   >
                     <LogIn size={12} />
@@ -894,7 +907,7 @@ export default function TenantsPage() {
                     size="sm"
                     variant="ghost"
                     className="w-full h-7 gap-1.5 text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800"
-                    onClick={() => setCleanId(t.id)}
+                    onClick={() => requirePassword(`clean all transactions for "${t.name}"`, () => setCleanId(t.id))}
                   >
                     <Eraser size={11} /> Clean Transactions
                   </Button>
@@ -939,7 +952,7 @@ export default function TenantsPage() {
                         variant="ghost"
                         disabled={isSeeding}
                         className="w-full h-7 gap-1.5 text-[11px] text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-800"
-                        onClick={() => handleLoadDemoInto(t)}
+                        onClick={() => requirePassword(`load demo data into "${t.name}"`, () => handleLoadDemoInto(t))}
                       >
                         {isSeeding
                           ? <><RefreshCw size={10} className="animate-spin" /> Loading…</>
@@ -1104,6 +1117,15 @@ export default function TenantsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Admin password gate ─────────────────────────────────────────────── */}
+      <ConfirmPasswordDialog
+        open={pwGateOpen}
+        onOpenChange={open => { setPwGateOpen(open); if (!open) setPwGateAction(null); }}
+        currentUser={currentUser}
+        actionLabel={pwGateLabel}
+        onConfirm={() => pwGateAction && pwGateAction()}
+      />
 
       {/* ── Clean transactions confirmation ──────────────────────────────────── */}
       <AlertDialog open={!!cleanId} onOpenChange={() => setCleanId(null)}>
