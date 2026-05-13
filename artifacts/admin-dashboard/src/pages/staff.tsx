@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Staff, StaffStatus, getDepartments, getDesignations } from "@/lib/store";
+import { Staff, StaffStatus, getDepartments, getDesignations, getSalarySlips } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,8 @@ export default function StaffPage() {
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
   const [newRow,       setNewRow]       = useState<Record<EditableField, string> | null>(null);
   const [newRowActive, setNewRowActive] = useState<number | null>(null);
-  const [deleteId,     setDeleteId]     = useState<string | null>(null);
+  const [deleteId,         setDeleteId]         = useState<string | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [loginTarget,  setLoginTarget]  = useState<Staff | null>(null);
   const [loginForm,    setLoginForm]    = useState({ enabled: false, username: "", password: "" });
   const [showLoginPwd, setShowLoginPwd] = useState(false);
@@ -158,14 +159,35 @@ export default function StaffPage() {
   const handleDelete = () => {
     if (!deleteId) return;
     const s = staff.find(m => m.id === deleteId);
-    if (s && isDefaultDirector(s)) {
+    if (!s) { setDeleteId(null); return; }
+
+    if (isDefaultDirector(s)) {
       toast({ title: "Cannot delete default user", description: "The Director account is a system default and cannot be removed.", variant: "destructive" });
-      setDeleteId(null);
+      setDeleteId(null); setDeleteConfirmName("");
       return;
     }
+
+    // Block deletion if this staff member has any salary slips (any status)
+    const hasSlips = getSalarySlips().some(sl => sl.staffId === s.id);
+    if (hasSlips) {
+      toast({
+        title: "Cannot delete staff member",
+        description: `"${s.name}" has salary slips on record. Delete their salary slips first before removing the staff member.`,
+        variant: "destructive",
+      });
+      setDeleteId(null); setDeleteConfirmName("");
+      return;
+    }
+
+    // Final guard: name must match
+    if (deleteConfirmName.trim().toLowerCase() !== s.name.trim().toLowerCase()) {
+      toast({ title: "Name does not match", description: "Type the staff member's exact name to confirm.", variant: "destructive" });
+      return;
+    }
+
     removeStaff(deleteId);
-    toast({ title: "Staff member removed", description: `"${s?.name}" removed.` });
-    setDeleteId(null);
+    toast({ title: "Staff member removed", description: `"${s.name}" has been permanently removed.` });
+    setDeleteId(null); setDeleteConfirmName("");
   };
 
   const openLoginDialog = (member: Staff) => {
@@ -487,21 +509,59 @@ export default function StaffPage() {
         </ExcelGridShell>
       </div>
 
-      {/* Delete confirm */}
-      <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove staff member?</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{staff.find(s => s.id === deleteId)?.name}" will be permanently removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remove</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete confirm — requires typing the exact name */}
+      {(() => {
+        const target = staff.find(s => s.id === deleteId);
+        const hasSlips = target ? getSalarySlips().some(sl => sl.staffId === target.id) : false;
+        const nameMatch = deleteConfirmName.trim().toLowerCase() === (target?.name ?? "").trim().toLowerCase();
+        return (
+          <Dialog open={!!deleteId} onOpenChange={v => { if (!v) { setDeleteId(null); setDeleteConfirmName(""); } }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-[15px] text-red-600">
+                  <Trash2 size={16} /> Remove staff member?
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-1">
+                {hasSlips ? (
+                  <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 text-[13px] text-red-700 dark:text-red-300">
+                    <strong>Cannot remove "{target?.name}".</strong><br />
+                    This staff member has salary slips on record. Delete all their salary slips first before removing the staff member.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-muted-foreground">
+                      This will permanently remove <strong>{target?.name}</strong> and cannot be undone.
+                      Type their full name below to confirm.
+                    </p>
+                    <Input
+                      placeholder={target?.name ?? ""}
+                      value={deleteConfirmName}
+                      onChange={e => setDeleteConfirmName(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && nameMatch && handleDelete()}
+                      autoFocus
+                      className="text-[13px]"
+                    />
+                  </>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => { setDeleteId(null); setDeleteConfirmName(""); }}>Cancel</Button>
+                {!hasSlips && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={!nameMatch}
+                    onClick={handleDelete}
+                  >
+                    Remove permanently
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Login Access dialog */}
       <Dialog open={!!loginTarget} onOpenChange={v => !v && setLoginTarget(null)}>
