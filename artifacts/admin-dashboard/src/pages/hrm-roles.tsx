@@ -94,8 +94,7 @@ const PERMISSION_GROUPS: PermGroup[] = [
   {
     group: "System",
     modules: [
-      { label: "Settings",        prefix: "Settings",       actions: ["view","edit"] },
-      { label: "Admin Accounts",  prefix: "Admin Accounts", actions: ["view","add","edit","delete"] },
+      { label: "Settings", prefix: "Settings", actions: ["view","edit"] },
     ],
   },
 ];

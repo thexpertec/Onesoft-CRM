@@ -109,6 +109,8 @@ export default function StaffPage() {
     return c;
   }, [staff]);
 
+  const loginEnabledCount = useMemo(() => staff.filter(s => s.loginEnabled).length, [staff]);
+
   // ── cell commit ──
   const commitCell = useCallback((id: string, field: EditableField, value: string) => {
     const s = staff.find(m => m.id === id);
@@ -225,7 +227,14 @@ export default function StaffPage() {
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Users2 size={22} className="text-zinc-500" /> Staff
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Click any cell to edit · organised by department & designation</p>
+          <p className="text-muted-foreground text-sm mt-0.5 flex items-center gap-2 flex-wrap">
+            Click any cell to edit · organised by department &amp; designation
+            {loginEnabledCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-teal-600 dark:text-teal-400 text-[11px] font-medium">
+                <KeyRound size={10} /> {loginEnabledCount} system {loginEnabledCount === 1 ? "user" : "users"}
+              </span>
+            )}
+          </p>
         </div>
         {can("Add Staff") && (
           <Button size="sm" onClick={() => nav("/staff/new")} className="gap-1.5">
@@ -384,6 +393,34 @@ export default function StaffPage() {
                             <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${STATUS_BG[rawVal as StaffStatus] ?? ""}`}>{rawVal}</span>
                           </div>
                         )
+                      ) : c.field === "name" && !isA ? (
+                        <div className="w-full h-full flex items-center px-3 gap-2 cursor-text" onClick={() => canEdit && setActiveCell({ id: member.id, col: ci })}>
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 bg-blue-500 dark:bg-blue-600">
+                            {member.name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <span className="text-[13px] text-gray-700 dark:text-foreground truncate flex-1">{rawVal || "—"}</span>
+                          {member.loginEnabled && (
+                            <span title={`Login: @${member.username}`} className="flex-shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 px-1.5 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
+                              <KeyRound size={8} /> {member.username}
+                            </span>
+                          )}
+                        </div>
+                      ) : c.field === "role" && !isA ? (
+                        <div className="w-full h-full flex items-center px-3 gap-1.5 cursor-text" onClick={() => canEdit && setActiveCell({ id: member.id, col: ci })}>
+                          {rawVal ? (() => {
+                            const hrmRole = roles.find(r => r.name === rawVal);
+                            const permCount = hrmRole ? hrmRole.permissions.split(",").filter(p => p.trim()).length : 0;
+                            return (
+                              <>
+                                {hrmRole?.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: hrmRole.color }} />}
+                                <span className="text-[12px] font-semibold truncate" style={{ color: hrmRole?.color || undefined }}>{rawVal}</span>
+                                {permCount > 0 && <span className="text-[9px] text-muted-foreground flex-shrink-0 ml-0.5">{permCount}p</span>}
+                              </>
+                            );
+                          })() : (
+                            <span className="text-[12px] text-gray-300 dark:text-zinc-600">No role</span>
+                          )}
+                        </div>
                       ) : (
                         <EditableCell
                           value={rawVal} col={c} active={isA} canEdit={canEdit}
@@ -477,15 +514,43 @@ export default function StaffPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            {/* Role badge */}
-            {loginTarget?.role && (
-              <div className="text-[12px] text-gray-500 dark:text-muted-foreground">
-                Role: <span className="font-semibold text-gray-700 dark:text-foreground">{loginTarget.role}</span>
-                {loginTarget.designation && (
-                  <> &nbsp;·&nbsp; {loginTarget.designation}</>
-                )}
-              </div>
-            )}
+            {/* Role & permissions preview */}
+            {loginTarget?.role && (() => {
+              const hrmRole = roles.find(r => r.name === loginTarget.role);
+              const perms = hrmRole
+                ? hrmRole.permissions.split(",").map(p => p.trim()).filter(Boolean)
+                : [];
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap text-[12px] text-gray-500 dark:text-muted-foreground">
+                    <span>Role:</span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-gray-700 dark:text-foreground">
+                      {hrmRole?.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: hrmRole.color }} />}
+                      {loginTarget.role}
+                    </span>
+                    {loginTarget.designation && <span className="text-gray-400">· {loginTarget.designation}</span>}
+                  </div>
+                  {perms.length > 0 ? (
+                    <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-zinc-800/30 border border-gray-100 dark:border-zinc-700">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">
+                        {perms.length} permissions granted by this role
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {perms.map(p => (
+                          <span key={p} className="text-[9px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded">{p}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      {hrmRole
+                        ? "This role has no permissions assigned — go to HRM → Roles to configure them."
+                        : `Role "${loginTarget.role}" not found in Roles — assign a valid role first.`}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Enable toggle */}
             <div className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
