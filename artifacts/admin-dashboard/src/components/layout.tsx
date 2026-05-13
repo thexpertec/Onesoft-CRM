@@ -1348,20 +1348,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </>}
 
                 {/* HRM */}
-                {hrmItems.length > 0 && <>
+                {!isSuperAdminOwn && hrmItems.length > 0 && <>
                   <SectionLabel label="HRM" />
                   {hrmItems.map(item => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />)}
                 </>}
 
                 {/* Documents */}
-                {isModuleAllowed("documents") && <>
+                {!isSuperAdminOwn && isModuleAllowed("documents") && <>
                   <SectionLabel label="Documents" />
                   <NavLink href="/documents"     icon={FileText} label="All Documents" />
                   <NavLink href="/documents/new" icon={FilePlus} label="New Document" />
                 </>}
 
                 {/* Investments */}
-                {(isModuleAllowed("shareholders") || isModuleAllowed("investment_plans")) && <>
+                {!isSuperAdminOwn && (isModuleAllowed("shareholders") || isModuleAllowed("investment_plans")) && <>
                   <SectionLabel label="Investments" />
                   {isModuleAllowed("shareholders")     && <NavLink href="/shareholders"     icon={Landmark}   label="Shareholders" />}
                   {isModuleAllowed("investment_plans") && <NavLink href="/investment-plans" icon={TrendingUp} label="Investment Plans" />}
