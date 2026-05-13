@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   Wallet, Users, DollarSign, CheckCircle2, Clock, Plus, Trash2,
   Pencil, Printer, Download, BadgeCheck, X, ChevronsUpDown, Search,
-  ChevronDown, TrendingUp, AlertCircle, FileSpreadsheet,
+  ChevronDown, TrendingUp, AlertCircle, FileSpreadsheet, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +153,7 @@ export default function SalaryPage() {
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
   const [generateOpen,          setGenerateOpen]          = useState(false);
   const [generateStaffOpen,     setGenerateStaffOpen]     = useState(false);
+  const [revertId,              setRevertId]              = useState<string | null>(null);
 
   // ── Slip for editing ───────────────────────────────────────────────────────
   const editTarget = useMemo(() => slips.find(s => s.id === editSlipId) ?? null, [slips, editSlipId]);
@@ -483,6 +484,16 @@ export default function SalaryPage() {
                             <DollarSign size={13} />
                           </button>
                         )}
+                        {/* Revert to Draft */}
+                        {(slip.status === "Paid" || slip.status === "Approved") && (
+                          <button
+                            title="Revert to Draft"
+                            onClick={() => setRevertId(slip.id)}
+                            className="p-1.5 rounded hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors text-muted-foreground hover:text-amber-600"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
                         {/* Print */}
                         <button
                           title="Print Slip"
@@ -645,6 +656,50 @@ export default function SalaryPage() {
               }}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Revert to Draft Confirm ──────────────────────────────────────────── */}
+      <AlertDialog open={!!revertId} onOpenChange={() => setRevertId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <RotateCcw size={16} className="text-amber-500" /> Revert to Draft?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reset the slip back to <strong>Draft</strong> and clear all payment and
+              journal entry references. Use this when the associated journal entries have been
+              deleted and the slip needs to be re-processed.
+              <br /><br />
+              No journal entries will be created or deleted — you must manage those separately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => {
+                if (revertId) {
+                  const slip = slips.find(s => s.id === revertId);
+                  editSlip(revertId, {
+                    status:                "Draft",
+                    paidAt:                undefined,
+                    journalEntryId:        undefined,
+                    accrualJournalEntryId: undefined,
+                    paymentAccountId:      undefined,
+                    paymentMethod:         undefined,
+                  });
+                  setRevertId(null);
+                  toast({
+                    title: "Reverted to Draft",
+                    description: `${slip?.staffName ?? "Slip"}'s status has been reset to Draft.`,
+                  });
+                }
+              }}
+            >
+              <RotateCcw size={13} className="mr-1.5" /> Revert to Draft
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
