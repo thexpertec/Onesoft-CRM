@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useLeads, useDocs, useCustomers, useSales, useStock, useStaff, useProducts, usePurchaseOrders, useInvoices, useAccounts, useJournalEntries } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { getAdminUsers, getSettings, getCashBankLedgers, SYS_ACCS } from "@/lib/store";
+import { getAdminUsers, getSettings, getCashBankLedgers, SYS_ACCS, getTenants } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ import {
   Target, CheckCircle2, Building2, MapPin, Layers, UserPlus, UserCheck,
   ShoppingCart, Package, Boxes, Receipt, AlertTriangle, Users2,
   ArrowUpRight, ArrowDownRight, Truck, BarChart3, CreditCard,
-  Banknote, Wifi, WifiOff, Tag, Shield, Settings, Clock,
+  Banknote, Wifi, WifiOff, Tag, Shield, Settings, Clock, Globe,
 } from "lucide-react";
 import { CURRENCIES, fmtMoneyCompact, fmtMoney, getSettingsCurrencySymbol } from "@/lib/currencies";
 import {
@@ -240,6 +240,276 @@ function QuickTile({
         <ArrowRight size={13} className="text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors self-end mt-auto" />
       </div>
     </Link>
+  );
+}
+
+// ─── Superadmin plan/status meta ──────────────────────────────────────────────
+const SA_PLAN_META: Record<string, { label: string; bg: string; text: string }> = {
+  starter:      { label: "Starter",      bg: "bg-gray-100 dark:bg-gray-800",          text: "text-gray-600 dark:text-gray-400"      },
+  professional: { label: "Professional", bg: "bg-blue-50 dark:bg-blue-950/40",         text: "text-blue-700 dark:text-blue-300"       },
+  enterprise:   { label: "Enterprise",   bg: "bg-violet-50 dark:bg-violet-950/40",     text: "text-violet-700 dark:text-violet-300"   },
+};
+const SA_STATUS_META: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+  active:    { label: "Active",    bg: "bg-emerald-50 dark:bg-emerald-950/40", text: "text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-500" },
+  trial:     { label: "Trial",     bg: "bg-amber-50 dark:bg-amber-950/40",     text: "text-amber-700 dark:text-amber-300",     dot: "bg-amber-500"   },
+  suspended: { label: "Suspended", bg: "bg-red-50 dark:bg-red-950/40",         text: "text-red-700 dark:text-red-300",         dot: "bg-red-500"     },
+};
+
+// ─── Superadmin dashboard ─────────────────────────────────────────────────────
+export function SuperAdminDashboard() {
+  const { currentUser } = useAuth();
+  const [, navigate]    = useLocation();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 350);
+    return () => clearTimeout(t);
+  }, []);
+
+  const tenants    = useMemo(() => getTenants(), []);
+  const adminUsers = useMemo(() => getAdminUsers(), []);
+
+  const now          = new Date();
+  const hour         = now.getHours();
+  const greeting     = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const displayName  = currentUser?.fullName?.split(" ")[0] || currentUser?.username || "Super";
+
+  const totalTenants     = tenants.length;
+  const activeTenants    = tenants.filter(t => t.status === "active").length;
+  const trialTenants     = tenants.filter(t => t.status === "trial").length;
+  const suspendedTenants = tenants.filter(t => t.status === "suspended").length;
+
+  const newThisMonth = useMemo(() => {
+    const m = now.getMonth(); const y = now.getFullYear();
+    return tenants.filter(t => {
+      const d = new Date(t.createdAt ?? "");
+      return d.getMonth() === m && d.getFullYear() === y;
+    }).length;
+  }, [tenants]);
+
+  const sortedTenants = useMemo(() =>
+    [...tenants].sort((a, b) => {
+      const order: Record<string, number> = { active: 0, trial: 1, suspended: 2 };
+      const ao = order[a.status] ?? 3;
+      const bo = order[b.status] ?? 3;
+      return ao !== bo ? ao - bo : a.name.localeCompare(b.name);
+    }),
+  [tenants]);
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+      {/* ══ Header ═══════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {greeting}, {displayName} 👋
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {format(now, "EEEE, d MMMM yyyy")} &middot; Superadmin Control Panel
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/accounts">
+            <Button size="sm" className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
+              <Building2 size={14} /> Manage Tenants
+            </Button>
+          </Link>
+          <Link href="/website">
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Globe size={14} /> Website
+            </Button>
+          </Link>
+          <Link href="/settings">
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Settings size={14} /> Settings
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* ══ KPI Cards ════════════════════════════════════════════════════════ */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {!mounted ? (
+          <>
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-indigo-600 to-indigo-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-emerald-600 to-emerald-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-amber-500 to-orange-500" />
+            <SkeletonKpiCard gradient="bg-gradient-to-br from-violet-600 to-violet-500" />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              icon={Building2}
+              label="Total Tenants"
+              value={totalTenants}
+              numericValue={totalTenants}
+              formatter={n => String(Math.round(n))}
+              sub={`${newThisMonth} new this month`}
+              gradient="bg-gradient-to-br from-indigo-600 to-indigo-500"
+              iconBg="bg-indigo-400/40"
+              href="/accounts"
+            />
+            <KpiCard
+              icon={CheckCircle2}
+              label="Active Tenants"
+              value={activeTenants}
+              numericValue={activeTenants}
+              formatter={n => String(Math.round(n))}
+              sub={totalTenants > 0 ? `${Math.round((activeTenants / totalTenants) * 100)}% of all tenants` : "No tenants yet"}
+              gradient="bg-gradient-to-br from-emerald-600 to-emerald-500"
+              iconBg="bg-emerald-400/40"
+              href="/accounts"
+            />
+            <KpiCard
+              icon={Clock}
+              label="On Trial"
+              value={trialTenants}
+              numericValue={trialTenants}
+              formatter={n => String(Math.round(n))}
+              sub={suspendedTenants > 0 ? `${suspendedTenants} suspended` : "None suspended"}
+              gradient={trialTenants > 0
+                ? "bg-gradient-to-br from-amber-500 to-orange-500"
+                : "bg-gradient-to-br from-gray-500 to-gray-400"}
+              iconBg="bg-white/20"
+              href="/accounts"
+            />
+            <KpiCard
+              icon={Shield}
+              label="Admin Accounts"
+              value={adminUsers.length}
+              numericValue={adminUsers.length}
+              formatter={n => String(Math.round(n))}
+              sub="Platform administrators"
+              gradient="bg-gradient-to-br from-violet-600 to-violet-500"
+              iconBg="bg-violet-400/40"
+              href="/admin"
+            />
+          </>
+        )}
+      </div>
+
+      {/* ══ Status Distribution ═══════════════════════════════════════════════ */}
+      {totalTenants > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(["active", "trial", "suspended"] as const).map(st => {
+            const count = st === "active" ? activeTenants : st === "trial" ? trialTenants : suspendedTenants;
+            const meta  = SA_STATUS_META[st];
+            const pct   = totalTenants > 0 ? Math.round((count / totalTenants) * 100) : 0;
+            return (
+              <Card key={st}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${meta.text}`}>
+                      <span className={`w-2 h-2 rounded-full ${meta.dot}`} /> {meta.label}
+                    </span>
+                    <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums">{count}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${meta.dot}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">{pct}% of all tenants</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ══ Tenants Table ════════════════════════════════════════════════════ */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Building2 size={14} /> All Tenants
+          </h2>
+          <Link href="/accounts">
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+              Manage all <ArrowRight size={12} />
+            </Button>
+          </Link>
+        </div>
+
+        {totalTenants === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+              <Building2 size={32} className="opacity-30" />
+              <p className="text-sm font-medium">No tenants yet</p>
+              <Link href="/accounts">
+                <Button size="sm" className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white mt-1">
+                  <Plus size={13} /> Add First Tenant
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-muted/40 border-b border-border">
+                    <th className="text-left px-5 py-3 font-semibold text-muted-foreground">Tenant</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Plan</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Created</th>
+                    <th className="w-28 px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedTenants.map((t, i) => {
+                    const plan   = SA_PLAN_META[t.plan]   ?? SA_PLAN_META.starter;
+                    const status = SA_STATUS_META[t.status] ?? SA_STATUS_META.active;
+                    return (
+                      <tr
+                        key={t.id}
+                        className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${i % 2 !== 0 ? "bg-gray-50/50 dark:bg-muted/10" : ""}`}
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/40 flex items-center justify-center shrink-0">
+                              <Building2 size={14} className="text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-gray-100">{t.name}</p>
+                              {(t as any).domain && (
+                                <p className="text-[10px] text-muted-foreground">{(t as any).domain}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${plan.bg} ${plan.text}`}>
+                            {plan.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${status.dot}`} />
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-[12px]">
+                          {(t as any).createdAt ? format(new Date((t as any).createdAt), "d MMM yyyy") : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px] gap-1 font-medium"
+                            onClick={() => navigate("/accounts")}
+                          >
+                            <ArrowRight size={11} /> Open
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -18,6 +18,7 @@ import NotFound from "@/pages/not-found";
 // contains the shell (auth, layout, routing). Each page chunk is fetched
 // on-demand the first time a user navigates there.
 const Dashboard             = lazy(() => import("@/pages/dashboard"));
+const SuperAdminDashboard   = lazy(() => import("@/pages/dashboard").then(m => ({ default: m.SuperAdminDashboard })));
 const ManagerDashboard      = lazy(() => import("@/pages/manager-dashboard"));
 const Leads                 = lazy(() => import("@/pages/leads"));
 const LeadsReportPage       = lazy(() => import("@/pages/leads-report"));
@@ -177,7 +178,8 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function HomeRoute() {
-  const { isManager } = useAuth();
+  const { isManager, isSuperAdmin, currentTenantId } = useAuth();
+  if (isSuperAdmin && !currentTenantId) return <SuperAdminDashboard />;
   if (isManager) return <ManagerDashboard />;
   return <Dashboard />;
 }
