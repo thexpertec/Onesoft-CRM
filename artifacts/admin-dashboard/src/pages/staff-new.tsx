@@ -63,6 +63,18 @@ export default function StaffNewPage() {
     if (!form.name.trim()) {
       toast({ title: "Full name is required", variant: "destructive" }); return;
     }
+    if (!form.department.trim()) {
+      toast({ title: "Department is required", variant: "destructive" }); return;
+    }
+    if (!form.designation.trim()) {
+      toast({ title: "Designation is required", variant: "destructive" }); return;
+    }
+    if (!form.role.trim()) {
+      toast({ title: "Role is required", variant: "destructive" }); return;
+    }
+    if (!form.phone.trim()) {
+      toast({ title: "Phone number is required", variant: "destructive" }); return;
+    }
     addStaff({
       name:           form.name.trim(),
       department:     form.department.trim(),
@@ -127,17 +139,17 @@ export default function StaffNewPage() {
 
           {/* ── 6-col: Dept | Designation | Role | Email | Phone | Join Date ── */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <Field label="Department">
+            <Field label="Department *">
               <Combobox value={form.department} onChange={v => set("department", v)}
                 options={deptComboOpts} placeholder="Select or type…"
                 inputClassName="h-9 text-sm w-full border rounded-md px-3" />
             </Field>
-            <Field label="Designation">
+            <Field label="Designation *">
               <Combobox value={form.designation} onChange={v => set("designation", v)}
                 options={desigOptsForDept} placeholder="Select or type…"
                 inputClassName="h-9 text-sm w-full border rounded-md px-3" />
             </Field>
-            <Field label="Role">
+            <Field label="Role *">
               <Combobox value={form.role} onChange={v => set("role", v)}
                 options={roleComboOpts} placeholder="Select or type…"
                 inputClassName="h-9 text-sm w-full border rounded-md px-3" />
@@ -146,7 +158,7 @@ export default function StaffNewPage() {
               <Input type="email" placeholder="staff@company.com" value={form.email}
                 onChange={e => set("email", e.target.value)} className="h-9 text-sm" />
             </Field>
-            <Field label="Phone">
+            <Field label="Phone *">
               <Input type="tel" placeholder="+44 7700 900000" value={form.phone}
                 onChange={e => set("phone", e.target.value)} className="h-9 text-sm" />
             </Field>
