@@ -363,7 +363,7 @@ export default function BalanceSheetPage() {
                 <div className={`text-[18px] font-bold font-mono ${s.text}`}>
                   {fmt(total)}
                 </div>
-                <div className={`text-[10px] mt-0.5 ${s.text} opacity-60`}>Opening balance total</div>
+                <div className={`text-[10px] mt-0.5 ${s.text} opacity-60`}>Current running total</div>
               </div>
             );
           })}

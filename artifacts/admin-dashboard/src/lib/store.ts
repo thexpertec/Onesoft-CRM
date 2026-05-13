@@ -6633,6 +6633,30 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
+  // ── Always: backfill payment JEs for paid slips missing journalEntryId ───
+  // Runs every login. For any Paid slip with a paymentAccountId but no
+  // journalEntryId, post the Dr Salary Payable/Expense → Cr Payment Account JE.
+  {
+    const slips   = getStored<SalarySlip>(SALARY_SLIPS_KEY);
+    const paidNoJE = slips.filter(s => s.status === "Paid" && !s.journalEntryId && !!s.paymentAccountId);
+    if (paidNoJE.length > 0) {
+      const paymentAccounts = getStored<{ id: string; ledgerAccountId?: string }>(PAYMENT_ACCOUNTS_KEY);
+      const updated = slips.map(s => {
+        if (s.status !== "Paid" || s.journalEntryId || !s.paymentAccountId) return s;
+        const pa = paymentAccounts.find(a => a.id === s.paymentAccountId);
+        if (!pa?.ledgerAccountId) return s;
+        try {
+          const date = s.paidAt ? s.paidAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+          const je = postSalaryPaymentJE(s, pa.ledgerAccountId, date);
+          return { ...s, journalEntryId: je.id };
+        } catch {
+          return s; // skip if JE creation fails
+        }
+      });
+      setStored(SALARY_SLIPS_KEY, updated);
+    }
+  }
+
   // ── Auto-populate accounting settings (only fills missing mappings) ────────
   const s = getSettings();
   const mappingUpdates: Partial<AppSettings> = {};

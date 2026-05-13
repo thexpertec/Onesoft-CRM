@@ -609,17 +609,14 @@ export default function SalaryPage() {
           slip={payTarget}
           paymentAccounts={paymentAccounts}
           sym={sym}
-          onPay={(accountId, ledgerId, date, postJE) => {
+          onPay={(accountId, ledgerId, date) => {
             const account = paymentAccounts.find(a => a.id === accountId);
-            // Post JE only when the checkbox is checked
             let jeId: string | undefined;
-            if (postJE) {
-              try {
-                const je = postSalaryPaymentJE(payTarget, ledgerId, date);
-                jeId = je.id;
-              } catch (err) {
-                console.error("JE posting failed:", err);
-              }
+            try {
+              const je = postSalaryPaymentJE(payTarget, ledgerId, date);
+              jeId = je.id;
+            } catch (err) {
+              console.error("JE posting failed:", err);
             }
             editSlip(payTarget.id, {
               status: "Paid",
@@ -631,7 +628,7 @@ export default function SalaryPage() {
             setPaySlipId(null);
             toast({
               title: "Salary Paid",
-              description: `${payTarget.staffName}'s salary posted${jeId ? " with journal entry" : ""}.`,
+              description: `${payTarget.staffName}'s salary marked as paid.`,
             });
           }}
           onClose={() => setPaySlipId(null)}
@@ -824,20 +821,20 @@ function PayDialog({
   slip: SalarySlip;
   paymentAccounts: ReturnType<typeof getPaymentAccounts>;
   sym: string;
-  onPay: (accountId: string, ledgerId: string, date: string, postJE: boolean) => void;
+  onPay: (accountId: string, ledgerId: string, date: string) => void;
   onClose: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [accountId, setAccountId] = useState(paymentAccounts[0]?.id ?? "");
   const [date,      setDate]      = useState(today);
-  const [postJE,    setPostJE]    = useState(true);
 
   const account = paymentAccounts.find(a => a.id === accountId);
 
   const handlePay = () => {
     if (!accountId) return;
-    const ledgerId = account?.ledgerAccountId ?? "sys-1111";
-    onPay(accountId, ledgerId, date, postJE);
+    const ledgerId = account?.ledgerAccountId ?? "";
+    if (!ledgerId) return;
+    onPay(accountId, ledgerId, date);
   };
 
   return (
@@ -884,16 +881,13 @@ function PayDialog({
             <Input type="date" className="h-9 text-[13px]" value={date} onChange={e => setDate(e.target.value)} />
           </div>
 
-          {/* Post JE toggle */}
-          <label className="flex items-center gap-2 cursor-pointer text-[13px]">
-            <input
-              type="checkbox"
-              checked={postJE}
-              onChange={e => setPostJE(e.target.checked)}
-              className="rounded accent-primary"
-            />
-            Post journal entry (Dr Salary Expense / Cr {account?.accountTitle ?? "Account"})
-          </label>
+          {/* JE info — always posted, no opt-out */}
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-3 py-2 text-[12px] text-blue-700 dark:text-blue-300">
+            A journal entry will be posted automatically:<br />
+            <span className="font-mono">
+              Dr {slip.accrualJournalEntryId ? "Salary Payable" : "Salary Expense"} → Cr {account?.accountTitle ?? "Payment Account"}
+            </span>
+          </div>
         </div>
 
         <DialogFooter>
