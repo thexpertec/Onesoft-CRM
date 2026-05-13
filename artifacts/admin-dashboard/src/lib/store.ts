@@ -6323,13 +6323,25 @@ export function seedDefaultCoaAccounts(): void {
   const allAgents = getStored<{ ledgerAccountId?: string }>(SALES_AGENTS_KEY);
   const agentLedgerIds = new Set(allAgents.map(a => a.ledgerAccountId).filter(Boolean) as string[]);
 
+  // Pre-collect every ledger ID referenced by any JE line so we never delete an account
+  // that still has historical transaction data — even if the contact's ledgerAccountId
+  // was cleared by a server sync that didn't include the field.
+  const jeReferencedLedgerIds = new Set<string>();
+  for (const je of getJournalEntries()) {
+    for (const l of je.lines) jeReferencedLedgerIds.add(l.ledgerId);
+  }
+
   const CONTACT_PARENT_IDS = new Set<string>([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
   const beforeContactClean = dynamicAccounts.length;
   dynamicAccounts = dynamicAccounts.filter(a => {
     if (a.accountType !== "Ledger") return true;
     const parentId = a.parentId || "";
-    // Contact (AR/AP) ledgers — keep only if a customer/supplier still references it
-    if (CONTACT_PARENT_IDS.has(parentId)) return contactLedgerIds.has(a.id);
+    if (CONTACT_PARENT_IDS.has(parentId)) {
+      // Keep if a contact still claims this ledger, OR if any JE references it.
+      // The second condition ensures we never orphan historical transaction data
+      // when a server sync replaces customer records without the ledgerAccountId field.
+      return contactLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
+    }
     // Commission ledgers — keep only if a sales agent in THIS tenant still references it
     if (parentId === SYS_ACCS.COMMISSION_GROUP) return agentLedgerIds.has(a.id);
     return true;
@@ -6359,9 +6371,12 @@ export function seedDefaultCoaAccounts(): void {
     const contacts = getStored<ContactRow>(CUSTOMERS_KEY);
     const liveAccountIds = new Set(getAccounts().map(a => a.id));
     let contactsUpdated = false;
+    // old ledger ID → new ledger ID; used below to patch JE lines after the loop
+    const ledgerIdRemap = new Map<string, string>();
     const contactsPatched = contacts.map(c => {
       // Skip only when the ledger is set AND the COA account actually exists
       if (c.ledgerAccountId && liveAccountIds.has(c.ledgerAccountId)) return c;
+      const oldLedgerId = c.ledgerAccountId; // may be undefined or point to a deleted account
       const isSupplier = (c.customerRole ?? "Buyer") === "Supplier";
       const displayName = (c.name ?? "").trim() + (c.company ? ` (${c.company})` : "");
       const lid = createSubsidiaryLedger({
@@ -6374,6 +6389,8 @@ export function seedDefaultCoaAccounts(): void {
           ? `Accounts payable ledger for supplier: ${c.name}`
           : `Accounts receivable ledger for customer: ${c.name}`,
       });
+      // Record old→new remap so JE lines can be updated to point to the new account
+      if (oldLedgerId && oldLedgerId !== lid) ledgerIdRemap.set(oldLedgerId, lid);
       // Keep the new ID in the live set so subsequent contacts in this loop
       // don't wrongly collide on code generation.
       liveAccountIds.add(lid);
@@ -6382,6 +6399,23 @@ export function seedDefaultCoaAccounts(): void {
     });
     if (contactsUpdated) {
       setStored(CUSTOMERS_KEY, contactsPatched);
+    }
+    // Re-link JE lines whose ledgerId points to a now-replaced contact ledger account.
+    // This recovers ledger history that would otherwise disappear after an account
+    // replacement caused by a server sync that omitted the ledgerAccountId field.
+    if (ledgerIdRemap.size > 0) {
+      const allJEs = getJournalEntries();
+      const needsPatch = allJEs.some(je => je.lines.some(l => ledgerIdRemap.has(l.ledgerId)));
+      if (needsPatch) {
+        const patchedJEs = allJEs.map(je => ({
+          ...je,
+          lines: je.lines.map(l =>
+            ledgerIdRemap.has(l.ledgerId) ? { ...l, ledgerId: ledgerIdRemap.get(l.ledgerId)! } : l,
+          ),
+        }));
+        setStored(JE_KEY, patchedJEs);
+        console.info(`[COA] Re-linked JE lines for ${ledgerIdRemap.size} replaced contact ledger(s)`);
+      }
     }
   }
 
