@@ -45,7 +45,9 @@ function absBalance(balance: number, debitNormal: boolean): number {
   return debitNormal ? balance : -balance;
 }
 
-// ─── Account Selector (searchable dropdown) ───────────────────────────────────
+// ─── Account Selector (searchable dropdown with grouping) ─────────────────────
+
+type AccountGroup = { label: string; color: string; badge: string; items: Account[] };
 
 function AccountSelector({
   accounts,
@@ -60,21 +62,48 @@ function AccountSelector({
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  const ledgers = useMemo(
-    () => accounts.filter(a => a.accountType === "Ledger" && a.isActive)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
-    [accounts],
-  );
+  // Split active ledger accounts into three logical groups
+  const groups = useMemo((): AccountGroup[] => {
+    const all = accounts
+      .filter(a => a.accountType === "Ledger" && a.isActive)
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-  const filtered = useMemo(() => {
-    if (!q) return ledgers;
+    return [
+      {
+        label: "Accounts",
+        color: "text-blue-600 dark:text-blue-400",
+        badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+        items: all.filter(a => a.subType !== "Receivable" && a.subType !== "Payable"),
+      },
+      {
+        label: "Customers",
+        color: "text-emerald-600 dark:text-emerald-400",
+        badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+        items: all.filter(a => a.subType === "Receivable"),
+      },
+      {
+        label: "Suppliers",
+        color: "text-orange-600 dark:text-orange-400",
+        badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+        items: all.filter(a => a.subType === "Payable"),
+      },
+    ];
+  }, [accounts]);
+
+  // Apply search filter per group
+  const filteredGroups = useMemo((): AccountGroup[] => {
+    if (!q) return groups;
     const lq = q.toLowerCase();
-    return ledgers.filter(a =>
-      a.name.toLowerCase().includes(lq) || a.code.toLowerCase().includes(lq),
-    );
-  }, [ledgers, q]);
+    return groups.map(g => ({
+      ...g,
+      items: g.items.filter(a =>
+        a.name.toLowerCase().includes(lq) || a.code.toLowerCase().includes(lq),
+      ),
+    }));
+  }, [groups, q]);
 
   const selected = accounts.find(a => a.id === value);
+  const totalVisible = filteredGroups.reduce((s, g) => s + g.items.length, 0);
 
   return (
     <div className="relative" ref={ref}>
@@ -90,7 +119,8 @@ function AccountSelector({
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-[340px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 z-50 w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+          {/* Search bar */}
           <div className="p-2 border-b border-border">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -98,29 +128,40 @@ function AccountSelector({
                 autoFocus
                 value={q}
                 onChange={e => setQ(e.target.value)}
-                placeholder="Search account name or code…"
+                placeholder="Search by name or code…"
                 className="w-full h-8 pl-7 pr-3 text-sm bg-muted/40 rounded-lg border border-transparent focus:outline-none focus:border-ring"
               />
             </div>
           </div>
-          <div className="max-h-[280px] overflow-y-auto">
-            {filtered.length === 0 && (
+
+          {/* Grouped list */}
+          <div className="max-h-[320px] overflow-y-auto">
+            {totalVisible === 0 && (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">No accounts found</div>
             )}
-            {filtered.map(a => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => { onChange(a.id); setOpen(false); }}
-                className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-accent transition-colors text-sm
-                  ${a.id === value ? "bg-primary/8 text-primary font-semibold" : "text-foreground"}`}
-              >
-                <span className="truncate">{a.name}</span>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-[11px] text-muted-foreground font-mono">{a.code}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{a.head}</span>
+            {filteredGroups.map(g => g.items.length === 0 ? null : (
+              <div key={g.label}>
+                {/* Group header */}
+                <div className="sticky top-0 flex items-center gap-2 px-3 py-1.5 bg-muted/70 backdrop-blur-sm border-b border-border/50">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${g.color}`}>{g.label}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">{g.items.length}</span>
                 </div>
-              </button>
+                {g.items.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => { onChange(a.id); setOpen(false); }}
+                    className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-accent transition-colors text-sm
+                      ${a.id === value ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}`}
+                  >
+                    <span className="truncate">{a.name}</span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[11px] text-muted-foreground font-mono">{a.code}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${g.badge}`}>{a.subType || a.head}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>

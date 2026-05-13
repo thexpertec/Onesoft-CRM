@@ -317,7 +317,7 @@ export function useStock() {
 }
 
 export function useAccounts() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>(() => getAccounts());
   const fetch = useCallback(() => setAccounts(getAccounts()), []);
   useStoreEffect(fetch);
   const addAccount    = (d: Parameters<typeof createAccount>[0])               => { const a = createAccount(d);    fetch(); return a; };
@@ -387,7 +387,7 @@ export function useInvestmentPlans() {
 }
 
 export function useJournalEntries() {
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [entries, setEntries] = useState<JournalEntry[]>(() => getJournalEntries());
   const fetch = useCallback(() => setEntries(getJournalEntries()), []);
   useStoreEffect(fetch);
   const addEntry    = (d: Parameters<typeof createJournalEntry>[0])                => { const e = createJournalEntry(d);    fetch(); return e; };
