@@ -6613,6 +6613,83 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
+  // ── Heal orphaned salary JE lines ────────────────────────────────────────
+  // Salary JE lines can reference a ledger account that no longer exists in the
+  // COA — e.g. when the account was created locally but the _apiWrite to the DB
+  // failed, so on the next login syncAllFromServer restores the pre-write COA
+  // without it. The JE still exists but shows "Unknown ledger" in the UI.
+  //
+  // Fix: parse the staff-ID prefix from the JE reference (SAL-ACCR-YYYY-MM-xxxx
+  // or SAL-YYYY-MM-xxxx), find the staff member, get or create their salary
+  // ledger, and re-link the orphaned JE lines to it.
+  {
+    const salValidIds = new Set(getAccounts().map(a => a.id));
+    const allSalJEs   = getJournalEntries();
+    // Reference format: SAL[-ACCR]-YYYY-MM-{staffId.slice(0,8)}
+    const SAL_REF = /^SAL(?:-ACCR)?-\d{4}-\d{2}-([a-f0-9]{8})/i;
+
+    const orphanedSalaryJEs = allSalJEs.filter(je =>
+      SAL_REF.test(je.reference ?? "") &&
+      je.lines.some(l => !salValidIds.has(l.ledgerId))
+    );
+
+    if (orphanedSalaryJEs.length > 0) {
+      const allStaffForHeal = getStored<Staff>(STAFF_KEY);
+      let salJEChanged = false;
+      const salHealedMap = new Map<string, JournalEntry>();
+
+      for (const je of orphanedSalaryJEs) {
+        const m = SAL_REF.exec(je.reference ?? "");
+        if (!m) continue;
+        const staffIdPrefix = m[1];
+        const staffMember   = allStaffForHeal.find(s => s.id.startsWith(staffIdPrefix));
+        if (!staffMember) continue;
+
+        // Use existing ledger if valid; otherwise find by name or create fresh
+        let targetLedgerId: string | null = null;
+        if (staffMember.ledgerAccountId && salValidIds.has(staffMember.ledgerAccountId)) {
+          targetLedgerId = staffMember.ledgerAccountId;
+        } else {
+          const matchN = staffMember.name + (staffMember.designation ? ` — ${staffMember.designation}` : "");
+          const found  = getAccounts().find(
+            a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
+                 a.name.toLowerCase() === matchN.toLowerCase()
+          );
+          if (found) {
+            targetLedgerId = found.id;
+          } else {
+            targetLedgerId = createSubsidiaryLedger({
+              parentId:    SYS_ACCS.SALARY_GROUP,
+              parentCode:  "4200",
+              name:        matchN,
+              head:        "Expense",
+              subType:     "Payroll",
+              description: `Salary ledger for ${staffMember.name}`,
+            });
+          }
+          salValidIds.add(targetLedgerId!);
+          if (staffMember.ledgerAccountId !== targetLedgerId) {
+            updateStaff(staffMember.id, { ledgerAccountId: targetLedgerId! });
+          }
+        }
+        if (!targetLedgerId) continue;
+
+        const tid = targetLedgerId;
+        salHealedMap.set(je.id, {
+          ...je,
+          lines: je.lines.map(l => salValidIds.has(l.ledgerId) ? l : { ...l, ledgerId: tid }),
+        });
+        salJEChanged = true;
+      }
+
+      if (salJEChanged) {
+        const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
+        setStored(JE_KEY, allSalJEsUpdated);
+        console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned ledger line(s)`);
+      }
+    }
+  }
+
   // ── Always: backfill accrual JEs for approved-but-unpaid slips ───────────
   // Runs every login. For any Approved slip that has no accrualJournalEntryId,
   // post the Dr Salary Expense → Cr Salary Payable JE and record its ID.

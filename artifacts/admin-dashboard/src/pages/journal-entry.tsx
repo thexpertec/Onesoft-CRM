@@ -789,6 +789,9 @@ export default function JournalEntryPage() {
                                             ) : (
                                               <div>
                                                 <span className="text-[11px] text-red-400 italic">Unknown ledger</span>
+                                                {l.narration && (
+                                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{l.narration}</div>
+                                                )}
                                                 <div className="text-[9px] font-mono text-gray-400 mt-0.5 truncate" title={l.ledgerId}>{l.ledgerId}</div>
                                               </div>
                                             )}
