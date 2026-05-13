@@ -7,7 +7,7 @@ import {
   User, Phone, Building2, Hash, Printer,
 } from "lucide-react";
 import { FormModeToggle, useFormMode } from "@/components/form-wrapper";
-import { useRPVouchers, useAccounts } from "@/hooks/use-data";
+import { useRPVouchers, useAccounts, useInvoices, useCustomers } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { RPVoucher, RPVoucherLine, Account, getInvoices, Invoice, SYS_ACCS, getSettings, getAccounts, findSubLedgerForParty, getCustomers, Customer, getRPVouchers, getPaymentAccounts, SYS_PA_CASH } from "@/lib/store";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -710,6 +710,10 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   const isPosted = initial?.status === "posted";
   const [formLayoutMode, toggleFormLayoutMode] = useFormMode("rp-form-mode");
 
+  // Reactive store data — re-syncs after async server load fires onesoft:data-synced
+  const { invoices: allInvoices }   = useInvoices();
+  const { customers: allCustomers } = useCustomers();
+
   const [vtype,   setVtype]   = useState<"receipt" | "payment">(initial?.voucherType ?? defaultType);
   const [date,    setDate]    = useState(initial?.date ?? todayStr());
   const [party,   setParty]   = useState(initial?.partyName ?? "");
@@ -723,7 +727,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
       : [emptyLine()]
   );
   const [linkedInvId, setLinkedInvId] = useState<string | null>(initial?.linkedInvoiceId ?? null);
-  const linkedInv = linkedInvId ? getInvoices().find(i => i.id === linkedInvId) ?? null : null;
+  const linkedInv = linkedInvId ? allInvoices.find(i => i.id === linkedInvId) ?? null : null;
 
   const invBalance = useMemo(() => {
     if (!linkedInv) return null;
@@ -746,7 +750,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   );
 
   // Show ALL CRM contacts — a contact might be tagged as Buyer in CRM but still used as a supplier
-  const suppliers = useMemo<Customer[]>(() => getCustomers(), []);
+  const suppliers = allCustomers;
 
   // Supplier's advance credit balance (from prior overpayments)
   const supplierAdvanceCredit = useMemo(() => {
@@ -758,13 +762,13 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   // All purchase invoices for this supplier, sorted by invoice number (oldest first)
   const supplierInvoices = useMemo<Invoice[]>(() => {
     if (!isNewPayment || !supplierName) return [];
-    return getInvoices()
+    return allInvoices
       .filter(inv =>
         inv.invoiceType === "purchase" &&
         (inv.customer ?? "").toLowerCase() === supplierName.toLowerCase()
       )
       .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber, undefined, { numeric: true }));
-  }, [supplierName, isNewPayment]);
+  }, [supplierName, isNewPayment, allInvoices]);
 
   // All supplier invoices → AP lines (no selection needed, always all)
   const computedApLines = useMemo<LineRow[]>(() => {
@@ -810,7 +814,7 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   );
 
   // Show ALL CRM contacts — a contact might be tagged as Supplier but also receive payments
-  const buyers = useMemo<Customer[]>(() => getCustomers(), []);
+  const buyers = allCustomers;
 
   // Buyer's advance credit balance (from prior overpayments)
   const buyerAdvanceCredit = useMemo(() => {
@@ -822,14 +826,14 @@ function VoucherForm({ accounts, initial, defaultType, onClose, onSave, onPost, 
   // All sale invoices for the selected buyer, sorted by invoice number (oldest first)
   const buyerInvoices = useMemo<Invoice[]>(() => {
     if (!isNewReceipt || !buyerName) return [];
-    return getInvoices()
+    return allInvoices
       .filter(inv =>
         inv.invoiceType !== "purchase" &&
         inv.status !== "Cancelled" &&
         (inv.customer ?? "").toLowerCase() === buyerName.toLowerCase()
       )
       .sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber, undefined, { numeric: true }));
-  }, [buyerName, isNewReceipt]);
+  }, [buyerName, isNewReceipt, allInvoices]);
 
   // All buyer invoices → AR lines (no selection needed, always all)
   const computedArLines = useMemo<LineRow[]>(() => {
