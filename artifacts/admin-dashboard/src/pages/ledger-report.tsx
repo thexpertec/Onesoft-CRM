@@ -62,7 +62,12 @@ function AccountSelector({
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  // Split active ledger accounts into three logical groups
+  // Split active ledger accounts into four focused groups — only show
+  // Cash/Bank, Tax, Customers (Receivable), and Suppliers (Payable).
+  // All other sub-types (Inventory, Revenue, COGS, Purchases, etc.) are excluded.
+  const CASH_BANK_TYPES = new Set(["Cash", "Bank", "Wallet"]);
+  const isTax = (subType: string) => subType.toLowerCase().includes("tax");
+
   const groups = useMemo((): AccountGroup[] => {
     const all = accounts
       .filter(a => a.accountType === "Ledger" && a.isActive)
@@ -70,10 +75,10 @@ function AccountSelector({
 
     return [
       {
-        label: "Accounts",
+        label: "Cash & Bank",
         color: "text-blue-600 dark:text-blue-400",
         badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-        items: all.filter(a => a.subType !== "Receivable" && a.subType !== "Payable"),
+        items: all.filter(a => CASH_BANK_TYPES.has(a.subType)),
       },
       {
         label: "Customers",
@@ -87,7 +92,14 @@ function AccountSelector({
         badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
         items: all.filter(a => a.subType === "Payable"),
       },
+      {
+        label: "Taxes",
+        color: "text-violet-600 dark:text-violet-400",
+        badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+        items: all.filter(a => isTax(a.subType)),
+      },
     ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts]);
 
   // Apply search filter per group
