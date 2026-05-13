@@ -3053,7 +3053,7 @@ export default function InvoicesPage() {
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
             {/* Table Header */}
-            <div className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700 text-[12px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider`}>
+            <div className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1.2fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_1fr_auto]"} gap-0 px-4 py-3 bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-700 text-[12px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider`}>
               <div>Invoice #</div>
               <div>{isPurchase ? "Supplier" : "Customer"}</div>
               <div>Date</div>
@@ -3061,9 +3061,10 @@ export default function InvoicesPage() {
               <div className="text-right">Items</div>
               <div className="text-right">Total</div>
               <div className="text-right">Paid</div>
-              <div>Status</div>
+              <div>PaidStatus</div>
+              <div>{isPurchase ? "Purchase Status" : "Sale Status"}</div>
               {isPurchase && <div>Stock Status</div>}
-              {isPurchase && <div>Purchase Status</div>}
+              {isPurchase && <div>Order Status</div>}
               <div />
             </div>
 
@@ -3079,7 +3080,7 @@ export default function InvoicesPage() {
                 <div
                   key={inv.id}
                   onClick={() => navigate(`/invoices/${inv.id}${inv.invoiceType === "purchase" ? "?type=purchase" : ""}`)}
-                  className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_auto]"} gap-0 px-4 py-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
+                  className={`grid ${isPurchase ? "grid-cols-[1.2fr_1.4fr_0.9fr_0.9fr_0.6fr_1fr_0.8fr_1.2fr_1fr_0.9fr_1fr_auto]" : "grid-cols-[1.4fr_1.6fr_1fr_1fr_0.8fr_1fr_1fr_1.2fr_1fr_auto]"} gap-0 px-4 py-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors group ${wrapText ? "items-start" : "items-center"}`}
                 >
                   {/* Invoice # */}
                   <div className={`font-mono text-[13px] font-bold text-gray-900 dark:text-gray-100 pr-2 ${wrapText ? "break-words" : "truncate"}`}>
@@ -3128,6 +3129,36 @@ export default function InvoicesPage() {
                     <StatusBadge status={inv.status} />
                   </div>
 
+                  {/* Sale / Purchase Status — shown for all invoices */}
+                  <div>
+                    {inv.saleStatus ? (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                        isPurchase
+                          ? inv.saleStatus === "Received"
+                            ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                            : inv.saleStatus === "Partially Received"
+                              ? "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+                              : inv.saleStatus === "Cancelled"
+                                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                                : "bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300"
+                          : inv.saleStatus === "Delivered" || inv.saleStatus === "Completed"
+                            ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                            : inv.saleStatus === "Partially Delivered"
+                              ? "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+                            : inv.saleStatus === "Dispatched"
+                              ? "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                            : inv.saleStatus === "Cancelled"
+                              ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                            : "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300"
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                        {inv.saleStatus}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-[11px]">—</span>
+                    )}
+                  </div>
+
                   {/* Stock Status — purchase only */}
                   {isPurchase && (
                     <div>
@@ -3142,7 +3173,7 @@ export default function InvoicesPage() {
                     </div>
                   )}
 
-                  {/* Purchase Status — purchase only */}
+                  {/* Order Status — purchase only */}
                   {isPurchase && (
                     <div>
                       {inv.saleStatus ? (
