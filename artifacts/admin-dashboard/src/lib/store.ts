@@ -5836,6 +5836,7 @@ export const SYS_ACCS = {
   AP_GENERAL:         "sys-2102",   // General Accounts Payable LEDGER (2112) — fallback for JE posting
   VAT_PAYABLE:        "sys-2200",   // VAT / Tax Payable (2120)
   ACCRUED_EXP:        "sys-2130",   // Accrued Expenses (2130)
+  SALARY_PAYABLE:     "sys-2131",   // Salary Payable — approved but not yet paid (2131)
   NON_CURRENT_LIAB:   "sys-2200g",  // Non-Current Liabilities group (2200) — child of LIAB_ROOT
   LT_LOANS:           "sys-2210",   // Long-term Loans / Borrowings (2210)
   // Revenue / Income
@@ -5894,6 +5895,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.AP_GENERAL,         code: "2112", name: "General Accounts Payable",   head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Aggregate payable for suppliers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
+  { id: SYS_ACCS.SALARY_PAYABLE,     code: "2131", name: "Salary Payable",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.ACCRUED_EXP,         subType: "Accrued",          description: "Salaries approved but not yet paid to staff", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   // Non-Current Liabilities
   { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
 
@@ -6627,6 +6629,26 @@ export function seedDefaultCoaAccounts(): void {
     });
     if (agentsUpdated) {
       setStored(SALES_AGENTS_KEY, agentsPatched);
+    }
+  }
+
+  // ── Always: backfill accrual JEs for approved-but-unpaid slips ───────────
+  // Runs every login. For any Approved slip that has no accrualJournalEntryId,
+  // post the Dr Salary Expense → Cr Salary Payable JE and record its ID.
+  {
+    const slips = getStored<SalarySlip>(SALARY_SLIPS_KEY);
+    const approvedUnpaid = slips.filter(s => s.status === "Approved" && !s.accrualJournalEntryId);
+    if (approvedUnpaid.length > 0) {
+      const updated = slips.map(s => {
+        if (s.status !== "Approved" || s.accrualJournalEntryId) return s;
+        try {
+          const je = postSalaryApprovalJE(s);
+          return { ...s, accrualJournalEntryId: je.id };
+        } catch {
+          return s; // skip if JE creation fails
+        }
+      });
+      setStored(SALARY_SLIPS_KEY, updated);
     }
   }
 
@@ -8696,6 +8718,7 @@ export type SalarySlip = {
   paymentAccountId?: string;
   paidAt?: string;
   journalEntryId?: string;
+  accrualJournalEntryId?: string;  // JE posted on approval (Dr Salary Expense → Cr Salary Payable)
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -8734,34 +8757,34 @@ export const deleteSalarySlip = (id: string): void => {
 };
 
 /**
- * Post a double-entry journal entry for a salary payment:
- *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages)
- *   Cr — Payment Account Ledger (Cash / Bank)
+ * Post an accrual journal entry when a salary slip is approved:
+ *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages — the expense)
+ *   Cr — Salary Payable       (2131 — liability until cash is paid)
  */
-export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
+export function postSalaryApprovalJE(slip: SalarySlip): JournalEntry {
   const staffLedgerId = (() => {
     const staff = getStaff().find(s => s.id === slip.staffId);
     return staff?.ledgerAccountId ?? SYS_ACCS.SALARY_GROUP;
   })();
-  const ref = `SAL-${slip.period}-${slip.staffId.slice(0, 8)}`;
-  const je = createJournalEntry({
-    date,
-    reference: ref,
-    description: `Salary payment — ${slip.staffName} (${slip.period})`,
+  const ref = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
+  return createJournalEntry({
+    date:        new Date().toISOString().slice(0, 10),
+    reference:   ref,
+    description: `Salary accrual — ${slip.staffName} (${slip.period})`,
     lines: [
       {
-        id: crypto.randomUUID(),
+        id:        crypto.randomUUID(),
         ledgerId:  staffLedgerId,
         narration: `Salary expense — ${slip.staffName} (${slip.period})`,
-        debit:  slip.netSalary,
-        credit: 0,
+        debit:     slip.netSalary,
+        credit:    0,
       },
       {
-        id: crypto.randomUUID(),
-        ledgerId:  paymentAccountLedgerId,
-        narration: `Salary paid — ${slip.staffName} (${slip.period})`,
-        debit:  0,
-        credit: slip.netSalary,
+        id:        crypto.randomUUID(),
+        ledgerId:  SYS_ACCS.SALARY_PAYABLE,
+        narration: `Salary payable — ${slip.staffName} (${slip.period})`,
+        debit:     0,
+        credit:    slip.netSalary,
       },
     ],
     status:      "posted",
@@ -8769,7 +8792,55 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
     totalCredit: slip.netSalary,
     isBalanced:  true,
   });
-  return je;
+}
+
+/**
+ * Post a payment journal entry when a salary slip is marked Paid.
+ *
+ * If the slip was previously approved with an accrual JE (the normal flow):
+ *   Dr — Salary Payable       (clears the 2131 liability)
+ *   Cr — Payment Account Ledger (Cash / Bank)
+ *
+ * If no accrual JE exists (legacy / direct-pay flow):
+ *   Dr — Staff Salary Ledger  (expense recognised at payment)
+ *   Cr — Payment Account Ledger (Cash / Bank)
+ */
+export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
+  const hasAccrual    = !!slip.accrualJournalEntryId;
+  const staffLedgerId = (() => {
+    const staff = getStaff().find(s => s.id === slip.staffId);
+    return staff?.ledgerAccountId ?? SYS_ACCS.SALARY_GROUP;
+  })();
+  const debitLedgerId = hasAccrual ? SYS_ACCS.SALARY_PAYABLE : staffLedgerId;
+  const debitNarr     = hasAccrual
+    ? `Salary payable settled — ${slip.staffName} (${slip.period})`
+    : `Salary expense — ${slip.staffName} (${slip.period})`;
+  const ref = `SAL-${slip.period}-${slip.staffId.slice(0, 8)}`;
+  return createJournalEntry({
+    date,
+    reference:   ref,
+    description: `Salary payment — ${slip.staffName} (${slip.period})`,
+    lines: [
+      {
+        id:        crypto.randomUUID(),
+        ledgerId:  debitLedgerId,
+        narration: debitNarr,
+        debit:     slip.netSalary,
+        credit:    0,
+      },
+      {
+        id:        crypto.randomUUID(),
+        ledgerId:  paymentAccountLedgerId,
+        narration: `Salary paid — ${slip.staffName} (${slip.period})`,
+        debit:     0,
+        credit:    slip.netSalary,
+      },
+    ],
+    status:      "posted",
+    totalDebit:  slip.netSalary,
+    totalCredit: slip.netSalary,
+    isBalanced:  true,
+  });
 }
 
 // ─── Attendance Management ────────────────────────────────────────────────────

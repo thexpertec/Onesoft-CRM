@@ -669,7 +669,7 @@ export default function Dashboard() {
   const adminUsers = useMemo(() => getAdminUsers(), []);
 
   // ── Financial position balances (AR / AP / Cash & Bank) ────────────────────
-  const { arBalance, apBalance, cashBankBalance, cashBankBreakdown } = useMemo(() => {
+  const { arBalance, apBalance, salaryPayableBalance, cashBankBalance, cashBankBreakdown } = useMemo(() => {
     // Recursively collect all account IDs under a group
     function getGroupIds(rootId: string): Set<string> {
       const ids = new Set<string>([rootId]);
@@ -702,8 +702,9 @@ export default function Dashboard() {
       return creditNormal ? -bal : bal;
     }
 
-    const arBalance = groupBalance(SYS_ACCS.AR_GROUP, false);
-    const apBalance = groupBalance(SYS_ACCS.AP_GROUP, true);
+    const arBalance             = groupBalance(SYS_ACCS.AR_GROUP, false);
+    const apBalance             = groupBalance(SYS_ACCS.AP_GROUP, true);
+    const salaryPayableBalance  = groupBalance(SYS_ACCS.SALARY_PAYABLE, true);
 
     // Cash & Bank — per-ledger breakdown
     const cbLedgers = getCashBankLedgers();
@@ -721,7 +722,7 @@ export default function Dashboard() {
       .map(a => ({ name: a.name, balance: cbMap[a.id] ?? 0 }))
       .filter(x => x.balance !== 0 || cbLedgers.length <= 4);
 
-    return { arBalance, apBalance, cashBankBalance, cashBankBreakdown };
+    return { arBalance, apBalance, salaryPayableBalance, cashBankBalance, cashBankBreakdown };
   }, [accounts, entries]);
 
   // ── Recents ────────────────────────────────────────────────────────────────
@@ -1022,7 +1023,7 @@ export default function Dashboard() {
         <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
           <Banknote size={14} /> Financial Position
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {/* Accounts Receivable */}
           <KpiCard
             icon={TrendingUp}
@@ -1048,6 +1049,18 @@ export default function Dashboard() {
             gradient="bg-gradient-to-br from-orange-500 to-amber-500"
             iconBg="bg-orange-400/40"
             href="/ledger-report"
+          />
+          {/* Salary Payable */}
+          <KpiCard
+            icon={Users}
+            label="Salary Payable"
+            value={fmtCurrency(Math.max(0, salaryPayableBalance))}
+            numericValue={Math.max(0, salaryPayableBalance)}
+            formatter={n => fmtCurrency(n)}
+            sub="Approved salaries awaiting payment"
+            gradient="bg-gradient-to-br from-violet-600 to-purple-500"
+            iconBg="bg-violet-400/40"
+            href="/hrm/payroll"
           />
           {/* Cash & Bank */}
           <KpiCard

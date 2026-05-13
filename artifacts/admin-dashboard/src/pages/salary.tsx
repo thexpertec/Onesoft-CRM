@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useSalarySlips, useStaff, usePaymentAccounts, useSalaryTemplates } from "@/hooks/use-data";
 import {
   SalarySlip, SalarySlipItem, SalarySlipStatus,
-  getSettings, postSalaryPaymentJE, getPaymentAccounts,
+  getSettings, postSalaryPaymentJE, postSalaryApprovalJE, getPaymentAccounts,
 } from "@/lib/store";
 import { buildPayslipHtml } from "@/lib/print-payslip";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -456,8 +456,15 @@ export default function SalaryPage() {
                           <button
                             title="Approve"
                             onClick={() => {
-                              editSlip(slip.id, { status: "Approved" });
-                              toast({ title: "Approved", description: `${slip.staffName}'s slip approved.` });
+                              let accrualJournalEntryId: string | undefined;
+                              try {
+                                const accrualJE = postSalaryApprovalJE(slip);
+                                accrualJournalEntryId = accrualJE.id;
+                              } catch (err) {
+                                console.error("Salary accrual JE failed:", err);
+                              }
+                              editSlip(slip.id, { status: "Approved", accrualJournalEntryId });
+                              toast({ title: "Approved", description: `${slip.staffName}'s slip approved and salary payable recorded.` });
                             }}
                             className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-muted-foreground hover:text-blue-600"
                           >
