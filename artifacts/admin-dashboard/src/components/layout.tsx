@@ -692,9 +692,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const HRM_NAV: NavItem = { key: "hrm", label: "HRM", icon: Building2, isMega: true };
 
+  const isSuperAdminOwn = isSuperAdmin && !currentTenantId;
+  const SUPERADMIN_NAV_KEYS = new Set(["dashboard", "accounts", "website", "settings"]);
+
   // Filter top-level nav by module access (maintains original order)
   const navItems: NavItem[] = [
     ...OTHER_NAV.filter(item => {
+      if (isSuperAdminOwn) return SUPERADMIN_NAV_KEYS.has(item.key);
       switch (item.key) {
         case "crm":           return allowedCrmColumns.length > 0;
         case "products":      return isModuleAllowed("products");
@@ -716,7 +720,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         default:              return true; // dashboard always shown
       }
     }),
-    ...(hrmItems.length > 0 ? [HRM_NAV] : []),
+    ...(hrmItems.length > 0 && !isSuperAdminOwn ? [HRM_NAV] : []),
     ...(!isStaff && isSuperAdmin && !currentTenantId ? [{
       key: "sysadmin", label: "Admin", icon: Shield,
       items: [
@@ -1282,13 +1286,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <NavLink href="/" icon={LayoutDashboard} label="Dashboard" />
 
                 {/* CRM */}
-                {allowedCrmColumns.length > 0 && <>
+                {!isSuperAdminOwn && allowedCrmColumns.length > 0 && <>
                   <SectionLabel label="CRM" />
                   {allowedCrmColumns.map(col => <NavLink key={col.href} href={col.href} icon={col.icon} label={col.label} />)}
                 </>}
 
                 {/* Trading */}
-                {(isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
+                {!isSuperAdminOwn && (isModuleAllowed("sales") || isModuleAllowed("invoices")) && <>
                   <SectionLabel label="Purchase & Sale" />
                   {isModuleAllowed("sales") && <>
                     <NavLink href="/sales"       icon={Receipt} label="All Sales" />
@@ -1301,7 +1305,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </>}
 
                 {/* Products */}
-                {isModuleAllowed("products") && <>
+                {!isSuperAdminOwn && isModuleAllowed("products") && <>
                   <SectionLabel label="Products" />
                   <NavLink href="/products"       icon={Package}           label="All Products" />
                   <NavLink href="/product-groups" icon={Layers}            label="Product Groups" />
@@ -1316,7 +1320,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </>}
 
                 {/* Manufacturing */}
-                {isModuleAllowed("manufacturing") && <>
+                {!isSuperAdminOwn && isModuleAllowed("manufacturing") && <>
                   <SectionLabel label="Manufacturing" />
                   <NavLink href="/production-guide" icon={ArrowRight}    label="Workflow Guide" />
                   <NavLink href="/raw-materials"    icon={FlaskConical}  label="Raw Materials" />
