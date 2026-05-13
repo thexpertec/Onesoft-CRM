@@ -15,6 +15,7 @@ import { useSalarySlips, useStaff, usePaymentAccounts, useSalaryTemplates } from
 import {
   SalarySlip, SalarySlipItem, SalarySlipStatus,
   getSettings, postSalaryPaymentJE, postSalaryApprovalJE, getPaymentAccounts,
+  deleteJournalEntry,
 } from "@/lib/store";
 import { buildPayslipHtml } from "@/lib/print-payslip";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -666,11 +667,9 @@ export default function SalaryPage() {
               <RotateCcw size={16} className="text-amber-500" /> Revert to Draft?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will reset the slip back to <strong>Draft</strong> and clear all payment and
-              journal entry references. Use this when the associated journal entries have been
-              deleted and the slip needs to be re-processed.
-              <br /><br />
-              No journal entries will be created or deleted — you must manage those separately.
+              This will reset the slip back to <strong>Draft</strong>, delete its linked
+              journal entries (payment JE and accrual JE if present), and clear all payment fields.
+              The slip can then be re-approved and re-paid.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -680,6 +679,15 @@ export default function SalaryPage() {
               onClick={() => {
                 if (revertId) {
                   const slip = slips.find(s => s.id === revertId);
+                  // Delete payment JE first (so its own salary-slip reversion hook doesn't fire
+                  // and overwrite accrualJournalEntryId before we delete that too)
+                  if (slip?.journalEntryId) {
+                    try { deleteJournalEntry(slip.journalEntryId); } catch { /* already gone */ }
+                  }
+                  if (slip?.accrualJournalEntryId) {
+                    try { deleteJournalEntry(slip.accrualJournalEntryId); } catch { /* already gone */ }
+                  }
+                  // Force the slip to Draft regardless of what the deleteJournalEntry hook set
                   editSlip(revertId, {
                     status:                "Draft",
                     paidAt:                undefined,
@@ -691,7 +699,7 @@ export default function SalaryPage() {
                   setRevertId(null);
                   toast({
                     title: "Reverted to Draft",
-                    description: `${slip?.staffName ?? "Slip"}'s status has been reset to Draft.`,
+                    description: `${slip?.staffName ?? "Slip"}'s slip and journal entries have been removed.`,
                   });
                 }
               }}
