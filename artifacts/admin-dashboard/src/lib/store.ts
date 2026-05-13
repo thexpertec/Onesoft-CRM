@@ -5882,10 +5882,10 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.CURRENT_LIAB,       code: "2100", name: "Current Liabilities",        head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Current Liability", description: "Obligations due within 12 months" },
   { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
   { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Trade payables — subsidiary ledgers per supplier" },
-  { id: SYS_ACCS.AP_GENERAL,         code: "2112", name: "General Accounts Payable",   head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Aggregate payable for suppliers without individual ledgers", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.AP_GENERAL,         code: "2112", name: "General Accounts Payable",   head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Aggregate payable for suppliers without individual ledgers", openingBalance: 0, paymentType: "Credit", isActive: true } as unknown as SysAccDef,
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
-  { id: SYS_ACCS.SALARY_PAYABLE,     code: "2131", name: "Salary Payable",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.ACCRUED_EXP,         subType: "Accrued",          description: "Salaries approved but not yet paid to staff", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.SALARY_PAYABLE,     code: "2131", name: "Salary Payable",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.ACCRUED_EXP,         subType: "Accrued",          description: "Salaries approved but not yet paid to staff", openingBalance: 0, paymentType: "Credit", isActive: true } as unknown as SysAccDef,
   // Non-Current Liabilities
   { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
 
@@ -5982,7 +5982,7 @@ export function seedDefaultCoaAccounts(): void {
       subType:        def.subType,
       description:    def.description,
       openingBalance: 0,
-      paymentType:    null,
+      paymentType:    def.paymentType ?? null,
       isActive:       true,
       createdAt:      now,
       updatedAt:      now,
@@ -5991,6 +5991,22 @@ export function seedDefaultCoaAccounts(): void {
 
   let workingAccounts = [...existing, ...toAdd];
   let staticChanged = toAdd.length > 0;
+
+  // ── Always: fix paymentType for system liability ledgers stored as null ───────
+  // Older versions created SALARY_PAYABLE and AP_GENERAL with paymentType: null,
+  // causing them to display as "Dr" in the COA / Balance Sheet. Patch in-place.
+  {
+    const creditFix = new Set([SYS_ACCS.SALARY_PAYABLE, SYS_ACCS.AP_GENERAL]);
+    let fixed = false;
+    workingAccounts = workingAccounts.map(a => {
+      if (creditFix.has(a.id) && a.paymentType !== "Credit") {
+        fixed = true;
+        return { ...a, paymentType: "Credit" as const, updatedAt: now };
+      }
+      return a;
+    });
+    if (fixed) staticChanged = true;
+  }
 
   // ── m02: IFRS-compliant hierarchy restructure ────────────────────────────────
   // Detect old structure: CURRENT_ASSETS still has parentId = null.
