@@ -399,6 +399,7 @@ export default function SalaryPage() {
               <tr className="bg-muted/40 border-b">
                 <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">#</th>
                 <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Staff Name</th>
+                <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Month</th>
                 <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Department</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Basic</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Allowances</th>
@@ -412,7 +413,7 @@ export default function SalaryPage() {
             <tbody className="divide-y">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-16 text-muted-foreground">
+                  <td colSpan={11} className="text-center py-16 text-muted-foreground">
                     <Wallet size={32} className="mx-auto mb-3 opacity-20" />
                     <p className="font-medium">No payslips for {periodLabel(period)}</p>
                     <p className="text-[12px] mt-1">Click "Generate Payroll" to create slips for all active staff.</p>
@@ -428,6 +429,7 @@ export default function SalaryPage() {
                       <div>{slip.staffName}</div>
                       <div className="text-[11px] text-muted-foreground">{slip.designation}</div>
                     </td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{periodLabel(slip.period)}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{slip.department || "—"}</td>
                     <td className="px-3 py-2.5 text-right">{fmt(slip.basicSalary, sym)}</td>
                     <td className="px-3 py-2.5 text-right text-emerald-600 dark:text-emerald-400">
@@ -508,7 +510,7 @@ export default function SalaryPage() {
             {filtered.length > 0 && (
               <tfoot className="border-t bg-muted/30">
                 <tr className="text-[12px] font-semibold">
-                  <td colSpan={3} className="px-3 py-2 text-muted-foreground">
+                  <td colSpan={4} className="px-3 py-2 text-muted-foreground">
                     {filtered.length} slip{filtered.length !== 1 ? "s" : ""}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -543,9 +545,13 @@ export default function SalaryPage() {
           salaryTemplates={salaryTemplates}
           paymentAccounts={paymentAccounts}
           onSave={(data) => {
-            addSlip(data);
-            setGenerateStaffOpen(false);
-            toast({ title: "Slip Generated", description: `Salary slip for ${data.staffName} (${periodLabel(period)}) created.` });
+            try {
+              addSlip(data);
+              setGenerateStaffOpen(false);
+              toast({ title: "Slip Generated", description: `Salary slip for ${data.staffName} (${periodLabel(period)}) created.` });
+            } catch (err) {
+              toast({ title: "Duplicate Slip", description: (err as Error).message, variant: "destructive" });
+            }
           }}
           onClose={() => setGenerateStaffOpen(false)}
         />
