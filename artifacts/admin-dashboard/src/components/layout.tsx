@@ -204,9 +204,8 @@ const SALES_COLUMNS: MegaColumn[] = [
     color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/40",
     desc: "Transactions & POS",
     links: [
-      { label: "All Sales",    href: "/sales",       icon: Receipt, desc: "View all transactions"  },
-      { label: "New Sale",     href: "/sales/new",   icon: Plus,    desc: "Open POS terminal"      },
-      { label: "Sale Returns", href: "/sale-return", icon: Undo2,   desc: "Refunds & credit notes", agentHide: true },
+      { label: "All Sales", href: "/sales",     icon: Receipt, desc: "View all transactions" },
+      { label: "New Sale",  href: "/sales/new", icon: Plus,    desc: "Open POS terminal"     },
     ],
   },
   {
@@ -225,9 +224,7 @@ const SALES_COLUMNS: MegaColumn[] = [
     desc: "Sale & purchase returns",
     agentHide: true,
     links: [
-      { label: "All Returns",      href: "/returns",         icon: Undo2,        desc: "Sale & purchase returns" },
-      { label: "Sale Returns",     href: "/sale-return",     icon: ShoppingBag,  desc: "Refunds & credit notes" },
-      { label: "Purchase Returns", href: "/purchase-return", icon: ShoppingCart, desc: "Debit notes & supplier returns" },
+      { label: "Sale & Purchase Returns", href: "/returns", icon: Undo2, desc: "Sale & purchase returns" },
     ],
   },
 ];
