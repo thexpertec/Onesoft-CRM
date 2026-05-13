@@ -8700,9 +8700,14 @@ function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions
 export const getSalarySlips = (): SalarySlip[] => getStored<SalarySlip>(SALARY_SLIPS_KEY);
 
 export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "netSalary" | "createdAt" | "updatedAt">): SalarySlip => {
+  const existing = getSalarySlips();
+  const duplicate = existing.find(s => s.staffId === data.staffId && s.period === data.period);
+  if (duplicate) {
+    throw new Error(`A salary slip for ${data.staffName} already exists for ${data.period}. Duplicate slips are not allowed.`);
+  }
   const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions);
   const item: SalarySlip = { ...data, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(SALARY_SLIPS_KEY, [...getSalarySlips(), item]);
+  setStored(SALARY_SLIPS_KEY, [...existing, item]);
   return item;
 };
 
