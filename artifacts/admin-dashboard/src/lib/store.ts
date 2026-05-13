@@ -6419,6 +6419,72 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
+  // ── Always: heal orphaned JE lines that reference deleted contact ledger accounts ──
+  // Scenario: a reconcile or server-sync deleted an old contact ledger and created a new
+  // one with a different ID. JE lines posted before that change still reference the old
+  // (now-missing) account ID, so those transactions disappear from the ledger report.
+  //
+  // Healing path:  orphaned-JE.reference → invoice.invoiceNumber → invoice.customer
+  //               → CRM contact.ledgerAccountId (current, live account)
+  //
+  // Only lines whose ledgerId is NOT in the current COA are considered orphaned.
+  {
+    const validIds    = new Set(getAccounts().map(a => a.id));
+    const allJEs      = getJournalEntries();
+    const hasOrphans  = allJEs.some(je => je.lines.some(l => !validIds.has(l.ledgerId)));
+
+    if (hasOrphans) {
+      // Build reference → customer map from all invoices
+      const invoices = getInvoices();
+      const refToParty = new Map<string, string>();
+      for (const inv of invoices) {
+        if (inv.invoiceNumber && inv.customer) refToParty.set(inv.invoiceNumber, inv.customer);
+      }
+
+      // Build party-name (lower) → current ledgerAccountId from CRM contacts
+      type _CRow = { name?: string; company?: string; ledgerAccountId?: string };
+      const crmContacts = getStored<_CRow>(CUSTOMERS_KEY);
+      const partyToLedger = new Map<string, string>();
+      for (const c of crmContacts) {
+        if (!c.ledgerAccountId || !validIds.has(c.ledgerAccountId)) continue;
+        const simple   = (c.name ?? "").toLowerCase();
+        const combined = (c.name ?? "").trim().toLowerCase() +
+                         (c.company ? ` (${c.company})`.toLowerCase() : "");
+        if (simple)   partyToLedger.set(simple,   c.ledgerAccountId);
+        if (combined && combined !== simple) partyToLedger.set(combined, c.ledgerAccountId);
+      }
+
+      let jePatched = false;
+      const healedJEs = allJEs.map(je => {
+        if (je.lines.every(l => validIds.has(l.ledgerId))) return je; // nothing to fix
+
+        // Try to find the party name for this JE
+        const partyName = refToParty.get(je.reference ?? "");
+        if (!partyName) return je; // can't determine party — leave as-is
+
+        const currentLedgerId = partyToLedger.get(partyName.toLowerCase());
+        if (!currentLedgerId) return je; // party not in CRM or CRM has no valid ledger
+
+        const newLines = je.lines.map(l => {
+          if (validIds.has(l.ledgerId)) return l; // already points to a valid account
+          // Only remap lines that were AR/AP-type (DR on sale JE, CR on purchase JE)
+          // We identify them simply: orphaned ledgerId → replace with party's current ledger
+          return { ...l, ledgerId: currentLedgerId };
+        });
+
+        const changed = newLines.some((l, i) => l.ledgerId !== je.lines[i].ledgerId);
+        if (!changed) return je;
+        jePatched = true;
+        return { ...je, lines: newLines };
+      });
+
+      if (jePatched) {
+        setStored(JE_KEY, healedJEs);
+        console.info("[COA] Healed orphaned JE lines — re-linked to current contact ledger accounts");
+      }
+    }
+  }
+
   // ── Always: backfill COA ledgers for payment accounts missing one ────────────
   const allPAs = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
   const existingCoaIds = new Set(getAccounts().map(a => a.id));
