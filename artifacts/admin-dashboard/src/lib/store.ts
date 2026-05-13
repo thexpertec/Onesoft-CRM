@@ -6893,19 +6893,78 @@ export function getJournalEntries(): JournalEntry[] {
   return [];
 }
 
-function _saveJournalEntries(entries: JournalEntry[]): void {
-  // setStored: updates _memRaw immediately + fires _apiWrite to persist to server.
+function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
+  if (!_isDelete) {
+    // ── Merge guard: re-read fresh to pick up any concurrently added entries ──
+    // This prevents a race where two writes both read [A,B], one saves [A,B,C],
+    // then the other saves [A,B,D] — overwriting C.  We merge all entries by id.
+    const fresh = (() => {
+      try { const r = _lsGet(tenantKey(JE_KEY)); return r ? JSON.parse(r) as JournalEntry[] : []; } catch { return []; }
+    })();
+    const newIds   = new Set(entries.map(e => e.id));
+    // Any entry in `fresh` that is NOT in `entries` and is NOT being intentionally
+    // replaced is a concurrent addition — keep it.
+    const concurrent = fresh.filter((e: JournalEntry) => !newIds.has(e.id));
+    if (concurrent.length > 0) {
+      entries = [...entries, ...concurrent].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+    // Safety check: never allow an update to silently strip lines from a posted JE
+    for (const entry of entries) {
+      const prior = fresh.find((f: JournalEntry) => f.id === entry.id);
+      if (!prior || entry.status !== "posted" || prior.status !== "posted") continue;
+      const entryIds = new Set(entry.lines.map((l: JournalEntryLine) => l.id));
+      const strippedLines = prior.lines.filter((l: JournalEntryLine) => !entryIds.has(l.id));
+      if (strippedLines.length > 0) {
+        // Merge stripped lines back in — they were lost by a concurrent/stale write
+        console.warn('[JE] Prevented silent line removal from posted entry', entry.id,
+          '— restoring', strippedLines.length, 'line(s):', strippedLines.map((l: JournalEntryLine) => l.ledgerId));
+        entry.lines = [...entry.lines, ...strippedLines];
+        entry.totalDebit  = parseFloat(entry.lines.reduce((s: number, l: JournalEntryLine) => s + l.debit,  0).toFixed(2));
+        entry.totalCredit = parseFloat(entry.lines.reduce((s: number, l: JournalEntryLine) => s + l.credit, 0).toFixed(2));
+        entry.isBalanced  = Math.abs(entry.totalDebit - entry.totalCredit) < 0.02;
+      }
+    }
+  }
   setStored(JE_KEY, entries);
 }
 
 export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">): JournalEntry {
+  // Idempotency guard: if a reference already exists, return the existing entry
+  if (data.reference) {
+    const existing = getJournalEntries().find(e => e.reference === data.reference);
+    if (existing) {
+      console.warn('[JE] createJournalEntry skipped duplicate reference:', data.reference);
+      return existing;
+    }
+  }
   const entry: JournalEntry = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  // Re-read fresh immediately before appending to pick up concurrent additions
   _saveJournalEntries([...getJournalEntries(), entry]);
   return entry;
 }
 
 export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntry, "id" | "createdAt">>): JournalEntry {
-  const entries = getJournalEntries().map(e => e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e);
+  const current = getJournalEntries();
+  const entries = current.map(e => {
+    if (e.id !== id) return e;
+    const updated = { ...e, ...updates, updatedAt: new Date().toISOString() };
+    // Strong guard for posted entries: never silently drop lines via programmatic update.
+    // A programmatic caller (backfill, migration) may pass a partial `lines` array;
+    // merge any existing lines that are absent from the new array back in.
+    if (updates.lines && e.status === "posted") {
+      const newLineIds = new Set(updates.lines.map((l: JournalEntryLine) => l.id));
+      const missingLines = e.lines.filter((l: JournalEntryLine) => !newLineIds.has(l.id));
+      if (missingLines.length > 0) {
+        console.warn('[JE] updateJournalEntry: merging back', missingLines.length,
+          'line(s) that would have been lost from posted entry', id);
+        updated.lines = [...updates.lines, ...missingLines];
+        updated.totalDebit  = parseFloat(updated.lines.reduce((s: number, l: JournalEntryLine) => s + l.debit,  0).toFixed(2));
+        updated.totalCredit = parseFloat(updated.lines.reduce((s: number, l: JournalEntryLine) => s + l.credit, 0).toFixed(2));
+        updated.isBalanced  = Math.abs(updated.totalDebit - updated.totalCredit) < 0.02;
+      }
+    }
+    return updated;
+  });
   _saveJournalEntries(entries);
   return entries.find(e => e.id === id)!;
 }
@@ -7032,7 +7091,7 @@ export function deleteJournalEntry(id: string): void {
   }
   if (prsChanged) setStored(PR_KEY, prs);
 
-  _saveJournalEntries(getJournalEntries().filter(e => e.id !== id));
+  _saveJournalEntries(getJournalEntries().filter(e => e.id !== id), true);
 }
 
 // ─── Sub-ledger lookup ────────────────────────────────────────────────────────
@@ -7107,14 +7166,20 @@ export function findSubLedgerForParty(partyName: string, parentGroupId: string):
   if (contact) {
     if (contact.ledgerAccountId) {
       const all = getAccounts();
+      // First: try to find the account regardless of isActive status
       const acct = all.find(
-        a => a.id === contact.ledgerAccountId &&
-             a.accountType === "Ledger" &&
-             a.isActive !== false
+        a => a.id === contact.ledgerAccountId && a.accountType === "Ledger"
       );
-      if (acct) return acct.id;
+      if (acct) {
+        // If the account exists but was marked inactive, reactivate it
+        // instead of creating a duplicate — this preserves all historical JE references
+        if (acct.isActive === false) {
+          try { updateAccount(acct.id, { isActive: true }); } catch { /* non-fatal */ }
+        }
+        return acct.id;
+      }
     }
-    // Contact found but ledger is missing or was deleted — auto-create it
+    // Contact found but ledger is truly missing (not just inactive) — auto-create it
     // so the JE always has a named, individual AR/AP ledger for this party.
     const isSupplier = (contact.customerRole ?? "Buyer") === "Supplier";
     const displayName = (contact.name ?? "").trim() +
@@ -7487,7 +7552,7 @@ export function revertInvoiceToDraft(invoiceId: string): void {
     if (je.reference === `ADJ-${invNo}`)      return false; // price-adj JEs
     return true;
   });
-  _saveJournalEntries(remainingJEs);
+  _saveJournalEntries(remainingJEs, true);
 
   // 2. Reset linked Receipt Vouchers → draft (their JE was wiped above) ───────
   const updatedVouchers = getRPVouchers().map(v => {
@@ -7563,7 +7628,7 @@ export function revertInvoicePayments(invoiceId: string): void {
   const remainingJEs = getJournalEntries().filter(je =>
     je.reference !== `RCPT-${invNo}`
   );
-  _saveJournalEntries(remainingJEs);
+  _saveJournalEntries(remainingJEs, true);
 
   // 2. Reset linked R/P vouchers → draft
   const updatedVouchers = getRPVouchers().map(v => {
@@ -7621,7 +7686,7 @@ export function revertInvoiceDelivery(invoiceId: string): void {
     if (je.reference === `ADJ-${invNo}`)   return false;
     return true;
   });
-  _saveJournalEntries(remainingJEs);
+  _saveJournalEntries(remainingJEs, true);
 
   // 2. Reset linked Receipt Vouchers → draft
   const updatedVouchers = getRPVouchers().map(v => {
@@ -7684,13 +7749,28 @@ export function autoPostPurchaseJE(params: {
   // Prefer supplier-specific ledger, then find sub-ledger by name, then AP_TRADE.
   // Also search AR_GROUP as a fallback — covers contacts that were set up as
   // customers (AR ledger under 1130) but are also used as purchase suppliers.
-  const apId = params.supplierLedgerId
-    || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
-    || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
-    || findSubLedgerForParty(params.supplier, SYS_ACCS.AR_GROUP)
-    || resolveToLedger(s.accPurchasePayable)
-    || resolveToLedger(SYS_ACCS.AP_TRADE)
-    || SYS_ACCS.AP_GENERAL;
+  const apId = (() => {
+    if (params.supplierLedgerId) {
+      // Validate that the supplied ledger ID actually exists as an active ledger.
+      // If inactive, reactivate it so the JE reference stays valid.
+      const allAccs = getAccounts();
+      const acct = allAccs.find(a => a.id === params.supplierLedgerId && a.accountType === "Ledger");
+      if (acct) {
+        if (acct.isActive === false) {
+          try { updateAccount(acct.id, { isActive: true }); } catch { /* non-fatal */ }
+        }
+        return acct.id;
+      }
+      // supplierLedgerId provided but account not found — fall through to name-based lookup
+      console.warn('[PO JE] supplierLedgerId', params.supplierLedgerId, 'not found for', params.supplier, '— falling through to name lookup');
+    }
+    return findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)
+      || findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)
+      || findSubLedgerForParty(params.supplier, SYS_ACCS.AR_GROUP)
+      || resolveToLedger(s.accPurchasePayable)
+      || resolveToLedger(SYS_ACCS.AP_TRADE)
+      || SYS_ACCS.AP_GENERAL;
+  })();
   if (!apId) return null;
 
   const allAccounts  = getAccounts();
@@ -7947,7 +8027,7 @@ export function deleteRPVoucher(id: string): void {
 
   // 1. Delete linked Journal Entry
   if (v.journalEntryId) {
-    _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId));
+    _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId), true);
   }
 
   // 2. Reverse invoice payment(s) if this voucher was posted

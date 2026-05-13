@@ -787,7 +787,10 @@ export default function JournalEntryPage() {
                                                 )}
                                               </>
                                             ) : (
-                                              <span className="text-[11px] text-gray-400 italic">Unknown ledger</span>
+                                              <div>
+                                                <span className="text-[11px] text-red-400 italic">Unknown ledger</span>
+                                                <div className="text-[9px] font-mono text-gray-400 mt-0.5 truncate" title={l.ledgerId}>{l.ledgerId}</div>
+                                              </div>
                                             )}
                                           </td>
                                           <td className="px-3 py-2 text-[11px] text-gray-500 dark:text-gray-400">{l.narration || "—"}</td>
