@@ -361,6 +361,13 @@ export default function ModuleGroupsPage() {
   const tenants = getTenants();
   const reload  = () => setGroups(getModuleGroups());
 
+  // Keep local state in sync whenever a background server sync completes
+  useEffect(() => {
+    const onSync = () => setGroups(getModuleGroups());
+    window.addEventListener("onesoft:data-synced", onSync);
+    return () => window.removeEventListener("onesoft:data-synced", onSync);
+  }, []);
+
   // Tenant counts per group
   const tenantCountByGroup = useMemo(() => {
     const m: Record<string, number> = {};
@@ -569,12 +576,14 @@ export default function ModuleGroupsPage() {
       )}
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      <GroupModal
-        open={modalOpen}
-        editing={editing}
-        onClose={() => { setModalOpen(false); setEditing(null); }}
-        onSave={handleSave}
-      />
+      {modalOpen && (
+        <GroupModal
+          open={true}
+          editing={editing}
+          onClose={() => { setModalOpen(false); setEditing(null); }}
+          onSave={handleSave}
+        />
+      )}
 
       {/* Duplicate confirmation */}
       <AlertDialog open={!!dupeId} onOpenChange={() => setDupeId(null)}>
