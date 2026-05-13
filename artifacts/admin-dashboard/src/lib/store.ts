@@ -8743,15 +8743,58 @@ export const deleteSalarySlip = (id: string): void => {
 };
 
 /**
+ * Resolve a guaranteed real Ledger account ID for a staff member's salary expense.
+ *
+ * Problem: if the staff record has no `ledgerAccountId`, or the stored ID points to a
+ * Group account or a deleted account, posting the JE to that ID makes the expense
+ * invisible — the balance-sheet `subtreeBalance` for a Group sums only its child
+ * Ledgers and ignores any JEs posted directly to the Group itself.
+ *
+ * This helper always returns the ID of a valid Ledger account under 4200 Salary & Wages,
+ * creating and persisting one when necessary.
+ */
+function _resolveStaffSalaryLedger(slip: SalarySlip): string {
+  const allAccounts = getAccounts();
+  const staff       = getStaff().find(s => s.id === slip.staffId);
+
+  // Preferred: staff has a ledgerAccountId that exists as a real Ledger in COA
+  if (staff?.ledgerAccountId) {
+    const acc = allAccounts.find(a => a.id === staff.ledgerAccountId);
+    if (acc && acc.accountType === "Ledger") return staff.ledgerAccountId;
+  }
+
+  // Check if there's already a ledger under 4200 whose name matches the staff/slip name
+  const matchName = (staff?.name ?? slip.staffName) + (staff?.designation ? ` — ${staff.designation}` : "");
+  const existing  = allAccounts.find(
+    a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
+         a.name.toLowerCase() === matchName.toLowerCase(),
+  );
+  if (existing) {
+    // Persist the link back so future calls hit the fast path
+    if (staff && !staff.ledgerAccountId) updateStaff(staff.id, { ledgerAccountId: existing.id });
+    return existing.id;
+  }
+
+  // Create a fresh subsidiary ledger and persist the link on the staff record
+  const lid = createSubsidiaryLedger({
+    parentId:    SYS_ACCS.SALARY_GROUP,
+    parentCode:  "4200",
+    name:        matchName,
+    head:        "Expense",
+    subType:     "Payroll",
+    description: `Salary ledger for ${staff?.name ?? slip.staffName}`,
+  });
+  if (staff) updateStaff(staff.id, { ledgerAccountId: lid });
+  return lid;
+}
+
+/**
  * Post an accrual journal entry when a salary slip is approved:
  *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages — the expense)
  *   Cr — Salary Payable       (2131 — liability until cash is paid)
  */
 export function postSalaryApprovalJE(slip: SalarySlip): JournalEntry {
-  const staffLedgerId = (() => {
-    const staff = getStaff().find(s => s.id === slip.staffId);
-    return staff?.ledgerAccountId ?? SYS_ACCS.SALARY_GROUP;
-  })();
+  const staffLedgerId = _resolveStaffSalaryLedger(slip);
   const ref = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
   return createJournalEntry({
     date:        new Date().toISOString().slice(0, 10),
@@ -8793,10 +8836,7 @@ export function postSalaryApprovalJE(slip: SalarySlip): JournalEntry {
  */
 export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
   const hasAccrual    = !!slip.accrualJournalEntryId;
-  const staffLedgerId = (() => {
-    const staff = getStaff().find(s => s.id === slip.staffId);
-    return staff?.ledgerAccountId ?? SYS_ACCS.SALARY_GROUP;
-  })();
+  const staffLedgerId = _resolveStaffSalaryLedger(slip);
   const debitLedgerId = hasAccrual ? SYS_ACCS.SALARY_PAYABLE : staffLedgerId;
   const debitNarr     = hasAccrual
     ? `Salary payable settled — ${slip.staffName} (${slip.period})`
