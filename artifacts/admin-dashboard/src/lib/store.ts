@@ -4614,8 +4614,7 @@ export type SalesAgent = {
   joinDate:         string;   // YYYY-MM-DD
   notes:            string;
   openingBalance?:  number;  // commission balance owed to agent at setup
-  ledgerAccountId?:       string;  // auto-created subsidiary ledger under Sales Commission
-  salaryLedgerAccountId?: string;  // auto-created subsidiary ledger under Salary & Wages
+  ledgerAccountId?: string;  // auto-created subsidiary ledger under Sales Commission
   // Portal login
   username?:      string;
   password?:      string;
@@ -4648,18 +4647,9 @@ export const createSalesAgent = (data: Omit<SalesAgent, "id" | "agentCode" | "cr
     subType:     "Commission",
     description: `Commission ledger for sales agent: ${data.name}`,
   });
-  const salaryLedgerAccountId = data.salaryLedgerAccountId || createSubsidiaryLedger({
-    parentId:    SYS_ACCS.SALARY_GROUP,
-    parentCode:  "4200",
-    name:        data.name + " — Sales Agent",
-    head:        "Expense",
-    subType:     "Payroll",
-    description: `Salary ledger for sales agent: ${data.name}`,
-  });
   const agent: SalesAgent = {
     ...data,
     ledgerAccountId,
-    salaryLedgerAccountId,
     id:        crypto.randomUUID(),
     agentCode: nextAgentCode(),
     createdAt: new Date().toISOString(),
@@ -6332,9 +6322,8 @@ export function seedDefaultCoaAccounts(): void {
   const allCustomers = getStored<{ ledgerAccountId?: string }>(CUSTOMERS_KEY);
   const contactLedgerIds = new Set(allCustomers.map(c => c.ledgerAccountId).filter(Boolean) as string[]);
 
-  const allAgents = getStored<{ ledgerAccountId?: string; salaryLedgerAccountId?: string }>(SALES_AGENTS_KEY);
+  const allAgents = getStored<{ ledgerAccountId?: string }>(SALES_AGENTS_KEY);
   const agentLedgerIds = new Set(allAgents.map(a => a.ledgerAccountId).filter(Boolean) as string[]);
-  const agentSalaryLedgerIds = new Set(allAgents.map(a => a.salaryLedgerAccountId).filter(Boolean) as string[]);
 
   const allStaffForClean = getStored<{ ledgerAccountId?: string }>(STAFF_KEY);
   const staffSalaryLedgerIds = new Set(allStaffForClean.map(s => s.ledgerAccountId).filter(Boolean) as string[]);
@@ -6360,9 +6349,9 @@ export function seedDefaultCoaAccounts(): void {
     }
     // Commission ledgers — keep only if a sales agent in THIS tenant still references it
     if (parentId === SYS_ACCS.COMMISSION_GROUP) return agentLedgerIds.has(a.id);
-    // Salary ledgers — keep if a staff member OR agent still references it, or has JE history
+    // Salary ledgers — keep if a staff member still references it, or has JE history
     if (parentId === SYS_ACCS.SALARY_GROUP) {
-      return staffSalaryLedgerIds.has(a.id) || agentSalaryLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
+      return staffSalaryLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
     }
     return true;
   });
@@ -6605,30 +6594,6 @@ export function seedDefaultCoaAccounts(): void {
     });
     if (staffUpdated) {
       setStored(STAFF_KEY, staffPatched);
-    }
-  }
-
-  // ── Always: backfill salary ledgers for sales agents missing one ──────────
-  {
-    const allAgents = getStored<SalesAgent>(SALES_AGENTS_KEY);
-    const liveAccountIds = new Set(getAccounts().map(a => a.id));
-    let agentsUpdated = false;
-    const agentsPatched = allAgents.map(a => {
-      if (a.salaryLedgerAccountId && liveAccountIds.has(a.salaryLedgerAccountId)) return a;
-      const lid = createSubsidiaryLedger({
-        parentId:    SYS_ACCS.SALARY_GROUP,
-        parentCode:  "4200",
-        name:        a.name + " — Sales Agent",
-        head:        "Expense",
-        subType:     "Payroll",
-        description: `Salary ledger for sales agent: ${a.name}`,
-      });
-      liveAccountIds.add(lid);
-      agentsUpdated = true;
-      return { ...a, salaryLedgerAccountId: lid };
-    });
-    if (agentsUpdated) {
-      setStored(SALES_AGENTS_KEY, agentsPatched);
     }
   }
 
