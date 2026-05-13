@@ -7160,6 +7160,59 @@ export function deleteJournalEntry(id: string): void {
   }
   if (prsChanged) setStored(PR_KEY, prs);
 
+  // Salary Slips — auto-revert status when their linked JE is deleted.
+  //
+  //  • Payment JE deleted  (journalEntryId === id):
+  //      Paid → Approved  (if accrual JE still recorded)
+  //      Paid → Draft     (if no accrual JE — direct-pay slip)
+  //  • Accrual JE deleted  (accrualJournalEntryId === id):
+  //      Approved → Draft (slip was never paid, or payment JE also gone)
+  //      Paid     → Draft (both JEs gone; full reset)
+  const slips = getSalarySlips();
+  let slipsChanged = false;
+  for (let i = 0; i < slips.length; i++) {
+    const slip = slips[i];
+    const isPaymentJE  = slip.journalEntryId        === id;
+    const isAccrualJE  = slip.accrualJournalEntryId === id;
+    if (!isPaymentJE && !isAccrualJE) continue;
+
+    if (isPaymentJE) {
+      // The payment JE was deleted → step back one level
+      const hasAccrual = !!slip.accrualJournalEntryId;
+      slips[i] = {
+        ...slip,
+        status:            hasAccrual ? "Approved" : "Draft",
+        journalEntryId:    undefined,
+        paidAt:            undefined,
+        paymentAccountId:  undefined,
+        paymentMethod:     undefined,
+        updatedAt:         now,
+      };
+      addActivity({
+        action: "status_changed", entity: "Salary Slip", entityName: slip.staffName,
+        detail: `Payment JE removed → reverted to ${hasAccrual ? "Approved" : "Draft"}`,
+      });
+    } else {
+      // The accrual JE was deleted → full reset to Draft
+      slips[i] = {
+        ...slip,
+        status:                "Draft",
+        accrualJournalEntryId: undefined,
+        journalEntryId:        undefined,
+        paidAt:                undefined,
+        paymentAccountId:      undefined,
+        paymentMethod:         undefined,
+        updatedAt:             now,
+      };
+      addActivity({
+        action: "status_changed", entity: "Salary Slip", entityName: slip.staffName,
+        detail: "Accrual JE removed → reverted to Draft",
+      });
+    }
+    slipsChanged = true;
+  }
+  if (slipsChanged) setStored(SALARY_SLIPS_KEY, slips);
+
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id), true);
 }
 
