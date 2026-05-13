@@ -151,9 +151,16 @@ export default function StaffPage() {
     setNewRow(null); setNewRowActive(null);
   };
 
+  const isDefaultDirector = (member: Staff) => member.username === "director";
+
   const handleDelete = () => {
     if (!deleteId) return;
     const s = staff.find(m => m.id === deleteId);
+    if (s && isDefaultDirector(s)) {
+      toast({ title: "Cannot delete default user", description: "The Director account is a system default and cannot be removed.", variant: "destructive" });
+      setDeleteId(null);
+      return;
+    }
     removeStaff(deleteId);
     toast({ title: "Staff member removed", description: `"${s?.name}" removed.` });
     setDeleteId(null);
@@ -418,7 +425,7 @@ export default function StaffPage() {
                         <KeyRound size={13} />
                       </button>
                     )}
-                    {can("Delete Staff") && (
+                    {can("Delete Staff") && !isDefaultDirector(member) && (
                       <button className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Remove"
                         onClick={() => setDeleteId(member.id)}>
                         <Trash2 size={13} />
