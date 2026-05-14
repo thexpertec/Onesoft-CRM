@@ -990,16 +990,39 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   </div>
                 )}
                 {/* Sale/Purchase Status */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">
-                    {invoiceType === "purchase" ? "Purchase Status" : "Sale Status"}
-                  </label>
-                  <select value={form.saleStatus ?? ""} onChange={e => setF("saleStatus", e.target.value)}
-                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="">— Select status —</option>
-                    {(invoiceType === "purchase" ? PURCHASE_ORDER_STATUSES : SALE_ORDER_STATUSES).map(st => <option key={st}>{st}</option>)}
-                  </select>
-                </div>
+                {(() => {
+                  // When the invoice is payment-locked but delivery is not yet
+                  // Delivered/Completed, allow changing the delivery status even
+                  // though the rest of the form is locked. We auto-save immediately
+                  // via updateInvoice so the user doesn't need the Save button.
+                  const deliveryDone = form.saleStatus === "Delivered" || form.saleStatus === "Completed"
+                    || form.saleStatus === "Received";
+                  const canEditWhenLocked = isPaymentLocked && !deliveryDone && invoiceType !== "purchase";
+                  return (
+                    <div className={canEditWhenLocked ? "relative pointer-events-auto opacity-100" : ""}>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">
+                        {invoiceType === "purchase" ? "Purchase Status" : "Sale Status"}
+                      </label>
+                      {canEditWhenLocked && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1">
+                          Update delivery status even while invoice is locked
+                        </p>
+                      )}
+                      <select
+                        value={form.saleStatus ?? ""}
+                        onChange={e => {
+                          setF("saleStatus", e.target.value);
+                          if (canEditWhenLocked && invoice) {
+                            updateInvoice(invoice.id, { saleStatus: e.target.value as typeof form.saleStatus });
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">— Select status —</option>
+                        {(invoiceType === "purchase" ? PURCHASE_ORDER_STATUSES : SALE_ORDER_STATUSES).map(st => <option key={st}>{st}</option>)}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>{/* /section 1 */}
