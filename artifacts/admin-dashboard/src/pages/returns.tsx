@@ -761,10 +761,17 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
       {step === 1 && (
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <p className="text-sm text-muted-foreground">Search for the original purchase invoice to create a return against:</p>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <Input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Invoice number, supplier or item name…" className="pl-9" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Input autoFocus value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)}
+                placeholder="Supplier name or phone…" className="pl-9" />
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Input value={itemSearch} onChange={e => setItemSearch(e.target.value)}
+                placeholder="Invoice #, item name or SKU…" className="pl-9" />
+            </div>
           </div>
           {filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm">No purchase invoices found</div>
