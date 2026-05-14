@@ -79,7 +79,6 @@ const IncomeReportPage      = lazy(() => import("@/pages/income-report"));
 const ReceiptPaymentPage    = lazy(() => import("@/pages/receipt-payment"));
 const RpSummaryPage         = lazy(() => import("@/pages/rp-summary"));
 const TransactionHistoryPage = lazy(() => import("@/pages/transaction-history"));
-const SaleReturnPage        = lazy(() => import("@/pages/sale-return"));
 const PurchaseReturnPage    = lazy(() => import("@/pages/purchase-return"));
 const ReturnsPage           = lazy(() => import("@/pages/returns"));
 const SalesAgentsPage       = lazy(() => import("@/pages/sales-agents"));
@@ -270,7 +269,6 @@ function Router() {
                   <Route path="/transaction-history" component={TransactionHistoryPage} />
                   <Route path="/payment-accounts"   component={PaymentAccountsPage} />
                   <Route path="/returns"            component={ReturnsPage} />
-                  <Route path="/sale-return"        component={SaleReturnPage} />
                   <Route path="/purchase-return"    component={PurchaseReturnPage} />
                   <Route path="/website-cms"        component={WebsiteCmsPage} />
                   <Route path="/repair"             component={RepairPage} />

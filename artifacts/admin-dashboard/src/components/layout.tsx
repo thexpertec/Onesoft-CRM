@@ -351,7 +351,7 @@ const OTHER_NAV: NavItem[] = [
 
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger", "/product-stock-report"];
-const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/sale-return", "/purchase-return"];
+const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/purchase-return"];
 const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database"];
@@ -628,7 +628,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "sales":             "sales",
     "new-sale":          "sales",
     "returns":           "sale_return",
-    "sale-return":       "sale_return",
     "purchase-return":   "purchases",
     "invoices":          "invoices",
     "calc-invoice":      "calc_invoice",
