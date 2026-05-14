@@ -221,12 +221,13 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   // Re-read from store whenever data syncs from the server. Without this, opening
   // the "New Return" sheet right after a fresh page load (before sync completes)
   // would show "No sales found" even though the sale exists in the DB.
-  const [sales, setSales]       = useState<Sale[]>(() =>
-    getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+  // Include all non-cancelled, non-refunded sales (Completed, Draft, On Credit, Pending).
+  const isReturnable = (s: Sale) => s.status !== "Cancelled" && s.status !== "Refunded";
+  const [sales, setSales]       = useState<Sale[]>(() => getSales().filter(isReturnable));
   const [products, setProducts] = useState(() => getProducts());
   useEffect(() => {
     const refresh = () => {
-      setSales(getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+      setSales(getSales().filter(isReturnable));
       setProducts(getProducts());
     };
     window.addEventListener("onesoft:data-synced", refresh);
