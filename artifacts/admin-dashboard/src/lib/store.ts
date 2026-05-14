@@ -6613,80 +6613,96 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
-  // ── Heal orphaned salary JE lines ────────────────────────────────────────
-  // Salary JE lines can reference a ledger account that no longer exists in the
-  // COA — e.g. when the account was created locally but the _apiWrite to the DB
-  // failed, so on the next login syncAllFromServer restores the pre-write COA
-  // without it. The JE still exists but shows "Unknown ledger" in the UI.
+  // ── Heal orphaned OR stale salary JE lines ───────────────────────────────
+  // Two failure modes that cause salary expenses to vanish from the income
+  // statement:
   //
-  // Fix: parse the staff-ID prefix from the JE reference (SAL-ACCR-YYYY-MM-xxxx
-  // or SAL-YYYY-MM-xxxx), find the staff member, get or create their salary
-  // ledger, and re-link the orphaned JE lines to it.
+  //   A. ORPHANED  — JE line's ledgerId is missing from the COA entirely
+  //      (account was created locally, _apiWrite failed, next sync restored the
+  //      pre-write COA).  Shows as "Unknown ledger" in the JE detail view.
+  //
+  //   B. STALE     — JE line's ledgerId IS in the COA but belongs to an OLD
+  //      salary ledger for this staff member.  A newer ledger was created (and
+  //      linked via staff.ledgerAccountId) after the JE was posted.  The income
+  //      statement shows the new ledger with a zero balance, the old one has
+  //      the debit but is hidden / unnamed.
+  //
+  // Fix (both): parse staff-ID prefix from reference (SAL-ACCR-YYYY-MM-xxxx or
+  // SAL-YYYY-MM-xxxx), find the staff member, get their CURRENT ledgerAccountId,
+  // and re-link any salary expense line that doesn't already point to it.
   {
     const salValidIds = new Set(getAccounts().map(a => a.id));
     const allSalJEs   = getJournalEntries();
+    // All salary subsidiary ledger IDs (parentId = sys-4200) for stale detection
+    const salarySubLedgerIds = new Set(
+      getAccounts()
+        .filter(a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger")
+        .map(a => a.id)
+    );
     // Reference format: SAL[-ACCR]-YYYY-MM-{staffId.slice(0,8)}
     const SAL_REF = /^SAL(?:-ACCR)?-\d{4}-\d{2}-([a-f0-9]{8})/i;
 
-    const orphanedSalaryJEs = allSalJEs.filter(je =>
-      SAL_REF.test(je.reference ?? "") &&
-      je.lines.some(l => !salValidIds.has(l.ledgerId))
-    );
+    const allStaffForHeal = getStored<Staff>(STAFF_KEY);
+    let salJEChanged = false;
+    const salHealedMap = new Map<string, JournalEntry>();
 
-    if (orphanedSalaryJEs.length > 0) {
-      const allStaffForHeal = getStored<Staff>(STAFF_KEY);
-      let salJEChanged = false;
-      const salHealedMap = new Map<string, JournalEntry>();
+    for (const je of allSalJEs) {
+      const m = SAL_REF.exec(je.reference ?? "");
+      if (!m) continue;
+      const staffIdPrefix = m[1];
+      const staffMember   = allStaffForHeal.find(s => s.id.startsWith(staffIdPrefix));
+      if (!staffMember) continue;
 
-      for (const je of orphanedSalaryJEs) {
-        const m = SAL_REF.exec(je.reference ?? "");
-        if (!m) continue;
-        const staffIdPrefix = m[1];
-        const staffMember   = allStaffForHeal.find(s => s.id.startsWith(staffIdPrefix));
-        if (!staffMember) continue;
+      // Check whether any line needs healing (Case A or B)
+      const currentLid = staffMember.ledgerAccountId;
+      const needsHeal = je.lines.some(l =>
+        !salValidIds.has(l.ledgerId) ||                               // Case A: orphaned
+        (salarySubLedgerIds.has(l.ledgerId) && currentLid && l.ledgerId !== currentLid) // Case B: stale
+      );
+      if (!needsHeal) continue;
 
-        // Use existing ledger if valid; otherwise find by name or create fresh
-        let targetLedgerId: string | null = null;
-        if (staffMember.ledgerAccountId && salValidIds.has(staffMember.ledgerAccountId)) {
-          targetLedgerId = staffMember.ledgerAccountId;
-        } else {
-          const matchN = staffMember.name + (staffMember.designation ? ` — ${staffMember.designation}` : "");
-          const found  = getAccounts().find(
-            a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
-                 a.name.toLowerCase() === matchN.toLowerCase()
-          );
-          if (found) {
-            targetLedgerId = found.id;
-          } else {
-            targetLedgerId = createSubsidiaryLedger({
-              parentId:    SYS_ACCS.SALARY_GROUP,
-              parentCode:  "4200",
-              name:        matchN,
-              head:        "Expense",
-              subType:     "Payroll",
-              description: `Salary ledger for ${staffMember.name}`,
-            });
-          }
-          salValidIds.add(targetLedgerId!);
-          if (staffMember.ledgerAccountId !== targetLedgerId) {
-            updateStaff(staffMember.id, { ledgerAccountId: targetLedgerId! });
-          }
-        }
-        if (!targetLedgerId) continue;
-
-        const tid = targetLedgerId;
-        salHealedMap.set(je.id, {
-          ...je,
-          lines: je.lines.map(l => salValidIds.has(l.ledgerId) ? l : { ...l, ledgerId: tid }),
+      // Resolve the correct target ledger for this staff member
+      let targetLedgerId: string | null = null;
+      if (currentLid && salValidIds.has(currentLid)) {
+        targetLedgerId = currentLid;
+      } else {
+        const matchN = staffMember.name + (staffMember.designation ? ` — ${staffMember.designation}` : "");
+        const found  = getAccounts().find(
+          a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
+               a.name.toLowerCase() === matchN.toLowerCase()
+        );
+        targetLedgerId = found?.id ?? createSubsidiaryLedger({
+          parentId:    SYS_ACCS.SALARY_GROUP,
+          parentCode:  "4200",
+          name:        matchN,
+          head:        "Expense",
+          subType:     "Payroll",
+          description: `Salary ledger for ${staffMember.name}`,
         });
+        salValidIds.add(targetLedgerId!);
+        salarySubLedgerIds.add(targetLedgerId!);
+        if (staffMember.ledgerAccountId !== targetLedgerId) {
+          updateStaff(staffMember.id, { ledgerAccountId: targetLedgerId! });
+        }
+      }
+      if (!targetLedgerId) continue;
+
+      const tid = targetLedgerId;
+      const healedLines = je.lines.map(l => {
+        const orphaned = !salValidIds.has(l.ledgerId);
+        const stale    = salarySubLedgerIds.has(l.ledgerId) && l.ledgerId !== tid;
+        return (orphaned || stale) ? { ...l, ledgerId: tid } : l;
+      });
+      if (healedLines.some((l, i) => l !== je.lines[i])) {
+        salHealedMap.set(je.id, { ...je, lines: healedLines });
         salJEChanged = true;
       }
+    }
 
-      if (salJEChanged) {
-        const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
-        setStored(JE_KEY, allSalJEsUpdated);
-        console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned ledger line(s)`);
-      }
+    if (salJEChanged) {
+      const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
+      setStored(JE_KEY, allSalJEsUpdated);
+      console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned/stale ledger line(s)`);
     }
   }
 
@@ -8689,7 +8705,14 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     console.warn("[sync] syncAllFromServer failed:", e);
   }
 
-  // Step 5 — Notify all data hooks so they re-render with the fresh server data.
+  // Step 5 — Run accounting integrity checks (heal orphaned/stale salary JEs,
+  //           backfill missing accrual JEs, wire system accounts).  This is
+  //           cheap (reads LS, no network) and safe to run every sync.
+  if (tenantId) {
+    try { seedDefaultCoaAccounts(); } catch { /* non-fatal */ }
+  }
+
+  // Step 6 — Notify all data hooks so they re-render with the fresh server data.
   try {
     window.dispatchEvent(new CustomEvent("onesoft:data-synced"));
   } catch { /* SSR guard */ }
