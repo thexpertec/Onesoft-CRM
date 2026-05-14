@@ -459,10 +459,13 @@ export default function SalaryPage() {
                         {slip.status === "Draft" && (
                           <button
                             title="Approve"
-                            onClick={() => {
+                            onClick={async () => {
                               let accrualJournalEntryId: string | undefined;
                               try {
-                                const accrualJE = postSalaryApprovalJE(slip);
+                                // postSalaryApprovalJE is async: it awaits the COA server
+                                // write before creating the JE, preventing "Unknown ledger"
+                                // caused by the tab closing between the two writes.
+                                const accrualJE = await postSalaryApprovalJE(slip);
                                 accrualJournalEntryId = accrualJE.id;
                               } catch (err) {
                                 console.error("Salary accrual JE failed:", err);

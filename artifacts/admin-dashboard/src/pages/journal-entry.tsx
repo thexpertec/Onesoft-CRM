@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown, ChevronUp,
   Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil, ShieldAlert,
 } from "lucide-react";
-import { useAccounts } from "@/hooks/use-data";
+import { useAccounts, useStaff } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import { Account, JournalEntry, purgeOrphanedVoucherJEs } from "@/lib/store";
@@ -180,6 +180,7 @@ function LedgerDropdown({
 
 export default function JournalEntryPage() {
   const { accounts } = useAccounts();
+  const { staff } = useStaff();
   const { entries, addEntry, editEntry, removeEntry, refresh: refreshEntries } = useJournalEntries();
   const { toast } = useToast();
   const dp = getSettingsDecimalPlaces();
@@ -771,8 +772,14 @@ export default function JournalEntryPage() {
                                   </thead>
                                   <tbody>
                                     {e.lines.map(l => {
-                                      const ledger = ledgerById(l.ledgerId);
-                                      const trail  = ledger ? buildTrail(accounts, ledger) : null;
+                                      const ledger    = ledgerById(l.ledgerId);
+                                      const trail     = ledger ? buildTrail(accounts, ledger) : null;
+                                      // Graceful fallback: if the ledger is missing (orphaned UUID)
+                                      // but the line carries a staffId anchor, resolve the staff
+                                      // member's name so the row is still meaningful.
+                                      const staffFallback = !ledger && l.staffId
+                                        ? staff.find(s => s.id === l.staffId)
+                                        : null;
                                       return (
                                         <tr key={l.id} className="border-t border-blue-100 dark:border-blue-900/50">
                                           <td className="px-3 py-2">
@@ -786,6 +793,13 @@ export default function JournalEntryPage() {
                                                   <div className="text-[9px] text-gray-400 opacity-60 blur-[0.3px] truncate mt-0.5">{trail}</div>
                                                 )}
                                               </>
+                                            ) : staffFallback ? (
+                                              <div>
+                                                <span className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">
+                                                  Salary expense — {staffFallback.name}
+                                                </span>
+                                                <div className="text-[9px] text-amber-500/70 mt-0.5">Ledger re-syncing — will resolve on next login</div>
+                                              </div>
                                             ) : (
                                               <div>
                                                 <span className="text-[11px] text-red-400 italic">Unknown ledger</span>

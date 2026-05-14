@@ -232,6 +232,19 @@ function _lsGet(storageKey: string): string | null {
   return _memRaw.get(storageKey) ?? null;
 }
 
+/**
+ * Wait for any in-flight write to the Chart of Accounts to complete.
+ * Call this before creating a JE that references a newly-created ledger account
+ * so the ledger is guaranteed to be on the server before the JE is stored.
+ */
+async function _awaitAccountsWrite(): Promise<void> {
+  const sk = tenantKey(COA_KEY);
+  const pending = _pendingWrites.get(sk);
+  if (pending) {
+    try { await pending; } catch { /* write-error event already dispatched */ }
+  }
+}
+
 /** Write to in-memory cache only. Server persistence is handled by _apiWrite. */
 function _lsSet(storageKey: string, data: unknown): void {
   _memRaw.set(storageKey, JSON.stringify(data));
@@ -6680,10 +6693,17 @@ export function seedDefaultCoaAccounts(): void {
     const salHealedMap = new Map<string, JournalEntry>();
 
     for (const je of allSalJEs) {
-      const m = SAL_REF.exec(je.reference ?? "");
-      if (!m) continue;
-      const staffIdPrefix = m[1];
-      const staffMember   = allStaffForHeal.find(s => s.id.startsWith(staffIdPrefix));
+      // Primary: use staffId stored directly on the expense line (new JEs).
+      // Fallback: parse the 8-char prefix from the JE reference (legacy JEs).
+      const lineStaffId = je.lines.find(l => l.staffId)?.staffId;
+      let staffMember: Staff | undefined;
+      if (lineStaffId) {
+        staffMember = allStaffForHeal.find(s => s.id === lineStaffId);
+      } else {
+        const m = SAL_REF.exec(je.reference ?? "");
+        if (!m) continue;
+        staffMember = allStaffForHeal.find(s => s.id.startsWith(m[1]));
+      }
       if (!staffMember) continue;
 
       // Check whether any line needs healing (Case A or B)
@@ -6776,10 +6796,23 @@ export function seedDefaultCoaAccounts(): void {
     const slips = getStored<SalarySlip>(SALARY_SLIPS_KEY);
     const approvedUnpaid = slips.filter(s => s.status === "Approved" && !s.accrualJournalEntryId);
     if (approvedUnpaid.length > 0) {
+      // Note: postSalaryApprovalJE is async (awaits COA write) but here the COA
+      // is already stable post-sync (no pending writes), so we inline the creation
+      // synchronously to avoid making seedDefaultCoaAccounts async.
       const updated = slips.map(s => {
         if (s.status !== "Approved" || s.accrualJournalEntryId) return s;
         try {
-          const je = postSalaryApprovalJE(s);
+          const staffLedgerId = _resolveStaffSalaryLedger(s);
+          const je = createJournalEntry({
+            date:        new Date().toISOString().slice(0, 10),
+            reference:   `SAL-ACCR-${s.period}-${s.staffId.slice(0, 8)}`,
+            description: `Salary accrual — ${s.staffName} (${s.period})`,
+            lines: [
+              { id: crypto.randomUUID(), ledgerId: staffLedgerId,           narration: `Salary expense — ${s.staffName} (${s.period})`,  debit: s.netSalary, credit: 0, staffId: s.staffId },
+              { id: crypto.randomUUID(), ledgerId: SYS_ACCS.SALARY_PAYABLE, narration: `Salary payable — ${s.staffName} (${s.period})`, debit: 0, credit: s.netSalary },
+            ],
+            status: "posted", totalDebit: s.netSalary, totalCredit: s.netSalary, isBalanced: true,
+          });
           return { ...s, accrualJournalEntryId: je.id };
         } catch {
           return s; // skip if JE creation fails
@@ -7116,6 +7149,8 @@ export type JournalEntryLine = {
   narration: string;
   debit: number;
   credit: number;
+  /** Present on salary-expense lines — stable anchor independent of ledger UUID. */
+  staffId?: string;
 };
 
 export type JournalEntry = {
@@ -9037,8 +9072,13 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
  *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages — the expense)
  *   Cr — Salary Payable       (2131 — liability until cash is paid)
  */
-export function postSalaryApprovalJE(slip: SalarySlip): JournalEntry {
+export async function postSalaryApprovalJE(slip: SalarySlip): Promise<JournalEntry> {
   const staffLedgerId = _resolveStaffSalaryLedger(slip);
+  // Await the COA server write before creating the JE.
+  // This prevents the race condition where the ledger exists locally but not yet
+  // on the server — if the tab closes between these two writes, the ledger UUID
+  // would be orphaned on next login and show as "Unknown ledger".
+  await _awaitAccountsWrite();
   const ref = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
   return createJournalEntry({
     date:        new Date().toISOString().slice(0, 10),
@@ -9051,6 +9091,7 @@ export function postSalaryApprovalJE(slip: SalarySlip): JournalEntry {
         narration: `Salary expense — ${slip.staffName} (${slip.period})`,
         debit:     slip.netSalary,
         credit:    0,
+        staffId:   slip.staffId, // stable anchor — survives ledger UUID changes
       },
       {
         id:        crypto.randomUUID(),
@@ -9097,6 +9138,8 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
         narration: debitNarr,
         debit:     slip.netSalary,
         credit:    0,
+        // staffId only applies when the debit is the salary expense (no-accrual path)
+        ...(!hasAccrual ? { staffId: slip.staffId } : {}),
       },
       {
         id:        crypto.randomUUID(),
