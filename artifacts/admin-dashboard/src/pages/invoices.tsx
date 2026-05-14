@@ -3084,7 +3084,7 @@ export default function InvoicesPage() {
               <div className="text-right">Items</div>
               <div className="text-right">Total</div>
               <div className="text-right">Paid</div>
-              <div>PaidStatus</div>
+              <div>Paid Status</div>
               <div>{isPurchase ? "Purchase Status" : "Sale Status"}</div>
               {isPurchase && <div>Stock Status</div>}
               {isPurchase && <div>Order Status</div>}
