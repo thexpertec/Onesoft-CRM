@@ -684,6 +684,27 @@ export const getCustomer = (id: string): Customer | undefined => getCustomers().
 const _OB_REF_PREFIX = "OB-";
 
 /**
+ * Returns true when a reference looks like the OLD UUID-based format
+ * (OB- followed by a UUID hex string) rather than the clean sequential format.
+ */
+const _isLegacyObRef = (ref: string): boolean =>
+  ref.startsWith(_OB_REF_PREFIX) && !/^\d+$/.test(ref.slice(_OB_REF_PREFIX.length));
+
+/**
+ * Generate the next sequential opening-balance reference that isn't yet taken.
+ * Format: OB-000001, OB-000002, …
+ */
+function _nextObRef(): string {
+  const used = getJournalEntries()
+    .map(e => e.reference)
+    .filter(r => r.startsWith(_OB_REF_PREFIX))
+    .map(r => parseInt(r.slice(_OB_REF_PREFIX.length), 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+  const next = used.length > 0 ? Math.max(...used) + 1 : 1;
+  return `${_OB_REF_PREFIX}${String(next).padStart(6, "0")}`;
+}
+
+/**
  * Post (or update) a "brought-forward" opening-balance journal entry for a
  * customer/supplier ledger account.  Calling with amount=0 deletes any
  * existing OB entry.  Safe to call multiple times — only one OB entry per
@@ -696,8 +717,16 @@ function _upsertOpeningBalanceJE(
   date: string,
   entityName: string,
 ): void {
-  const ref = `${_OB_REF_PREFIX}${ledgerAccountId}`;
-  const existing = getJournalEntries().find(e => e.reference === ref);
+  // Look up by ledger account ID in the JE lines — more robust than reference
+  // matching and works across both old UUID-style refs and new sequential refs.
+  const existing = getJournalEntries().find(
+    e => e.reference.startsWith(_OB_REF_PREFIX) &&
+         e.lines.some(l => l.ledgerId === ledgerAccountId)
+  );
+  // Keep an existing clean sequential ref; generate a new one otherwise.
+  const ref = (existing && !_isLegacyObRef(existing.reference))
+    ? existing.reference
+    : _nextObRef();
 
   if (amount === 0) {
     if (existing) deleteJournalEntry(existing.id);
@@ -2370,11 +2399,15 @@ export function backfillMissingSKUs(): void {
  */
 export function backfillOpeningBalanceJEs(): void {
   const customers = getCustomers();
+  const allJEs    = getJournalEntries();
   for (const c of customers) {
     if (!c.openingBalance || c.openingBalance === 0) continue;
     if (!c.ledgerAccountId) continue;
-    const ref = `${_OB_REF_PREFIX}${c.ledgerAccountId}`;
-    const alreadyExists = getJournalEntries().some(e => e.reference === ref);
+    // Look up by ledger account in lines — works for both old UUID refs and new sequential refs
+    const alreadyExists = allJEs.some(
+      e => e.reference.startsWith(_OB_REF_PREFIX) &&
+           e.lines.some(l => l.ledgerId === c.ledgerAccountId)
+    );
     if (alreadyExists) continue;
     const isSupplier = (c.customerRole ?? "Buyer") === "Supplier";
     const displayName = c.name + (c.company ? ` (${c.company})` : "");
@@ -6703,6 +6736,36 @@ export function seedDefaultCoaAccounts(): void {
       const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
       setStored(JE_KEY, allSalJEsUpdated);
       console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned/stale ledger line(s)`);
+    }
+  }
+
+  // ── Migrate legacy UUID-style Opening Balance refs → sequential ──────────
+  // Old format: OB-{ledgerAccountId} (a full UUID).
+  // New format: OB-000001, OB-000002, …
+  // Run every login — cheap scan, only writes when legacy refs are found.
+  {
+    const allJEs = getJournalEntries();
+    const legacyOBJEs = allJEs.filter(e => _isLegacyObRef(e.reference ?? ""));
+    if (legacyOBJEs.length > 0) {
+      // Pre-compute which sequential numbers are already taken so we never clash.
+      const takenNums = new Set(
+        allJEs
+          .map(e => parseInt((e.reference ?? "").slice(_OB_REF_PREFIX.length), 10))
+          .filter(n => Number.isFinite(n) && n > 0)
+      );
+      let nextNum = 1;
+      const getNextNum = (): number => {
+        while (takenNums.has(nextNum)) nextNum++;
+        takenNums.add(nextNum);
+        return nextNum++;
+      };
+      const patched = allJEs.map(je => {
+        if (!_isLegacyObRef(je.reference ?? "")) return je;
+        const seq = `${_OB_REF_PREFIX}${String(getNextNum()).padStart(6, "0")}`;
+        return { ...je, reference: seq };
+      });
+      setStored(JE_KEY, patched);
+      console.info(`[COA] Migrated ${legacyOBJEs.length} opening-balance JE ref(s) to sequential format`);
     }
   }
 
