@@ -627,7 +627,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "receipts-payments": "accounting_receipts",
     "sales":             "sales",
     "new-sale":          "sales",
-    "returns":           "sale_return",
+    "sale-return":       "sale_return",
     "purchase-return":   "purchases",
     "invoices":          "invoices",
     "calc-invoice":      "calc_invoice",

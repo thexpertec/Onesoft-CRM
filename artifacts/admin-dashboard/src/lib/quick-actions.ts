@@ -29,7 +29,7 @@ export const QUICK_ACTIONS_REGISTRY: QuickActionDef[] = [
   // ── Sales ────────────────────────────────────────────────────────────────
   { id: "sales",              label: "Sales",     titleFull: "Sales / POS",          href: "/sales",                      icon: Receipt,       color: "emerald", group: "Sales" },
   { id: "new-sale",           label: "New Sale",  titleFull: "New Sale (POS)",       href: "/sales/new",                  icon: PlusCircle,    color: "teal",    group: "Sales" },
-  { id: "sale-return",        label: "Returns",   titleFull: "Sale Returns",         href: "/sale-return",                icon: Undo2,         color: "red",     group: "Sales" },
+  { id: "sale-return",        label: "Returns",   titleFull: "Sale & Purchase Returns", href: "/returns",                  icon: Undo2,         color: "red",     group: "Sales" },
   // ── Invoicing ─────────────────────────────────────────────────────────────
   { id: "invoices",           label: "Invoices",  titleFull: "Invoices",             href: "/invoices",                   icon: FileText,      color: "blue",    group: "Invoicing" },
   { id: "calc-invoice",       label: "Calc Inv.", titleFull: "Calc Invoice",         href: "/calc-invoice",               icon: Calculator,    color: "purple",  group: "Invoicing" },
