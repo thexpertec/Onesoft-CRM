@@ -8705,11 +8705,15 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
     console.warn("[sync] syncAllFromServer failed:", e);
   }
 
-  // Step 5 — Run accounting integrity checks (heal orphaned/stale salary JEs,
-  //           backfill missing accrual JEs, wire system accounts).  This is
-  //           cheap (reads LS, no network) and safe to run every sync.
+  // Step 5 — Run accounting integrity checks scoped to the correct tenant.
+  // seedDefaultCoaAccounts() (heal orphaned/stale salary JEs, backfill missing
+  // accrual JEs, wire system accounts) uses _activeTenantId to scope its reads
+  // and writes.  syncAllFromServer never sets _activeTenantId, so we switch it
+  // temporarily — exactly as the tenant-creation flow does.
   if (tenantId) {
-    try { seedDefaultCoaAccounts(); } catch { /* non-fatal */ }
+    const _prevTenant = _activeTenantId;
+    _activeTenantId = tenantId;
+    try { seedDefaultCoaAccounts(); } catch { /* non-fatal */ } finally { _activeTenantId = _prevTenant; }
   }
 
   // Step 6 — Notify all data hooks so they re-render with the fresh server data.
