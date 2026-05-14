@@ -310,7 +310,8 @@ function DebitNoteView({ pr, onClose }: { pr: PurchaseReturn; onClose: () => voi
 function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
   const [step, setStep]                   = useState<1 | 2>(1);
-  const [saleSearch, setSaleSearch]       = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [itemSearch, setItemSearch]         = useState("");
   const [selectedSale, setSelectedSale]   = useState<Sale | null>(null);
   const [returnItems, setReturnItems]     = useState<SaleReturnItem[]>([]);
   const saleRefundOptions = useMemo(() => getSaleRefundOptions(), []);
@@ -322,12 +323,12 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
   const [date, setDate]                   = useState(today());
   const [submitting, setSubmitting]       = useState(false);
 
-  const [sales, setSales]       = useState<Sale[]>(() =>
-    getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+  const isReturnable = (s: Sale) => s.status !== "Cancelled" && s.status !== "Refunded";
+  const [sales, setSales]       = useState<Sale[]>(() => getSales().filter(isReturnable));
   const [products, setProducts] = useState(() => getProducts());
   useEffect(() => {
     const refresh = () => {
-      setSales(getSales().filter(s => s.status === "Completed" || s.status === "Draft"));
+      setSales(getSales().filter(isReturnable));
       setProducts(getProducts());
     };
     window.addEventListener("onesoft:data-synced", refresh);
@@ -337,14 +338,21 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
   const sym = getSettingsCurrencySymbol();
 
   const filteredSales = useMemo(() => {
-    if (!saleSearch.trim()) return sales;
-    const q = saleSearch.toLowerCase();
-    return sales.filter(s =>
-      s.saleNumber.toLowerCase().includes(q) ||
-      (s.customer || "").toLowerCase().includes(q) ||
-      s.items.some(it => (it.productName || "").toLowerCase().includes(q))
-    );
-  }, [sales, saleSearch]);
+    const cq = customerSearch.trim().toLowerCase();
+    const iq = itemSearch.trim().toLowerCase();
+    return sales.filter(s => {
+      const matchCustomer = !cq ||
+        (s.customer || "").toLowerCase().includes(cq) ||
+        (s.phone || "").toLowerCase().includes(cq);
+      const matchItem = !iq ||
+        s.saleNumber.toLowerCase().includes(iq) ||
+        s.items.some(it =>
+          (it.productName || "").toLowerCase().includes(iq) ||
+          (it.sku || "").toLowerCase().includes(iq)
+        );
+      return matchCustomer && matchItem;
+    });
+  }, [sales, customerSearch, itemSearch]);
 
   const handleSelectSale = (sale: Sale) => {
     setSelectedSale(sale);
@@ -451,10 +459,17 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
       {step === 1 && (
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <p className="text-sm text-muted-foreground">Search for the original sale to create a return against:</p>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <Input autoFocus value={saleSearch} onChange={e => setSaleSearch(e.target.value)}
-              placeholder="Sale number, customer or item name…" className="pl-9" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Input autoFocus value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                placeholder="Customer name or phone…" className="pl-9" />
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Input value={itemSearch} onChange={e => setItemSearch(e.target.value)}
+                placeholder="Sale #, item name or SKU…" className="pl-9" />
+            </div>
           </div>
           {filteredSales.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm">No sales found</div>
@@ -592,8 +607,9 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
 
 function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
-  const [step, setStep]               = useState<1 | 2>(1);
-  const [search, setSearch]           = useState("");
+  const [step, setStep]                   = useState<1 | 2>(1);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [itemSearch, setItemSearch]         = useState("");
   const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
   const [returnItems, setReturnItems] = useState<PurchaseReturnItem[]>([]);
   const [products]                    = useState(() => getProducts());
@@ -614,14 +630,21 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
   );
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return purchaseInvoices;
-    const q = search.toLowerCase();
-    return purchaseInvoices.filter(inv =>
-      inv.invoiceNumber.toLowerCase().includes(q) ||
-      (inv.customer || "").toLowerCase().includes(q) ||
-      inv.items.some(it => (it.productName || "").toLowerCase().includes(q))
-    );
-  }, [purchaseInvoices, search]);
+    const sq = supplierSearch.trim().toLowerCase();
+    const iq = itemSearch.trim().toLowerCase();
+    return purchaseInvoices.filter(inv => {
+      const matchSupplier = !sq ||
+        (inv.customer || "").toLowerCase().includes(sq) ||
+        (inv.phone || "").toLowerCase().includes(sq);
+      const matchItem = !iq ||
+        inv.invoiceNumber.toLowerCase().includes(iq) ||
+        inv.items.some(it =>
+          (it.productName || "").toLowerCase().includes(iq) ||
+          (it.sku || "").toLowerCase().includes(iq)
+        );
+      return matchSupplier && matchItem;
+    });
+  }, [purchaseInvoices, supplierSearch, itemSearch]);
 
   const handleSelect = (inv: Invoice) => {
     setSelectedInv(inv);
