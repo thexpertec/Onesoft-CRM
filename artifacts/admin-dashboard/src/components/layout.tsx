@@ -1038,6 +1038,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <div
                         className={`absolute top-full z-50 mt-0 bg-white dark:bg-card border border-gray-100 dark:border-border rounded-b-xl shadow-xl overflow-hidden ${"rightAlign" in cfg && cfg.rightAlign ? "right-0" : "left-0"}`}
                         style={{ minWidth: `${cfg.columns.length * 210}px` }}
+                        ref={(el) => {
+                          if (!el) return;
+                          const rect = el.getBoundingClientRect();
+                          if (rect.left < 8) {
+                            el.style.transform = `translateX(${-(rect.left - 8)}px)`;
+                          }
+                        }}
                       >
                         {/* Column grid */}
                         {(() => {
