@@ -73,19 +73,13 @@ export function FormModeToggle({ mode, onToggle, onClose, className = "" }: Form
   );
 }
 
-// ── Hook: persist preference in localStorage ──────────────────────────────────
-// Priority: per-module localStorage key → global setting (crmFormMode) → "dialog"
-export function useFormMode(storageKey = "os-form-mode"): ["dialog" | "sheet", () => void] {
-  const [mode, setMode] = useState<"dialog" | "sheet">(() => {
-    const perModule = localStorage.getItem(storageKey) as "dialog" | "sheet" | null;
-    if (perModule === "dialog" || perModule === "sheet") return perModule;
-    return getSettings().crmFormMode ?? "dialog";
-  });
-  const toggle = () => {
-    const next = mode === "dialog" ? "sheet" : "dialog";
-    setMode(next);
-    try { localStorage.setItem(storageKey, next); } catch { /* quota */ }
-  };
+// ── Hook: form mode preference (in-memory, no persistence) ───────────────────
+// Priority: global setting (crmFormMode) → "dialog"
+export function useFormMode(_storageKey = "os-form-mode"): ["dialog" | "sheet", () => void] {
+  const [mode, setMode] = useState<"dialog" | "sheet">(
+    () => getSettings().crmFormMode ?? "dialog"
+  );
+  const toggle = () => setMode(m => m === "dialog" ? "sheet" : "dialog");
   return [mode, toggle];
 }
 

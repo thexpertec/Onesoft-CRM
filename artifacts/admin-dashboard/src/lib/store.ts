@@ -7213,6 +7213,27 @@ function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
 }
 
 export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">): JournalEntry {
+  // ── Hard ledger validation ─────────────────────────────────────────────────
+  // Every line's ledgerId MUST exist in the current COA as a Ledger account.
+  // This is the single enforcement point that makes "Unknown ledger" impossible
+  // for newly created JEs — the entry is rejected before it is ever stored.
+  const allAccounts = getAccounts();
+  const validLedgerIds = new Set(
+    allAccounts.filter(a => a.accountType === "Ledger").map(a => a.id)
+  );
+  for (const line of data.lines) {
+    if (!validLedgerIds.has(line.ledgerId)) {
+      const account = allAccounts.find(a => a.id === line.ledgerId);
+      const hint = account
+        ? `account "${account.name}" exists but is a ${account.accountType}, not a Ledger`
+        : `ledger ID "${line.ledgerId}" does not exist in the Chart of Accounts`;
+      throw new Error(
+        `[JE] Cannot create journal entry "${data.reference ?? "(no ref)"}": ${hint}. ` +
+        `Ensure the ledger account is created and persisted before posting the JE.`
+      );
+    }
+  }
+
   // Idempotency guard: if a reference already exists, return the existing entry
   if (data.reference) {
     const existing = getJournalEntries().find(e => e.reference === data.reference);

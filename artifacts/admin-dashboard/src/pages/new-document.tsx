@@ -832,8 +832,8 @@ export default function NewDocument() {
   const dirtyCount = Object.values(dirtySections).filter(Boolean).length;
 
   const persist = (key: string, data: object) => {
-    const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data })); } catch { /* quota */ }
+    const existing = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "{}");
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, [key]: data })); } catch { /* quota */ }
   };
 
   // Builds the full sections payload from current in-memory state so each
@@ -871,7 +871,7 @@ export default function NewDocument() {
       };
       editDoc(params.id, docPayload);
       // Clear draft once saved to DB so next load comes from the server
-      localStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(DRAFT_KEY);
     }
     markSaved(sectionKey);
     markClean(sectionKey);
@@ -884,11 +884,11 @@ export default function NewDocument() {
     const sec = customSections.find(s => s.id === id);
     if (!sec) return;
     // Update the draft custom section entry
-    const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+    const existing = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "{}");
     const currentCustom: CustomSection[] = existing.sCustom?.sections ?? [];
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } })); } catch { /* quota */ }
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom: { sections: currentCustom } })); } catch { /* quota */ }
     // Persist full doc to DB in edit mode
     if (isEditMode && params.id) {
       editDoc(params.id, {
@@ -905,18 +905,18 @@ export default function NewDocument() {
         startDate: startDate || "",
         deliveryDate: deliveryDate || "",
       });
-      localStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(DRAFT_KEY);
     }
     markSaved(`sc_${id}`); markClean(`sc_${id}`);
   };
   const saveCustomSection2 = (id: string) => {
     const sec = customSections2.find(s => s.id === id);
     if (!sec) return;
-    const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+    const existing = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "{}");
     const currentCustom: CustomSection[] = existing.sCustom2?.sections ?? [];
     const idx = currentCustom.findIndex((s: CustomSection) => s.id === id);
     if (idx >= 0) currentCustom[idx] = sec; else currentCustom.push(sec);
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } })); } catch { /* quota */ }
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...existing, sCustom2: { sections: currentCustom } })); } catch { /* quota */ }
     if (isEditMode && params.id) {
       editDoc(params.id, {
         sections: buildSections(),
@@ -932,7 +932,7 @@ export default function NewDocument() {
         startDate: startDate || "",
         deliveryDate: deliveryDate || "",
       });
-      localStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(DRAFT_KEY);
     }
     markSaved(`sc2_${id}`); markClean(`sc2_${id}`);
   };
@@ -1068,11 +1068,11 @@ export default function NewDocument() {
         const sections = (existingDoc.sections ?? {}) as Record<string, unknown>;
         loadSections(sections);
         // Also check for unsaved draft edits on top
-        const draftRaw = localStorage.getItem(DRAFT_KEY);
+        const draftRaw = sessionStorage.getItem(DRAFT_KEY);
         if (draftRaw) loadSections(JSON.parse(draftRaw));
       } else {
         // New mode: load from draft
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) return;
         loadSections(JSON.parse(raw));
       }
@@ -1179,7 +1179,7 @@ export default function NewDocument() {
       addDoc({ ...docPayload, status: "Draft" });
     }
 
-    localStorage.removeItem(DRAFT_KEY);
+    sessionStorage.removeItem(DRAFT_KEY);
     navigate("/documents");
   };
 

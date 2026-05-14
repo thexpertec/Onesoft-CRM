@@ -24,14 +24,15 @@ import {
 } from "@/lib/store";
 import { verifyTenantCredentials } from "@/lib/api";
 
-// Core auth state (isAuthenticated, userId, tenantId) is stored in localStorage
-// so it survives page refreshes and iframe reloads. The Replit preview pane is
-// an iframe — sessionStorage is cleared on every iframe refresh there.
-// Impersonation and tab-tenant-override remain in sessionStorage (tab-scoped by design).
+// All auth/session state is stored in sessionStorage — no localStorage anywhere.
+// sessionStorage persists across F5/hard-refreshes within the same browser tab
+// and is automatically cleared when the tab is closed.
+// Impersonation and tab-tenant-override are also in sessionStorage (tab-scoped by design).
 const AUTH_KEY        = "onesoft-admin-auth";
 const AUTH_USER_ID    = "onesoft-admin-user-id";
 const TENANT_KEY      = "onesoft-tenant-id";
-const IMPERSONATE_KEY = "onesoft-impersonate-from"; // stores manager's original userId — sessionStorage
+const IMPERSONATE_KEY = "onesoft-impersonate-from";
+const _ss = sessionStorage;
 
 export type ImpersonateAs = "admin" | "staff" | "sales_agent";
 
@@ -82,10 +83,10 @@ const AuthContext = createContext<AuthContextType>({
   switchTenant:       () => {},
 });
 
-/** Restore tenant namespace from localStorage on page load. */
+/** Restore tenant namespace from sessionStorage on page load. */
 function restoreActiveTenant(): string | null {
   try {
-    const raw = localStorage.getItem(TENANT_KEY);
+    const raw = _ss.getItem(TENANT_KEY);
     if (raw === null) return null;
     const id = raw === "" ? null : raw;
     setActiveTenant(id);
@@ -98,8 +99,8 @@ function restoreActiveTenant(): string | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(() => {
     try {
-      const isAuth = localStorage.getItem(AUTH_KEY) === "true";
-      const userId  = localStorage.getItem(AUTH_USER_ID);
+      const isAuth = _ss.getItem(AUTH_KEY) === "true";
+      const userId  = _ss.getItem(AUTH_USER_ID);
       if (!isAuth || !userId) return null;
       restoreActiveTenant();
       return getAdminUserById(userId) ?? null;
@@ -131,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** Raw SalesAgent.id when a sales agent is logged in, null otherwise. */
   const currentAgentId: string | null = (() => {
     if (!isSalesAgent || !currentUser) return null;
-    const userId = localStorage.getItem(AUTH_USER_ID);
+    const userId = _ss.getItem(AUTH_USER_ID);
     if (userId?.startsWith("agent:")) return userId.slice(6);
     return null;
   })();
@@ -184,8 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── On app load: if already authenticated, sync from DB ────────────────────
   useEffect(() => {
-    const isAuth = localStorage.getItem(AUTH_KEY) === "true";
-    const userId  = localStorage.getItem(AUTH_USER_ID);
+    const isAuth = _ss.getItem(AUTH_KEY) === "true";
+    const userId  = _ss.getItem(AUTH_USER_ID);
     if (!isAuth || !userId) return;
 
     // Check for ?tenant=<id> URL param — used when opening a tenant in a new tab.
@@ -208,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveTenant(tabTenant);
         setCurrentTenantId(tabTenant);
       } else {
-        const tenantId = localStorage.getItem(TENANT_KEY);
+        const tenantId = _ss.getItem(TENANT_KEY);
         resolvedTenantId = tenantId === "" ? null : (tenantId ?? null);
       }
     }
@@ -264,9 +265,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const tenantUser = tenantToAdminUser(tenantFromServer);
         setActivityUser(tenantUser.fullName || tenantUser.username);
-        localStorage.setItem(AUTH_KEY,     "true");
-        localStorage.setItem(AUTH_USER_ID, `tenant:${tenantFromServer.id}`);
-        localStorage.setItem(TENANT_KEY,   tenantFromServer.id);
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, `tenant:${tenantFromServer.id}`);
+        _ss.setItem(TENANT_KEY,   tenantFromServer.id);
         setCurrentUser(tenantUser);
         setCurrentTenantId(tenantFromServer.id);
         return true;
@@ -303,9 +304,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         setActiveTenant(null);
         setActivityUser(user.fullName || user.username);
-        localStorage.setItem(AUTH_KEY,     "true");
-        localStorage.setItem(AUTH_USER_ID, user.id);
-        localStorage.setItem(TENANT_KEY,   "");
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, user.id);
+        _ss.setItem(TENANT_KEY,   "");
         setCurrentUser(user);
         setCurrentTenantId(null);
         return true;
@@ -329,9 +330,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const tenantUser = tenantToAdminUser(tenant);
         setActivityUser(tenantUser.fullName || tenantUser.username);
-        localStorage.setItem(AUTH_KEY,     "true");
-        localStorage.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
-        localStorage.setItem(TENANT_KEY,   tenant.id);
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, `tenant:${tenant.id}`);
+        _ss.setItem(TENANT_KEY,   tenant.id);
         setCurrentUser(tenantUser);
         setCurrentTenantId(tenant.id);
         return true;
@@ -344,9 +345,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const staffUser = staffToAdminUser(staffMember);
         setActiveTenant(null);
         setActivityUser(staffUser.fullName || staffUser.username);
-        localStorage.setItem(AUTH_KEY,     "true");
-        localStorage.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
-        localStorage.setItem(TENANT_KEY,   "");
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
+        _ss.setItem(TENANT_KEY,   "");
         setCurrentUser(staffUser);
         setCurrentTenantId(null);
         return true;
@@ -358,9 +359,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const agentUser = agentToAdminUser(agent);
         setActiveTenant(null);
         setActivityUser(agentUser.fullName || agentUser.username);
-        localStorage.setItem(AUTH_KEY,     "true");
-        localStorage.setItem(AUTH_USER_ID, `agent:${agent.id}`);
-        localStorage.setItem(TENANT_KEY,   "");
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, `agent:${agent.id}`);
+        _ss.setItem(TENANT_KEY,   "");
         setCurrentUser(agentUser);
         setCurrentTenantId(null);
         return true;
@@ -385,8 +386,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!tenant || tenant.status === "suspended") return false;
 
     // Save manager's original user ID so we can restore (tab-scoped — sessionStorage is correct)
-    const origUserId = localStorage.getItem(AUTH_USER_ID) ?? "";
-    sessionStorage.setItem(IMPERSONATE_KEY, origUserId);
+    const origUserId = _ss.getItem(AUTH_USER_ID) ?? "";
+    _ss.setItem(IMPERSONATE_KEY, origUserId);
 
     // Set active tenant FIRST so seedDefaultCoaAccounts writes to the correct namespace.
     setActiveTenant(tenantId);
@@ -405,8 +406,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (as === "admin") {
       const tenantUser = tenantToAdminUser(tenant);
       setActivityUser(tenantUser.fullName || tenantUser.username);
-      localStorage.setItem(AUTH_USER_ID, `tenant:${tenantId}`);
-      localStorage.setItem(TENANT_KEY, tenantId);
+      _ss.setItem(AUTH_USER_ID, `tenant:${tenantId}`);
+      _ss.setItem(TENANT_KEY, tenantId);
       setCurrentUser(tenantUser);
       setCurrentTenantId(tenantId);
       setIsImpersonating(true);
@@ -419,8 +420,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const staffUser = staffToAdminUser(staffMember);
       setActiveTenant(tenantId);
       setActivityUser(staffUser.fullName || staffUser.username);
-      localStorage.setItem(AUTH_USER_ID, `staff:${memberId}`);
-      localStorage.setItem(TENANT_KEY, tenantId);
+      _ss.setItem(AUTH_USER_ID, `staff:${memberId}`);
+      _ss.setItem(TENANT_KEY, tenantId);
       setCurrentUser(staffUser);
       setCurrentTenantId(tenantId);
       setIsImpersonating(true);
@@ -433,8 +434,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const agentUser = agentToAdminUser(agent);
       setActiveTenant(tenantId);
       setActivityUser(agentUser.fullName || agentUser.username);
-      localStorage.setItem(AUTH_USER_ID, `agent:${memberId}`);
-      localStorage.setItem(TENANT_KEY, tenantId);
+      _ss.setItem(AUTH_USER_ID, `agent:${memberId}`);
+      _ss.setItem(TENANT_KEY, tenantId);
       setCurrentUser(agentUser);
       setCurrentTenantId(tenantId);
       setIsImpersonating(true);
@@ -442,19 +443,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Cleanup if something went wrong
-    sessionStorage.removeItem(IMPERSONATE_KEY);
+    _ss.removeItem(IMPERSONATE_KEY);
     return false;
   };
 
   // ── Exit Impersonation ─────────────────────────────────────────────────────
   const exitImpersonation = () => {
-    const origUserId = sessionStorage.getItem(IMPERSONATE_KEY);
+    const origUserId = _ss.getItem(IMPERSONATE_KEY);
     if (!origUserId) return;
 
-    sessionStorage.removeItem(IMPERSONATE_KEY);
+    _ss.removeItem(IMPERSONATE_KEY);
     setActiveTenant(null);
-    localStorage.setItem(AUTH_USER_ID, origUserId);
-    localStorage.setItem(TENANT_KEY, "");
+    _ss.setItem(AUTH_USER_ID, origUserId);
+    _ss.setItem(TENANT_KEY, "");
 
     const managerUser = getAdminUserById(origUserId);
     setActivityUser(managerUser?.fullName || managerUser?.username || "Manager");
@@ -467,18 +468,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setActiveTenant(null);
     setActivityUser("System");
-    localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem(AUTH_USER_ID);
-    localStorage.removeItem(TENANT_KEY);
-    sessionStorage.removeItem("onesoft_tab_tenant");
-    sessionStorage.removeItem(IMPERSONATE_KEY);
+    _ss.removeItem(AUTH_KEY);
+    _ss.removeItem(AUTH_USER_ID);
+    _ss.removeItem(TENANT_KEY);
+    _ss.removeItem("onesoft_tab_tenant");
+    _ss.removeItem(IMPERSONATE_KEY);
     setCurrentUser(null);
     setCurrentTenantId(null);
   };
 
   // ── Refresh ────────────────────────────────────────────────────────────────
   const refreshCurrentUser = () => {
-    const userId = localStorage.getItem(AUTH_USER_ID);
+    const userId = _ss.getItem(AUTH_USER_ID);
     if (userId) setCurrentUser(getAdminUserById(userId) ?? null);
   };
 
@@ -486,9 +487,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchTenant = (tenantId: string | null) => {
     setActiveTenant(tenantId);
     setCurrentTenantId(tenantId);
-    localStorage.setItem(TENANT_KEY, tenantId ?? "");
+    _ss.setItem(TENANT_KEY, tenantId ?? "");
     // Clear the per-tab sessionStorage override so the explicit switch takes over
-    sessionStorage.removeItem("onesoft_tab_tenant");
+    _ss.removeItem("onesoft_tab_tenant");
 
     // Sync that tenant's data from DB
     if (tenantId) {

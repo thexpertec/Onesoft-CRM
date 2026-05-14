@@ -1243,7 +1243,7 @@ export default function TenantsPage() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               <strong>"{tenants.find(t => t.id === deleteId)?.name}"</strong> will be permanently removed from the platform registry.
-              Their isolated data in localStorage will remain but become inaccessible.
+              Their isolated data on the server will remain but become inaccessible.
               This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

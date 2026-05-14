@@ -385,9 +385,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false);
   const [unreadCount,  setUnreadCount]  = useState(0);
 
-  // Compute unread count (entries newer than last-seen timestamp)
+  // Compute unread count (entries newer than last-seen timestamp).
+  // Last-seen is stored in sessionStorage — no localStorage.
   const refreshUnread = useCallback(() => {
-    const lastSeen = parseInt(localStorage.getItem(LAST_SEEN_KEY) || "0", 10);
+    const lastSeen = parseInt(sessionStorage.getItem(LAST_SEEN_KEY) || "0", 10);
     const count = getActivities().filter(e => new Date(e.timestamp).getTime() > lastSeen).length;
     setUnreadCount(count);
   }, []);
@@ -403,7 +404,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleActivityOpen = (open: boolean) => {
     setActivityOpen(open);
     if (open) {
-      try { localStorage.setItem(LAST_SEEN_KEY, String(Date.now())); } catch { /* quota */ }
+      try { sessionStorage.setItem(LAST_SEEN_KEY, String(Date.now())); } catch { /* quota */ }
       setUnreadCount(0);
     }
   };

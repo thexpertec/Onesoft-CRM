@@ -34,7 +34,6 @@ import {
 } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { UI_PRESETS, SCALE_LABELS, getPresetFonts, type UiPreset } from "@/lib/ui-presets";
-import { CRM_FORM_MODE_KEYS } from "@/components/form-wrapper";
 import { CURRENCIES } from "@/lib/currencies";
 import {
   QUICK_ACTIONS_REGISTRY, DEFAULT_QUICK_ACTIONS,
@@ -744,11 +743,8 @@ export default function SettingsPage() {
   // ── Save ────────────────────────────────────────────────────────────────────
   function handleSave() {
     setSaving(true);
-    // When crmFormMode changes, clear all per-module overrides so the new default takes effect
-    const prev = getSettings();
-    if (prev.crmFormMode !== form.crmFormMode) {
-      CRM_FORM_MODE_KEYS.forEach(k => localStorage.removeItem(k));
-    }
+    // When crmFormMode changes, the new default takes effect immediately
+    // (per-module overrides are held in React state only — no storage to clear)
     saveSettings(form);
     setTimeout(() => {
       setSaving(false);
