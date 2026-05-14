@@ -62,9 +62,6 @@ function AccountSelector({
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  // Split active ledger accounts into four focused groups — only show
-  // Cash/Bank, Tax, Customers (Receivable), and Suppliers (Payable).
-  // All other sub-types (Inventory, Revenue, COGS, Purchases, etc.) are excluded.
   const CASH_BANK_TYPES = new Set(["Cash", "Bank", "Wallet"]);
   const isTax = (subType: string) => subType.toLowerCase().includes("tax");
 
@@ -73,30 +70,48 @@ function AccountSelector({
       .filter(a => a.accountType === "Ledger" && a.isActive)
       .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
+    const cashBank   = all.filter(a => CASH_BANK_TYPES.has(a.subType));
+    const customers  = all.filter(a => a.subType === "Receivable");
+    const suppliers  = all.filter(a => a.subType === "Payable");
+    const taxes      = all.filter(a => isTax(a.subType));
+
+    const categorised = new Set([
+      ...cashBank.map(a => a.id),
+      ...customers.map(a => a.id),
+      ...suppliers.map(a => a.id),
+      ...taxes.map(a => a.id),
+    ]);
+
     return [
       {
         label: "Cash & Bank",
         color: "text-blue-600 dark:text-blue-400",
         badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-        items: all.filter(a => CASH_BANK_TYPES.has(a.subType)),
+        items: cashBank,
       },
       {
         label: "Customers",
         color: "text-emerald-600 dark:text-emerald-400",
         badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-        items: all.filter(a => a.subType === "Receivable"),
+        items: customers,
       },
       {
         label: "Suppliers",
         color: "text-orange-600 dark:text-orange-400",
         badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
-        items: all.filter(a => a.subType === "Payable"),
+        items: suppliers,
       },
       {
         label: "Taxes",
         color: "text-violet-600 dark:text-violet-400",
         badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-        items: all.filter(a => isTax(a.subType)),
+        items: taxes,
+      },
+      {
+        label: "Other Accounts",
+        color: "text-slate-600 dark:text-slate-400",
+        badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+        items: all.filter(a => !categorised.has(a.id)),
       },
     ];
   // eslint-disable-next-line react-hooks/exhaustive-deps
