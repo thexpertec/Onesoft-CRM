@@ -5107,7 +5107,7 @@ export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">)
   const staffPayableLedgerId = data.staffPayableLedgerId || createSubsidiaryLedger({
     parentId:    SYS_ACCS.STAFF_PAYABLE_GROUP,
     parentCode:  "2113",
-    name:        `${data.name} - Payable Account`,
+    name:        data.name,
     head:        "Liabilities",
     subType:     "Payable",
     description: `Staff payable account for: ${data.name}`,
@@ -6829,7 +6829,7 @@ export function seedDefaultCoaAccounts(): void {
     let staffBFUpdated = false;
     const staffBFPatched = allStaffBF.map(s => {
       if (s.staffPayableLedgerId && liveAccIdsBF.has(s.staffPayableLedgerId)) return s;
-      const ledgerName = `${s.name} - Payable Account`;
+      const ledgerName = s.name;
       const existing   = getAccounts().find(
         a => a.parentId === SYS_ACCS.STAFF_PAYABLE_GROUP && a.accountType === "Ledger" &&
              a.name.toLowerCase() === ledgerName.toLowerCase(),
@@ -9156,7 +9156,7 @@ function _resolveStaffPayableLedger(slip: SalarySlip): string {
     const acc = allAccounts.find(a => a.id === staff.staffPayableLedgerId);
     if (acc && acc.accountType === "Ledger") return staff.staffPayableLedgerId;
   }
-  const ledgerName = `${staff?.name ?? slip.staffName} - Payable Account`;
+  const ledgerName = staff?.name ?? slip.staffName;
   const existing   = allAccounts.find(
     a => a.parentId === SYS_ACCS.STAFF_PAYABLE_GROUP && a.accountType === "Ledger" &&
          a.name.toLowerCase() === ledgerName.toLowerCase(),

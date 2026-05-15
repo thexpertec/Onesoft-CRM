@@ -914,7 +914,7 @@ function PayDialog({
           <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-3 py-2 text-[12px] text-blue-700 dark:text-blue-300">
             A journal entry will be posted automatically:<br />
             <span className="font-mono">
-              Dr {slip.accrualJournalEntryId ? `${slip.staffName} - Payable Account` : "Salary Expense"} → Cr {account?.accountTitle ?? "Payment Account"}
+              Dr {slip.accrualJournalEntryId ? slip.staffName : "Salary Expense"} → Cr {account?.accountTitle ?? "Payment Account"}
             </span>
           </div>
         </div>
