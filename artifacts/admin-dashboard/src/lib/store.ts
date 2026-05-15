@@ -6929,6 +6929,60 @@ export function seedDefaultCoaAccounts(): void {
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
   }
+
+  // ── One-time migration: merge old "Salary & Wages - X" ledgers → clean "X" siblings ──
+  // Accounts created before the naming fix used "Salary & Wages - Director" style names.
+  // Find every such duplicate under 4200, re-link all JE lines and staff references
+  // to the clean-named counterpart, then delete the old account.
+  {
+    const allAccsMig = getAccounts();
+    const salary4200Children = allAccsMig.filter(
+      a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger",
+    );
+    const PREFIX = "salary & wages - ";
+    const toMerge: Array<{ oldId: string; newId: string }> = [];
+    for (const oldAcc of salary4200Children) {
+      if (!oldAcc.name.toLowerCase().startsWith(PREFIX)) continue;
+      const shortName = oldAcc.name.slice(PREFIX.length).trim(); // e.g. "Director"
+      const newAcc = salary4200Children.find(
+        a => a.id !== oldAcc.id && a.name.toLowerCase() === shortName.toLowerCase(),
+      );
+      if (newAcc) toMerge.push({ oldId: oldAcc.id, newId: newAcc.id });
+    }
+    if (toMerge.length > 0) {
+      const idMap = new Map(toMerge.map(m => [m.oldId, m.newId]));
+      // Re-link journal entry lines
+      const allJEs = getJournalEntries();
+      let jeDirty = false;
+      const patchedJEs = allJEs.map(je => {
+        const patchedLines = je.lines.map(line => {
+          const newLedgerId = idMap.get(line.ledgerId);
+          if (!newLedgerId) return line;
+          jeDirty = true;
+          return { ...line, ledgerId: newLedgerId };
+        });
+        return jeDirty ? { ...je, lines: patchedLines } : je;
+      });
+      if (jeDirty) {
+        const jeKey = tenantKey(JE_KEY);
+        _lsCache(jeKey, patchedJEs);
+        _apiWrite(jeKey, patchedJEs).catch(() => { /* handled via onesoft:write-error */ });
+      }
+      // Re-link staff.ledgerAccountId references
+      const allStaffMig = getStored<Staff>(STAFF_KEY);
+      let staffDirty = false;
+      const patchedStaff = allStaffMig.map(st => {
+        const newLedgerId = st.ledgerAccountId ? idMap.get(st.ledgerAccountId) : undefined;
+        if (!newLedgerId) return st;
+        staffDirty = true;
+        return { ...st, ledgerAccountId: newLedgerId };
+      });
+      if (staffDirty) setStored(STAFF_KEY, patchedStaff);
+      // Remove the old duplicate accounts
+      const oldIds = new Set(toMerge.map(m => m.oldId));
+      _saveAccounts(getAccounts().filter(a => !oldIds.has(a.id)));
+    }
+  }
 }
 
 /**
