@@ -802,7 +802,18 @@ export default function JournalEntryPage() {
                                               </div>
                                             ) : (
                                               <div>
-                                                <span className="text-[11px] text-red-400 italic">Unknown ledger</span>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[11px] text-red-400 italic">Unknown ledger</span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={ev => { ev.stopPropagation(); loadEntryForEdit(e); }}
+                                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-700 transition-colors"
+                                                    title="Open this entry in the editor to reassign the missing account"
+                                                  >
+                                                    <Pencil size={9} />
+                                                    Edit to fix
+                                                  </button>
+                                                </div>
                                                 {l.narration && (
                                                   <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{l.narration}</div>
                                                 )}
