@@ -6675,10 +6675,10 @@ export function seedDefaultCoaAccounts(): void {
       const lid = createSubsidiaryLedger({
         parentId:    SYS_ACCS.SALARY_GROUP,
         parentCode:  "4200",
-        name:        s.name + (s.designation ? ` — ${s.designation}` : ""),
+        name:        s.designation || s.name,
         head:        "Expense",
         subType:     "Payroll",
-        description: `Salary ledger for staff member: ${s.name}`,
+        description: `Salary ledger for role: ${s.designation || s.name}`,
       });
       liveAccountIds.add(lid);
       staffUpdated = true;
@@ -6928,6 +6928,29 @@ export function seedDefaultCoaAccounts(): void {
   }
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
+  }
+
+  // ── One-time migration: rename "Name — Role" salary ledgers → just "Role" ──────────
+  // Accounts created before the naming fix used "StaffName — Designation" style names.
+  // Strip everything before " — " so only the role/designation remains.
+  {
+    const SW_DASH = " \u2014 "; // " — "
+    const salary4200Rename = getAccounts().filter(
+      a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" && a.name.includes(SW_DASH),
+    );
+    if (salary4200Rename.length > 0) {
+      const allAccsRen = getAccounts();
+      let renamed = false;
+      const patched = allAccsRen.map(a => {
+        if (a.parentId !== SYS_ACCS.SALARY_GROUP || a.accountType !== "Ledger") return a;
+        const idx = a.name.indexOf(SW_DASH);
+        if (idx === -1) return a;
+        renamed = true;
+        const cleanName = a.name.slice(idx + SW_DASH.length).trim();
+        return { ...a, name: cleanName, description: `Salary expense ledger for role: ${cleanName}`, updatedAt: new Date().toISOString() };
+      });
+      if (renamed) _saveAccounts(patched);
+    }
   }
 
   // ── One-time migration: merge old "Salary & Wages - X" ledgers → clean "X" siblings ──
@@ -9183,16 +9206,15 @@ export const deleteSalarySlip = (id: string): void => {
  */
 function _resolveRoleSalaryLedger(designation: string): string {
   const allAccounts = getAccounts();
-  const ledgerName  = `Salary & Wages - ${designation}`;
   const existing    = allAccounts.find(
     a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
-         a.name.toLowerCase() === ledgerName.toLowerCase(),
+         a.name.toLowerCase() === designation.toLowerCase(),
   );
   if (existing) return existing.id;
   return createSubsidiaryLedger({
     parentId:    SYS_ACCS.SALARY_GROUP,
     parentCode:  "4200",
-    name:        ledgerName,
+    name:        designation,
     head:        "Expense",
     subType:     "Payroll",
     description: `Salary expense ledger for role: ${designation}`,
