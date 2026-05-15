@@ -5116,10 +5116,12 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
 export const deleteStaff = (id: string): void => {
   const staff = getStaff().find(s => s.id === id);
   setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
-  // Remove the linked payroll ledger (soft-fail if it has JE transactions)
+  // Remove the linked payroll ledger only when it has no JE history.
+  // If the account has posted JEs, leave it fully active so those JEs
+  // continue to resolve correctly — the dynamicAccounts filter in
+  // seedDefaultCoaAccounts will clean up zero-history orphans on next login.
   if (staff?.ledgerAccountId) {
-    try { deleteAccount(staff.ledgerAccountId); } catch { /* has posted JEs — deactivate instead */ }
-    try { updateAccount(staff.ledgerAccountId, { isActive: false }); } catch { /* ignore */ }
+    try { deleteAccount(staff.ledgerAccountId); } catch { /* has JEs — leave active */ }
   }
 };
 
@@ -6662,24 +6664,6 @@ export function seedDefaultCoaAccounts(): void {
     });
     if (staffUpdated) {
       setStored(STAFF_KEY, staffPatched);
-    }
-  }
-
-  // ── Purge orphaned payroll ledgers (under 4200) with no live staff owner ──
-  {
-    const activeStaffLedgerIds = new Set(
-      getStored<Staff>(STAFF_KEY).map(s => s.ledgerAccountId).filter(Boolean) as string[]
-    );
-    const orphanPayrollLedgers = getAccounts().filter(
-      a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
-           !activeStaffLedgerIds.has(a.id)
-    );
-    for (const acct of orphanPayrollLedgers) {
-      try { deleteAccount(acct.id); } catch { /* has posted JEs — deactivate */ }
-      try { updateAccount(acct.id, { isActive: false }); } catch { /* ignore */ }
-    }
-    if (orphanPayrollLedgers.length > 0) {
-      console.info(`[COA] Removed/deactivated ${orphanPayrollLedgers.length} orphaned payroll ledger(s)`);
     }
   }
 
