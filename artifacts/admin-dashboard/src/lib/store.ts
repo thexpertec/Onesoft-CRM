@@ -9272,8 +9272,9 @@ export type SalarySlip = {
   basicSalary: number;
   allowances: SalarySlipItem[];    // itemized allowances
   deductions: SalarySlipItem[];    // itemized deductions
+  advanceSalary?: number;          // salary advance deducted from net pay
   grossSalary: number;             // basicSalary + Σ allowances
-  netSalary: number;               // grossSalary  − Σ deductions
+  netSalary: number;               // grossSalary  − Σ deductions − advanceSalary
   status: SalarySlipStatus;
   paymentMethod?: "Cash" | "Bank Transfer" | "Wallet";
   paymentAccountId?: string;
@@ -9289,9 +9290,9 @@ export type SalarySlip = {
 
 const SALARY_SLIPS_KEY = "admin-hrm-salary-slips";
 
-function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions: SalarySlipItem[]) {
+function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions: SalarySlipItem[], advanceSalary = 0) {
   const grossSalary = basic + allowances.reduce((s, a) => s + (a.amount || 0), 0);
-  const netSalary   = grossSalary - deductions.reduce((s, d) => s + (d.amount || 0), 0);
+  const netSalary   = grossSalary - deductions.reduce((s, d) => s + (d.amount || 0), 0) - (advanceSalary || 0);
   return { grossSalary, netSalary };
 }
 
@@ -9321,7 +9322,7 @@ export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "
   if (duplicate) {
     throw new Error(`A salary slip for ${data.staffName} already exists for ${data.period}. Duplicate slips are not allowed.`);
   }
-  const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions);
+  const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions, data.advanceSalary);
   const resolvedRole = data.role || staffMember?.role || undefined;
   const item: SalarySlip = { ...data, role: resolvedRole, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(SALARY_SLIPS_KEY, [...existing, item]);
@@ -9333,7 +9334,7 @@ export const updateSalarySlip = (id: string, updates: Partial<Omit<SalarySlip, "
   const i = items.findIndex(s => s.id === id);
   if (i === -1) throw new Error("Salary slip not found");
   const merged = { ...items[i], ...updates };
-  const { grossSalary, netSalary } = _calcSlipTotals(merged.basicSalary, merged.allowances, merged.deductions);
+  const { grossSalary, netSalary } = _calcSlipTotals(merged.basicSalary, merged.allowances, merged.deductions, merged.advanceSalary);
   items[i] = { ...merged, grossSalary, netSalary, updatedAt: new Date().toISOString() };
   setStored(SALARY_SLIPS_KEY, items);
   return items[i];
