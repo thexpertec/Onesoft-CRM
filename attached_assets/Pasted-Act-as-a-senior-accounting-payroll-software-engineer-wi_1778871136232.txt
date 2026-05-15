@@ -1,0 +1,64 @@
+Act as a senior accounting & payroll software engineer with 10+ years of experience in double‑entry bookkeeping and ERP systems.
+
+I have a salary approval table (see attached screenshot) with columns: STAFF NAME, MONTH, DEPARTMENT, BASIC, ALLOWANCES, DEDUCTIONS, GROSS, NET, STATUS, ACTIONS.
+
+When a user approves a salary row (or bulk approves), the system must automatically generate **4 journal entries** (two transactions) with the **transaction date = last day of the month** for which the salary is being approved.
+
+## Accounting Rules (Exactly 4 Entries)
+
+| Step | Debit (Dr) Ledger | Credit (Cr) Ledger | Amount | Account Type |
+|------|-------------------|--------------------|--------|---------------|
+| 1 | `[Role]` (e.g., Management Ledger, Sales Department Ledger) | `Salary Payable` | NET Salary | Expense → Liability |
+| 2 | `Salary Payable` | `Staff` (Liabilities) | NET Salary | Liability → Liability |
+
+So the 4 lines are:
+1. **Dr.** `[Role] Ledger` (Expense)
+2. **Cr.** `Salary Payable` (Liability)
+3. **Dr.** `Salary Payable` (Liability)
+4. **Cr.** `Staff Ledger` (Liability)
+
+> Note: `[Role]` is dynamic based on the staff’s DEPARTMENT column. Example:
+> - Department = "Management" → Dr "Management Ledger"
+> - Department = "Sales Department" → Dr "Sales Department Ledger"
+> - Department = "Purchase Department" → Dr "Purchase Department Ledger"
+
+## Critical Requirement — Transaction Date
+
+- The **journal entry date** must be the **last day of the month** shown in the `MONTH` column.
+- Examples:
+  - MONTH = "April 2026" → Entry date = **April 30, 2026**
+  - MONTH = "February 2026" → Entry date = **February 28, 2026** (or 29 if leap year)
+  - MONTH = "January 2026" → Entry date = **January 31, 2026**
+
+- This date must be displayed clearly in the UI when showing the generated journal entries.
+- All 4 entries for one salary approval share the **same transaction date** (last day of that month).
+
+## UI & Interaction Requirements
+
+1. **Approve button** for each row (only visible when STATUS = "Draft").
+2. Upon clicking Approve:
+   - Change STATUS from "Draft" to "Approved".
+   - Show a **modal or side panel** with the 4 journal entries, including:
+     - Transaction date (last day of the month)
+     - Ledger names
+     - Debit/Credit amounts
+     - Narration (e.g., "Salary approval for April 2026 - Director")
+   - Disable the Approve button for that row.
+
+3. **Bulk Approve** button above the table:
+   - Approves all Draft rows at once.
+   - Generates the 4 entries per staff member, each with its own date (last day of that staff's month).
+   - Shows a consolidated summary of all entries grouped by month/role.
+
+4. **Prevent double approval** — same salary row cannot be approved twice.
+
+5. **Keep an audit log** (in‑memory or console) of all approved entries with their dates.
+
+## Date Calculation Function
+
+Implement a helper function:
+```javascript
+function getLastDayOfMonth(monthYearString) {
+  // Input: "April 2026" or "February 2026"
+  // Output: Date object set to last day of that month at 23:59:59
+}

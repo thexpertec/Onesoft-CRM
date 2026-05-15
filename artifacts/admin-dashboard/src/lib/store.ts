@@ -9446,6 +9446,18 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
  *
  * Also persists the staffPayableLedgerId on the slip so the payment JE knows which account to debit.
  */
+/**
+ * Returns the last calendar day of a salary period as a "YYYY-MM-DD" string.
+ * period format: "YYYY-MM"
+ * e.g. "2026-04" → "2026-04-30", "2026-02" → "2026-02-28" (or -29 in leap year)
+ */
+export function lastDayOfPeriod(period: string): string {
+  const [year, month] = period.split("-").map(Number);
+  // Day-0 of the following month equals the last day of this month
+  const d = new Date(year, month, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function postSalaryApprovalJE(slip: SalarySlip): Promise<{ je: JournalEntry; staffPayableLedgerId: string }> {
   const roleLedgerId         = _resolveRoleSalaryLedger(slip.role || slip.designation || "General");
   const staffPayableLedgerId = _resolveStaffPayableLedger(slip);
@@ -9454,32 +9466,57 @@ export async function postSalaryApprovalJE(slip: SalarySlip): Promise<{ je: Jour
   // on the server — if the tab closes between these two writes, the ledger UUID
   // would be orphaned on next login and show as "Unknown ledger".
   await _awaitAccountsWrite();
-  const ref = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
+  const ref  = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
+  // Use the last day of the salary month as the JE date (not today)
+  const date = lastDayOfPeriod(slip.period);
+  const amt  = slip.netSalary;
   const je = createJournalEntry({
-    date:        new Date().toISOString().slice(0, 10),
+    date,
     reference:   ref,
     description: `Salary accrual — ${slip.staffName} (${slip.period})`,
     lines: [
+      // ── Step 1: Expense Recognition ──────────────────────────────────────
+      // Dr  [Role] Salary Ledger (4200-xxx)   — expense hits P&L
       {
         id:        crypto.randomUUID(),
         ledgerId:  roleLedgerId,
         narration: `Salary expense — ${slip.staffName} (${slip.period})`,
-        debit:     slip.netSalary,
+        debit:     amt,
         credit:    0,
-        staffId:   slip.staffId, // stable anchor — survives ledger UUID changes
+        staffId:   slip.staffId,
       },
+      // Cr  Salary Payable (2131)             — aggregate liability
+      {
+        id:        crypto.randomUUID(),
+        ledgerId:  SYS_ACCS.SALARY_PAYABLE,
+        narration: `Salary payable — ${slip.staffName} (${slip.period})`,
+        debit:     0,
+        credit:    amt,
+        staffId:   slip.staffId,
+      },
+      // ── Step 2: Staff Allocation ──────────────────────────────────────────
+      // Dr  Salary Payable (2131)             — clears the aggregate balance
+      {
+        id:        crypto.randomUUID(),
+        ledgerId:  SYS_ACCS.SALARY_PAYABLE,
+        narration: `Salary allocated — ${slip.staffName} (${slip.period})`,
+        debit:     amt,
+        credit:    0,
+        staffId:   slip.staffId,
+      },
+      // Cr  [Staff] Payable Account (2113-xxx) — individual staff liability
       {
         id:        crypto.randomUUID(),
         ledgerId:  staffPayableLedgerId,
-        narration: `Salary payable — ${slip.staffName} (${slip.period})`,
+        narration: `Staff payable — ${slip.staffName} (${slip.period})`,
         debit:     0,
-        credit:    slip.netSalary,
-        staffId:   slip.staffId, // anchor for payable side too
+        credit:    amt,
+        staffId:   slip.staffId,
       },
     ],
     status:      "posted",
-    totalDebit:  slip.netSalary,
-    totalCredit: slip.netSalary,
+    totalDebit:  2 * amt,
+    totalCredit: 2 * amt,
     isBalanced:  true,
   });
   return { je, staffPayableLedgerId };

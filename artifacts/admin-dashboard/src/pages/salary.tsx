@@ -3,6 +3,7 @@ import {
   Wallet, Users, DollarSign, CheckCircle2, Clock, Plus, Trash2,
   Pencil, Printer, Download, BadgeCheck, X, ChevronsUpDown, Search,
   ChevronDown, TrendingUp, AlertCircle, FileSpreadsheet, RotateCcw,
+  ListChecks, Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { useSalarySlips, useStaff, usePaymentAccounts, useSalaryTemplates } from
 import {
   SalarySlip, SalarySlipItem, SalarySlipStatus,
   getSettings, postSalaryPaymentJE, postSalaryApprovalJE, getPaymentAccounts,
-  deleteJournalEntry,
+  deleteJournalEntry, getAccounts, SYS_ACCS, lastDayOfPeriod,
 } from "@/lib/store";
 import { buildPayslipHtml } from "@/lib/print-payslip";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -156,6 +157,10 @@ export default function SalaryPage() {
   const [generateOpen,          setGenerateOpen]          = useState(false);
   const [generateStaffOpen,     setGenerateStaffOpen]     = useState(false);
   const [revertId,              setRevertId]              = useState<string | null>(null);
+  const [approveSlip,           setApproveSlip]           = useState<SalarySlip | null>(null);
+  const [approving,             setApproving]             = useState(false);
+  const [bulkApproveOpen,       setBulkApproveOpen]       = useState(false);
+  const [bulkApproving,         setBulkApproving]         = useState(false);
 
   // ── Slip for editing ───────────────────────────────────────────────────────
   const editTarget = useMemo(() => slips.find(s => s.id === editSlipId) ?? null, [slips, editSlipId]);
@@ -401,6 +406,18 @@ export default function SalaryPage() {
         <span className="text-[12px] text-muted-foreground ml-auto">
           {filtered.length} of {periodSlips.length} slips
         </span>
+
+        {periodSlips.some(s => s.status === "Draft") && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+            onClick={() => setBulkApproveOpen(true)}
+          >
+            <ListChecks size={13} />
+            Bulk Approve ({periodSlips.filter(s => s.status === "Draft").length})
+          </Button>
+        )}
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
@@ -475,24 +492,8 @@ export default function SalaryPage() {
                         {/* Approve */}
                         {slip.status === "Draft" && (
                           <button
-                            title="Approve"
-                            onClick={async () => {
-                              let accrualJournalEntryId: string | undefined;
-                              try {
-                                // postSalaryApprovalJE is async: it awaits the COA server
-                                // write before creating the JE, preventing "Unknown ledger"
-                                // caused by the tab closing between the two writes.
-                                const result = await postSalaryApprovalJE(slip);
-                                accrualJournalEntryId = result.je.id;
-                                // Persist the staffPayableLedgerId on the slip so the
-                                // payment JE knows which per-employee account to debit.
-                                editSlip(slip.id, { staffPayableLedgerId: result.staffPayableLedgerId });
-                              } catch (err) {
-                                console.error("Salary accrual JE failed:", err);
-                              }
-                              editSlip(slip.id, { status: "Approved", accrualJournalEntryId });
-                              toast({ title: "Approved", description: `${slip.staffName}'s slip approved and salary payable recorded.` });
-                            }}
+                            title="Approve — preview journal entries"
+                            onClick={() => setApproveSlip(slip)}
                             className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-muted-foreground hover:text-blue-600"
                           >
                             <BadgeCheck size={13} />
@@ -742,6 +743,200 @@ export default function SalaryPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Approve JE Preview Dialog ───────────────────────────────────────── */}
+      {approveSlip && (() => {
+        const slip    = approveSlip;
+        const accts   = getAccounts();
+        const jeDate  = lastDayOfPeriod(slip.period);
+        const jeDateFmt = new Date(jeDate + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+        const roleName  = accts.find(a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" && a.name.toLowerCase() === (slip.role || slip.designation || "").toLowerCase())?.name ?? (slip.role || slip.designation || "Salary Expense");
+        const staffPayName = accts.find(a => a.parentId === SYS_ACCS.STAFF_PAYABLE_GROUP && a.accountType === "Ledger" && a.name.toLowerCase() === slip.staffName.toLowerCase())?.name ?? slip.staffName;
+        const rows: Array<{ step: string; type: "Dr" | "Cr"; account: string; code: string; narration: string; amount: number }> = [
+          { step: "1", type: "Dr", account: roleName,        code: "4200", narration: `Salary expense — ${slip.staffName} (${slip.period})`,   amount: slip.netSalary },
+          { step: "1", type: "Cr", account: "Salary Payable",code: "2131", narration: `Salary payable — ${slip.staffName} (${slip.period})`,   amount: slip.netSalary },
+          { step: "2", type: "Dr", account: "Salary Payable",code: "2131", narration: `Salary allocated — ${slip.staffName} (${slip.period})`, amount: slip.netSalary },
+          { step: "2", type: "Cr", account: staffPayName,    code: "2113", narration: `Staff payable — ${slip.staffName} (${slip.period})`,    amount: slip.netSalary },
+        ];
+        return (
+          <Dialog open onOpenChange={o => { if (!o && !approving) setApproveSlip(null); }}>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <BadgeCheck size={16} className="text-blue-600" />
+                  Approve Salary — {slip.staffName}
+                </DialogTitle>
+                <DialogDescription>
+                  Review the journal entries below. Click <strong>Confirm & Post</strong> to approve.
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Date badge */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 text-[13px]">
+                <Calendar size={13} className="text-blue-500" />
+                <span className="text-muted-foreground">Transaction Date:</span>
+                <span className="font-semibold text-blue-700 dark:text-blue-300">{jeDateFmt}</span>
+                <span className="text-muted-foreground text-[11px] ml-auto">(last day of {slip.period})</span>
+              </div>
+
+              {/* JE table */}
+              <div className="border rounded-lg overflow-hidden text-[12px]">
+                {[1, 2].map(step => {
+                  const stepRows = rows.filter(r => r.step === String(step));
+                  return (
+                    <div key={step}>
+                      <div className={`px-3 py-1.5 font-semibold text-[11px] uppercase tracking-wide ${step === 1 ? "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300" : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"} border-b`}>
+                        Step {step} — {step === 1 ? "Expense Recognition" : "Staff Allocation"}
+                      </div>
+                      <table className="w-full">
+                        <tbody>
+                          {stepRows.map((r, i) => (
+                            <tr key={i} className={`border-b last:border-0 ${r.type === "Dr" ? "" : "bg-muted/20"}`}>
+                              <td className="pl-3 py-2 w-8">
+                                <span className={`font-bold text-[11px] ${r.type === "Dr" ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>{r.type}</span>
+                              </td>
+                              <td className="py-2 pr-2">
+                                <div className="font-medium">{r.account}</div>
+                                <div className="text-[10px] text-muted-foreground">{r.code} · {r.narration}</div>
+                              </td>
+                              <td className={`py-2 pr-3 text-right font-semibold ${r.type === "Dr" ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                {sym}{r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setApproveSlip(null)} disabled={approving}>Cancel</Button>
+                <Button
+                  disabled={approving}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+                  onClick={async () => {
+                    setApproving(true);
+                    let accrualJournalEntryId: string | undefined;
+                    try {
+                      const result = await postSalaryApprovalJE(slip);
+                      accrualJournalEntryId = result.je.id;
+                      editSlip(slip.id, { staffPayableLedgerId: result.staffPayableLedgerId });
+                    } catch (err) {
+                      console.error("Salary accrual JE failed:", err);
+                    }
+                    editSlip(slip.id, { status: "Approved", accrualJournalEntryId });
+                    toast({ title: "Approved", description: `${slip.staffName}'s slip approved. JE posted for ${jeDateFmt}.` });
+                    setApproving(false);
+                    setApproveSlip(null);
+                  }}
+                >
+                  {approving ? "Posting…" : <><BadgeCheck size={13} /> Confirm & Post JE</>}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {/* ── Bulk Approve Dialog ─────────────────────────────────────────────── */}
+      {bulkApproveOpen && (() => {
+        const draftSlips = periodSlips.filter(s => s.status === "Draft");
+        return (
+          <Dialog open onOpenChange={o => { if (!o && !bulkApproving) setBulkApproveOpen(false); }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <ListChecks size={16} className="text-blue-600" />
+                  Bulk Approve — {periodLabel(period)}
+                </DialogTitle>
+                <DialogDescription>
+                  {draftSlips.length} draft slip{draftSlips.length !== 1 ? "s" : ""} will be approved.
+                  Each gets its own 4-line journal entry dated the last day of {periodLabel(period)}.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 text-[13px]">
+                <Calendar size={13} className="text-blue-500" />
+                <span className="text-muted-foreground">Transaction Date for all entries:</span>
+                <span className="font-semibold text-blue-700 dark:text-blue-300">
+                  {new Date(lastDayOfPeriod(period) + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                </span>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden max-h-52 overflow-y-auto text-[12px]">
+                <table className="w-full">
+                  <thead className="bg-muted/40 border-b sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px] uppercase">Staff</th>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px] uppercase">Role</th>
+                      <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] uppercase">Net Salary</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {draftSlips.map(s => (
+                      <tr key={s.id} className="hover:bg-muted/20">
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{s.staffName}</div>
+                          <div className="text-[10px] text-muted-foreground">{s.designation}</div>
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{s.role || s.designation}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-primary">
+                          {sym}{s.netSalary.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between px-1 text-[12px]">
+                <span className="text-muted-foreground">Total payroll to approve</span>
+                <span className="font-bold text-primary">
+                  {sym}{draftSlips.reduce((s, x) => s + x.netSalary, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBulkApproveOpen(false)} disabled={bulkApproving}>Cancel</Button>
+                <Button
+                  disabled={bulkApproving}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+                  onClick={async () => {
+                    setBulkApproving(true);
+                    let approved = 0;
+                    for (const slip of draftSlips) {
+                      try {
+                        const result = await postSalaryApprovalJE(slip);
+                        editSlip(slip.id, {
+                          status:                "Approved",
+                          accrualJournalEntryId: result.je.id,
+                          staffPayableLedgerId:  result.staffPayableLedgerId,
+                        });
+                        approved++;
+                      } catch (err) {
+                        console.error(`Bulk approve failed for ${slip.staffName}:`, err);
+                      }
+                    }
+                    setBulkApproving(false);
+                    setBulkApproveOpen(false);
+                    toast({
+                      title: `${approved} slip${approved !== 1 ? "s" : ""} approved`,
+                      description: `Journal entries posted for ${periodLabel(period)} — dated ${new Date(lastDayOfPeriod(period) + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`,
+                    });
+                  }}
+                >
+                  {bulkApproving
+                    ? "Approving…"
+                    : <><BadgeCheck size={13} /> Approve All & Post JEs</>
+                  }
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
