@@ -5081,7 +5081,8 @@ export type Staff = {
   username?: string;
   password?: string;
   loginEnabled?: boolean;
-  ledgerAccountId?: string;  // auto-created subsidiary ledger under Salary & Wages
+  ledgerAccountId?: string;    // per-staff expense ledger under Salary & Wages (4200) — legacy; kept for JE healing
+  staffPayableLedgerId?: string; // per-employee payable ledger under Staff Payable Accounts (2113)
   createdAt: string;
   updatedAt: string;
 };
@@ -5091,6 +5092,7 @@ const STAFF_KEY = "admin-hrm-staff";
 export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
 
 export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
+  // Per-staff expense ledger under Salary & Wages (kept for legacy JE healing)
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
     parentId:    SYS_ACCS.SALARY_GROUP,
     parentCode:  "4200",
@@ -5099,7 +5101,16 @@ export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">)
     subType:     "Payroll",
     description: `Salary ledger for staff member: ${data.name}`,
   });
-  const item: Staff = { ...data, ledgerAccountId, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  // Per-employee payable account under Staff Payable Accounts (2113) — used in new salary JEs
+  const staffPayableLedgerId = data.staffPayableLedgerId || createSubsidiaryLedger({
+    parentId:    SYS_ACCS.STAFF_PAYABLE_GROUP,
+    parentCode:  "2113",
+    name:        `${data.name} - Payable Account`,
+    head:        "Liabilities",
+    subType:     "Payable",
+    description: `Staff payable account for: ${data.name}`,
+  });
+  const item: Staff = { ...data, ledgerAccountId, staffPayableLedgerId, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(STAFF_KEY, [...getStaff(), item]);
   return item;
 };
@@ -5116,12 +5127,14 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
 export const deleteStaff = (id: string): void => {
   const staff = getStaff().find(s => s.id === id);
   setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
-  // Remove the linked payroll ledger only when it has no JE history.
-  // If the account has posted JEs, leave it fully active so those JEs
-  // continue to resolve correctly — the dynamicAccounts filter in
-  // seedDefaultCoaAccounts will clean up zero-history orphans on next login.
+  // Remove linked ledgers only when they have no JE history.
+  // Accounts with posted JEs are left fully active so those JEs continue to resolve correctly.
+  // The dynamicAccounts filter in seedDefaultCoaAccounts cleans up zero-history orphans on next login.
   if (staff?.ledgerAccountId) {
     try { deleteAccount(staff.ledgerAccountId); } catch { /* has JEs — leave active */ }
+  }
+  if (staff?.staffPayableLedgerId) {
+    try { deleteAccount(staff.staffPayableLedgerId); } catch { /* has JEs — leave active */ }
   }
 };
 
@@ -5878,6 +5891,7 @@ export const SYS_ACCS = {
   AP_GROUP:           "sys-2100",   // Accounts Payable GROUP (2110)
   AP_TRADE:           "sys-2101",   // Trade Payables GROUP (2111) — parent for per-supplier ledgers
   AP_GENERAL:         "sys-2102",   // General Accounts Payable LEDGER (2112) — fallback for JE posting
+  STAFF_PAYABLE_GROUP:"sys-2113",   // Staff Payable Accounts GROUP (2113) — parent for per-employee payable ledgers
   VAT_PAYABLE:        "sys-2200",   // VAT / Tax Payable (2120)
   ACCRUED_EXP:        "sys-2130",   // Accrued Expenses (2130)
   SALARY_PAYABLE:     "sys-2131",   // Salary Payable — approved but not yet paid (2131)
@@ -5937,6 +5951,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.AP_GROUP,           code: "2110", name: "Accounts Payable",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Payable",          description: "Amounts owed to suppliers" },
   { id: SYS_ACCS.AP_TRADE,           code: "2111", name: "Trade Payables",             head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Trade payables — subsidiary ledgers per supplier" },
   { id: SYS_ACCS.AP_GENERAL,         code: "2112", name: "General Accounts Payable",   head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Aggregate payable for suppliers without individual ledgers", openingBalance: 0, paymentType: "Credit", isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.STAFF_PAYABLE_GROUP,code: "2113", name: "Staff Payable Accounts",      head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.AP_GROUP,            subType: "Payable",          description: "Individual payable accounts for each staff member — subsidiary ledgers per employee" },
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
   { id: SYS_ACCS.SALARY_PAYABLE,     code: "2131", name: "Salary Payable",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.ACCRUED_EXP,         subType: "Accrued",          description: "Salaries approved but not yet paid to staff", openingBalance: 0, paymentType: "Credit", isActive: true } as unknown as SysAccDef,
@@ -6395,8 +6410,9 @@ export function seedDefaultCoaAccounts(): void {
   const allAgents = getStored<{ ledgerAccountId?: string }>(SALES_AGENTS_KEY);
   const agentLedgerIds = new Set(allAgents.map(a => a.ledgerAccountId).filter(Boolean) as string[]);
 
-  const allStaffForClean = getStored<{ ledgerAccountId?: string }>(STAFF_KEY);
-  const staffSalaryLedgerIds = new Set(allStaffForClean.map(s => s.ledgerAccountId).filter(Boolean) as string[]);
+  const allStaffForClean = getStored<{ ledgerAccountId?: string; staffPayableLedgerId?: string }>(STAFF_KEY);
+  const staffSalaryLedgerIds  = new Set(allStaffForClean.map(s => s.ledgerAccountId).filter(Boolean) as string[]);
+  const staffPayableLedgerIds = new Set(allStaffForClean.map(s => s.staffPayableLedgerId).filter(Boolean) as string[]);
 
   // Pre-collect every ledger ID referenced by any JE line so we never delete an account
   // that still has historical transaction data — even if the contact's ledgerAccountId
@@ -6419,9 +6435,13 @@ export function seedDefaultCoaAccounts(): void {
     }
     // Commission ledgers — keep only if a sales agent in THIS tenant still references it
     if (parentId === SYS_ACCS.COMMISSION_GROUP) return agentLedgerIds.has(a.id);
-    // Salary ledgers — keep if a staff member still references it, or has JE history
+    // Salary expense ledgers — keep if a staff member still references it, or has JE history
     if (parentId === SYS_ACCS.SALARY_GROUP) {
       return staffSalaryLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
+    }
+    // Staff payable ledgers — keep if a staff member still references it, or has JE history
+    if (parentId === SYS_ACCS.STAFF_PAYABLE_GROUP) {
+      return staffPayableLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
     }
     return true;
   });
@@ -6797,9 +6817,38 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
+  // ── Always: backfill staffPayableLedgerId for existing staff missing one ────
+  // Runs every login. For any staff member without a staffPayableLedgerId (or whose
+  // stored ID no longer exists in the COA), create the payable account under 2113.
+  {
+    const allStaffBF = getStored<Staff>(STAFF_KEY);
+    const liveAccIdsBF = new Set(getAccounts().map(a => a.id));
+    let staffBFUpdated = false;
+    const staffBFPatched = allStaffBF.map(s => {
+      if (s.staffPayableLedgerId && liveAccIdsBF.has(s.staffPayableLedgerId)) return s;
+      const ledgerName = `${s.name} - Payable Account`;
+      const existing   = getAccounts().find(
+        a => a.parentId === SYS_ACCS.STAFF_PAYABLE_GROUP && a.accountType === "Ledger" &&
+             a.name.toLowerCase() === ledgerName.toLowerCase(),
+      );
+      const lid = existing?.id ?? createSubsidiaryLedger({
+        parentId:    SYS_ACCS.STAFF_PAYABLE_GROUP,
+        parentCode:  "2113",
+        name:        ledgerName,
+        head:        "Liabilities",
+        subType:     "Payable",
+        description: `Staff payable account for: ${s.name}`,
+      });
+      liveAccIdsBF.add(lid);
+      staffBFUpdated = true;
+      return { ...s, staffPayableLedgerId: lid };
+    });
+    if (staffBFUpdated) setStored(STAFF_KEY, staffBFPatched);
+  }
+
   // ── Always: backfill accrual JEs for approved-but-unpaid slips ───────────
   // Runs every login. For any Approved slip that has no accrualJournalEntryId,
-  // post the Dr Salary Expense → Cr Salary Payable JE and record its ID.
+  // post the Dr Role Expense → Cr Staff Payable JE and record its ID.
   {
     const slips = getStored<SalarySlip>(SALARY_SLIPS_KEY);
     const approvedUnpaid = slips.filter(s => s.status === "Approved" && !s.accrualJournalEntryId);
@@ -6810,18 +6859,19 @@ export function seedDefaultCoaAccounts(): void {
       const updated = slips.map(s => {
         if (s.status !== "Approved" || s.accrualJournalEntryId) return s;
         try {
-          const staffLedgerId = _resolveStaffSalaryLedger(s);
+          const roleLedgerId         = _resolveRoleSalaryLedger(s.designation || "General");
+          const staffPayableLedgerId = _resolveStaffPayableLedger(s);
           const je = createJournalEntry({
             date:        new Date().toISOString().slice(0, 10),
             reference:   `SAL-ACCR-${s.period}-${s.staffId.slice(0, 8)}`,
             description: `Salary accrual — ${s.staffName} (${s.period})`,
             lines: [
-              { id: crypto.randomUUID(), ledgerId: staffLedgerId,           narration: `Salary expense — ${s.staffName} (${s.period})`,  debit: s.netSalary, credit: 0, staffId: s.staffId },
-              { id: crypto.randomUUID(), ledgerId: SYS_ACCS.SALARY_PAYABLE, narration: `Salary payable — ${s.staffName} (${s.period})`, debit: 0, credit: s.netSalary },
+              { id: crypto.randomUUID(), ledgerId: roleLedgerId,         narration: `Salary expense — ${s.staffName} (${s.period})`,  debit: s.netSalary, credit: 0, staffId: s.staffId },
+              { id: crypto.randomUUID(), ledgerId: staffPayableLedgerId, narration: `Salary payable — ${s.staffName} (${s.period})`, debit: 0, credit: s.netSalary, staffId: s.staffId },
             ],
             status: "posted", totalDebit: s.netSalary, totalCredit: s.netSalary, isBalanced: true,
           });
-          return { ...s, accrualJournalEntryId: je.id };
+          return { ...s, accrualJournalEntryId: je.id, staffPayableLedgerId };
         } catch {
           return s; // skip if JE creation fails
         }
@@ -9007,7 +9057,8 @@ export type SalarySlip = {
   paymentAccountId?: string;
   paidAt?: string;
   journalEntryId?: string;
-  accrualJournalEntryId?: string;  // JE posted on approval (Dr Salary Expense → Cr Salary Payable)
+  accrualJournalEntryId?: string;  // JE posted on approval (Dr Role Expense → Cr Staff Payable)
+  staffPayableLedgerId?: string;   // snapshot of staffPayableLedgerId at approval time — used by payment JE
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -9051,12 +9102,63 @@ export const deleteSalarySlip = (id: string): void => {
 };
 
 /**
+ * Resolve (or create) the role-based salary expense Ledger for a slip.
+ * One ledger per designation, shared by all staff with that designation.
+ *   e.g., "Salary & Wages - Director" under 4200 Salary & Wages
+ */
+function _resolveRoleSalaryLedger(designation: string): string {
+  const allAccounts = getAccounts();
+  const ledgerName  = `Salary & Wages - ${designation}`;
+  const existing    = allAccounts.find(
+    a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
+         a.name.toLowerCase() === ledgerName.toLowerCase(),
+  );
+  if (existing) return existing.id;
+  return createSubsidiaryLedger({
+    parentId:    SYS_ACCS.SALARY_GROUP,
+    parentCode:  "4200",
+    name:        ledgerName,
+    head:        "Expense",
+    subType:     "Payroll",
+    description: `Salary expense ledger for role: ${designation}`,
+  });
+}
+
+/**
+ * Resolve (or create) the per-employee staff payable Ledger for a slip.
+ *   e.g., "Muhammad Ali - Payable Account" under 2113 Staff Payable Accounts
+ */
+function _resolveStaffPayableLedger(slip: SalarySlip): string {
+  const allAccounts = getAccounts();
+  const staff       = getStaff().find(s => s.id === slip.staffId);
+  if (staff?.staffPayableLedgerId) {
+    const acc = allAccounts.find(a => a.id === staff.staffPayableLedgerId);
+    if (acc && acc.accountType === "Ledger") return staff.staffPayableLedgerId;
+  }
+  const ledgerName = `${staff?.name ?? slip.staffName} - Payable Account`;
+  const existing   = allAccounts.find(
+    a => a.parentId === SYS_ACCS.STAFF_PAYABLE_GROUP && a.accountType === "Ledger" &&
+         a.name.toLowerCase() === ledgerName.toLowerCase(),
+  );
+  if (existing) {
+    if (staff && !staff.staffPayableLedgerId) updateStaff(staff.id, { staffPayableLedgerId: existing.id });
+    return existing.id;
+  }
+  const lid = createSubsidiaryLedger({
+    parentId:    SYS_ACCS.STAFF_PAYABLE_GROUP,
+    parentCode:  "2113",
+    name:        ledgerName,
+    head:        "Liabilities",
+    subType:     "Payable",
+    description: `Staff payable account for: ${staff?.name ?? slip.staffName}`,
+  });
+  if (staff) updateStaff(staff.id, { staffPayableLedgerId: lid });
+  return lid;
+}
+
+/**
  * Resolve a guaranteed real Ledger account ID for a staff member's salary expense.
- *
- * Problem: if the staff record has no `ledgerAccountId`, or the stored ID points to a
- * Group account or a deleted account, posting the JE to that ID makes the expense
- * invisible — the balance-sheet `subtreeBalance` for a Group sums only its child
- * Ledgers and ignores any JEs posted directly to the Group itself.
+ * (Legacy per-staff ledger — used only for healing old JE lines.)
  *
  * This helper always returns the ID of a valid Ledger account under 4200 Salary & Wages,
  * creating and persisting one when necessary.
@@ -9098,25 +9200,28 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
 
 /**
  * Post an accrual journal entry when a salary slip is approved:
- *   Dr — Staff Salary Ledger  (under 4200 Salary & Wages — the expense)
- *   Cr — Salary Payable       (2131 — liability until cash is paid)
+ *   Dr — Salary & Wages - [Role]        (role-based expense, shared by all staff of same designation)
+ *   Cr — [Employee Name] - Payable Account  (per-employee liability under Staff Payable Accounts 2113)
+ *
+ * Also persists the staffPayableLedgerId on the slip so the payment JE knows which account to debit.
  */
-export async function postSalaryApprovalJE(slip: SalarySlip): Promise<JournalEntry> {
-  const staffLedgerId = _resolveStaffSalaryLedger(slip);
+export async function postSalaryApprovalJE(slip: SalarySlip): Promise<{ je: JournalEntry; staffPayableLedgerId: string }> {
+  const roleLedgerId         = _resolveRoleSalaryLedger(slip.designation || "General");
+  const staffPayableLedgerId = _resolveStaffPayableLedger(slip);
   // Await the COA server write before creating the JE.
   // This prevents the race condition where the ledger exists locally but not yet
   // on the server — if the tab closes between these two writes, the ledger UUID
   // would be orphaned on next login and show as "Unknown ledger".
   await _awaitAccountsWrite();
   const ref = `SAL-ACCR-${slip.period}-${slip.staffId.slice(0, 8)}`;
-  return createJournalEntry({
+  const je = createJournalEntry({
     date:        new Date().toISOString().slice(0, 10),
     reference:   ref,
     description: `Salary accrual — ${slip.staffName} (${slip.period})`,
     lines: [
       {
         id:        crypto.randomUUID(),
-        ledgerId:  staffLedgerId,
+        ledgerId:  roleLedgerId,
         narration: `Salary expense — ${slip.staffName} (${slip.period})`,
         debit:     slip.netSalary,
         credit:    0,
@@ -9124,10 +9229,11 @@ export async function postSalaryApprovalJE(slip: SalarySlip): Promise<JournalEnt
       },
       {
         id:        crypto.randomUUID(),
-        ledgerId:  SYS_ACCS.SALARY_PAYABLE,
+        ledgerId:  staffPayableLedgerId,
         narration: `Salary payable — ${slip.staffName} (${slip.period})`,
         debit:     0,
         credit:    slip.netSalary,
+        staffId:   slip.staffId, // anchor for payable side too
       },
     ],
     status:      "posted",
@@ -9135,26 +9241,42 @@ export async function postSalaryApprovalJE(slip: SalarySlip): Promise<JournalEnt
     totalCredit: slip.netSalary,
     isBalanced:  true,
   });
+  return { je, staffPayableLedgerId };
 }
 
 /**
  * Post a payment journal entry when a salary slip is marked Paid.
  *
- * If the slip was previously approved with an accrual JE (the normal flow):
- *   Dr — Salary Payable       (clears the 2131 liability)
- *   Cr — Payment Account Ledger (Cash / Bank)
+ * New flow (slip has staffPayableLedgerId — set on approval):
+ *   Dr — [Employee] - Payable Account   (clears the employee liability)
+ *   Cr — Cash / Bank
  *
- * If no accrual JE exists (legacy / direct-pay flow):
- *   Dr — Staff Salary Ledger  (expense recognised at payment)
- *   Cr — Payment Account Ledger (Cash / Bank)
+ * Legacy flow (old slip approved before this change, has no staffPayableLedgerId):
+ *   Dr — Salary Payable (2131)           (old aggregate liability — backward compat)
+ *   Cr — Cash / Bank
+ *
+ * Direct-pay flow (no accrual JE at all):
+ *   Dr — [Employee] - Payable Account   (expense + liability in one step)
+ *   Cr — Cash / Bank
  */
 export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
-  const hasAccrual    = !!slip.accrualJournalEntryId;
-  const staffLedgerId = _resolveStaffSalaryLedger(slip);
-  const debitLedgerId = hasAccrual ? SYS_ACCS.SALARY_PAYABLE : staffLedgerId;
-  const debitNarr     = hasAccrual
-    ? `Salary payable settled — ${slip.staffName} (${slip.period})`
-    : `Salary expense — ${slip.staffName} (${slip.period})`;
+  const hasAccrual = !!slip.accrualJournalEntryId;
+  // New flow: use the per-employee payable account resolved at approval time
+  // Legacy flow: old slips that were approved before staffPayableLedgerId was introduced
+  //              still credit Salary Payable (2131) — keep backward compat
+  let debitLedgerId: string;
+  let debitNarr: string;
+  if (hasAccrual && !slip.staffPayableLedgerId) {
+    // Legacy approved slip — debit the old aggregate Salary Payable (2131)
+    debitLedgerId = SYS_ACCS.SALARY_PAYABLE;
+    debitNarr     = `Salary payable settled — ${slip.staffName} (${slip.period})`;
+  } else {
+    // New flow OR direct-pay: debit the per-employee payable account
+    debitLedgerId = slip.staffPayableLedgerId || _resolveStaffPayableLedger(slip);
+    debitNarr     = hasAccrual
+      ? `Salary payable settled — ${slip.staffName} (${slip.period})`
+      : `Salary expense — ${slip.staffName} (${slip.period})`;
+  }
   const ref = `SAL-${slip.period}-${slip.staffId.slice(0, 8)}`;
   return createJournalEntry({
     date,
@@ -9167,8 +9289,7 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
         narration: debitNarr,
         debit:     slip.netSalary,
         credit:    0,
-        // staffId only applies when the debit is the salary expense (no-accrual path)
-        ...(!hasAccrual ? { staffId: slip.staffId } : {}),
+        staffId:   slip.staffId,
       },
       {
         id:        crypto.randomUUID(),

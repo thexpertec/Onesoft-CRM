@@ -465,8 +465,11 @@ export default function SalaryPage() {
                                 // postSalaryApprovalJE is async: it awaits the COA server
                                 // write before creating the JE, preventing "Unknown ledger"
                                 // caused by the tab closing between the two writes.
-                                const accrualJE = await postSalaryApprovalJE(slip);
-                                accrualJournalEntryId = accrualJE.id;
+                                const result = await postSalaryApprovalJE(slip);
+                                accrualJournalEntryId = result.je.id;
+                                // Persist the staffPayableLedgerId on the slip so the
+                                // payment JE knows which per-employee account to debit.
+                                editSlip(slip.id, { staffPayableLedgerId: result.staffPayableLedgerId });
                               } catch (err) {
                                 console.error("Salary accrual JE failed:", err);
                               }
@@ -896,7 +899,7 @@ function PayDialog({
           <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-3 py-2 text-[12px] text-blue-700 dark:text-blue-300">
             A journal entry will be posted automatically:<br />
             <span className="font-mono">
-              Dr {slip.accrualJournalEntryId ? "Salary Payable" : "Salary Expense"} → Cr {account?.accountTitle ?? "Payment Account"}
+              Dr {slip.accrualJournalEntryId ? `${slip.staffName} - Payable Account` : "Salary Expense"} → Cr {account?.accountTitle ?? "Payment Account"}
             </span>
           </div>
         </div>

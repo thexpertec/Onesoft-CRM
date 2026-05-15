@@ -1,0 +1,218 @@
+Use the following professional prompt in Replit for your ERP/accounting system development:
+
+---
+
+```text
+Act as a Senior ERP Architect and Chartered Accountant with 15+ years of experience in Payroll, HR, and Double Entry Accounting Systems.
+
+Develop a complete payroll accounting workflow for the HR Module of a School/College ERP system. The system must follow proper double-entry accounting principles and IFRS-compliant accounting practices.
+
+========================
+STAFF CREATION LOGIC
+========================
+
+When a new staff member is created:
+
+1. Auto-create a personal ledger account for the employee under:
+   Liabilities
+      → Current Liabilities
+         → Accounts Payable
+            → Staff Payable Accounts
+
+2. Ledger name format:
+   [Employee Name] - Payable Account
+
+Example:
+   Ali Raza - Payable Account
+
+3. Each staff member must also be linked with a Role:
+   - Director
+   - Principal
+   - Vice Principal
+   - Teacher
+   - Accountant
+   - Clerk
+   - Driver
+   etc.
+
+4. System must automatically create or use an existing Role Expense Ledger under:
+   Expenses
+      → Salary & Wages
+         → [Role Name]
+
+Example:
+   Salary & Wages - Director
+   Salary & Wages - Teacher
+
+5. Prevent duplicate role ledgers.
+   If role ledger already exists, use existing ledger.
+
+========================
+SALARY POSTING WORKFLOW
+========================
+
+When monthly salary is processed/post for a staff member:
+
+Example:
+   Employee: Muhammad Ali
+   Role: Director
+   Salary: 100,000
+
+System must automatically pass accounting entries.
+
+--------------------------------
+STEP 1 — RECORD SALARY EXPENSE
+--------------------------------
+
+Debit:
+   Salary & Wages - Director
+
+Credit:
+   Muhammad Ali - Payable Account
+
+Entry:
+   Dr Salary & Wages - Director      100,000
+      Cr Muhammad Ali - Payable      100,000
+
+Purpose:
+   Record salary expense and create liability against employee.
+
+--------------------------------
+STEP 2 — TRANSFER TO SALARY PAYABLE
+--------------------------------
+
+System must also create adjustment entry:
+
+Debit:
+   Salary Payable
+
+Credit:
+   Salary & Wages - Director
+
+Entry:
+   Dr Salary Payable                 100,000
+      Cr Salary & Wages - Director   100,000
+
+Purpose:
+   Maintain payable control and reporting.
+
+OR alternatively maintain proper accrual workflow if needed.
+
+========================
+SALARY PAYMENT WORKFLOW
+========================
+
+When salary is paid:
+
+Example:
+   Payment Mode:
+   - Cash
+   - Bank
+
+System must pass:
+
+Debit:
+   Muhammad Ali - Payable Account
+
+Credit:
+   Cash OR Bank Account
+
+Entry:
+   Dr Muhammad Ali - Payable         100,000
+      Cr Cash/Bank                   100,000
+
+Purpose:
+   Clear employee payable liability after payment.
+
+========================
+IMPORTANT ACCOUNTING RULES
+========================
+
+1. All accounting must follow Double Entry System.
+
+2. Ledger balances must always remain synchronized.
+
+3. Employee ledgers must NEVER be deleted if transactions exist.
+
+4. Use FOREIGN KEY constraints to prevent orphan journal entries.
+
+5. Use soft delete instead of hard delete.
+
+6. Historical transactions must always show original ledger names.
+
+7. Every journal entry must contain:
+   - Voucher Number
+   - Date
+   - Narration
+   - Reference Type
+   - Module Source (HR Module)
+   - Created By
+   - Branch/Campus
+   - Session/Financial Year
+
+8. Maintain separate tables for:
+   - Employees
+   - Payroll
+   - Payroll Items
+   - Journal Entries
+   - Journal Entry Lines
+   - Ledgers
+   - Ledger Groups
+
+========================
+DATABASE SAFETY RULES
+========================
+
+1. Never allow deletion of ledger used in journal entries.
+
+2. If ledger is inactive, still show it in old vouchers.
+
+3. Use UUID for all ledgers and transactions.
+
+4. Maintain transaction rollback if any accounting step fails.
+
+5. Payroll posting must be atomic:
+   Either all entries save successfully OR none save.
+
+========================
+REPORTS REQUIRED
+========================
+
+Generate reports:
+- Salary Sheet
+- Payroll Register
+- Employee Ledger
+- Salary Payable Report
+- Role-wise Salary Expense
+- Trial Balance
+- General Ledger
+- Cash Book
+- Bank Book
+
+========================
+TECHNICAL REQUIREMENTS
+========================
+
+Use:
+- PostgreSQL
+- Prisma ORM
+- Proper relational schema
+- Transaction-safe posting
+- Audit logs
+- Role-based permissions
+
+Create:
+- Database schema
+- API logic
+- Posting engine
+- Journal entry service
+- Payroll posting service
+- Error handling
+- Validation logic
+
+Ensure the system is scalable for:
+- Schools
+- Colleges
+- Universities
+- Multi-campus organizations
+```
