@@ -352,7 +352,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger", "/product-stock-report"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/hrm-setup", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
+const HRM_ROUTES           = ["/staff", "/hrm-setup", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
@@ -545,8 +545,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     areas:               ["View Sales",     "Manage Sales"],
     // HRM
     hrm_staff:           ["View Staff",     "Add Staff",    "Edit Staff",    "Delete Staff",    "Manage Staff"],
-    hrm_roles:           ["View Roles",     "Add Roles",    "Edit Roles",    "Delete Roles",    "Manage Roles"],
-    hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_setup:           ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_salary:          ["View Staff",     "Manage Staff", "View Payroll",  "Manage Payroll"],
     hrm_attendance:      ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
@@ -605,8 +603,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-agent-perf":    "agent_performance",
     "l-areas":         "areas",
     "l-staff":            "hrm_staff",
-    "l-roles":            "hrm_roles",
-    "l-hrm-org":          "hrm_org",
     "l-hrm-setup":        "hrm_setup",
     "l-salary":            "hrm_salary",
     "l-salary-template":   "hrm_salary",
@@ -659,8 +655,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const hrmItems: SubItem[] = [
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",                href: "/staff",        icon: Users2,    desc: "Employees by dept & designation"     }] : []),
-    ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
-    ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
     ...(isModuleAllowed("hrm_setup")       ? [{ label: "HRM Setup",           href: "/hrm-setup",    icon: Layers3,   desc: "Unified role → dept → designation setup" }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Templates, allowances, deductions & advances" }] : []),
@@ -674,9 +668,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",       href: "/staff",       icon: Users2,    desc: "Employee records & departments"      }] : []),
   ];
   const hrmStructureLinks = [
-    ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                href: "/roles",   icon: KeyRound,  desc: "Permission roles & access control"  }] : []),
-    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org",   icon: Building2, desc: "Org chart & job descriptions"            }] : []),
-    ...(isModuleAllowed("hrm_setup") ? [{ label: "HRM Setup",           href: "/hrm-setup", icon: Layers3,   desc: "Unified role → dept → designation setup" }] : []),
+    ...(isModuleAllowed("hrm_setup") ? [{ label: "HRM Setup", href: "/hrm-setup", icon: Layers3, desc: "Unified role → dept → designation setup" }] : []),
   ];
   const hrmPayrollLinks = [
     ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
@@ -689,7 +681,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
   const hrmMegaCols: MegaColumn[] = [
     ...(hrmPeopleLinks.length    > 0 ? [{ label: "People",            href: "/staff",        icon: Users2,    color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-950/40",       desc: "Staff management",     links: hrmPeopleLinks    }] : []),
-    ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",         href: "/roles",        icon: KeyRound,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org chart",       links: hrmStructureLinks }] : []),
+    ...(hrmStructureLinks.length > 0 ? [{ label: "Structure",         href: "/hrm-setup",    icon: Layers3,   color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/40", desc: "Roles & org structure",   links: hrmStructureLinks }] : []),
     ...(hrmPayrollLinks.length   > 0 ? [{ label: "Payroll & Attend.", href: "/salary",       icon: Wallet,    color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-950/40",   desc: "Payroll & time tracking", links: hrmPayrollLinks   }] : []),
     ...(hrmSalesTeamLinks.length > 0 ? [{ label: "Sales Team",        href: "/sales-agents", icon: BarChart3, color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/40",     desc: "Agents & performance",    links: hrmSalesTeamLinks }] : []),
   ];
@@ -1178,15 +1170,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   active={location === "/staff" || location.startsWith("/staff/")} />
               )}
               {/* ── Structure ── */}
-              {(isModuleAllowed("hrm_roles") || isModuleAllowed("hrm_org")) && <HrmTabDivider />}
-              {isModuleAllowed("hrm_roles") && (
-                <HrmTab href="/roles" icon={KeyRound} label="Roles"
-                  active={location === "/roles"} />
-              )}
-              {isModuleAllowed("hrm_org") && (
-                <HrmTab href="/hrm-org" icon={Building2} label="Org & Designations"
-                  active={location === "/hrm-org"} />
-              )}
+              {isModuleAllowed("hrm_setup") && <HrmTabDivider />}
               {isModuleAllowed("hrm_setup") && (
                 <HrmTab href="/hrm-setup" icon={Layers3} label="HRM Setup"
                   active={location === "/hrm-setup"} />

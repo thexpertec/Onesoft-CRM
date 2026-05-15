@@ -37,8 +37,6 @@ const ProductStockReportPage = lazy(() => import("@/pages/product-stock-report")
 const StaffPage             = lazy(() => import("@/pages/staff"));
 const StaffNewPage          = lazy(() => import("@/pages/staff-new"));
 const StaffEditPage         = lazy(() => import("@/pages/staff-edit"));
-const HrmRolesPage          = lazy(() => import("@/pages/hrm-roles"));
-const HrmOrgPage            = lazy(() => import("@/pages/hrm-org"));
 const HrmSetupPage          = lazy(() => import("@/pages/hrm-setup"));
 const SalaryPage            = lazy(() => import("@/pages/salary"));
 const SalaryTemplatePage    = lazy(() => import("@/pages/salary-template"));
@@ -242,8 +240,8 @@ function Router() {
                   <Route path="/staff/:id/edit"     component={StaffEditPage} />
                   <Route path="/staff/new"          component={StaffNewPage} />
                   <Route path="/staff"              component={StaffPage} />
-                  <Route path="/roles"              component={HrmRolesPage} />
-                  <Route path="/hrm-org"            component={HrmOrgPage} />
+                  <Route path="/roles"   component={HrmSetupPage} />
+                  <Route path="/hrm-org" component={HrmSetupPage} />
                   <Route path="/hrm-setup"          component={HrmSetupPage} />
                   <Route path="/salary"             component={SalaryPage} />
                   <Route path="/salary-template"    component={SalaryTemplatePage} />

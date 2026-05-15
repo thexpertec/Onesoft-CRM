@@ -2,7 +2,7 @@ import {
   ShoppingCart, CreditCard, Receipt, PlusCircle, Undo2, FileText,
   Calculator, Wallet, ClipboardList, TrendingUp, Landmark, Package,
   Users, PhoneCall, Truck, BarChart3, Tag, Factory, FileBarChart, BookOpen,
-  UserCheck, Users2, Building2, KeyRound, Layers, FlaskConical, MapPin,
+  UserCheck, Users2, Building2, KeyRound, Layers, Layers3, FlaskConical, MapPin,
   Image as ImageIcon, Settings, FolderOpen, SlidersHorizontal, Ruler,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -86,8 +86,7 @@ export const LEFT_ACTIONS_REGISTRY: QuickActionDef[] = [
   { id: "l-areas",            label: "Areas",      titleFull: "Areas & Regions",        href: "/areas",             icon: MapPin,          color: "lime",    group: "CRM"           },
   // ── HRM ───────────────────────────────────────────────────────────────────
   { id: "l-staff",            label: "Staff",      titleFull: "Staff / HRM",            href: "/staff",             icon: Building2,       color: "rose",    group: "HRM"           },
-  { id: "l-roles",            label: "Roles",      titleFull: "HRM Roles",              href: "/roles",             icon: KeyRound,        color: "pink",    group: "HRM"           },
-  { id: "l-hrm-org",          label: "Org",        titleFull: "Depts & Designations",   href: "/hrm-org",           icon: Layers,          color: "orange",  group: "HRM"           },
+  { id: "l-hrm-setup",        label: "HRM Setup",  titleFull: "HRM Setup",              href: "/hrm-setup",         icon: Layers3,         color: "orange",  group: "HRM"           },
   // ── Catalogue ─────────────────────────────────────────────────────────────
   { id: "l-products",         label: "Products",   titleFull: "Products",               href: "/products",          icon: Package,         color: "blue",    group: "Catalogue"     },
   { id: "l-categories",       label: "Categories", titleFull: "Product Categories",     href: "/categories",        icon: FolderOpen,      color: "fuchsia", group: "Catalogue"     },
@@ -112,8 +111,7 @@ export const DEFAULT_LEFT_QUICK_ACTIONS: QuickActionItem[] = [
   { id: "l-agent-perf",       visible: true  },
   { id: "l-areas",            visible: true  },
   { id: "l-staff",            visible: true  },
-  { id: "l-roles",            visible: true  },
-  { id: "l-hrm-org",          visible: true  },
+  { id: "l-hrm-setup",        visible: true  },
   { id: "l-products",         visible: true  },
   { id: "l-categories",       visible: true  },
   { id: "l-brands",           visible: false },

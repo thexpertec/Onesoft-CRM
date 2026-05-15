@@ -1320,7 +1320,7 @@ export type ModuleId =
   | "sales" | "invoices" | "sale_return" | "calc_invoice"
   | "sales_agents" | "agent_performance" | "areas"
   // HRM
-  | "hrm_staff" | "hrm_roles" | "hrm_org" | "hrm_salary" | "hrm_attendance"
+  | "hrm_staff" | "hrm_setup" | "hrm_salary" | "hrm_attendance"
   // Products organisation
   | "products_departments"
   // Accounting
@@ -1373,8 +1373,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
 
   // ── HRM ───────────────────────────────────────────────────────────────────
   { id: "hrm_staff",       label: "Staff",                       desc: "Employee records & departments",        group: "HRM", href: "/staff"       },
-  { id: "hrm_roles",       label: "Roles",                       desc: "Permission roles & access control",     group: "HRM", href: "/roles"       },
-  { id: "hrm_org",         label: "Departments & Designations",  desc: "Org chart & job descriptions",          group: "HRM", href: "/hrm-org"     },
+  { id: "hrm_setup",       label: "HRM Setup",                   desc: "Roles, departments & designations",     group: "HRM", href: "/hrm-setup"   },
   { id: "hrm_salary",      label: "Salary Management",           desc: "Payroll, salary slips & JE posting",   group: "HRM", href: "/salary"      },
   { id: "hrm_attendance",  label: "Attendance",                  desc: "Daily attendance & bulk marking",      group: "HRM", href: "/attendance"  },
 

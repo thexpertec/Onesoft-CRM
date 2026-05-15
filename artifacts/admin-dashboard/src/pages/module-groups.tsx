@@ -61,7 +61,7 @@ const PRESETS: { name: string; description: string; modules: ModuleId[]; color: 
       "crm_leads","crm_customers",
       "products","categories","brands","stock","purchases",
       "sales","invoices","sale_return","sales_agents",
-      "hrm_staff","hrm_roles",
+      "hrm_staff","hrm_setup",
       "accounting_coa","accounting_journal","accounting_pls","accounting_receipts",
       "documents","media","settings",
     ],
