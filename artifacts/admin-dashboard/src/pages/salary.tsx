@@ -184,7 +184,16 @@ export default function SalaryPage() {
 
   // ── Generate payroll ──────────────────────────────────────────────────────
   const handleGeneratePayroll = useCallback(() => {
-    const activeStaff = staff.filter(s => s.status === "Active");
+    const activeStaff = staff.filter(s => {
+      if (s.status !== "Active") return false;
+      const joinMonth = s.joinDate?.slice(0, 7);
+      if (joinMonth && period < joinMonth) return false;
+      if (s.leavingDate) {
+        const leaveMonth = s.leavingDate.slice(0, 7);
+        if (period > leaveMonth) return false;
+      }
+      return true;
+    });
     const existingIds = new Set(periodSlips.map(s => s.staffId));
     let created = 0;
     for (const s of activeStaff) {
@@ -582,11 +591,17 @@ export default function SalaryPage() {
             <AlertDialogTitle>Generate Payroll — {periodLabel(period)}</AlertDialogTitle>
             <AlertDialogDescription>
               This will create <strong>Draft</strong> salary slips for all active staff
-              who do not already have a slip for <strong>{periodLabel(period)}</strong>.
+              who were employed during <strong>{periodLabel(period)}</strong> and do not already have a slip for this period.
               Existing slips will not be affected.
               <br /><br />
-              Active staff without a slip: <strong>
-                {staff.filter(s => s.status === "Active" && !periodSlips.some(p => p.staffId === s.id)).length}
+              Eligible staff (Active, period within employment dates, no existing slip): <strong>
+                {staff.filter(s => {
+                  if (s.status !== "Active") return false;
+                  const joinMonth = s.joinDate?.slice(0, 7);
+                  if (joinMonth && period < joinMonth) return false;
+                  if (s.leavingDate && period > s.leavingDate.slice(0, 7)) return false;
+                  return !periodSlips.some(p => p.staffId === s.id);
+                }).length}
               </strong>
             </AlertDialogDescription>
           </AlertDialogHeader>

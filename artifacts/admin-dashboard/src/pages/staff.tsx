@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { useStaff, useStaffRoles } from "@/hooks/use-data";
+import { useStaff, useStaffRoles, useDepartments, useDesignations } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
-import { Staff, StaffStatus, getDepartments, getDesignations, getSalarySlips } from "@/lib/store";
+import { Staff, StaffStatus, getSalarySlips } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff, Pencil, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,21 +22,23 @@ const STATUS_BG: Record<StaffStatus, string> = {
 };
 
 
-type EditableField = "name" | "department" | "designation" | "role" | "status" | "email" | "phone" | "joinDate" | "notes";
+type EditableField = "name" | "fatherName" | "department" | "designation" | "role" | "status" | "email" | "phone" | "joinDate" | "notes";
 const BLANK = (): Record<EditableField, string> => ({
-  name: "", department: "", designation: "", role: "", status: "Active",
+  role: "", department: "", designation: "",
+  name: "", fatherName: "", status: "Active",
   email: "", phone: "", joinDate: new Date().toISOString().slice(0, 10), notes: "",
 });
 
 const COLS: ColDef[] = [
-  { field: "name",        label: "Full Name",    minW: 180, type: "text"   },
+  { field: "role",        label: "Role",         minW: 130, type: "text"   },
   { field: "department",  label: "Department",   minW: 150, type: "text"   },
   { field: "designation", label: "Designation",  minW: 150, type: "text"   },
-  { field: "role",        label: "Role",         minW: 130, type: "text"   },
-  { field: "status",      label: "Status",       minW: 120, type: "select", options: STATUS_OPTS as unknown as string[] },
+  { field: "name",        label: "Full Name",    minW: 180, type: "text"   },
+  { field: "fatherName",  label: "Father Name",  minW: 150, type: "text"   },
   { field: "email",       label: "Email",        minW: 185, type: "email"  },
   { field: "phone",       label: "Phone",        minW: 130, type: "tel"    },
   { field: "joinDate",    label: "Join Date",    minW: 120, type: "date"   },
+  { field: "status",      label: "Status",       minW: 120, type: "select", options: STATUS_OPTS as unknown as string[] },
 ];
 const TOTAL_W = COLS.reduce((a, c) => a + c.minW, 0);
 
@@ -49,10 +51,13 @@ export default function StaffPage() {
   const { toast } = useToast();
 
   const roleNames   = useMemo(() => roles.map(r => r.name), [roles]);
-  const allDepts    = useMemo(() => getDepartments().filter(d => d.isActive), []);
-  const allDesigs   = useMemo(() => getDesignations().filter(d => d.isActive), []);
+  const { departments: deptList }       = useDepartments();
+  const { designations: desigList }     = useDesignations();
+  const allDepts  = useMemo(() => deptList.filter(d => d.isActive), [deptList]);
+  const allDesigs = useMemo(() => desigList.filter(d => d.isActive), [desigList]);
 
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [roleFilter,   setRoleFilter]   = useState<string>("All");
   const [deptFilter,   setDeptFilter]   = useState<string>("All");
   const [search,       setSearch]       = useState("");
   const [activeCell,   setActiveCell]   = useState<{ id: string; col: number } | null>(null);
@@ -73,16 +78,18 @@ export default function StaffPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // ── unique departments for filter pills ──
-  const departments = useMemo(() => {
-    const depts = [...new Set(staff.map(s => s.department).filter(Boolean))].sort();
-    return depts;
-  }, [staff]);
-
   // ── Combobox options ──
   const deptComboOpts  = useMemo<ComboOption[]>(() => allDepts.map(d => ({ value: d.name,  label: d.name,  sub: d.headOf || undefined })), [allDepts]);
   const desigComboOpts = useMemo<ComboOption[]>(() => allDesigs.map(d => ({ value: d.title, label: d.title, sub: d.department || undefined })), [allDesigs]);
   const roleComboOpts  = useMemo<ComboOption[]>(() => roleNames.map(r => ({ value: r, label: r })), [roleNames]);
+
+  // ── Smart dept filter: filter departments by selected role ────────────────
+  const deptOptsForRole = useCallback((roleName: string): ComboOption[] => {
+    if (!roleName) return deptComboOpts;
+    const filtered = allDepts.filter(d => !d.roleName || d.roleName === roleName);
+    const opts = filtered.map(d => ({ value: d.name, label: d.name, sub: d.headOf || undefined }));
+    return opts.length > 0 ? opts : deptComboOpts;
+  }, [allDepts, deptComboOpts]);
 
   // ── Smart designation filter: only show designations for selected department ──
   const desigOptsForDept = useCallback((dept: string): ComboOption[] => {
@@ -94,15 +101,16 @@ export default function StaffPage() {
   const filtered = useMemo(() => {
     let rows = [...staff];
     if (statusFilter !== "All") rows = rows.filter(s => s.status === statusFilter);
-    if (deptFilter  !== "All") rows = rows.filter(s => s.department === deptFilter);
+    if (roleFilter   !== "All") rows = rows.filter(s => s.role       === roleFilter);
+    if (deptFilter   !== "All") rows = rows.filter(s => s.department === deptFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(s =>
-        [s.name, s.email, s.phone, s.department, s.designation, s.role, s.status].some(v => v?.toLowerCase().includes(q)),
+        [s.name, s.fatherName, s.email, s.phone, s.department, s.designation, s.role, s.status].some(v => v?.toLowerCase().includes(q)),
       );
     }
     return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [staff, statusFilter, deptFilter, search]);
+  }, [staff, statusFilter, roleFilter, deptFilter, search]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { All: staff.length };
@@ -279,22 +287,45 @@ export default function StaffPage() {
           );
         })}
 
-        {/* Dept filter pills */}
-        {departments.length > 0 && (
+        {/* Role filter pills */}
+        {roles.length > 0 && (
           <>
-            <span className="text-xs text-zinc-400 ml-2 mr-0.5">Dept:</span>
-            {departments.map(dept => {
-              const isA = deptFilter === dept;
+            <span className="text-xs text-zinc-400 ml-2 mr-0.5">Role:</span>
+            {roles.map(r => {
+              const isA = roleFilter === r.name;
               return (
-                <button key={dept} aria-pressed={isA}
-                  onClick={() => setDeptFilter(prev => prev === dept ? "All" : dept)}
-                  className={`text-xs font-medium rounded-full px-2.5 py-1 transition-all ${isA ? "bg-blue-600 text-white ring-2 ring-blue-400" : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100"}`}>
-                  {dept}{isA && " ×"}
+                <button key={r.name} aria-pressed={isA}
+                  onClick={() => { setRoleFilter(prev => prev === r.name ? "All" : r.name); setDeptFilter("All"); }}
+                  className="text-xs font-medium rounded-full px-2.5 py-1 transition-all"
+                  style={isA
+                    ? { background: r.color || "#6366f1", color: "white", outline: `2px solid ${r.color || "#6366f1"}`, outlineOffset: 2 }
+                    : { background: `${r.color || "#6366f1"}18`, color: r.color || "#6366f1" }}>
+                  {r.name}{isA && " ×"}
                 </button>
               );
             })}
           </>
         )}
+
+        {/* Dept filter pills */}
+        {(() => {
+          const depts = [...new Set(staff.map(s => s.department).filter(Boolean))].sort();
+          return depts.length > 0 ? (
+            <>
+              <span className="text-xs text-zinc-400 ml-2 mr-0.5">Dept:</span>
+              {depts.map(dept => {
+                const isA = deptFilter === dept;
+                return (
+                  <button key={dept} aria-pressed={isA}
+                    onClick={() => setDeptFilter(prev => prev === dept ? "All" : dept)}
+                    className={`text-xs font-medium rounded-full px-2.5 py-1 transition-all ${isA ? "bg-blue-600 text-white ring-2 ring-blue-400" : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100"}`}>
+                    {dept}{isA && " ×"}
+                  </button>
+                );
+              })}
+            </>
+          ) : null;
+        })()}
       </div>
 
       {/* Toolbar */}
@@ -342,8 +373,12 @@ export default function StaffPage() {
                     ) : isA && (c.field === "department" || c.field === "designation" || c.field === "role") ? (
                       <div className="absolute inset-0 flex items-center">
                         <Combobox autoFocus value={val}
-                          onChange={v => setNewRow(r => r ? { ...r, [c.field]: v } : r)}
-                          options={c.field === "department" ? deptComboOpts : c.field === "designation" ? desigOptsForDept(newRow?.department ?? "") : roleComboOpts}
+                          onChange={v => {
+                            if (c.field === "role")        setNewRow(r => r ? { ...r, role: v, department: "", designation: "" } : r);
+                            else if (c.field === "department") setNewRow(r => r ? { ...r, department: v, designation: "" } : r);
+                            else                           setNewRow(r => r ? { ...r, [c.field]: v } : r);
+                          }}
+                          options={c.field === "role" ? roleComboOpts : c.field === "department" ? deptOptsForRole(newRow?.role ?? "") : desigOptsForDept(newRow?.department ?? "")}
                           placeholder={c.label}
                           className="w-full h-full"
                           inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground placeholder:text-gray-300"
@@ -449,11 +484,21 @@ export default function StaffPage() {
                           <Combobox
                             autoFocus
                             value={rawVal}
-                            onChange={v => commitCell(member.id, c.field as EditableField, v)}
+                            onChange={v => {
+                              if (c.field === "role") {
+                                editStaff(member.id, { role: v, department: "", designation: "" } as Partial<Staff>);
+                                setActiveCell(null); toast({ title: "Saved" });
+                              } else if (c.field === "department") {
+                                editStaff(member.id, { department: v, designation: "" } as Partial<Staff>);
+                                setActiveCell(null); toast({ title: "Saved" });
+                              } else {
+                                commitCell(member.id, c.field as EditableField, v);
+                              }
+                            }}
                             options={
-                              c.field === "department"  ? deptComboOpts :
-                              c.field === "designation" ? desigOptsForDept(member.department ?? "") :
-                              roleComboOpts
+                              c.field === "role"        ? roleComboOpts :
+                              c.field === "department"  ? deptOptsForRole(member.role ?? "") :
+                              desigOptsForDept(member.department ?? "")
                             }
                             placeholder={`Select ${c.label}…`}
                             className="w-full h-full"

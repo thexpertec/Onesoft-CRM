@@ -25,16 +25,17 @@ const CELL_INPUT = "w-full h-full bg-transparent border-0 outline-none px-3 text
 
 // ─── Departments ──────────────────────────────────────────────────────────────
 const DEPT_COLS: ColDef[] = [
+  { field: "_role",       label: "Under Role",       minW: 160, type: "readonly" },
   { field: "name",        label: "Department Name",  minW: 200, type: "text" },
-  { field: "description", label: "Description",      minW: 260, type: "text" },
-  { field: "headOf",      label: "Head of Dept.",    minW: 180, type: "text" },
+  { field: "description", label: "Description",      minW: 240, type: "text" },
+  { field: "headOf",      label: "Head of Dept.",    minW: 160, type: "text" },
   { field: "_staff",      label: "Staff",            minW: 80,  type: "readonly" },
   { field: "_desig",      label: "Designations",     minW: 110, type: "readonly" },
 ];
 const DEPT_TOTAL_W = DEPT_COLS.reduce((a, c) => a + c.minW, 0);
 
-type DeptEdit = { name: string; description: string; headOf: string };
-const DEPT_BLANK = (): DeptEdit => ({ name: "", description: "", headOf: "" });
+type DeptEdit = { name: string; roleName: string; description: string; headOf: string };
+const DEPT_BLANK = (): DeptEdit => ({ name: "", roleName: "", description: "", headOf: "" });
 
 // ─── Designations ─────────────────────────────────────────────────────────────
 const DESIG_COLS: ColDef[] = [
@@ -128,18 +129,18 @@ export default function HrmOrgPage() {
     const dept = departments.find(d => d.id === id);
     if (!dept) return;
     setDeptActiveCell({ id, field });
-    setDeptEditData({ name: dept.name, description: dept.description, headOf: dept.headOf || "" });
+    setDeptEditData({ name: dept.name, roleName: dept.roleName || "", description: dept.description, headOf: dept.headOf || "" });
   };
 
   const commitDeptCell = (id: string) => {
     if (!deptEditData.name.trim()) { toast({ title: "Department name is required", variant: "destructive" }); return; }
-    editDepartment(id, { name: deptEditData.name.trim(), description: deptEditData.description.trim(), headOf: deptEditData.headOf.trim() });
+    editDepartment(id, { name: deptEditData.name.trim(), roleName: deptEditData.roleName.trim(), description: deptEditData.description.trim(), headOf: deptEditData.headOf.trim() });
     setDeptActiveCell(null);
   };
 
   const saveDeptNew = () => {
     if (!deptNewRow?.name.trim()) { toast({ title: "Department name is required", variant: "destructive" }); return; }
-    addDepartment({ name: deptNewRow.name.trim(), description: deptNewRow.description.trim(), headOf: deptNewRow.headOf.trim(), isActive: true });
+    addDepartment({ name: deptNewRow.name.trim(), roleName: deptNewRow.roleName.trim(), description: deptNewRow.description.trim(), headOf: deptNewRow.headOf.trim(), isActive: true });
     toast({ title: "Department added", description: deptNewRow.name.trim() });
     setDeptNewRow(null);
   };
@@ -305,6 +306,25 @@ export default function HrmOrgPage() {
                     </td>
 
                     {DEPT_COLS.map(col => {
+                      if (col.field === "_role") return (
+                        <td key={col.field} className="border-r border-gray-100 dark:border-border p-0" style={{ height: CELL_H }}>
+                          {isEditing ? (
+                            <select
+                              value={deptEditData.roleName}
+                              onChange={e => setDeptEditData(p => ({ ...p, roleName: e.target.value }))}
+                              className="w-full h-full px-3 text-[12px] bg-transparent border-0 outline-none dark:text-foreground">
+                              <option value="">(Any / No Role)</option>
+                              {roles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                            </select>
+                          ) : (
+                            <span className="flex items-center h-full px-3 text-[12px] truncate">
+                              {dept.roleName
+                                ? (() => { const r = roles.find(x => x.name === dept.roleName); return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r?.color || "#94a3b8" }} />{dept.roleName}</span>; })()
+                                : <span className="text-muted-foreground/40">—</span>}
+                            </span>
+                          )}
+                        </td>
+                      );
                       if (col.field === "_staff") return (
                         <td key={col.field} className="border-r border-gray-100 dark:border-border px-3 text-[12px] text-muted-foreground" style={{ height: CELL_H }}>
                           <span className="inline-flex items-center gap-1"><Users2 size={11} className="text-blue-500" />{deptStaffCount[dept.name] || 0}</span>
@@ -363,6 +383,17 @@ export default function HrmOrgPage() {
                 <tr className={`${NEW_ROW_BG} border-b border-gray-100 dark:border-border`}>
                   <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-emerald-600 font-bold select-none" style={{ height: CELL_H }}>+</td>
                   {DEPT_COLS.map((col, ci) => {
+                    if (col.field === "_role") return (
+                      <td key={col.field} className="border-r border-gray-100 dark:border-border p-0 ring-2 ring-inset ring-emerald-400" style={{ height: CELL_H }}>
+                        <select
+                          value={deptNewRow.roleName}
+                          onChange={e => setDeptNewRow(p => ({ ...p!, roleName: e.target.value }))}
+                          className="w-full h-full px-3 text-[12px] bg-transparent border-0 outline-none dark:text-foreground">
+                          <option value="">(Any / No Role)</option>
+                          {roles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                        </select>
+                      </td>
+                    );
                     if (col.type === "readonly") return <td key={col.field} className="border-r border-gray-100 dark:border-border" style={{ height: CELL_H }} />;
                     const field = col.field as "name" | "description" | "headOf";
                     return (
@@ -372,7 +403,7 @@ export default function HrmOrgPage() {
                           onChange={v => setDeptNewRow(p => ({ ...p!, [field]: v }))}
                           onSave={saveDeptNew}
                           onEscape={() => setDeptNewRow(null)}
-                          autoFocus={ci === 0}
+                          autoFocus={ci === 1}
                         />
                       </td>
                     );

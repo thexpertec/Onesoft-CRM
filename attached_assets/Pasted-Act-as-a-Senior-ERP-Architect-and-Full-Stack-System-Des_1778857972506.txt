@@ -1,0 +1,184 @@
+Act as a Senior ERP Architect and Full-Stack System Designer with 10+ years of experience in HRM, Payroll, and Database-driven SaaS applications.
+
+Design and implement a fully relational Staff Management Module for a multi-tenant ERP system (School/College/Business ERP).
+
+========================
+CORE OBJECTIVE
+========================
+
+Create a dynamic Staff Table and HR structure where:
+
+1. Role → controls Department
+2. Department → controls Designation
+3. All three must be managed in a SINGLE MASTER SETUP TABLE + SINGLE ADMIN PAGE
+
+The system must ensure strict hierarchical dependency:
+Role → Department → Designation
+
+========================
+STAFF TABLE STRUCTURE (REORDER REQUIRED)
+========================
+
+Redesign the Staff Listing Table with following columns:
+
+1. #
+2. Role
+3. Department
+4. Designation
+5. Full Name
+6. Father Name
+7. Email
+8. Phone
+9. Join Date
+10. Status
+11. Actions
+
+UI must support:
+- Inline editing
+- Filtering by Role, Department, Designation
+- Search by Name / Phone / Email
+
+========================
+DEPENDENCY LOGIC (VERY IMPORTANT)
+========================
+
+1. Role Selection:
+   - User selects Role first (e.g. Admin, Management, Teaching, Non-Teaching)
+
+2. Department Filter:
+   - Based on selected Role, system dynamically loads only related Departments
+
+3. Designation Filter:
+   - Based on selected Department, system loads only related Designations
+
+Example:
+Role: Management
+    → Departments: Executive Management, HR, Finance
+Department: Executive Management
+    → Designations: Director, CEO, Managing Director
+
+========================
+MASTER DATA DESIGN (SINGLE TABLE + SINGLE PAGE)
+========================
+
+Create ONE master configuration system:
+
+Table: hr_hierarchy_master
+
+Fields:
+- id
+- type (ROLE | DEPARTMENT | DESIGNATION)
+- name
+- parent_id (nullable for Role, required for Department & Designation)
+- tenant_id
+- is_active
+
+Rules:
+- Role = parent_id NULL
+- Department = linked to Role
+- Designation = linked to Department
+
+Admin Page:
+- Single UI with tabs or tree view:
+  - Roles
+  - Departments
+  - Designations
+- CRUD operations from same page
+- Drag/drop optional hierarchy support
+
+========================
+STAFF CREATION RULES
+========================
+
+When adding new staff:
+
+1. User selects Role
+2. System loads Departments (filtered by Role)
+3. System loads Designation (filtered by Department)
+
+Validation:
+- Designation cannot be selected without Department
+- Department cannot be selected without Role
+
+========================
+PAYROLL LOGIC (CRITICAL BUSINESS RULE)
+========================
+
+Salary generation must strictly follow employment dates:
+
+RULE 1:
+- System MUST NOT generate salary before Join Date
+
+RULE 2:
+- System MUST NOT generate salary after:
+  - Resignation Date
+  - Termination Date
+  - Left Date
+  - Inactive Status
+
+Example logic:
+
+IF (salary_month < join_date) → BLOCK
+IF (status != Active) → BLOCK
+IF (salary_month > leaving_date) → BLOCK
+
+========================
+PAYROLL VALIDATION ENGINE
+========================
+
+Before salary posting:
+
+Check:
+- staff.join_date <= salary_period.start_date
+- staff.status == ACTIVE
+- staff is not terminated
+
+If validation fails:
+Return error:
+"Salary cannot be generated due to invalid employment period"
+
+========================
+DATABASE DESIGN REQUIREMENTS
+========================
+
+Use relational structure:
+
+Tables:
+- staff
+- hr_hierarchy_master
+- payroll
+- payroll_items
+- journal_entries
+- journal_entry_lines
+
+Constraints:
+- Foreign keys mandatory
+- No orphan records allowed
+- Use UUID for all primary keys
+- Soft delete only
+
+========================
+SYSTEM BEHAVIOR
+========================
+
+- Role/Department/Designation must be reusable across tenants
+- Fast filtering required (indexed columns)
+- Prevent duplicate hierarchy entries
+- Maintain audit logs for all HR changes
+
+========================
+OUTPUT REQUIRED FROM DEVELOPER
+========================
+
+1. Database schema (PostgreSQL / Prisma)
+2. API design (REST or tRPC)
+3. Frontend UI logic (React preferred)
+4. Dynamic dropdown dependency system
+5. Payroll validation service
+6. Role-based access control
+
+Ensure system is:
+- Scalable
+- Multi-tenant ready
+- ERP-grade secure
+- Accounting compliant

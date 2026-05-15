@@ -5061,6 +5061,7 @@ export type StaffStatus = "Active" | "On Leave" | "Terminated";
 export type Staff = {
   id: string;
   name: string;
+  fatherName?: string;         // Father / guardian name
   department: string;
   designation: string;
   role: string;
@@ -5068,6 +5069,7 @@ export type Staff = {
   email: string;
   phone: string;
   joinDate: string;
+  leavingDate?: string;        // Resignation / termination / leaving date (YYYY-MM-DD)
   notes: string;
   openingBalance?: number;   // salary advance / balance owed at setup
   // ── Salary details ──
@@ -5196,6 +5198,7 @@ export const deleteStaffRole = (id: string): void => {
 export type Department = {
   id: string;
   name: string;
+  roleName?: string;            // Parent role — only departments under this role appear when that role is selected
   description: string;
   headOf: string;
   isActive: boolean;
@@ -9075,6 +9078,24 @@ function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions
 export const getSalarySlips = (): SalarySlip[] => getStored<SalarySlip>(SALARY_SLIPS_KEY);
 
 export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "netSalary" | "createdAt" | "updatedAt">): SalarySlip => {
+  // ── Employment-period validation ──────────────────────────────────────────
+  const staffMember = getStaff().find(s => s.id === data.staffId);
+  if (staffMember) {
+    if (staffMember.status !== "Active") {
+      throw new Error(`Salary blocked: ${data.staffName} is currently "${staffMember.status}". Only Active staff can receive salary.`);
+    }
+    const joinMonth = staffMember.joinDate?.slice(0, 7); // "YYYY-MM"
+    if (joinMonth && data.period < joinMonth) {
+      throw new Error(`Salary blocked: period ${data.period} is before ${data.staffName}'s join date (${staffMember.joinDate}). Salary cannot be generated prior to the join month.`);
+    }
+    if (staffMember.leavingDate) {
+      const leaveMonth = staffMember.leavingDate.slice(0, 7);
+      if (data.period > leaveMonth) {
+        throw new Error(`Salary blocked: period ${data.period} is after ${data.staffName}'s leaving date (${staffMember.leavingDate}). Salary cannot be generated after employment ended.`);
+      }
+    }
+  }
+  // ── Duplicate check ────────────────────────────────────────────────────────
   const existing = getSalarySlips();
   const duplicate = existing.find(s => s.staffId === data.staffId && s.period === data.period);
   if (duplicate) {
