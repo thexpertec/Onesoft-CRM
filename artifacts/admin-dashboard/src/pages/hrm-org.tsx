@@ -1,11 +1,11 @@
 import { useState, useMemo, useRef } from "react";
-import { useDepartments, useDesignations, useStaff } from "@/hooks/use-data";
+import { useDepartments, useDesignations, useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Designation } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import {
   Building2, Users2, Plus, X, Save, Trash2, FileText, CheckCircle2,
-  ChevronRight, LayoutGrid, Tag, Layers,
+  ChevronRight, LayoutGrid, Tag, Layers, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,10 +111,11 @@ export default function HrmOrgPage() {
 
   const { departments, addDepartment, editDepartment, removeDepartment } = useDepartments();
   const { designations, addDesignation, editDesignation, removeDesignation } = useDesignations();
+  const { roles, addRole, removeRole } = useStaffRoles();
   const { staff } = useStaff();
 
   // ── Active tab ───────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"departments" | "designations">("departments");
+  const [activeTab, setActiveTab] = useState<"departments" | "designations" | "roles">("departments");
 
   // ─────────────────────── DEPARTMENTS STATE ───────────────────────────────
   type DeptActiveCell = { id: string; field: "name" | "description" | "headOf" } | null;
@@ -192,10 +193,28 @@ export default function HrmOrgPage() {
 
   const deptNames = useMemo(() => departments.map(d => d.name).sort(), [departments]);
 
+  // ─── Roles state ─────────────────────────────────────────────────────────
+  const [roleNewRow,  setRoleNewRow]  = useState<{ name: string; color: string } | null>(null);
+  const [roleDeleteId, setRoleDeleteId] = useState<string | null>(null);
+
+  const roleStaffCount = useMemo(() => {
+    const m: Record<string, number> = {};
+    staff.forEach(s => { if (s.role) m[s.role] = (m[s.role] || 0) + 1; });
+    return m;
+  }, [staff]);
+
+  const saveRoleNew = () => {
+    if (!roleNewRow?.name.trim()) { toast({ title: "Role name is required", variant: "destructive" }); return; }
+    addRole({ name: roleNewRow.name.trim(), description: "", color: roleNewRow.color || "#6366f1", permissions: "" });
+    toast({ title: "Role added", description: roleNewRow.name.trim() });
+    setRoleNewRow(null);
+  };
+
   // ─── Tab pills ───────────────────────────────────────────────────────────
   const tabs = [
     { id: "departments" as const, label: "Departments", icon: Building2, count: departments.length, color: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400" },
     { id: "designations" as const, label: "Designations", icon: Tag, count: designations.length, color: "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400" },
+    { id: "roles" as const, label: "Roles", icon: Shield, count: roles.length, color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400" },
   ];
 
   return (
@@ -207,8 +226,8 @@ export default function HrmOrgPage() {
           <Layers size={17} className="text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-[15px] font-bold text-foreground leading-tight">Departments &amp; Designations</h1>
-          <p className="text-[12px] text-muted-foreground leading-tight">Org structure, job titles and job descriptions</p>
+          <h1 className="text-[15px] font-bold text-foreground leading-tight">Departments, Designations &amp; Roles</h1>
+          <p className="text-[12px] text-muted-foreground leading-tight">Manage the dropdown lists used in Staff records</p>
         </div>
 
         {/* Tab switcher */}
@@ -232,18 +251,19 @@ export default function HrmOrgPage() {
 
         {can("Add Staff") && (
           <Button size="sm" className={`gap-1.5 text-[12px] ${
-            activeTab === "departments"
-              ? "bg-rose-600 hover:bg-rose-700"
-              : "bg-violet-600 hover:bg-violet-700"
+            activeTab === "departments" ? "bg-rose-600 hover:bg-rose-700"
+            : activeTab === "designations" ? "bg-violet-600 hover:bg-violet-700"
+            : "bg-indigo-600 hover:bg-indigo-700"
           } text-white`}
             onClick={() => {
               if (activeTab === "departments") setDeptNewRow(DEPT_BLANK());
-              else setDesigNewRow(DESIG_BLANK());
+              else if (activeTab === "designations") setDesigNewRow(DESIG_BLANK());
+              else setRoleNewRow({ name: "", color: "#6366f1" });
             }}
-            data-testid={activeTab === "departments" ? "btn-add-department" : "btn-add-designation"}
+            data-testid={activeTab === "departments" ? "btn-add-department" : activeTab === "designations" ? "btn-add-designation" : "btn-add-role"}
           >
             <Plus size={13} />
-            Add {activeTab === "departments" ? "Department" : "Designation"}
+            Add {activeTab === "departments" ? "Department" : activeTab === "designations" ? "Designation" : "Role"}
           </Button>
         )}
       </div>
@@ -587,6 +607,139 @@ export default function HrmOrgPage() {
             )}
           </>
         )}
+
+        {/* ── ROLES TAB ────────────────────────────────────────────────────── */}
+        {activeTab === "roles" && (
+          <>
+            {/* Summary cards */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { icon: Shield,      count: roles.length,                                     label: "Total Roles",     color: "indigo" },
+                { icon: Users2,      count: staff.filter(s => s.role).length,                 label: "Staff with Role", color: "blue" },
+                { icon: CheckCircle2,count: staff.filter(s => !s.role || !s.role.trim()).length, label: "No Role Assigned", color: "amber" },
+              ].map(c => (
+                <div key={c.label} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg bg-${c.color}-100 dark:bg-${c.color}-950/50 flex items-center justify-center`}>
+                    <c.icon size={18} className={`text-${c.color}-600 dark:text-${c.color}-400`} />
+                  </div>
+                  <div>
+                    <p className="text-[22px] font-bold text-foreground leading-none">{c.count}</p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5">{c.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Roles table */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="w-8 border-r border-border text-center py-2 text-muted-foreground font-medium">#</th>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground border-r border-border" style={{ minWidth: 60 }}>Color</th>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground border-r border-border" style={{ minWidth: 200 }}>Role Name</th>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground border-r border-border" style={{ minWidth: 80 }}>Staff Using</th>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground border-r border-border" style={{ minWidth: 100 }}>Permissions</th>
+                    <th className="w-12 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {roles.map((role, ri) => {
+                    const permCount = role.permissions ? role.permissions.split(",").filter(p => p.trim()).length : 0;
+                    const sc = roleStaffCount[role.name] || 0;
+                    return (
+                      <tr key={role.id} className={`group border-b border-gray-100 dark:border-border ${ri % 2 !== 0 ? "bg-muted/20" : ""} hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10`}>
+                        <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-muted-foreground select-none py-2">{ri + 1}</td>
+                        <td className="border-r border-gray-100 dark:border-border px-3 py-2">
+                          <span className="w-5 h-5 rounded-full inline-block border border-border/50 shadow-sm" style={{ background: role.color || "#6366f1" }} />
+                        </td>
+                        <td className="border-r border-gray-100 dark:border-border px-3 py-2">
+                          <span className="font-semibold" style={{ color: role.color || undefined }}>{role.name}</span>
+                        </td>
+                        <td className="border-r border-gray-100 dark:border-border px-3 py-2 text-muted-foreground">
+                          <span className="inline-flex items-center gap-1"><Users2 size={11} className="text-blue-500" />{sc}</span>
+                        </td>
+                        <td className="border-r border-gray-100 dark:border-border px-3 py-2 text-muted-foreground">
+                          {permCount > 0 ? `${permCount} permission${permCount !== 1 ? "s" : ""}` : <span className="text-muted-foreground/40 italic">None set</span>}
+                        </td>
+                        <td className="px-2 py-2">
+                          {can("Edit Staff") && (
+                            <button onClick={() => setRoleDeleteId(role.id)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {/* New row */}
+                  {roleNewRow && (
+                    <tr className="border-b border-gray-100 dark:border-border bg-amber-50/60 dark:bg-amber-950/20">
+                      <td className="border-r border-gray-100 dark:border-border text-center text-[11px] text-emerald-600 font-bold select-none py-2">+</td>
+                      <td className="border-r border-gray-100 dark:border-border px-2 py-1.5">
+                        <input
+                          type="color"
+                          value={roleNewRow.color}
+                          onChange={e => setRoleNewRow(p => p ? { ...p, color: e.target.value } : p)}
+                          className="w-8 h-6 rounded cursor-pointer border border-border bg-transparent"
+                          title="Pick role colour"
+                        />
+                      </td>
+                      <td className="border-r border-gray-100 dark:border-border px-0 py-0" colSpan={3}>
+                        <input
+                          autoFocus
+                          value={roleNewRow.name}
+                          onChange={e => setRoleNewRow(p => p ? { ...p, name: e.target.value } : p)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") { e.preventDefault(); saveRoleNew(); }
+                            if (e.key === "Escape") { setRoleNewRow(null); }
+                          }}
+                          placeholder="Role name…"
+                          className="w-full h-full bg-transparent border-0 outline-none px-3 py-2 text-[12px] leading-none"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center gap-1">
+                          <button onClick={saveRoleNew} className="w-6 h-6 rounded flex items-center justify-center text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"><Save size={12} /></button>
+                          <button onClick={() => setRoleNewRow(null)} className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:bg-muted"><X size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Add row footer */}
+                  {can("Add Staff") && !roleNewRow && (
+                    <tr><td colSpan={6}>
+                      <button onClick={() => setRoleNewRow({ name: "", color: "#6366f1" })}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-colors">
+                        <Plus size={13} /> Add role
+                      </button>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {roles.length === 0 && !roleNewRow && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-950/40 flex items-center justify-center mb-4">
+                  <Shield size={26} className="text-indigo-500" />
+                </div>
+                <p className="text-[14px] font-semibold text-foreground">No roles yet</p>
+                <p className="text-[12px] text-muted-foreground mt-1">Add roles to assign staff access levels</p>
+                <Button size="sm" className="mt-4 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => setRoleNewRow({ name: "", color: "#6366f1" })}>
+                  <Plus size={13} /> Add First Role
+                </Button>
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted-foreground px-1">
+              Roles added here appear in the Role dropdown on Staff records. To configure role permissions, go to the <strong>Roles</strong> page in HRM.
+            </p>
+          </>
+        )}
       </div>
 
       {/* ── JD Dialog ────────────────────────────────────────────────────────── */}
@@ -645,6 +798,31 @@ export default function HrmOrgPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white"
               onClick={() => { if (desigDeleteId) { removeDesignation(desigDeleteId); setDesigDeleteId(null); toast({ title: "Designation deleted" }); } }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Delete Role dialog ───────────────────────────────────────────────── */}
+      <AlertDialog open={!!roleDeleteId} onOpenChange={o => { if (!o) setRoleDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Role?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const role = roles.find(r => r.id === roleDeleteId);
+                const sc = roleStaffCount[role?.name || ""] || 0;
+                return sc > 0
+                  ? `${sc} staff member(s) are assigned this role. Deleting it won't affect existing staff records but the role will no longer appear in the Role dropdown.`
+                  : "This action cannot be undone.";
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { if (roleDeleteId) { removeRole(roleDeleteId); setRoleDeleteId(null); toast({ title: "Role deleted" }); } }}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

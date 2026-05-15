@@ -4,7 +4,7 @@ import { useStaff, useStaffRoles } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Staff, StaffStatus, getDepartments, getDesignations, getSalarySlips } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
-import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff, Pencil } from "lucide-react";
+import { Users2, Plus, Search, X, Save, Trash2, KeyRound, Eye, EyeOff, ShieldCheck, ShieldOff, Pencil, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -428,20 +428,48 @@ export default function StaffPage() {
                           )}
                         </div>
                       ) : c.field === "role" && !isA ? (
-                        <div className="w-full h-full flex items-center px-3 gap-1.5 cursor-text" onClick={() => canEdit && setActiveCell({ id: member.id, col: ci })}>
+                        <div className="w-full h-full flex items-center px-3 gap-1.5 cursor-pointer group/rcell" onClick={() => canEdit && setActiveCell({ id: member.id, col: ci })}>
                           {rawVal ? (() => {
                             const hrmRole = roles.find(r => r.name === rawVal);
                             const permCount = hrmRole ? hrmRole.permissions.split(",").filter(p => p.trim()).length : 0;
                             return (
                               <>
                                 {hrmRole?.color && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: hrmRole.color }} />}
-                                <span className="text-[12px] font-semibold truncate" style={{ color: hrmRole?.color || undefined }}>{rawVal}</span>
-                                {permCount > 0 && <span className="text-[9px] text-muted-foreground flex-shrink-0 ml-0.5">{permCount}p</span>}
+                                <span className="text-[12px] font-semibold truncate flex-1" style={{ color: hrmRole?.color || undefined }}>{rawVal}</span>
+                                {permCount > 0 && <span className="text-[9px] text-muted-foreground flex-shrink-0">{permCount}p</span>}
                               </>
                             );
                           })() : (
-                            <span className="text-[12px] text-gray-300 dark:text-zinc-600">No role</span>
+                            <span className="text-[12px] text-gray-300 dark:text-zinc-600 flex-1">No role</span>
                           )}
+                          {canEdit && <ChevronDown size={11} className="text-gray-300 flex-shrink-0 opacity-0 group-hover/rcell:opacity-100 transition-opacity" />}
+                        </div>
+                      ) : isA && (c.field === "department" || c.field === "designation" || c.field === "role") ? (
+                        <div className="absolute inset-0 flex items-center z-20">
+                          <Combobox
+                            autoFocus
+                            value={rawVal}
+                            onChange={v => commitCell(member.id, c.field as EditableField, v)}
+                            options={
+                              c.field === "department"  ? deptComboOpts :
+                              c.field === "designation" ? desigOptsForDept(member.department ?? "") :
+                              roleComboOpts
+                            }
+                            placeholder={`Select ${c.label}…`}
+                            className="w-full h-full"
+                            inputClassName="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground"
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              if (e.key === "Escape") { e.preventDefault(); setActiveCell(null); }
+                              if (e.key === "Tab") { e.preventDefault(); navigateCell(member.id, ci, e.shiftKey); }
+                            }}
+                          />
+                        </div>
+                      ) : !isA && (c.field === "department" || c.field === "designation") ? (
+                        <div className="w-full h-full flex items-center px-3 gap-1 cursor-pointer group/dcell" onClick={() => canEdit && setActiveCell({ id: member.id, col: ci })}>
+                          <span className="text-[13px] truncate flex-1 text-gray-700 dark:text-foreground">
+                            {rawVal || <span className="text-gray-300 dark:text-zinc-600">—</span>}
+                          </span>
+                          {canEdit && <ChevronDown size={11} className="text-gray-300 flex-shrink-0 opacity-0 group-hover/dcell:opacity-100 transition-opacity" />}
                         </div>
                       ) : (
                         <EditableCell
@@ -451,12 +479,6 @@ export default function StaffPage() {
                           onCancel={() => setActiveCell(null)}
                           onTab={s => navigateCell(member.id, ci, s)}
                           onEnter={() => moveCellDown(member.id, ci)}
-                          suggestions={
-                            c.field === "department"  ? deptComboOpts :
-                            c.field === "designation" ? desigOptsForDept(member.department ?? "") :
-                            c.field === "role"        ? roleComboOpts :
-                            undefined
-                          }
                         />
                       )}
                     </td>
