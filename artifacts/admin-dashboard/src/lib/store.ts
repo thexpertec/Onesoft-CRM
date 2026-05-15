@@ -6675,10 +6675,10 @@ export function seedDefaultCoaAccounts(): void {
       const lid = createSubsidiaryLedger({
         parentId:    SYS_ACCS.SALARY_GROUP,
         parentCode:  "4200",
-        name:        s.designation || s.name,
+        name:        s.role || s.designation || s.name,
         head:        "Expense",
         subType:     "Payroll",
-        description: `Salary ledger for role: ${s.designation || s.name}`,
+        description: `Salary ledger for role: ${s.role || s.designation || s.name}`,
       });
       liveAccountIds.add(lid);
       staffUpdated = true;
@@ -6861,7 +6861,7 @@ export function seedDefaultCoaAccounts(): void {
       const updated = slips.map(s => {
         if (s.status !== "Approved" || s.accrualJournalEntryId) return s;
         try {
-          const roleLedgerId         = _resolveRoleSalaryLedger(s.designation || "General");
+          const roleLedgerId         = _resolveRoleSalaryLedger((s as SalarySlip & { role?: string }).role || s.designation || "General");
           const staffPayableLedgerId = _resolveStaffPayableLedger(s);
           const je = createJournalEntry({
             date:        new Date().toISOString().slice(0, 10),
@@ -6928,6 +6928,80 @@ export function seedDefaultCoaAccounts(): void {
   }
   if (Object.keys(mappingUpdates).length > 0) {
     saveSettings({ ...s, ...mappingUpdates });
+  }
+
+  // ── One-time migration: rename designation-named 4200 ledgers → role names ──────────
+  // e.g., "Sale Manager" (designation) → "Management" (role), merging duplicates.
+  {
+    const allStaffForRoleMig = getStored<Staff>(STAFF_KEY);
+    // Build map: designation (lower) → role name
+    const desigToRole = new Map<string, string>();
+    for (const st of allStaffForRoleMig) {
+      if (st.designation && st.role) {
+        desigToRole.set(st.designation.toLowerCase(), st.role);
+      }
+    }
+    if (desigToRole.size > 0) {
+      const roleAccsMig = getAccounts().filter(
+        a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger",
+      );
+      // Build rename map: oldId → target role name
+      const toProcess: Array<{ acc: typeof roleAccsMig[0]; roleName: string }> = [];
+      for (const acc of roleAccsMig) {
+        const roleName = desigToRole.get(acc.name.toLowerCase());
+        if (roleName && roleName.toLowerCase() !== acc.name.toLowerCase()) {
+          toProcess.push({ acc, roleName });
+        }
+      }
+      if (toProcess.length > 0) {
+        // For each, find or create the role-named account, then re-link JEs
+        const idRemap = new Map<string, string>(); // oldId → roleAccId
+        for (const { acc, roleName } of toProcess) {
+          // Check if a ledger with the role name already exists
+          const existing = getAccounts().find(
+            a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
+                 a.name.toLowerCase() === roleName.toLowerCase() && a.id !== acc.id,
+          );
+          if (existing) {
+            idRemap.set(acc.id, existing.id);
+          } else {
+            // Rename in-place: no need to remap JEs
+            updateAccount(acc.id, { name: roleName, description: `Salary expense ledger for role: ${roleName}` });
+          }
+        }
+        // Re-link JE lines for merged accounts
+        if (idRemap.size > 0) {
+          const allJEsR = getJournalEntries();
+          let jeDirtyR = false;
+          const patchedJEsR = allJEsR.map(je => {
+            const patchedLines = je.lines.map(line => {
+              const newId = idRemap.get(line.ledgerId);
+              if (!newId) return line;
+              jeDirtyR = true;
+              return { ...line, ledgerId: newId };
+            });
+            return { ...je, lines: patchedLines };
+          });
+          if (jeDirtyR) {
+            const jeKey = tenantKey(JE_KEY);
+            _lsCache(jeKey, patchedJEsR);
+            _apiWrite(jeKey, patchedJEsR).catch(() => { /* handled via onesoft:write-error */ });
+          }
+          // Re-link staff.ledgerAccountId
+          const allStaffR = getStored<Staff>(STAFF_KEY);
+          let staffDirtyR = false;
+          const patchedStaffR = allStaffR.map(st => {
+            const newId = st.ledgerAccountId ? idRemap.get(st.ledgerAccountId) : undefined;
+            if (!newId) return st;
+            staffDirtyR = true;
+            return { ...st, ledgerAccountId: newId };
+          });
+          if (staffDirtyR) setStored(STAFF_KEY, patchedStaffR);
+          // Remove old merged accounts
+          _saveAccounts(getAccounts().filter(a => !idRemap.has(a.id)));
+        }
+      }
+    }
   }
 
   // ── One-time migration: rename "Name — Role" salary ledgers → just "Role" ──────────
@@ -9124,6 +9198,7 @@ export type SalarySlip = {
   staffName: string;
   department: string;
   designation: string;
+  role?: string;                   // staff role (e.g. "Management") — used for 4200 salary ledger grouping
   period: string;                  // "YYYY-MM"
   salaryType: "Monthly" | "Hourly" | "Daily" | "Commission";
   basicSalary: number;
@@ -9179,7 +9254,8 @@ export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "
     throw new Error(`A salary slip for ${data.staffName} already exists for ${data.period}. Duplicate slips are not allowed.`);
   }
   const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions);
-  const item: SalarySlip = { ...data, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const resolvedRole = data.role || staffMember?.role || undefined;
+  const item: SalarySlip = { ...data, role: resolvedRole, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   setStored(SALARY_SLIPS_KEY, [...existing, item]);
   return item;
 };
@@ -9303,7 +9379,7 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
  * Also persists the staffPayableLedgerId on the slip so the payment JE knows which account to debit.
  */
 export async function postSalaryApprovalJE(slip: SalarySlip): Promise<{ je: JournalEntry; staffPayableLedgerId: string }> {
-  const roleLedgerId         = _resolveRoleSalaryLedger(slip.designation || "General");
+  const roleLedgerId         = _resolveRoleSalaryLedger(slip.role || slip.designation || "General");
   const staffPayableLedgerId = _resolveStaffPayableLedger(slip);
   // Await the COA server write before creating the JE.
   // This prevents the race condition where the ledger exists locally but not yet
