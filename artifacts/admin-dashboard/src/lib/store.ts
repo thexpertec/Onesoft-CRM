@@ -5098,7 +5098,7 @@ export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">)
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
     parentId:    SYS_ACCS.SALARY_GROUP,
     parentCode:  "4200",
-    name:        data.name + (data.designation ? ` — ${data.designation}` : ""),
+    name:        data.designation || data.name,
     head:        "Expense",
     subType:     "Payroll",
     description: `Salary ledger for staff member: ${data.name}`,
@@ -6750,7 +6750,7 @@ export function seedDefaultCoaAccounts(): void {
       if (currentLid && salValidIds.has(currentLid)) {
         targetLedgerId = currentLid;
       } else {
-        const matchN = staffMember.name + (staffMember.designation ? ` — ${staffMember.designation}` : "");
+        const matchN = staffMember.designation || staffMember.name;
         const found  = getAccounts().find(
           a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
                a.name.toLowerCase() === matchN.toLowerCase()
@@ -9194,8 +9194,8 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
     if (acc && acc.accountType === "Ledger") return staff.ledgerAccountId;
   }
 
-  // Check if there's already a ledger under 4200 whose name matches the staff/slip name
-  const matchName = (staff?.name ?? slip.staffName) + (staff?.designation ? ` — ${staff.designation}` : "");
+  // Check if there's already a ledger under 4200 whose name matches the staff designation/name
+  const matchName = staff?.designation || staff?.name || slip.staffName;
   const existing  = allAccounts.find(
     a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
          a.name.toLowerCase() === matchName.toLowerCase(),
