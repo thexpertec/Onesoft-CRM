@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2, Banknote,
-  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2, Truck,
+  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2, Truck, Layers3,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -352,7 +352,7 @@ const OTHER_NAV: NavItem[] = [
 const CRM_ROUTES           = ["/leads", "/customers"];
 const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-groups", "/attributes", "/units", "/product-departments", "/media", "/stock-ledger", "/product-stock-report"];
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/purchase-return"];
-const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
+const HRM_ROUTES           = ["/staff", "/roles", "/hrm-org", "/hrm-setup", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
@@ -547,6 +547,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     hrm_staff:           ["View Staff",     "Add Staff",    "Edit Staff",    "Delete Staff",    "Manage Staff"],
     hrm_roles:           ["View Roles",     "Add Roles",    "Edit Roles",    "Delete Roles",    "Manage Roles"],
     hrm_org:             ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
+    hrm_setup:           ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     hrm_salary:          ["View Staff",     "Manage Staff", "View Payroll",  "Manage Payroll"],
     hrm_attendance:      ["View Staff",     "Add Staff",    "Edit Staff",    "Manage Staff"],
     // Accounting
@@ -606,6 +607,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     "l-staff":            "hrm_staff",
     "l-roles":            "hrm_roles",
     "l-hrm-org":          "hrm_org",
+    "l-hrm-setup":        "hrm_setup",
     "l-salary":            "hrm_salary",
     "l-salary-template":   "hrm_salary",
     "l-salary-allowances": "hrm_salary",
@@ -659,6 +661,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(isModuleAllowed("hrm_staff")       ? [{ label: "Staff",                href: "/staff",        icon: Users2,    desc: "Employees by dept & designation"     }] : []),
     ...(isModuleAllowed("hrm_roles")       ? [{ label: "Roles",                href: "/roles",        icon: KeyRound,  desc: "Permission roles"                     }] : []),
     ...(isModuleAllowed("hrm_org")         ? [{ label: "Depts & Designations", href: "/hrm-org",      icon: Building2, desc: "Departments, designations & JDs"      }] : []),
+    ...(isModuleAllowed("hrm_setup")       ? [{ label: "HRM Setup",           href: "/hrm-setup",    icon: Layers3,   desc: "Unified role → dept → designation setup" }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"          }] : []),
     ...(isModuleAllowed("hrm_salary")      ? [{ label: "Salary Templates",   href: "/salary-template",   icon: FileText,       desc: "Templates, allowances, deductions & advances" }] : []),
     ...(isModuleAllowed("hrm_attendance")  ? [{ label: "Attendance",         href: "/attendance",        icon: CalendarCheck2, desc: "Daily & bulk attendance marking"      }] : []),
@@ -672,7 +675,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
   const hrmStructureLinks = [
     ...(isModuleAllowed("hrm_roles") ? [{ label: "Roles",                href: "/roles",   icon: KeyRound,  desc: "Permission roles & access control"  }] : []),
-    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org", icon: Building2, desc: "Org chart & job descriptions"        }] : []),
+    ...(isModuleAllowed("hrm_org")   ? [{ label: "Depts & Designations", href: "/hrm-org",   icon: Building2, desc: "Org chart & job descriptions"            }] : []),
+    ...(isModuleAllowed("hrm_setup") ? [{ label: "HRM Setup",           href: "/hrm-setup", icon: Layers3,   desc: "Unified role → dept → designation setup" }] : []),
   ];
   const hrmPayrollLinks = [
     ...(isModuleAllowed("hrm_salary")     ? [{ label: "Salary Management",  href: "/salary",            icon: Wallet,         desc: "Payroll, slips & JE posting"           }] : []),
@@ -1182,6 +1186,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {isModuleAllowed("hrm_org") && (
                 <HrmTab href="/hrm-org" icon={Building2} label="Org & Designations"
                   active={location === "/hrm-org"} />
+              )}
+              {isModuleAllowed("hrm_setup") && (
+                <HrmTab href="/hrm-setup" icon={Layers3} label="HRM Setup"
+                  active={location === "/hrm-setup"} />
               )}
 
               {/* ── Payroll & Attendance ── */}

@@ -1,0 +1,86 @@
+ct as a senior full-stack developer with 10+ years of experience in HRM and dashboard design.
+
+I have an existing UI similar to the OneSoft HRM interface shown in the attached image.
+
+I want to create a **single new setup page** that combines the following three existing sections into one unified table-driven interface:
+
+- Roles
+- Departments (Depts)
+- Designations
+
+---
+
+## Page Requirements
+
+### Main UI Component
+
+Create a **single table** with the following exact columns (from left to right):
+
+| # | Colour | Role | Department | Designation | Description | Head of Department | Permissions | Staff | Action |
+|---|--------|------|------------|-------------|-------------|--------------------|-------------|-------|--------|
+
+---
+
+### Column Logic Details
+
+1. **#**  
+   - Auto-incrementing row number.
+
+2. **Colour**  
+   - A small color picker or colored badge (e.g., role color or department color).  
+   - Default to a soft gray if not set.
+
+3. **Role**  
+   - Text field (editable).  
+   - Example: Admin, Manager, Staff.
+
+4. **Department**  
+   - Text field or dropdown (pre-populated with existing dept list).  
+   - Allow adding new departments inline.
+
+5. **Designation**  
+   - Text field (editable).  
+   - Example: Senior Software Engineer, Team Lead.
+
+6. **Description**  
+   - Multi-line text field or short text input.
+
+7. **Head of Department** — *special logic*  
+   - If the department has **exactly 1 staff member** → display that staff’s name as plain text (non-editable in this column).  
+   - If the department has **2 or more staff members** → show a **dropdown list** of all staff members in that department, allowing the user to select one as Head of Department.  
+   - If the department has **0 staff members** → show “—”.
+
+8. **Permissions**  
+   - A comma-separated list of permission names (editable) or a small modal/popup to assign permissions.
+
+9. **Staff**  
+   - List of staff members assigned to that Role/Department/Designation combo.  
+   - Display as avatars, names, or a count with a tooltip.
+
+10. **Action**  
+    - Edit and Delete icons/buttons.
+
+---
+
+### Additional Features
+
+- **Add New Row** button above or below the table to insert a blank row.
+- **Inline editing** for all text-based fields (click to edit or double-click).
+- **Save / Auto-save** — include a "Save All Changes" button at the bottom.
+- **Search/filter** bar at the top to filter by Role, Department, or Designation.
+- **Responsive** — table should scroll horizontally on smaller screens.
+
+---
+
+### Mock Data
+
+Seed the table with 3–4 example rows showing:
+- Different combinations of Role, Dept, Designation.
+- At least one department with 1 staff member (show plain name in Head column).
+- At least one department with 2+ staff members (show dropdown in Head column).
+
+---
+
+### Staff Data Reference (for Head of Department logic)
+
+Assume a global staff array:

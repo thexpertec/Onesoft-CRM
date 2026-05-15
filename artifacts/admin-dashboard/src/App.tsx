@@ -39,6 +39,7 @@ const StaffNewPage          = lazy(() => import("@/pages/staff-new"));
 const StaffEditPage         = lazy(() => import("@/pages/staff-edit"));
 const HrmRolesPage          = lazy(() => import("@/pages/hrm-roles"));
 const HrmOrgPage            = lazy(() => import("@/pages/hrm-org"));
+const HrmSetupPage          = lazy(() => import("@/pages/hrm-setup"));
 const SalaryPage            = lazy(() => import("@/pages/salary"));
 const SalaryTemplatePage    = lazy(() => import("@/pages/salary-template"));
 const SalaryAllowancesPage  = lazy(() => import("@/pages/salary-allowances"));
@@ -243,6 +244,7 @@ function Router() {
                   <Route path="/staff"              component={StaffPage} />
                   <Route path="/roles"              component={HrmRolesPage} />
                   <Route path="/hrm-org"            component={HrmOrgPage} />
+                  <Route path="/hrm-setup"          component={HrmSetupPage} />
                   <Route path="/salary"             component={SalaryPage} />
                   <Route path="/salary-template"    component={SalaryTemplatePage} />
                   <Route path="/salary-allowances"  component={SalaryAllowancesPage} />
