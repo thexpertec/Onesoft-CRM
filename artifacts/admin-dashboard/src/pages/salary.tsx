@@ -118,6 +118,110 @@ function ItemList({
   );
 }
 
+// ─── Inline Cell Items Editor ─────────────────────────────────────────────────
+function CellItemsEditor({
+  items,
+  accent,
+  onSave,
+  onCancel,
+}: {
+  items: SalarySlipItem[];
+  accent: "emerald" | "red";
+  onSave: (items: SalarySlipItem[]) => void;
+  onCancel: () => void;
+}) {
+  const [local, setLocal] = useState<SalarySlipItem[]>(items.length ? items : []);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [onCancel]);
+
+  const update = (i: number, field: keyof SalarySlipItem, val: string | number) =>
+    setLocal(prev => prev.map((it, j) => j === i ? { ...it, [field]: val } : it));
+
+  const accentCls  = accent === "emerald" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+  const btnCls     = accent === "emerald" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700";
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 right-0 top-full mt-1 w-72 bg-background border rounded-xl shadow-2xl p-3 text-[12px]"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* header */}
+      <p className={`text-[10px] font-semibold uppercase tracking-wide mb-2 ${accentCls}`}>
+        {accent === "emerald" ? "Allowances" : "Deductions"}
+      </p>
+      {/* item rows */}
+      <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto pr-0.5">
+        {local.map((item, i) => (
+          <div key={i} className="flex gap-1.5 items-center">
+            <input
+              className="flex-1 min-w-0 border rounded-md px-2 py-1 text-[11px] bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Label"
+              value={item.label}
+              onChange={e => update(i, "label", e.target.value)}
+            />
+            <input
+              type="number"
+              min={0}
+              className="w-24 border rounded-md px-2 py-1 text-[11px] text-right bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="0"
+              value={item.amount || ""}
+              onChange={e => update(i, "amount", parseFloat(e.target.value) || 0)}
+            />
+            <button
+              type="button"
+              onClick={() => setLocal(prev => prev.filter((_, j) => j !== i))}
+              className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+        {local.length === 0 && (
+          <p className="text-muted-foreground text-[11px] py-1">No items yet.</p>
+        )}
+      </div>
+      {/* add row */}
+      <button
+        type="button"
+        onClick={() => setLocal(prev => [...prev, { label: "", amount: 0 }])}
+        className={`flex items-center gap-1 text-[11px] ${accentCls} hover:opacity-75 mb-3`}
+      >
+        <Plus size={11} /> Add item
+      </button>
+      {/* total */}
+      <div className={`flex justify-between text-[11px] font-semibold border-t pt-2 mb-3 ${accentCls}`}>
+        <span>Total</span>
+        <span>{local.reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}</span>
+      </div>
+      {/* actions */}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded border"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(local.filter(i => i.label.trim() !== "" || i.amount > 0))}
+          className={`text-[11px] text-white px-3 py-1 rounded ${btnCls}`}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Print Payslip ────────────────────────────────────────────────────────────
 function openPayslipWindow(slip: SalarySlip) {
   const settings = getSettings();
@@ -161,6 +265,7 @@ export default function SalaryPage() {
   const [approving,             setApproving]             = useState(false);
   const [bulkApproveOpen,       setBulkApproveOpen]       = useState(false);
   const [bulkApproving,         setBulkApproving]         = useState(false);
+  const [inlineEdit,            setInlineEdit]            = useState<{ slipId: string; field: "allowances" | "deductions" } | null>(null);
 
   // ── Slip for editing ───────────────────────────────────────────────────────
   const editTarget = useMemo(() => slips.find(s => s.id === editSlipId) ?? null, [slips, editSlipId]);
@@ -433,6 +538,7 @@ export default function SalaryPage() {
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Basic</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Allowances</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Deductions</th>
+                <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Advance</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Gross</th>
                 <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Net</th>
                 <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-[11px] uppercase">Status</th>
@@ -442,7 +548,7 @@ export default function SalaryPage() {
             <tbody className="divide-y">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-muted-foreground">
+                  <td colSpan={12} className="text-center py-16 text-muted-foreground">
                     <Wallet size={32} className="mx-auto mb-3 opacity-20" />
                     <p className="font-medium">No payslips for {periodLabel(period)}</p>
                     <p className="text-[12px] mt-1">Click "Generate Payroll" to create slips for all active staff.</p>
@@ -461,12 +567,76 @@ export default function SalaryPage() {
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{periodLabel(slip.period)}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{slip.department || "—"}</td>
                     <td className="px-3 py-2.5 text-right">{fmt(slip.basicSalary, sym)}</td>
-                    <td className="px-3 py-2.5 text-right text-emerald-600 dark:text-emerald-400">
-                      {allowTotal > 0 ? `+${fmt(allowTotal, sym)}` : "—"}
+                    {/* Allowances — click to edit (Draft only) */}
+                    <td
+                      className="px-3 py-2.5 text-right text-emerald-600 dark:text-emerald-400 relative overflow-visible"
+                    >
+                      {inlineEdit?.slipId === slip.id && inlineEdit.field === "allowances" ? (
+                        <CellItemsEditor
+                          items={slip.allowances}
+                          accent="emerald"
+                          onCancel={() => setInlineEdit(null)}
+                          onSave={items => {
+                            editSlip(slip.id, { allowances: items });
+                            setInlineEdit(null);
+                          }}
+                        />
+                      ) : null}
+                      <span
+                        onClick={() => slip.status === "Draft" && setInlineEdit({ slipId: slip.id, field: "allowances" })}
+                        className={`inline-flex items-center gap-1 rounded px-1 -mx-1 transition-colors ${slip.status === "Draft" ? "cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/30 group" : ""}`}
+                        title={slip.status === "Draft" ? "Click to edit allowances" : undefined}
+                      >
+                        {allowTotal > 0 ? `+${fmt(allowTotal, sym)}` : <span className="text-muted-foreground">—</span>}
+                        {slip.status === "Draft" && <Pencil size={9} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />}
+                      </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right text-red-600 dark:text-red-400">
-                      {dedTotal > 0 ? `-${fmt(dedTotal, sym)}` : "—"}
+
+                    {/* Deductions — click to edit (Draft only) */}
+                    <td
+                      className="px-3 py-2.5 text-right text-red-600 dark:text-red-400 relative overflow-visible"
+                    >
+                      {inlineEdit?.slipId === slip.id && inlineEdit.field === "deductions" ? (
+                        <CellItemsEditor
+                          items={slip.deductions}
+                          accent="red"
+                          onCancel={() => setInlineEdit(null)}
+                          onSave={items => {
+                            editSlip(slip.id, { deductions: items });
+                            setInlineEdit(null);
+                          }}
+                        />
+                      ) : null}
+                      <span
+                        onClick={() => slip.status === "Draft" && setInlineEdit({ slipId: slip.id, field: "deductions" })}
+                        className={`inline-flex items-center gap-1 rounded px-1 -mx-1 transition-colors ${slip.status === "Draft" ? "cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 group" : ""}`}
+                        title={slip.status === "Draft" ? "Click to edit deductions" : undefined}
+                      >
+                        {dedTotal > 0 ? `-${fmt(dedTotal, sym)}` : <span className="text-muted-foreground">—</span>}
+                        {slip.status === "Draft" && <Pencil size={9} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />}
+                      </span>
                     </td>
+
+                    {/* Advance Salary — inline number input for Draft */}
+                    <td className="px-3 py-2.5 text-right text-amber-600 dark:text-amber-400">
+                      {slip.status === "Draft" ? (
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={slip.advanceSalary || ""}
+                          placeholder="—"
+                          title="Advance salary deduction"
+                          onChange={e => editSlip(slip.id, { advanceSalary: parseFloat(e.target.value) || 0 })}
+                          className="w-28 text-right bg-transparent border-b border-dashed border-amber-300 dark:border-amber-700 focus:outline-none focus:border-amber-500 text-[13px] placeholder:text-muted-foreground"
+                        />
+                      ) : (
+                        (slip.advanceSalary ?? 0) > 0
+                          ? `-${fmt(slip.advanceSalary!, sym)}`
+                          : <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+
                     <td className="px-3 py-2.5 text-right font-medium">{fmt(slip.grossSalary, sym)}</td>
                     <td className="px-3 py-2.5 text-right font-bold text-primary">
                       {fmt(slip.netSalary, sym)}
@@ -557,6 +727,11 @@ export default function SalaryPage() {
                   </td>
                   <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">
                     {fmt(filtered.reduce((s, x) => s + x.deductions.reduce((t, d) => t + d.amount, 0), 0), sym)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-amber-600 dark:text-amber-400">
+                    {filtered.some(x => (x.advanceSalary ?? 0) > 0)
+                      ? `-${fmt(filtered.reduce((s, x) => s + (x.advanceSalary ?? 0), 0), sym)}`
+                      : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {fmt(filtered.reduce((s, x) => s + x.grossSalary, 0), sym)}
