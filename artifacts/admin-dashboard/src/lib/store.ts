@@ -6931,10 +6931,10 @@ export function seedDefaultCoaAccounts(): void {
   }
 
   // ── One-time migration: rename designation-named 4200 ledgers → role names ──────────
-  // e.g., "Sale Manager" (designation) → "Management" (role), merging duplicates.
+  // Single-pass batch: compute all target names up-front, group by target name,
+  // keep the first account per name (rename it), merge all others into it.
   {
     const allStaffForRoleMig = getStored<Staff>(STAFF_KEY);
-    // Build map: designation (lower) → role name
     const desigToRole = new Map<string, string>();
     for (const st of allStaffForRoleMig) {
       if (st.designation && st.role) {
@@ -6942,46 +6942,66 @@ export function seedDefaultCoaAccounts(): void {
       }
     }
     if (desigToRole.size > 0) {
-      const roleAccsMig = getAccounts().filter(
+      // Snapshot all 4200 ledgers ONCE — no iterative getAccounts() inside loop
+      const snap4200 = getAccounts().filter(
         a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger",
       );
-      // Build rename map: oldId → target role name
-      const toProcess: Array<{ acc: typeof roleAccsMig[0]; roleName: string }> = [];
-      for (const acc of roleAccsMig) {
-        const roleName = desigToRole.get(acc.name.toLowerCase());
-        if (roleName && roleName.toLowerCase() !== acc.name.toLowerCase()) {
-          toProcess.push({ acc, roleName });
+      // Map: target role name (lower) → [accounts that should carry that name]
+      const byTargetName = new Map<string, typeof snap4200>();
+      for (const acc of snap4200) {
+        const targetName = desigToRole.get(acc.name.toLowerCase()) ?? acc.name;
+        const key = targetName.toLowerCase();
+        const bucket = byTargetName.get(key) ?? [];
+        bucket.push(acc);
+        byTargetName.set(key, bucket);
+      }
+      const idRemap = new Map<string, string>(); // loser.id → winner.id
+      const renames  = new Map<string, string>(); // winner.id → new name (when renamed)
+      for (const [, bucket] of byTargetName) {
+        if (bucket.length < 2) {
+          // Single account in this bucket — rename in-place if needed
+          const acc = bucket[0];
+          const targetName = desigToRole.get(acc.name.toLowerCase());
+          if (targetName && targetName.toLowerCase() !== acc.name.toLowerCase()) {
+            renames.set(acc.id, targetName);
+          }
+          continue;
+        }
+        // Multiple accounts → keep first, merge rest into it
+        const [winner, ...losers] = bucket;
+        const targetName = desigToRole.get(winner.name.toLowerCase()) ?? winner.name;
+        if (targetName.toLowerCase() !== winner.name.toLowerCase()) {
+          renames.set(winner.id, targetName);
+        }
+        for (const loser of losers) {
+          idRemap.set(loser.id, winner.id);
         }
       }
-      if (toProcess.length > 0) {
-        // For each, find or create the role-named account, then re-link JEs
-        const idRemap = new Map<string, string>(); // oldId → roleAccId
-        for (const { acc, roleName } of toProcess) {
-          // Check if a ledger with the role name already exists
-          const existing = getAccounts().find(
-            a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
-                 a.name.toLowerCase() === roleName.toLowerCase() && a.id !== acc.id,
-          );
-          if (existing) {
-            idRemap.set(acc.id, existing.id);
-          } else {
-            // Rename in-place: no need to remap JEs
-            updateAccount(acc.id, { name: roleName, description: `Salary expense ledger for role: ${roleName}` });
-          }
-        }
-        // Re-link JE lines for merged accounts
+      if (idRemap.size > 0 || renames.size > 0) {
+        // Apply all account renames + deletions in one _saveAccounts call
+        const toDelete = new Set(idRemap.keys());
+        const allAccsNow = getAccounts();
+        const patchedAccs = allAccsNow
+          .filter(a => !toDelete.has(a.id))
+          .map(a => {
+            const newName = renames.get(a.id);
+            if (!newName) return a;
+            return { ...a, name: newName, description: `Salary expense ledger for role: ${newName}`, updatedAt: new Date().toISOString() };
+          });
+        _saveAccounts(patchedAccs);
+        // Re-link JE lines
         if (idRemap.size > 0) {
           const allJEsR = getJournalEntries();
           let jeDirtyR = false;
-          const patchedJEsR = allJEsR.map(je => {
-            const patchedLines = je.lines.map(line => {
+          const patchedJEsR = allJEsR.map(je => ({
+            ...je,
+            lines: je.lines.map(line => {
               const newId = idRemap.get(line.ledgerId);
               if (!newId) return line;
               jeDirtyR = true;
               return { ...line, ledgerId: newId };
-            });
-            return { ...je, lines: patchedLines };
-          });
+            }),
+          }));
           if (jeDirtyR) {
             const jeKey = tenantKey(JE_KEY);
             _lsCache(jeKey, patchedJEsR);
@@ -6997,10 +7017,58 @@ export function seedDefaultCoaAccounts(): void {
             return { ...st, ledgerAccountId: newId };
           });
           if (staffDirtyR) setStored(STAFF_KEY, patchedStaffR);
-          // Remove old merged accounts
-          _saveAccounts(getAccounts().filter(a => !idRemap.has(a.id)));
         }
       }
+    }
+  }
+
+  // ── Always: dedup any remaining 4200 ledgers that share the same name ─────────────
+  // Catches any duplicates left by previous migration runs (e.g. two "Management" entries).
+  {
+    const snap4200Dedup = getAccounts().filter(
+      a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger",
+    );
+    const seenName = new Map<string, string>(); // lower name → winner id
+    const dedupRemap = new Map<string, string>(); // loser id → winner id
+    for (const acc of snap4200Dedup) {
+      const key = acc.name.toLowerCase();
+      const winnerId = seenName.get(key);
+      if (winnerId) {
+        dedupRemap.set(acc.id, winnerId);
+      } else {
+        seenName.set(key, acc.id);
+      }
+    }
+    if (dedupRemap.size > 0) {
+      // Delete loser accounts
+      _saveAccounts(getAccounts().filter(a => !dedupRemap.has(a.id)));
+      // Re-link JE lines
+      const allJEsD = getJournalEntries();
+      let jeDirtyD = false;
+      const patchedJEsD = allJEsD.map(je => ({
+        ...je,
+        lines: je.lines.map(line => {
+          const newId = dedupRemap.get(line.ledgerId);
+          if (!newId) return line;
+          jeDirtyD = true;
+          return { ...line, ledgerId: newId };
+        }),
+      }));
+      if (jeDirtyD) {
+        const jeKey = tenantKey(JE_KEY);
+        _lsCache(jeKey, patchedJEsD);
+        _apiWrite(jeKey, patchedJEsD).catch(() => { /* handled via onesoft:write-error */ });
+      }
+      // Re-link staff.ledgerAccountId
+      const allStaffD = getStored<Staff>(STAFF_KEY);
+      let staffDirtyD = false;
+      const patchedStaffD = allStaffD.map(st => {
+        const newId = st.ledgerAccountId ? dedupRemap.get(st.ledgerAccountId) : undefined;
+        if (!newId) return st;
+        staffDirtyD = true;
+        return { ...st, ledgerAccountId: newId };
+      });
+      if (staffDirtyD) setStored(STAFF_KEY, patchedStaffD);
     }
   }
 
