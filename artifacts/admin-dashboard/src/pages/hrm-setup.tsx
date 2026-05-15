@@ -15,36 +15,47 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PRESET_COLORS } from "@/components/editable-cell";
 
-// ─── Permissions catalog (shared with Roles page logic) ──────────────────────
-const ALL_PERMISSIONS: string[] = [
-  "Dashboard",
-  "View Leads", "Add Leads", "Edit Leads", "Delete Leads",
-  "View Customers", "Add Customers", "Edit Customers", "Delete Customers",
-  "View Suppliers", "Add Suppliers", "Edit Suppliers", "Delete Suppliers",
-  "View Sales", "Add Sales", "Edit Sales", "Delete Sales",
-  "View Invoices", "Add Invoices", "Edit Invoices", "Delete Invoices",
-  "View Purchases", "Add Purchases", "Edit Purchases", "Delete Purchases",
-  "View Products", "Add Products", "Edit Products", "Delete Products",
-  "View Stock", "Edit Stock",
-  "View Manufacturing", "Add Manufacturing", "Edit Manufacturing",
-  "View Staff", "Add Staff", "Edit Staff", "Delete Staff", "Manage Staff",
-  "View Roles", "Add Roles", "Edit Roles", "Delete Roles", "Manage Roles",
-  "View Payroll", "Manage Payroll",
-  "View Attendance", "Manage Attendance",
-  "View Accounts", "Add Accounts", "Edit Accounts", "Delete Accounts",
-  "View Journal", "Add Journal",
-  "View Reports",
+// ─── Permissions catalog ─────────────────────────────────────────────────────
+type PermRow = { label: string; view?: string; add?: string; edit?: string; delete?: string; extras?: string[] };
+type PermGroup = { group: string; rows: PermRow[] };
+
+const PERM_GROUPS: PermGroup[] = [
+  { group: "Dashboard", rows: [
+    { label: "Dashboard", view: "Dashboard" },
+  ]},
+  { group: "CRM", rows: [
+    { label: "Leads",     view: "View Leads",     add: "Add Leads",     edit: "Edit Leads",     delete: "Delete Leads"     },
+    { label: "Customers", view: "View Customers", add: "Add Customers", edit: "Edit Customers", delete: "Delete Customers" },
+    { label: "Suppliers", view: "View Suppliers", add: "Add Suppliers", edit: "Edit Suppliers", delete: "Delete Suppliers" },
+  ]},
+  { group: "Sales", rows: [
+    { label: "Sales",    view: "View Sales",    add: "Add Sales",    edit: "Edit Sales",    delete: "Delete Sales"    },
+    { label: "Invoices", view: "View Invoices", add: "Add Invoices", edit: "Edit Invoices", delete: "Delete Invoices" },
+  ]},
+  { group: "Purchases", rows: [
+    { label: "Purchases", view: "View Purchases", add: "Add Purchases", edit: "Edit Purchases", delete: "Delete Purchases" },
+  ]},
+  { group: "Products & Stock", rows: [
+    { label: "Products",      view: "View Products",      add: "Add Products",      edit: "Edit Products",      delete: "Delete Products" },
+    { label: "Stock",         view: "View Stock",                                    edit: "Edit Stock"                                    },
+    { label: "Manufacturing", view: "View Manufacturing", add: "Add Manufacturing", edit: "Edit Manufacturing"                            },
+  ]},
+  { group: "HRM", rows: [
+    { label: "Staff",      view: "View Staff",      add: "Add Staff",      edit: "Edit Staff",      delete: "Delete Staff",   extras: ["Manage Staff"]      },
+    { label: "Roles",      view: "View Roles",      add: "Add Roles",      edit: "Edit Roles",      delete: "Delete Roles",   extras: ["Manage Roles"]      },
+    { label: "Payroll",    view: "View Payroll",                                                                               extras: ["Manage Payroll"]    },
+    { label: "Attendance", view: "View Attendance",                                                                            extras: ["Manage Attendance"] },
+  ]},
+  { group: "Accounts", rows: [
+    { label: "Accounts", view: "View Accounts", add: "Add Accounts", edit: "Edit Accounts", delete: "Delete Accounts" },
+    { label: "Journal",  view: "View Journal",  add: "Add Journal"                                                    },
+    { label: "Reports",  view: "View Reports"                                                                          },
+  ]},
 ];
 
-const PERM_GROUPS: { label: string; perms: string[] }[] = [
-  { label: "Dashboard", perms: ["Dashboard"] },
-  { label: "CRM", perms: ["View Leads","Add Leads","Edit Leads","Delete Leads","View Customers","Add Customers","Edit Customers","Delete Customers","View Suppliers","Add Suppliers","Edit Suppliers","Delete Suppliers"] },
-  { label: "Sales", perms: ["View Sales","Add Sales","Edit Sales","Delete Sales","View Invoices","Add Invoices","Edit Invoices","Delete Invoices"] },
-  { label: "Purchases", perms: ["View Purchases","Add Purchases","Edit Purchases","Delete Purchases"] },
-  { label: "Products & Stock", perms: ["View Products","Add Products","Edit Products","Delete Products","View Stock","Edit Stock","View Manufacturing","Add Manufacturing","Edit Manufacturing"] },
-  { label: "HRM", perms: ["View Staff","Add Staff","Edit Staff","Delete Staff","Manage Staff","View Roles","Add Roles","Edit Roles","Delete Roles","Manage Roles","View Payroll","Manage Payroll","View Attendance","Manage Attendance"] },
-  { label: "Accounts", perms: ["View Accounts","Add Accounts","Edit Accounts","Delete Accounts","View Journal","Add Journal","View Reports"] },
-];
+// Helpers for extras: auto-include Manage-style extras when any named perm in a row is active
+const ALL_NAMED_IN_ROW = (row: PermRow) =>
+  [row.view, row.add, row.edit, row.delete].filter(Boolean) as string[];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type RowType = "designation" | "department" | "role";
@@ -314,14 +325,68 @@ export default function HrmSetupPage() {
     setPermKey(null);
     toast({ title: "Permissions updated" });
   };
-  const togglePerm = (p: string) => {
-    const list = permDraft.split(",").map(x => x.trim()).filter(Boolean);
-    const idx  = list.indexOf(p);
-    if (idx === -1) list.push(p);
-    else list.splice(idx, 1);
-    setPermDraft(list.join(", "));
-  };
   const permList = (ps: string) => ps.split(",").map(x => x.trim()).filter(Boolean);
+
+  const togglePerm = (p: string) => {
+    setPermDraft(prev => {
+      let list = permList(prev);
+      const has = list.includes(p);
+      if (has) {
+        list = list.filter(x => x !== p);
+      } else {
+        list.push(p);
+      }
+      // sync extras: for each row that has this perm, add/remove extras
+      for (const g of PERM_GROUPS) {
+        for (const row of g.rows) {
+          if (!row.extras?.length) continue;
+          const named = ALL_NAMED_IN_ROW(row);
+          const anyActive = named.some(n => list.includes(n));
+          for (const ex of row.extras) {
+            if (anyActive && !list.includes(ex)) list.push(ex);
+            if (!anyActive) list = list.filter(x => x !== ex);
+          }
+        }
+      }
+      return list.join(", ");
+    });
+  };
+
+  // Toggle all perms in a given action column (view/add/edit/delete)
+  const toggleColumnAll = (col: "view" | "add" | "edit" | "delete") => {
+    const colPerms = PERM_GROUPS.flatMap(g => g.rows.map(r => r[col]).filter(Boolean)) as string[];
+    setPermDraft(prev => {
+      let list = permList(prev);
+      const allOn = colPerms.every(p => list.includes(p));
+      if (allOn) {
+        list = list.filter(p => !colPerms.includes(p));
+      } else {
+        colPerms.forEach(p => { if (!list.includes(p)) list.push(p); });
+      }
+      // sync extras
+      for (const g of PERM_GROUPS) {
+        for (const row of g.rows) {
+          if (!row.extras?.length) continue;
+          const named = ALL_NAMED_IN_ROW(row);
+          const anyActive = named.some(n => list.includes(n));
+          for (const ex of row.extras) {
+            if (anyActive && !list.includes(ex)) list.push(ex);
+            if (!anyActive) list = list.filter(x => x !== ex);
+          }
+        }
+      }
+      return list.join(", ");
+    });
+  };
+
+  // Column header state: "all" | "some" | "none"
+  const colState = (col: "view" | "add" | "edit" | "delete"): "all" | "some" | "none" => {
+    const colPerms = PERM_GROUPS.flatMap(g => g.rows.map(r => r[col]).filter(Boolean)) as string[];
+    const active = colPerms.filter(p => permList(permDraft).includes(p)).length;
+    if (active === 0) return "none";
+    if (active === colPerms.length) return "all";
+    return "some";
+  };
 
   // ── Color picker helpers ─────────────────────────────────────────────────
   const applyColor = (key: string | null, color: string, isNew: boolean) => {
@@ -615,50 +680,155 @@ export default function HrmSetupPage() {
       </div>
 
       {/* ── Permissions modal ─────────────────────────────────────────────── */}
-      {permKey !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-[520px] max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
-              <div className="flex items-center gap-2 font-semibold">
-                <Shield size={16} className="text-indigo-500" /> Assign Permissions
-              </div>
-              <button onClick={() => setPermKey(null)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
-            </div>
-            <div className="overflow-y-auto px-5 py-4 flex-1 space-y-4">
-              {PERM_GROUPS.map(group => (
-                <div key={group.label}>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{group.label}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {group.perms.map(p => {
-                      const active = permList(permDraft).includes(p);
-                      return (
-                        <button key={p} onClick={() => togglePerm(p)}
-                          className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${active ? "bg-indigo-600 text-white border-indigo-600" : "bg-muted text-muted-foreground border-transparent hover:border-indigo-300"}`}>
-                          {active && <Check size={9} className="inline mr-1" />}{p}
-                        </button>
-                      );
-                    })}
+      {permKey !== null && (() => {
+        const active = new Set(permList(permDraft));
+        const COL_KEYS = ["view","add","edit","delete"] as const;
+        const COL_LABELS: Record<typeof COL_KEYS[number], string> = { view: "View", add: "Add", edit: "Edit", delete: "Delete" };
+        const COL_COLORS: Record<typeof COL_KEYS[number], string> = {
+          view:   "text-blue-600 dark:text-blue-400",
+          add:    "text-emerald-600 dark:text-emerald-400",
+          edit:   "text-amber-600 dark:text-amber-400",
+          delete: "text-red-600 dark:text-red-400",
+        };
+        const COL_CHECK: Record<typeof COL_KEYS[number], string> = {
+          view:   "accent-blue-600",
+          add:    "accent-emerald-600",
+          edit:   "accent-amber-500",
+          delete: "accent-red-600",
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col">
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 flex items-center justify-center">
+                    <Shield size={15} className="text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm leading-tight">Assign Permissions</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      {active.size} permission{active.size !== 1 ? "s" : ""} selected
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-between items-center gap-3 px-5 py-3 border-t border-border">
-              <button onClick={() => setPermDraft("")} className="text-xs text-muted-foreground hover:text-red-500 transition-colors">Clear all</button>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPermKey(null)}>Cancel</Button>
-                <Button size="sm" onClick={() => {
-                  if (permKey === "__new__") {
-                    setNewDraft(d => ({ ...d, permissions: permDraft }));
-                    setPermKey(null);
-                  } else {
-                    savePermissions();
-                  }
-                }}>Save Permissions</Button>
+                <button onClick={() => setPermKey(null)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-auto flex-1 min-h-0">
+                <table className="w-full text-sm border-separate border-spacing-0">
+                  {/* Sticky column header */}
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-muted/80 backdrop-blur-sm">
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground px-4 py-2.5 w-[44%] border-b border-border">
+                        Module
+                      </th>
+                      {COL_KEYS.map(col => {
+                        const state = colState(col);
+                        return (
+                          <th key={col} className="text-center text-[11px] px-2 py-2.5 border-b border-border w-[14%]">
+                            <button
+                              onClick={() => toggleColumnAll(col)}
+                              className="flex flex-col items-center gap-1 mx-auto group"
+                              title={`Select all ${COL_LABELS[col]}`}
+                            >
+                              <span className={`font-semibold uppercase tracking-wide ${COL_COLORS[col]}`}>
+                                {COL_LABELS[col]}
+                              </span>
+                              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all
+                                ${state === "all"  ? "bg-indigo-600 border-indigo-600" :
+                                  state === "some" ? "bg-indigo-200 border-indigo-400 dark:bg-indigo-900 dark:border-indigo-500" :
+                                                     "border-border group-hover:border-indigo-400"}`}>
+                                {state === "all"  && <Check size={9} className="text-white" strokeWidth={3} />}
+                                {state === "some" && <span className="w-1.5 h-0.5 rounded-full bg-indigo-600 dark:bg-indigo-300" />}
+                              </span>
+                            </button>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PERM_GROUPS.map((group, gi) => (
+                      <>
+                        {/* Group header */}
+                        <tr key={`g-${gi}`} className="bg-muted/30">
+                          <td colSpan={5} className="px-4 py-1.5 border-b border-border/50">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                              {group.group}
+                            </span>
+                          </td>
+                        </tr>
+                        {/* Module rows */}
+                        {group.rows.map((row, ri) => (
+                          <tr key={`${gi}-${ri}`}
+                            className="hover:bg-muted/40 transition-colors border-b border-border/40 last:border-b-0">
+                            <td className="px-4 py-2.5 font-medium text-[12px] text-foreground">
+                              {row.label}
+                              {row.extras && (
+                                <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">
+                                  +manage
+                                </span>
+                              )}
+                            </td>
+                            {COL_KEYS.map(col => {
+                              const perm = row[col];
+                              const checked = perm ? active.has(perm) : false;
+                              return (
+                                <td key={col} className="text-center px-2 py-2.5">
+                                  {perm ? (
+                                    <label className="inline-flex items-center justify-center cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => togglePerm(perm)}
+                                        className={`w-[15px] h-[15px] rounded cursor-pointer ${COL_CHECK[col]}`}
+                                      />
+                                    </label>
+                                  ) : (
+                                    <span className="inline-block w-[15px] h-[15px] rounded border border-dashed border-border/50 opacity-30" />
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-between items-center gap-3 px-6 py-3.5 border-t border-border shrink-0">
+                <button
+                  onClick={() => setPermDraft("")}
+                  className="text-xs text-muted-foreground hover:text-red-500 transition-colors font-medium">
+                  Clear all
+                </button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPermKey(null)}>Cancel</Button>
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
+                    if (permKey === "__new__") {
+                      setNewDraft(d => ({ ...d, permissions: permDraft }));
+                      setPermKey(null);
+                    } else {
+                      savePermissions();
+                    }
+                  }}>
+                    <Shield size={13} className="mr-1.5" /> Save Permissions
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Delete confirmation ───────────────────────────────────────────── */}
       <AlertDialog open={!!deleteKey} onOpenChange={o => { if (!o) setDeleteKey(null); }}>
