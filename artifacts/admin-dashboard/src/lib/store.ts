@@ -9039,7 +9039,7 @@ export const deleteInterviewSchedule = (id: string): void => {
 // ─── HRM — Salary Management ──────────────────────────────────────────────────
 
 export type SalarySlipItem = { label: string; amount: number };
-export type SalarySlipStatus = "Draft" | "Approved" | "Paid";
+export type SalarySlipStatus = "Draft" | "Approved" | "Paid" | "Partially Paid";
 
 export type SalarySlip = {
   id: string;
@@ -9058,6 +9058,7 @@ export type SalarySlip = {
   paymentMethod?: "Cash" | "Bank Transfer" | "Wallet";
   paymentAccountId?: string;
   paidAt?: string;
+  amountPaid?: number;       // cumulative amount paid so far (may be less than netSalary)
   journalEntryId?: string;
   accrualJournalEntryId?: string;  // JE posted on approval (Dr Role Expense → Cr Staff Payable)
   staffPayableLedgerId?: string;   // snapshot of staffPayableLedgerId at approval time — used by payment JE
@@ -9279,7 +9280,7 @@ export async function postSalaryApprovalJE(slip: SalarySlip): Promise<{ je: Jour
  *   Dr — [Employee] - Payable Account   (expense + liability in one step)
  *   Cr — Cash / Bank
  */
-export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string): JournalEntry {
+export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: string, date: string, amount?: number): JournalEntry {
   const hasAccrual = !!slip.accrualJournalEntryId;
   // New flow: use the per-employee payable account resolved at approval time
   // Legacy flow: old slips that were approved before staffPayableLedgerId was introduced
@@ -9297,6 +9298,7 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
       ? `Salary payable settled — ${slip.staffName} (${slip.period})`
       : `Salary expense — ${slip.staffName} (${slip.period})`;
   }
+  const payAmt = amount ?? slip.netSalary;
   const ref = `SAL-${slip.period}-${slip.staffId.slice(0, 8)}`;
   return createJournalEntry({
     date,
@@ -9307,7 +9309,7 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
         id:        crypto.randomUUID(),
         ledgerId:  debitLedgerId,
         narration: debitNarr,
-        debit:     slip.netSalary,
+        debit:     payAmt,
         credit:    0,
         staffId:   slip.staffId,
       },
@@ -9316,12 +9318,12 @@ export function postSalaryPaymentJE(slip: SalarySlip, paymentAccountLedgerId: st
         ledgerId:  paymentAccountLedgerId,
         narration: `Salary paid — ${slip.staffName} (${slip.period})`,
         debit:     0,
-        credit:    slip.netSalary,
+        credit:    payAmt,
       },
     ],
     status:      "posted",
-    totalDebit:  slip.netSalary,
-    totalCredit: slip.netSalary,
+    totalDebit:  payAmt,
+    totalCredit: payAmt,
     isBalanced:  true,
   });
 }

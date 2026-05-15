@@ -46,9 +46,10 @@ function fmt(n: number, sym: string) {
 }
 
 const STATUS_CONFIG: Record<SalarySlipStatus, { label: string; color: string; bg: string }> = {
-  Draft:    { label: "Draft",    color: "text-amber-700 dark:text-amber-300",   bg: "bg-amber-50 dark:bg-amber-900/30"   },
-  Approved: { label: "Approved", color: "text-blue-700 dark:text-blue-300",     bg: "bg-blue-50 dark:bg-blue-900/30"     },
-  Paid:     { label: "Paid",     color: "text-emerald-700 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
+  Draft:           { label: "Draft",           color: "text-amber-700 dark:text-amber-300",   bg: "bg-amber-50 dark:bg-amber-900/30"   },
+  Approved:        { label: "Approved",        color: "text-blue-700 dark:text-blue-300",     bg: "bg-blue-50 dark:bg-blue-900/30"     },
+  Paid:            { label: "Paid",            color: "text-emerald-700 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
+  "Partially Paid":{ label: "Partially Paid",  color: "text-orange-700 dark:text-orange-300", bg: "bg-orange-50 dark:bg-orange-900/30" },
 };
 
 // ─── Editable allowance / deduction list ─────────────────────────────────────
@@ -175,9 +176,9 @@ export default function SalaryPage() {
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
-    const totalPayroll  = periodSlips.reduce((s, x) => s + x.netSalary,   0);
-    const paidAmt       = periodSlips.filter(x => x.status === "Paid").reduce((s, x) => s + x.netSalary, 0);
-    const pendingAmt    = periodSlips.filter(x => x.status !== "Paid").reduce((s, x) => s + x.netSalary, 0);
+    const totalPayroll  = periodSlips.reduce((s, x) => s + x.netSalary, 0);
+    const paidAmt       = periodSlips.reduce((s, x) => s + (x.amountPaid ?? (x.status === "Paid" ? x.netSalary : 0)), 0);
+    const pendingAmt    = periodSlips.reduce((s, x) => s + (x.netSalary - (x.amountPaid ?? (x.status === "Paid" ? x.netSalary : 0))), 0);
     const paidCount     = periodSlips.filter(x => x.status === "Paid").length;
     return { totalPayroll, paidAmt, pendingAmt, paidCount, headcount: periodSlips.length };
   }, [periodSlips]);
@@ -450,12 +451,19 @@ export default function SalaryPage() {
                       {dedTotal > 0 ? `-${fmt(dedTotal, sym)}` : "—"}
                     </td>
                     <td className="px-3 py-2.5 text-right font-medium">{fmt(slip.grossSalary, sym)}</td>
-                    <td className="px-3 py-2.5 text-right font-bold text-primary">{fmt(slip.netSalary, sym)}</td>
+                    <td className="px-3 py-2.5 text-right font-bold text-primary">
+                      {fmt(slip.netSalary, sym)}
+                      {slip.status === "Partially Paid" && (
+                        <div className="text-[10px] font-normal text-orange-600 dark:text-orange-400">
+                          Bal: {fmt(slip.netSalary - (slip.amountPaid ?? 0), sym)}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-center">{statusPill(slip.status)}</td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {/* Edit */}
-                        {slip.status !== "Paid" && (
+                        {slip.status !== "Paid" && slip.status !== "Partially Paid" && (
                           <button
                             title="Edit"
                             onClick={() => setEditSlipId(slip.id)}
@@ -491,7 +499,7 @@ export default function SalaryPage() {
                           </button>
                         )}
                         {/* Pay */}
-                        {slip.status !== "Paid" && (
+                        {(slip.status === "Approved" || slip.status === "Draft" || slip.status === "Partially Paid") && (
                           <button
                             title="Pay Salary"
                             onClick={() => setPaySlipId(slip.id)}
@@ -501,7 +509,7 @@ export default function SalaryPage() {
                           </button>
                         )}
                         {/* Revert to Draft */}
-                        {(slip.status === "Paid" || slip.status === "Approved") && (
+                        {(slip.status === "Paid" || slip.status === "Approved" || slip.status === "Partially Paid") && (
                           <button
                             title="Revert to Draft"
                             onClick={() => setRevertId(slip.id)}
@@ -519,7 +527,7 @@ export default function SalaryPage() {
                           <Printer size={13} />
                         </button>
                         {/* Delete */}
-                        {slip.status !== "Paid" && (
+                        {slip.status !== "Paid" && slip.status !== "Partially Paid" && (
                           <button
                             title="Delete"
                             onClick={() => setDeleteId(slip.id)}
@@ -631,21 +639,24 @@ export default function SalaryPage() {
           slip={payTarget}
           paymentAccounts={paymentAccounts}
           sym={sym}
-          onPay={(accountId, ledgerId, date) => {
-            const account = paymentAccounts.find(a => a.id === accountId);
+          onPay={(accountId, ledgerId, date, amount) => {
+            const account      = paymentAccounts.find(a => a.id === accountId);
+            const newAmountPaid = (payTarget.amountPaid ?? 0) + amount;
+            const isFullyPaid  = newAmountPaid >= payTarget.netSalary - 0.001;
             let jeId: string | undefined;
             try {
-              const je = postSalaryPaymentJE(payTarget, ledgerId, date);
+              const je = postSalaryPaymentJE(payTarget, ledgerId, date, amount);
               jeId = je.id;
             } catch (err) {
               console.error("JE posting failed:", err);
             }
             editSlip(payTarget.id, {
-              status: "Paid",
+              status:          isFullyPaid ? "Paid" : "Partially Paid",
               paymentAccountId: accountId,
-              paymentMethod: (account?.paymentMethod as "Cash" | "Bank Transfer" | "Wallet") ?? "Cash",
-              paidAt: new Date().toISOString(),
-              journalEntryId: jeId,
+              paymentMethod:   (account?.paymentMethod as "Cash" | "Bank Transfer" | "Wallet") ?? "Cash",
+              paidAt:          new Date().toISOString(),
+              amountPaid:      newAmountPaid,
+              journalEntryId:  jeId,
             });
             setPaySlipId(null);
             toast({
@@ -712,6 +723,7 @@ export default function SalaryPage() {
                   editSlip(revertId, {
                     status:                "Draft",
                     paidAt:                undefined,
+                    amountPaid:            undefined,
                     journalEntryId:        undefined,
                     accrualJournalEntryId: undefined,
                     paymentAccountId:      undefined,
@@ -850,20 +862,29 @@ function PayDialog({
   slip: SalarySlip;
   paymentAccounts: ReturnType<typeof getPaymentAccounts>;
   sym: string;
-  onPay: (accountId: string, ledgerId: string, date: string) => void;
+  onPay: (accountId: string, ledgerId: string, date: string, amount: number) => void;
   onClose: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [accountId, setAccountId] = useState(paymentAccounts[0]?.id ?? "");
   const [date,      setDate]      = useState(today);
 
-  const account = paymentAccounts.find(a => a.id === accountId);
+  // Remaining balance = netSalary − already paid
+  const alreadyPaid = slip.amountPaid ?? 0;
+  const remaining   = Math.max(0, slip.netSalary - alreadyPaid);
+  const [amountStr, setAmountStr] = useState(remaining.toFixed(2));
+
+  const account     = paymentAccounts.find(a => a.id === accountId);
+  const amountNum   = Math.max(0, parseFloat(amountStr) || 0);
+  const cappedAmt   = Math.min(amountNum, remaining);
+  const balance     = remaining - cappedAmt;
+  const isOverpay   = amountNum > remaining;
 
   const handlePay = () => {
-    if (!accountId) return;
+    if (!accountId || cappedAmt <= 0) return;
     const ledgerId = account?.ledgerAccountId ?? "";
     if (!ledgerId) return;
-    onPay(accountId, ledgerId, date);
+    onPay(accountId, ledgerId, date, cappedAmt);
   };
 
   return (
@@ -877,12 +898,53 @@ function PayDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Net amount highlight */}
-          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">Net Amount to Pay</p>
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {sym}{slip.netSalary.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
+          {/* Editable amount */}
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-muted-foreground font-medium">Net Amount to Pay</p>
+              <button
+                className="text-[10px] text-emerald-700 dark:text-emerald-400 underline underline-offset-2 hover:no-underline"
+                onClick={() => setAmountStr(remaining.toFixed(2))}
+              >
+                Full amount
+              </button>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700 dark:text-emerald-300 font-bold text-sm pointer-events-none">
+                {sym}
+              </span>
+              <input
+                type="number"
+                min={0.01}
+                max={remaining}
+                step={0.01}
+                value={amountStr}
+                onChange={e => setAmountStr(e.target.value)}
+                className={`w-full pl-8 pr-3 py-2 text-xl font-bold rounded-md border bg-white dark:bg-card text-emerald-700 dark:text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors ${isOverpay ? "border-red-400 ring-1 ring-red-300" : "border-emerald-200 dark:border-emerald-800"}`}
+              />
+            </div>
+            {isOverpay && (
+              <p className="text-[11px] text-red-500 font-medium">
+                Exceeds remaining balance — capped at {sym}{remaining.toFixed(2)}
+              </p>
+            )}
+            {/* Balance breakdown */}
+            <div className="grid grid-cols-3 gap-1 pt-1 border-t border-emerald-200 dark:border-emerald-800 text-[11px]">
+              <div className="text-center">
+                <p className="text-muted-foreground">Net Salary</p>
+                <p className="font-semibold">{sym}{slip.netSalary.toLocaleString(undefined,{minimumFractionDigits:2})}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-muted-foreground">Paying Now</p>
+                <p className="font-semibold text-emerald-600 dark:text-emerald-400">{sym}{cappedAmt.toLocaleString(undefined,{minimumFractionDigits:2})}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-muted-foreground">Balance</p>
+                <p className={`font-semibold ${balance > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {sym}{balance.toLocaleString(undefined,{minimumFractionDigits:2})}
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Payment account */}
@@ -910,7 +972,7 @@ function PayDialog({
             <Input type="date" className="h-9 text-[13px]" value={date} onChange={e => setDate(e.target.value)} />
           </div>
 
-          {/* JE info — always posted, no opt-out */}
+          {/* JE info */}
           <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-3 py-2 text-[12px] text-blue-700 dark:text-blue-300">
             A journal entry will be posted automatically:<br />
             <span className="font-mono">
@@ -923,10 +985,11 @@ function PayDialog({
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={handlePay}
-            disabled={!accountId || paymentAccounts.length === 0}
+            disabled={!accountId || paymentAccounts.length === 0 || cappedAmt <= 0}
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
-            <CheckCircle2 size={14} /> Confirm Payment
+            <CheckCircle2 size={14} />
+            {balance > 0 ? "Confirm Partial Payment" : "Confirm Payment"}
           </Button>
         </DialogFooter>
       </DialogContent>
