@@ -157,15 +157,24 @@ export default function SalaryTemplatePage() {
     return m;
   }, [roleOpts, desigOpts]);
 
-  // Filter staff by selected role OR designation value
+  // Staff IDs that already have a staff-specific template (excluding the one currently being edited)
+  const staffIdsWithTemplate = useMemo(() => {
+    return new Set(
+      templates
+        .filter(t => t.staffId && t.id !== editId)
+        .map(t => t.staffId)
+    );
+  }, [templates, editId]);
+
+  // Filter staff by selected role/designation, and exclude those who already have a personal template
   const filteredStaff = useMemo(() => {
-    const active = allStaff.filter(s => s.status !== "Terminated");
+    const active = allStaff.filter(s => s.status !== "Terminated" && !staffIdsWithTemplate.has(s.id));
     if (!form.designation) return active;
     return active.filter(s =>
       s.role        === form.designation ||
       s.designation === form.designation
     );
-  }, [allStaff, form.designation]);
+  }, [allStaff, form.designation, staffIdsWithTemplate]);
 
   // Live calculations
   const basicNum        = parseFloat(form.basicSalary)            || 0;
