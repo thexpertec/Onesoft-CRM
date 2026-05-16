@@ -7378,10 +7378,14 @@ export function getAccounts(): Account[] {
       }));
     }
   } catch { /* ignore */ }
-  // Fresh install — start with empty chart
+  // Key not found in memory cache — either a fresh install or getAccounts() was
+  // called before syncAllFromServer populated _memRaw (e.g. wrong tenant context).
+  // Only populate the local cache; do NOT fire _apiWrite here.
+  // Writing [] to the DB would permanently wipe the COA if this is called with the
+  // wrong _activeTenantId (e.g. null after a page refresh before setActiveTenant runs).
+  // seedDefaultCoaAccounts() will write the real initial data once sync completes.
   const sk = tenantKey(COA_KEY);
   _lsSet(sk, []);
-  _apiWrite(sk, []).catch(() => { /* handled via onesoft:write-error event */ });
   return [];
 }
 

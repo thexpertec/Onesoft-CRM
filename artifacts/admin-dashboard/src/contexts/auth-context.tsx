@@ -211,13 +211,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         const tenantId = _ss.getItem(TENANT_KEY);
         resolvedTenantId = tenantId === "" ? null : (tenantId ?? null);
+        // CRITICAL: must call setActiveTenant even for the sessionStorage path.
+        // Without this, _activeTenantId stays null after a page refresh, causing
+        // every getStored/setStored call to use the global namespace instead of
+        // the tenant's namespace — so all tenant data appears missing.
+        setActiveTenant(resolvedTenantId);
       }
     }
 
     setIsSyncing(true);
     syncAllFromServer(resolvedTenantId).finally(() => {
-      // Seed default COA + auto-link accounting settings on every login
-      seedDefaultCoaAccounts();
+      // NOTE: seedDefaultCoaAccounts() is already called inside syncAllFromServer
+      // with the correct _activeTenantId (see store.ts step 5). Calling it again
+      // here (after _activeTenantId has been restored) was the second source of
+      // the data-loss bug — it ran in the wrong tenant context and could corrupt
+      // global-namespace accounts. Removed.
       // After sync, re-read the user in case their record was updated in DB
       const refreshed = getAdminUserById(userId);
       if (refreshed) {
