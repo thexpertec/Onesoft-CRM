@@ -9063,6 +9063,51 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
 
       // Step 4a — Remove orphaned voucher Journal Entries.
       _purgeOrphanedVoucherJEs(tenantId, true);
+
+      // Step 4b — Self-healing orphan migration.
+      // Guards against the historical bug where setActiveTenant() was not
+      // called on page-refresh, causing tenant writes to land in the global
+      // namespace instead of t:{tenantId}. On every sync we check whether
+      // tenant-only HRM keys are empty in the tenant namespace but have data
+      // in global; if so, the data is moved here and the global copy is
+      // cleared so no other tenant can accidentally inherit it.
+      if (globalFetchSucceeded && globalData) {
+        const TENANT_ONLY_ORPHAN_KEYS = [
+          "admin-hrm-staff",
+          "admin-hrm-roles",
+          "admin-hrm-departments",
+          "admin-hrm-designations",
+          "admin-hrm-salary-slips",
+          "admin-hrm-salary-templates",
+          "admin-hrm-attendance",
+          "admin-hrm-salary-allowance-cats",
+          "admin-hrm-salary-deduction-cats",
+        ] as const;
+
+        for (const k of TENANT_ONLY_ORPHAN_KEYS) {
+          const globalVal = (globalData as Record<string, unknown>)[k];
+          if (!Array.isArray(globalVal) || globalVal.length === 0) continue;
+
+          const tKey = `t:${tenantId}:${k}`;
+          const tenantRaw = _memRaw.get(tKey);
+          const tenantArr: unknown[] = tenantRaw
+            ? (() => { try { return JSON.parse(tenantRaw) as unknown[]; } catch { return []; } })()
+            : [];
+          if (Array.isArray(tenantArr) && tenantArr.length > 0) continue; // tenant already has data, do not overwrite
+
+          const merged = globalVal as Record<string, unknown>[];
+          console.info(
+            `[sync] Orphan-migration: rescued ${merged.length} global "${k}" record(s) → t:${tenantId}`
+          );
+          _lsCache(tKey, merged);
+          kvPut(`t:${tenantId}`, k, merged).catch(() => {});
+
+          // Clear the orphaned global copy so other tenants never see it.
+          const empty: unknown[] = [];
+          _lsCache(k, empty);
+          kvPut("global", k, empty).catch(() => {});
+        }
+      }
     }
 
     // Step 4b — Deduplicate products and stock items.
