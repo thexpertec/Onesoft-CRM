@@ -6876,6 +6876,37 @@ export function seedDefaultCoaAccounts(): void {
     if (staffBFUpdated) setStored(STAFF_KEY, staffBFPatched);
   }
 
+  // ── Always: reconcile COA account names to staff full names ─────────────
+  // If a staff member was renamed AFTER their payable/expense accounts were
+  // created, the account names drift. This pass corrects the mismatch so the
+  // COA always shows the staff's current full name.
+  {
+    const allStaffRC = getStored<Staff>(STAFF_KEY);
+    const accountsMap = new Map(getAccounts().map(a => [a.id, a]));
+    for (const s of allStaffRC) {
+      // staffPayableLedgerId → must always equal staff full name
+      if (s.staffPayableLedgerId) {
+        const acc = accountsMap.get(s.staffPayableLedgerId);
+        if (acc && acc.name !== s.name) {
+          try {
+            updateAccount(s.staffPayableLedgerId, { name: s.name, description: `Staff payable account for: ${s.name}` });
+            console.info(`[COA] Reconciled staffPayable name: "${acc.name}" → "${s.name}"`);
+          } catch { /* non-fatal */ }
+        }
+      }
+      // ledgerAccountId (salary expense) → must always equal staff full name
+      if (s.ledgerAccountId) {
+        const acc = accountsMap.get(s.ledgerAccountId);
+        if (acc && acc.name !== s.name) {
+          try {
+            updateAccount(s.ledgerAccountId, { name: s.name, description: `Salary ledger for: ${s.name}` });
+            console.info(`[COA] Reconciled salaryExpense name: "${acc.name}" → "${s.name}"`);
+          } catch { /* non-fatal */ }
+        }
+      }
+    }
+  }
+
   // ── Always: backfill accrual JEs for approved-but-unpaid slips ───────────
   // Runs every login. For any Approved slip that has no accrualJournalEntryId,
   // post the Dr Role Expense → Cr Staff Payable JE and record its ID.
