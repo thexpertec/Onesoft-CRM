@@ -5120,8 +5120,29 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
   const items = getStaff();
   const i = items.findIndex(s => s.id === id);
   if (i === -1) throw new Error("Staff not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
+  const prev = items[i];
+  items[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
   setStored(STAFF_KEY, items);
+
+  // Sync linked COA ledger account names whenever name or designation changes.
+  // staffPayableLedgerId  → always named after the staff member's full name.
+  // ledgerAccountId (salary expense) → named after designation || name at creation time.
+  const nameChanged        = "name" in updates && updates.name !== prev.name;
+  const designationChanged = "designation" in updates && updates.designation !== prev.designation;
+
+  if (nameChanged && items[i].staffPayableLedgerId) {
+    try {
+      updateAccount(items[i].staffPayableLedgerId!, { name: items[i].name });
+    } catch { /* non-fatal — JE history preserved regardless */ }
+  }
+
+  if ((nameChanged || designationChanged) && items[i].ledgerAccountId) {
+    const newLedgerName = items[i].designation || items[i].name;
+    try {
+      updateAccount(items[i].ledgerAccountId!, { name: newLedgerName });
+    } catch { /* non-fatal */ }
+  }
+
   return items[i];
 };
 
