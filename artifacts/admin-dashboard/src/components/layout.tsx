@@ -773,6 +773,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
       footerHref: "/staff", footerLabel: "View HRM",
       rightAlign: true,
     },
+    sysadmin: {
+      columns: [
+        {
+          href: "/users", label: "Access Control", icon: Shield,
+          color: "text-indigo-500", bg: "bg-indigo-50 dark:bg-indigo-950/40",
+          desc: "Users, tenants & permissions",
+          links: [
+            { label: "Admin Accounts",  href: "/users",         icon: Shield,          desc: "Platform user accounts" },
+            { label: "Tenants",         href: "/tenants",       icon: Globe,           desc: "Client organisations"   },
+            { label: "Module Groups",   href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups"  },
+          ],
+        },
+        {
+          href: "/activity-log", label: "System Tools", icon: BarChart3,
+          color: "text-sky-500", bg: "bg-sky-50 dark:bg-sky-950/40",
+          desc: "Monitoring & diagnostics",
+          links: [
+            { label: "Activity Log", href: "/activity-log", icon: BarChart3, desc: "Full audit trail of all actions" },
+            { label: "Database",     href: "/database",     icon: BookOpen,  desc: "Live KV store browser"           },
+          ],
+        },
+      ] as MegaColumn[],
+      footerText: "Super-admin tools — handle with care",
+      footerHref: "/activity-log", footerLabel: "Open audit log",
+      rightAlign: true,
+    },
   };
 
   // Search

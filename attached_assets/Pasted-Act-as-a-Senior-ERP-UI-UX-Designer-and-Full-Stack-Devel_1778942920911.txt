@@ -1,0 +1,365 @@
+Act as a Senior ERP UI/UX Designer and Full Stack Developer with 15+ years experience in Admin Dashboard Systems.
+
+I already have an ERP dashboard design and I want you to create a new “Admin Panel” section with EXACT SAME design language, spacing, colors, typography, navbar structure, cards, buttons, shadows, and layout consistency as my existing ERP system.
+
+IMPORTANT:
+Do NOT create a different design.
+Follow my current dashboard theme exactly.
+
+Reference:
+Existing ERP design already includes:
+- Top Navbar
+- Sidebar Navigation
+- Dashboard Layout
+- Search Bar
+- Quick Add Button
+- User Profile Area
+- Card Design
+- Filter Design
+- Table Styling
+- Badges
+- Icons
+- Tenant View Banner
+
+====================================================
+OBJECTIVE
+====================================================
+
+Create a new menu item in top navigation:
+
+"Admin Panel"
+
+Inside Admin Panel create submenu/page:
+
+"Activity Log"
+
+Route URL:
+https://max.erp360.org/admin-dashboard/activity-log
+
+The page design must match existing ERP UI perfectly.
+
+====================================================
+1. TOP NAVIGATION
+====================================================
+
+Add new top navbar item:
+
+Admin Panel
+
+Behavior:
+- Dropdown menu on hover/click
+- Same style as other menu items
+- Responsive for mobile/tablet
+
+Submenu Items:
+- Dashboard
+- Activity Log
+- Recycle Bin
+- User Sessions
+- Security Logs
+- Permissions
+- System Settings
+
+Highlight:
+- Active page state
+- Hover effect
+- Smooth transition
+
+====================================================
+2. ACTIVITY LOG PAGE DESIGN
+====================================================
+
+Page Title:
+Activity Log
+
+Subtitle:
+Complete audit trail of all actions performed in the system.
+
+Use same spacing and layout as current ERP pages.
+
+====================================================
+3. PAGE HEADER SECTION
+====================================================
+
+Create statistics cards exactly like ERP dashboard style.
+
+Cards:
+- Total Activities
+- Created
+- Updated
+- Deleted
+- Logins
+
+Requirements:
+- Rounded cards
+- Soft shadows
+- Color badges
+- Responsive layout
+- Small icon in each card
+- Hover animation
+
+Color Scheme:
+- Created = Green
+- Updated = Blue
+- Deleted = Red
+- Logins = Purple
+- Total = Dark Gray
+
+====================================================
+4. FILTER SECTION
+====================================================
+
+Create professional filter row matching existing design.
+
+Required Filters:
+1. Search Box
+   Placeholder:
+   "Search user, record, module..."
+
+2. Activity Type Dropdown
+   - All Actions
+   - Create
+   - Update
+   - Delete
+   - Restore
+   - Login
+   - Logout
+
+3. Module Dropdown
+   - All Modules
+   - Students
+   - Staff
+   - Accounting
+   - Inventory
+   - Attendance
+   - Exams
+   - HRM
+
+4. Date Range Picker
+   - From Date
+   - To Date
+
+5. Export Button
+   - Excel
+   - CSV
+   - PDF
+
+Use:
+- same border radius
+- same font size
+- same input height
+- same button design
+as existing ERP pages.
+
+====================================================
+5. ACTIVITY TABLE DESIGN
+====================================================
+
+Create modern responsive activity table.
+
+Columns:
+1. #
+2. Date & Time
+3. User
+4. Role
+5. Module
+6. Activity
+7. Record
+8. Description
+9. IP Address
+10. Device
+11. Status
+12. Actions
+
+Features:
+- Sticky Header
+- Pagination
+- Column Sorting
+- Search
+- Server-side loading
+- Responsive horizontal scroll
+- Hover effect
+- Zebra rows
+- Empty state design
+
+====================================================
+6. ACTIVITY BADGES
+====================================================
+
+Use professional colored badges:
+
+CREATE = Green
+UPDATE = Blue
+DELETE = Red
+RESTORE = Orange
+LOGIN = Purple
+LOGOUT = Gray
+
+Badge Style:
+- Rounded
+- Small shadow
+- Uppercase text
+
+====================================================
+7. ACTION BUTTONS
+====================================================
+
+Actions Column Buttons:
+- View
+- Restore
+- Delete Permanently
+
+Use:
+- icon buttons
+- tooltip
+- confirmation modal
+
+====================================================
+8. VIEW DETAILS MODAL
+====================================================
+
+Clicking View opens professional modal.
+
+Show:
+- User Information
+- Module Name
+- Activity Type
+- Date & Time
+- IP Address
+- Device Info
+- Old Values
+- New Values
+
+Display:
+- side-by-side comparison
+- changed fields highlight
+- JSON viewer style
+
+====================================================
+9. EMPTY STATE DESIGN
+====================================================
+
+If no records found:
+Show:
+- centered icon
+- professional message
+
+Text:
+"No activity recorded yet. Start using the system to generate logs."
+
+Use same ERP empty-state style.
+
+====================================================
+10. RESPONSIVE DESIGN
+====================================================
+
+Must work perfectly on:
+- Desktop
+- Tablet
+- Mobile
+
+Requirements:
+- collapsible filters
+- responsive table
+- mobile-friendly spacing
+
+====================================================
+11. BACKEND REQUIREMENTS
+====================================================
+
+Create backend APIs for:
+- Fetch Activity Logs
+- Filter Logs
+- Export Logs
+- Restore Deleted Records
+- Pagination
+- Search
+
+Add:
+- optimized queries
+- indexing
+- server-side filtering
+
+====================================================
+12. DATABASE REQUIREMENTS
+====================================================
+
+Use table:
+activity_logs
+
+Fields:
+- id
+- user_id
+- module_name
+- activity_type
+- record_id
+- description
+- old_values
+- new_values
+- ip_address
+- device_info
+- created_at
+
+Support:
+- bulk logging
+- restore history
+- soft delete tracking
+
+====================================================
+13. DESIGN CONSISTENCY
+====================================================
+
+VERY IMPORTANT:
+The entire page must look like it is part of the existing ERP system.
+
+Match exactly:
+- navbar height
+- sidebar width
+- card spacing
+- input styling
+- button colors
+- typography
+- shadows
+- hover effects
+- border radius
+- icon style
+
+DO NOT use a different admin template.
+
+====================================================
+14. TECH STACK
+====================================================
+
+Use same technologies already used in project.
+
+Keep:
+- reusable components
+- modular structure
+- clean code
+- scalable architecture
+
+====================================================
+15. FINAL OUTPUT REQUIRED
+====================================================
+
+Generate:
+1. Admin Panel Navbar Integration
+2. Activity Log Page
+3. Responsive UI
+4. Backend APIs
+5. Database Migration
+6. Sample Data
+7. Filters
+8. Export Functions
+9. View Modal
+10. Restore Functionality
+11. Empty State Design
+12. Production-ready clean code
+
+Make final result look like modern enterprise ERP systems such as:
+- Oracle ERP
+- SAP
+- Odoo
+- Zoho
+- Dynamics 365
+while keeping exact visual consistency with my current ERP dashboard.
