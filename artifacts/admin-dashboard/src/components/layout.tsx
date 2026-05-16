@@ -717,8 +717,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       }
     }),
     ...(hrmItems.length > 0 && !isSuperAdminOwn ? [HRM_NAV] : []),
-    ...(!isStaff && isSuperAdmin && !currentTenantId ? [{
-      key: "sysadmin", label: "Admin", icon: Shield,
+    ...(!isStaff && isSuperAdmin ? [{
+      key: "sysadmin", label: "Admin", icon: Shield, isMega: true,
       items: [
         { label: "Admin Accounts", href: "/users",        icon: Shield,          desc: "System user accounts"  },
         { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
