@@ -354,7 +354,7 @@ const PRODUCTS_ROUTES      = ["/products", "/brands", "/categories", "/product-g
 const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns", "/purchase-return"];
 const HRM_ROUTES           = ["/staff", "/hrm-setup", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
-const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database"];
+const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database", "/activity-log"];
 const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/rp-summary", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
@@ -724,6 +724,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { label: "Tenants",        href: "/tenants",       icon: Globe,           desc: "Client organisations"  },
         { label: "Module Groups",  href: "/module-groups", icon: LayoutDashboard, desc: "Feature access groups" },
         { label: "Database",       href: "/database",      icon: BookOpen,        desc: "Live KV store browser" },
+        { label: "Activity Log",   href: "/activity-log",  icon: BarChart3,       desc: "Audit trail of all actions" },
       ] as SubItem[],
     }] : []),
   ];
@@ -1376,8 +1377,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {isSuperAdmin && !currentTenantId && <>
                   <SectionLabel label="Admin" />
                   <NavLink href="/users"     icon={KeyRound}     label="Admin Accounts" />
-                  <NavLink href="/tenants"   icon={Building2}    label="Tenants" />
-                  <NavLink href="/database"  icon={BookOpen}     label="Database" />
+                  <NavLink href="/tenants"      icon={Building2}    label="Tenants" />
+                  <NavLink href="/database"     icon={BookOpen}     label="Database" />
+                  <NavLink href="/activity-log" icon={BarChart3}    label="Activity Log" />
                 </>}
               </div>
             );

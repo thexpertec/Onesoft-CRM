@@ -92,6 +92,7 @@ const RepairPage            = lazy(() => import("@/pages/repair"));
 const RepairReportPage      = lazy(() => import("@/pages/repair-report"));
 const PaymentAccountsPage   = lazy(() => import("@/pages/payment-accounts"));
 const DatabaseViewerPage    = lazy(() => import("@/pages/database-viewer"));
+const ActivityLogPage       = lazy(() => import("@/pages/activity-log"));
 
 const queryClient = new QueryClient();
 
@@ -255,6 +256,7 @@ function Router() {
                   <Route path="/tenants"            component={TenantsPage} />
                   <Route path="/module-groups"      component={ModuleGroupsPage} />
                   <Route path="/database"           component={DatabaseViewerPage} />
+                  <Route path="/activity-log"       component={ActivityLogPage} />
                   <Route path="/chart-of-accounts"  component={ChartOfAccountsPage} />
                   <Route path="/journal-entry"      component={JournalEntryPage} />
                   <Route path="/balance-sheet"      component={BalanceSheetPage} />

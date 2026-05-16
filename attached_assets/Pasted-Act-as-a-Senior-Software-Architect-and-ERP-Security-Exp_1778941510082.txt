@@ -1,0 +1,356 @@
+Act as a Senior Software Architect and ERP Security Expert with 15+ years of experience in School, College, University, and Enterprise ERP systems.
+
+I want to implement a complete “Activity Log / Audit Trail System” in my ERP software.
+
+Objective:
+Every action performed in the system must be recorded permanently for security, accountability, monitoring, and recovery purposes.
+
+This logging system must work for:
+- Single entry operations
+- Bulk operations
+- Add / Create
+- Edit / Update
+- Delete
+- Restore
+- Login / Logout
+- Password Change
+- Role Permission Changes
+- Fee Posting
+- Accounting Entries
+- Inventory Transactions
+- Attendance Updates
+- Exam Changes
+- Employee Actions
+- Student Actions
+- Settings Changes
+- Import / Export
+- Voucher Modifications
+- API Actions
+- Any other CRUD activity in the software
+
+====================================================
+1. CREATE COMPLETE ACTIVITY LOG MODULE
+====================================================
+
+Create a professional module named:
+
+“Activity Log”
+or
+“Audit Trail”
+
+Add this module in Admin Panel.
+
+====================================================
+2. DATABASE DESIGN
+====================================================
+
+Create proper scalable database table:
+
+Table Name:
+activity_logs
+
+Columns:
+
+1. id
+2. uuid
+3. user_id
+4. user_name
+5. role
+6. department
+7. module_name
+8. sub_module
+9. activity_type
+   Examples:
+   - CREATE
+   - UPDATE
+   - DELETE
+   - RESTORE
+   - LOGIN
+   - LOGOUT
+   - APPROVE
+   - CANCEL
+   - PRINT
+   - EXPORT
+   - IMPORT
+
+10. record_id
+11. record_uuid
+12. reference_no
+13. description
+14. old_values (JSON)
+15. new_values (JSON)
+16. ip_address
+17. device_info
+18. browser
+19. operating_system
+20. mac_address (if possible)
+21. activity_source
+   Examples:
+   - Web
+   - Mobile App
+   - API
+   - System
+
+22. campus_id
+23. branch_id
+24. session_id
+25. status
+26. remarks
+27. created_at
+28. updated_at
+29. deleted_at
+
+Add proper:
+- indexing
+- foreign keys
+- UUID support
+- JSON storage optimization
+
+====================================================
+3. LOGGING REQUIREMENTS
+====================================================
+
+Whenever ANY data changes:
+- automatically create log entry
+- no manual coding required in every page
+- implement centralized middleware/service/hooks
+
+System must record:
+- Who performed action
+- What changed
+- Old value
+- New value
+- Exact date/time
+- IP address
+- Device/browser info
+- Module name
+- Record affected
+
+For UPDATE:
+Store both:
+- previous values
+- updated values
+
+For DELETE:
+Store complete deleted record snapshot.
+
+For BULK DELETE:
+Store all affected IDs.
+
+====================================================
+4. SOFT DELETE + RESTORE SYSTEM
+====================================================
+
+IMPORTANT:
+Never permanently delete records directly.
+
+Implement:
+Soft Delete System
+
+Requirements:
+- Every deleted record goes to recycle bin
+- Add Restore button
+- Add Permanent Delete button (Super Admin only)
+- Maintain delete history
+- Restore should recover:
+  - related data
+  - accounting links
+  - inventory links
+  - attachments
+
+Deleted entries should remain searchable in Activity Logs.
+
+====================================================
+5. ACTIVITY LOG TABLE UI DESIGN
+====================================================
+
+Create modern professional responsive table design.
+
+Required Columns:
+- #
+- Date & Time
+- User
+- Role
+- Module
+- Activity
+- Record
+- Description
+- IP Address
+- Device
+- Status
+- Actions
+
+Features:
+- Search
+- Advanced Filters
+- Date Range Filter
+- User Filter
+- Module Filter
+- Activity Type Filter
+- Campus Filter
+- Export Excel
+- Export PDF
+- Print
+- Pagination
+- Column Visibility
+- Sticky Header
+- Sorting
+- Color Badges
+
+Color Scheme:
+- CREATE = Green
+- UPDATE = Blue
+- DELETE = Red
+- RESTORE = Orange
+- LOGIN = Purple
+
+====================================================
+6. ACTIVITY DETAIL MODAL
+====================================================
+
+Clicking “View” should open detailed modal/panel.
+
+Show:
+- User details
+- Exact timestamp
+- Old values
+- New values
+- Side-by-side comparison
+- Changed fields highlight
+- IP/device details
+- Related module links
+
+Use professional JSON viewer.
+
+====================================================
+7. SECURITY REQUIREMENTS
+====================================================
+
+- Only authorized users can access logs
+- Add permissions:
+  - View Logs
+  - Restore Data
+  - Permanent Delete
+  - Export Logs
+
+Prevent:
+- editing logs
+- deleting logs without permission
+- tampering activity records
+
+Add encryption/hash verification if possible.
+
+====================================================
+8. PERFORMANCE OPTIMIZATION
+====================================================
+
+System must support:
+- millions of log records
+
+Implement:
+- lazy loading
+- server-side pagination
+- indexed queries
+- optimized filtering
+- queue/background processing for heavy logs
+
+====================================================
+9. NOTIFICATION & ALERTS
+====================================================
+
+Generate alerts for:
+- bulk delete
+- unauthorized access
+- role changes
+- fee reversal
+- accounting modification
+- failed login attempts
+
+====================================================
+10. REPORTS
+====================================================
+
+Create reports:
+- User Activity Report
+- Daily Activity Report
+- Deleted Records Report
+- Login History Report
+- Security Audit Report
+- Module-wise Activity Report
+
+Export:
+- Excel
+- PDF
+- CSV
+
+====================================================
+11. TECHNICAL IMPLEMENTATION
+====================================================
+
+Use best architecture practices.
+
+Implement:
+- reusable logging service
+- event-driven architecture
+- middleware/hooks/interceptors
+- transaction-safe restore system
+- scalable database structure
+
+Code must be:
+- production-ready
+- secure
+- optimized
+- modular
+- maintainable
+
+====================================================
+12. UI/UX REQUIREMENTS
+====================================================
+
+Design should be:
+- modern ERP style
+- responsive
+- dark/light compatible
+- professional admin dashboard look
+
+Use:
+- badges
+- icons
+- hover effects
+- activity timeline
+- clean spacing
+- quick filters
+
+====================================================
+13. EXTRA FEATURES
+====================================================
+
+Add:
+- Recycle Bin Module
+- Timeline View
+- User Session History
+- Live Activity Monitoring
+- “Who Changed This?” button on records
+- Compare Changes feature
+- Restore Preview
+- Audit Lock System
+
+====================================================
+14. FINAL OUTPUT REQUIRED
+====================================================
+
+Generate:
+1. Database schema
+2. Migration files
+3. Backend APIs
+4. Logging middleware/service
+5. Frontend tables
+6. Restore system
+7. Recycle bin
+8. Permissions system
+9. Export functionality
+10. Professional UI design
+11. Sample dummy data
+12. Fully working production-ready module
+
+Make the implementation enterprise-grade similar to modern ERP systems like Oracle, SAP, Odoo, and Dynamics 365.

@@ -19,6 +19,7 @@ import {
   syncTenantsFromServer,
   getTenants,
   setActivityUser,
+  addActivity,
   seedDefaultCoaAccounts,
   Tenant,
 } from "@/lib/store";
@@ -273,6 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const tenantUser = tenantToAdminUser(tenantFromServer);
         setActivityUser(tenantUser.fullName || tenantUser.username);
+        try { addActivity({ action: "login", entity: "Auth", entityName: tenantUser.username, module: "Authentication" }); } catch { /* non-fatal */ }
         _ss.setItem(AUTH_KEY,     "true");
         _ss.setItem(AUTH_USER_ID, `tenant:${tenantFromServer.id}`);
         _ss.setItem(TENANT_KEY,   tenantFromServer.id);
@@ -312,6 +314,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         setActiveTenant(null);
         setActivityUser(user.fullName || user.username);
+        try { addActivity({ action: "login", entity: "Auth", entityName: user.username, module: "Authentication" }); } catch { /* non-fatal */ }
         _ss.setItem(AUTH_KEY,     "true");
         _ss.setItem(AUTH_USER_ID, user.id);
         _ss.setItem(TENANT_KEY,   "");
@@ -353,6 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const staffUser = staffToAdminUser(staffMember);
         setActiveTenant(null);
         setActivityUser(staffUser.fullName || staffUser.username);
+        try { addActivity({ action: "login", entity: "Auth", entityName: staffUser.username, module: "Authentication", detail: "Staff login" }); } catch { /* non-fatal */ }
         _ss.setItem(AUTH_KEY,     "true");
         _ss.setItem(AUTH_USER_ID, `staff:${staffMember.id}`);
         _ss.setItem(TENANT_KEY,   "");
@@ -367,6 +371,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const agentUser = agentToAdminUser(agent);
         setActiveTenant(null);
         setActivityUser(agentUser.fullName || agentUser.username);
+        try { addActivity({ action: "login", entity: "Auth", entityName: agentUser.username, module: "Authentication", detail: "Sales agent login" }); } catch { /* non-fatal */ }
         _ss.setItem(AUTH_KEY,     "true");
         _ss.setItem(AUTH_USER_ID, `agent:${agent.id}`);
         _ss.setItem(TENANT_KEY,   "");
@@ -474,6 +479,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = () => {
+    try { addActivity({ action: "logout", entity: "Auth", entityName: currentUser?.username ?? "unknown", module: "Authentication" }); } catch { /* non-fatal */ }
     setActiveTenant(null);
     setActivityUser("System");
     _ss.removeItem(AUTH_KEY);

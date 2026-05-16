@@ -136,20 +136,27 @@ function tenantKey(baseKey: string): string {
 // ─── Activity Log ─────────────────────────────────────────────────────────────
 export type ActivityAction =
   | "created" | "updated" | "deleted"
-  | "converted" | "completed" | "status_changed";
+  | "converted" | "completed" | "status_changed"
+  | "login" | "logout" | "printed" | "exported"
+  | "imported" | "approved" | "cancelled" | "password_changed";
 
 export type ActivityEntry = {
   id: string;
   action: ActivityAction;
-  entity: string;       // e.g. "Lead", "Customer", "Sale"
-  entityName: string;   // e.g. lead.name, sale.saleNumber
-  detail?: string;      // optional extra info
+  entity: string;        // e.g. "Lead", "Customer", "Sale"
+  entityName: string;    // e.g. lead.name, sale.saleNumber
+  detail?: string;       // optional extra info
   user: string;
   timestamp: string;
+  // Enhanced fields (optional for backward-compat)
+  module?: string;                         // e.g. "CRM", "Inventory", "HRM"
+  recordId?: string;                       // ID of the affected record
+  oldValues?: Record<string, unknown>;     // snapshot before change
+  newValues?: Record<string, unknown>;     // snapshot after change
 };
 
 const ACTIVITY_KEY = "admin-activity-log";
-const MAX_ACTIVITY = 300;
+const MAX_ACTIVITY = 1000;
 let _activityUser = "System";
 
 export function setActivityUser(name: string): void {
