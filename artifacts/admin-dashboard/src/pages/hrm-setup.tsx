@@ -410,51 +410,56 @@ export default function HrmSetupPage() {
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Layers3 size={22} className="text-zinc-500" /> HRM Setup
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Roles → Departments → Designations — unified setup in one table
+            Click any cell to edit · organised by role &amp; department
           </p>
         </div>
-        {can("Add Staff") && !addingRow && (
-          <Button size="sm" className="gap-1.5" onClick={() => { setAddingRow(true); setNewDraft(BLANK()); }}>
-            <Plus size={14} /> Add Row
-          </Button>
-        )}
       </div>
 
-      {/* Search bar */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search role, department, designation…"
-          className="pl-8 h-8 text-[13px]"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        {search && (
-          <button onClick={() => setSearch("")} className="absolute right-2 top-2 text-muted-foreground hover:text-foreground">
-            <X size={13} />
-          </button>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="flex gap-3 flex-wrap">
+      {/* Stats pills — same style as Staff page */}
+      <div className="flex items-center gap-2 flex-wrap">
         {[
-          { label: "Roles",        count: roles.length,        color: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-950/40" },
-          { label: "Departments",  count: departments.length,  color: "text-rose-600",    bg: "bg-rose-50 dark:bg-rose-950/40" },
-          { label: "Designations", count: designations.length, color: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-950/40" },
-          { label: "Total Rows",   count: rows.length,         color: "text-zinc-600",    bg: "bg-zinc-50 dark:bg-zinc-900/60" },
-        ].map(s => (
-          <div key={s.label} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${s.bg} border border-transparent`}>
-            <span className={`text-base font-bold ${s.color}`}>{s.count}</span>
-            <span className="text-[11px] text-muted-foreground font-medium">{s.label}</span>
-          </div>
+          { label: "Total",        count: rows.length,         filter: "all",         color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",                                  ring: "ring-gray-400"   },
+          { label: "Roles",        count: roles.length,        filter: "roles",        color: "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300",                         ring: "ring-indigo-500" },
+          { label: "Departments",  count: departments.length,  filter: "departments",  color: "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",                                 ring: "ring-rose-500"   },
+          { label: "Designations", count: designations.length, filter: "designations", color: "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",                             ring: "ring-amber-400"  },
+        ].map(p => (
+          <button key={p.label}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all ${p.color} opacity-80 hover:opacity-100 hover:scale-[1.04]`}>
+            {p.label}: <span>{p.count}</span>
+          </button>
         ))}
+      </div>
+
+      {/* Toolbar — search + unsaved indicator + count */}
+      <div className="flex gap-2 flex-wrap items-center">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search role, department, designation…"
+            className="pl-8 h-8 text-[13px]"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-2 text-muted-foreground hover:text-foreground">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {addingRow && (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">1 unsaved row</span>
+            <Button size="sm" variant="outline" className="h-8 gap-1 text-[12px]" onClick={() => { setAddingRow(false); setNewDraft(BLANK()); }}><X size={12} /> Cancel</Button>
+            <Button size="sm" className="h-8 gap-1 text-[12px]" onClick={saveNew}><Save size={12} /> Save Row</Button>
+          </div>
+        )}
+        <div className="text-[12px] text-muted-foreground self-center ml-auto">{filtered.length} of {rows.length}</div>
       </div>
 
       {/* Table */}
@@ -462,7 +467,7 @@ export default function HrmSetupPage() {
         <table className="w-full border-collapse min-w-[1100px]">
           <thead>
             <tr className="border-b border-gray-200 dark:border-border">
-              <th className={`${TH} w-10 text-center border-r`}>#</th>
+              <th className={`${TH} w-10 text-center`}>#</th>
               <th className={`${TH} w-12`}>Color</th>
               <th className={`${TH} min-w-[120px]`}>Role</th>
               <th className={`${TH} min-w-[140px]`}>Department</th>
@@ -475,28 +480,6 @@ export default function HrmSetupPage() {
             </tr>
           </thead>
           <tbody>
-            {/* ── New row ─────────────────────────────────────────────────── */}
-            {addingRow && (
-              <NewRow
-                draft={newDraft}
-                setDraft={setNewDraft}
-                roleNames={roleNames}
-                deptNames={deptNames}
-                desigNames={desigNames}
-                colorKey={colorKey}
-                setColorKey={setColorKey}
-                applyColor={(c) => applyColor(null, c, true)}
-                staffForRow={staffForRow}
-                onSave={saveNew}
-                onCancel={() => { setAddingRow(false); setNewDraft(BLANK()); }}
-                openPermModal={() => { setPermKey("__new__"); setPermDraft(newDraft.permissions); }}
-                permList={permList}
-                TD={TD}
-                ROW_H={ROW_H}
-                EDIT_INPUT={EDIT_INPUT}
-              />
-            )}
-
             {/* ── Data rows ───────────────────────────────────────────────── */}
             {filtered.map((row, ri) => {
               const isEditing = editKey === row.key;
@@ -507,21 +490,27 @@ export default function HrmSetupPage() {
 
               return (
                 <tr key={row.key}
-                  className={`border-b border-gray-100 dark:border-border transition-colors ${isEditing ? "bg-blue-50/50 dark:bg-blue-950/20" : "hover:bg-muted/30"} group`}
+                  onClick={() => !isEditing && can("Edit Staff") && startEdit(row)}
+                  className={`border-b border-gray-100 dark:border-border transition-colors group ${
+                    isEditing
+                      ? "bg-blue-50/50 dark:bg-blue-950/20"
+                      : ri % 2 === 0
+                        ? "bg-white dark:bg-card hover:bg-blue-50/20 dark:hover:bg-blue-950/10 cursor-pointer"
+                        : "bg-gray-50/50 dark:bg-muted/10 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 cursor-pointer"
+                  }`}
                   style={{ height: isEditing ? "auto" : ROW_H }}>
 
                   {/* # */}
-                  <td className={`${TD} w-10 text-center text-muted-foreground/60 font-mono`}>{ri + 1}</td>
+                  <td className={`${TD} w-10 text-center text-gray-300 dark:text-muted-foreground/50 font-mono select-none`} onClick={e => isEditing && e.stopPropagation()}>{ri + 1}</td>
 
                   {/* Color */}
-                  <td className={`${TD} w-12`}>
+                  <td className={`${TD} w-12`} onClick={e => e.stopPropagation()}>
                     <div className="relative">
                       <button
-                        disabled={!isEditing}
-                        onClick={() => isEditing && setColorKey(showColorPicker ? null : row.key)}
-                        className={`w-5 h-5 rounded-full border-2 border-white dark:border-border shadow-sm transition-transform ${isEditing ? "cursor-pointer hover:scale-110" : ""}`}
+                        onClick={() => { if (!isEditing && can("Edit Staff")) startEdit(row); if (isEditing) setColorKey(showColorPicker ? null : row.key); }}
+                        className={`w-5 h-5 rounded-full border-2 border-white dark:border-border shadow-sm transition-transform ${isEditing ? "cursor-pointer hover:scale-110" : "cursor-pointer"}`}
                         style={{ background: rowColor }}
-                        title={isEditing ? "Change color" : rowColor}
+                        title={isEditing ? "Change color" : "Click row to edit"}
                       />
                       {showColorPicker && (
                         <div className="absolute z-30 top-7 left-0 bg-card border border-border rounded-xl shadow-xl p-3 w-52">
@@ -552,8 +541,8 @@ export default function HrmSetupPage() {
                     ) : (
                       <span className="flex items-center gap-1.5">
                         {row.roleName
-                          ? <><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />{row.roleName}</>
-                          : <span className="text-muted-foreground/40">—</span>}
+                          ? <><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} /><span className="text-[12px] font-semibold" style={{ color: row.color }}>{row.roleName}</span></>
+                          : <span className="text-gray-300 dark:text-zinc-600">—</span>}
                       </span>
                     )}
                   </td>
@@ -566,7 +555,9 @@ export default function HrmSetupPage() {
                         onChange={v => setEditDraft(dr => dr ? { ...dr, deptName: v } : dr)}
                         placeholder="Department…" />
                     ) : (
-                      row.deptName || <span className="text-muted-foreground/40">—</span>
+                      <span className="text-[13px] text-gray-700 dark:text-foreground">
+                        {row.deptName || <span className="text-gray-300 dark:text-zinc-600">—</span>}
+                      </span>
                     )}
                   </td>
 
@@ -579,8 +570,8 @@ export default function HrmSetupPage() {
                         placeholder="Designation…" />
                     ) : (
                       row.desigTitle
-                        ? <span className="font-medium text-foreground">{row.desigTitle}</span>
-                        : <span className="text-muted-foreground/40">—</span>
+                        ? <span className="text-[13px] font-medium text-foreground">{row.desigTitle}</span>
+                        : <span className="text-gray-300 dark:text-zinc-600">—</span>
                     )}
                   </td>
 
@@ -591,8 +582,8 @@ export default function HrmSetupPage() {
                         onChange={e => setEditDraft(dr => dr ? { ...dr, description: e.target.value } : dr)}
                         className={EDIT_INPUT} />
                     ) : (
-                      <span className="truncate max-w-[190px] block text-muted-foreground">
-                        {row.description || <span className="text-muted-foreground/40">—</span>}
+                      <span className="truncate max-w-[190px] block text-[13px] text-muted-foreground">
+                        {row.description || <span className="text-gray-300 dark:text-zinc-600">—</span>}
                       </span>
                     )}
                   </td>
@@ -610,13 +601,13 @@ export default function HrmSetupPage() {
                   </td>
 
                   {/* Permissions */}
-                  <td className={`${TD} min-w-[160px]`} style={{ paddingTop: 5, paddingBottom: 5 }}>
+                  <td className={`${TD} min-w-[160px]`} style={{ paddingTop: 5, paddingBottom: 5 }} onClick={e => e.stopPropagation()}>
                     <PermissionsCell
                       permissions={isEditing ? d!.permissions : row.permissions}
                       roleName={row.roleName}
                       roleId={row.roleId}
                       isEditing={isEditing}
-                      onEdit={() => openPermModal(row)}
+                      onEdit={() => { if (!isEditing && can("Edit Staff")) startEdit(row); openPermModal(row); }}
                       permList={permList}
                     />
                   </td>
@@ -624,37 +615,37 @@ export default function HrmSetupPage() {
                   {/* Staff */}
                   <td className={`${TD} w-20`}>
                     {row.deptName ? (
-                      <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                      <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-[12px]">
                         <Users2 size={11} />{sf.length}
                       </span>
-                    ) : <span className="text-muted-foreground/40">—</span>}
+                    ) : <span className="text-gray-300 dark:text-zinc-600">—</span>}
                   </td>
 
                   {/* Action */}
-                  <td className="px-2 w-20" style={{ height: isEditing ? "auto" : ROW_H }}>
+                  <td className="px-2 w-20 sticky right-0 bg-inherit border-l border-gray-100 dark:border-border text-center" style={{ height: isEditing ? "auto" : ROW_H }} onClick={e => e.stopPropagation()}>
                     {isEditing ? (
-                      <div className="flex items-center gap-1 py-1">
+                      <div className="flex items-center justify-center gap-1 py-1">
                         <button onClick={saveEdit}
-                          className="w-7 h-7 rounded flex items-center justify-center text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="Save">
+                          className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors" title="Save">
                           <Save size={13} />
                         </button>
                         <button onClick={() => { setEditKey(null); setEditDraft(null); setColorKey(null); }}
-                          className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors" title="Cancel">
+                          className="p-1 rounded text-muted-foreground hover:bg-muted transition-colors" title="Cancel">
                           <X size={13} />
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {can("Edit Staff") && (
                           <button onClick={() => startEdit(row)}
-                            className="w-7 h-7 rounded flex items-center justify-center text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Edit">
-                            <Pencil size={12} />
+                            className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Edit">
+                            <Pencil size={13} />
                           </button>
                         )}
                         {can("Delete Staff") && (
                           <button onClick={() => setDeleteKey(row.key)}
-                            className="w-7 h-7 rounded flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
-                            <Trash2 size={12} />
+                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
+                            <Trash2 size={13} />
                           </button>
                         )}
                       </div>
@@ -664,14 +655,49 @@ export default function HrmSetupPage() {
               );
             })}
 
+            {/* ── New row (bottom, same amber style as Staff page) ─────────── */}
+            {addingRow && (
+              <NewRow
+                draft={newDraft}
+                setDraft={setNewDraft}
+                roleNames={roleNames}
+                deptNames={deptNames}
+                desigNames={desigNames}
+                colorKey={colorKey}
+                setColorKey={setColorKey}
+                applyColor={(c) => applyColor(null, c, true)}
+                staffForRow={staffForRow}
+                onSave={saveNew}
+                onCancel={() => { setAddingRow(false); setNewDraft(BLANK()); }}
+                openPermModal={() => { setPermKey("__new__"); setPermDraft(newDraft.permissions); }}
+                permList={permList}
+                TD={TD}
+                ROW_H={ROW_H}
+                EDIT_INPUT={EDIT_INPUT}
+              />
+            )}
+
             {/* Empty state */}
             {filtered.length === 0 && !addingRow && (
               <tr>
                 <td colSpan={10} className="py-14 text-center">
                   <Layers3 size={28} className="mx-auto mb-3 text-muted-foreground/30" />
                   <p className="text-[13px] text-muted-foreground">
-                    {search ? "No results matching your search" : "No setup data yet — click \"Add Row\" to begin"}
+                    {search ? "No results matching your search" : "No setup data yet — click \"Add row\" below to begin"}
                   </p>
+                </td>
+              </tr>
+            )}
+
+            {/* ── Bottom "+ Add row" trigger (same as Staff page) ─────────── */}
+            {can("Add Staff") && !addingRow && (
+              <tr>
+                <td colSpan={10}>
+                  <button
+                    onClick={() => { setAddingRow(true); setNewDraft(BLANK()); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-[12px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
+                    <Plus size={13} /> Add row
+                  </button>
                 </td>
               </tr>
             )}
