@@ -1400,12 +1400,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <NavLink href="/print-templates"  icon={FileText}  label="Print Templates" />
                   <NavLink href="/invoice-template" icon={FileText}  label="Invoice Labels" />
                 </>}
-                {isSuperAdmin && !currentTenantId && <>
+
+                {/* Activity Log — available in all tenant contexts */}
+                {!isSuperAdminOwn && <>
+                  <SectionLabel label="Audit" />
+                  <NavLink href="/activity-log" icon={BarChart3} label="Activity Log" />
+                </>}
+
+                {isSuperAdmin && <>
                   <SectionLabel label="Admin" />
-                  <NavLink href="/users"     icon={KeyRound}     label="Admin Accounts" />
-                  <NavLink href="/tenants"      icon={Building2}    label="Tenants" />
-                  <NavLink href="/database"     icon={BookOpen}     label="Database" />
-                  <NavLink href="/activity-log" icon={BarChart3}    label="Activity Log" />
+                  <NavLink href="/users"        icon={KeyRound}  label="Admin Accounts" />
+                  <NavLink href="/tenants"       icon={Building2} label="Tenants" />
+                  <NavLink href="/database"      icon={BookOpen}  label="Database" />
                 </>}
               </div>
             );
