@@ -7255,31 +7255,31 @@ export function seedDirectorForTenant(tenantId: string): { username: string; pas
     const existing = getStaff();
     if (existing.length > 0) return null;
 
-    // Ensure a "Director" role with full access exists
+    // Ensure a "Management" role with full access exists
     let roles = getStaffRoles();
-    let directorRole = roles.find(r => r.name.toLowerCase() === "director");
-    if (!directorRole) {
-      directorRole = createStaffRole({
-        name: "Director",
+    let mgmtRole = roles.find(r => r.name.toLowerCase() === "management");
+    if (!mgmtRole) {
+      mgmtRole = createStaffRole({
+        name: "Management",
         description: "Directors and senior management with full access",
         permissions: "all",
         color: "#6366f1",
       });
     }
 
-    // Create the Director staff member
+    // Create the Management staff member
     const username = "director";
     const password = "Director@123";
     createStaff({
       name: "Director",
-      department: "Management",
+      department: "Administration",
       designation: "Director",
-      role: directorRole.name,
+      role: mgmtRole.name,
       status: "Active",
       email: "",
       phone: "",
       joinDate: new Date().toISOString().slice(0, 10),
-      notes: "Default director account — created automatically on tenant setup.",
+      notes: "Default management account — created automatically on tenant setup.",
       username,
       password,
       loginEnabled: true,

@@ -718,17 +718,17 @@ export default function TenantsPage() {
       if (result) {
         setStatsCache(s => ({ ...s, [tenant.id]: undefined as unknown as Record<string, number> }));
         toast({
-          title: `Director created for "${tenant.name}"`,
+          title: `Management account created for "${tenant.name}"`,
           description: `Login: ${result.username}  ·  Password: ${result.password}`,
         });
       } else {
         toast({
           title: `Staff already exist in "${tenant.name}"`,
-          description: "Director seed skipped — this tenant already has staff members.",
+          description: "Management account seed skipped — this tenant already has staff members.",
         });
       }
     } catch (e) {
-      toast({ title: "Director seed failed", description: String(e), variant: "destructive" });
+      toast({ title: "Management account seed failed", description: String(e), variant: "destructive" });
     }
   }
 
@@ -1047,23 +1047,31 @@ export default function TenantsPage() {
                       size="sm"
                       variant="ghost"
                       className="w-full h-7 gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 border border-dashed border-emerald-200 dark:border-emerald-800"
-                      onClick={() => handleSeedCOA(t)}
+                      onClick={() => {
+                        setPwGateLabel("seed / rebuild COA");
+                        setPwGateAction(() => () => handleSeedCOA(t));
+                        setPwGateOpen(true);
+                      }}
                     >
                       <BarChart3 size={11} /> Seed / Rebuild COA
                     </Button>
                   </div>
                 )}
 
-                {/* Director seed row — repair for tenants with no staff */}
+                {/* Management account seed row — repair for tenants with no staff */}
                 {!isActive && (
                   <div className="pt-1.5">
                     <Button
                       size="sm"
                       variant="ghost"
                       className="w-full h-7 gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 border border-dashed border-indigo-200 dark:border-indigo-800"
-                      onClick={() => handleSeedDirector(t)}
+                      onClick={() => {
+                        setPwGateLabel("seed Management account");
+                        setPwGateAction(() => () => handleSeedDirector(t));
+                        setPwGateOpen(true);
+                      }}
                     >
-                      <Crown size={11} /> Seed Director Account
+                      <Crown size={11} /> Seed Management Account
                     </Button>
                   </div>
                 )}
