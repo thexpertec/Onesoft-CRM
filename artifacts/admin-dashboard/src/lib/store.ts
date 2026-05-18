@@ -725,10 +725,18 @@ function _nextObRef(): string {
 }
 
 /**
- * Post (or update) a "brought-forward" opening-balance journal entry for a
+ * Post (or replace) a "brought-forward" opening-balance journal entry for a
  * customer/supplier ledger account.  Calling with amount=0 deletes any
  * existing OB entry.  Safe to call multiple times — only one OB entry per
  * ledger account is kept.
+ *
+ * ⚠️  IMPLEMENTATION NOTE — why delete-then-create instead of updateJournalEntry:
+ * `updateJournalEntry` contains a "lines merge guard" that protects posted
+ * entries from accidentally losing lines during programmatic updates.  When we
+ * pass fresh `crypto.randomUUID()` line IDs the guard sees all old lines as
+ * "missing" and appends them alongside the new ones, producing a 4-line (i.e.
+ * doubled) entry.  OB entries are always exactly 2 lines and are never linked
+ * to sales / vouchers, so delete-then-create is both safe and correct here.
  */
 function _upsertOpeningBalanceJE(
   ledgerAccountId: string,
@@ -737,23 +745,28 @@ function _upsertOpeningBalanceJE(
   date: string,
   entityName: string,
 ): void {
-  // Look up by ledger account ID in the JE lines — more robust than reference
-  // matching and works across both old UUID-style refs and new sequential refs.
-  const existing = getJournalEntries().find(
+  // ── Find ALL existing OB JEs that reference this ledger ──────────────────
+  // Use filter (not find) so accumulated duplicates are all captured.
+  const existingAll = getJournalEntries().filter(
     e => e.reference.startsWith(_OB_REF_PREFIX) &&
          e.lines.some(l => l.ledgerId === ledgerAccountId)
   );
-  // Keep an existing clean sequential ref; generate a new one otherwise.
-  const ref = (existing && !_isLegacyObRef(existing.reference))
-    ? existing.reference
-    : _nextObRef();
 
-  if (amount === 0) {
-    if (existing) deleteJournalEntry(existing.id);
-    return;
+  // Preserve the first clean sequential ref so OB numbering stays stable.
+  const keepRef = existingAll
+    .map(e => e.reference)
+    .find(r => !_isLegacyObRef(r));
+
+  // ── Delete every existing OB entry for this ledger ───────────────────────
+  for (const e of existingAll) {
+    deleteJournalEntry(e.id);
   }
 
+  if (amount === 0) return; // deleted above — nothing more to do
+
+  const ref    = keepRef ?? _nextObRef();
   const absAmt = Math.abs(amount);
+
   // For a buyer:    Dr customer ledger (receivable),  Cr Opening Balances equity
   // For a supplier: Dr Opening Balances equity,        Cr supplier ledger (payable)
   const lines: JournalEntryLine[] = isSupplier
@@ -766,22 +779,16 @@ function _upsertOpeningBalanceJE(
         { id: crypto.randomUUID(), ledgerId: SYS_ACCS.OPENING_BAL_EQUITY, narration: `Opening balance — ${entityName}`, debit: 0,      credit: absAmt },
       ];
 
-  const jeData = {
+  createJournalEntry({
     date,
-    reference: ref,
+    reference:   ref,
     description: `Opening Balance — ${entityName}`,
     lines,
-    status: "posted" as const,
+    status:      "posted",
     totalDebit:  absAmt,
     totalCredit: absAmt,
     isBalanced:  true,
-  };
-
-  if (existing) {
-    updateJournalEntry(existing.id, jeData);
-  } else {
-    createJournalEntry(jeData);
-  }
+  });
 }
 
 export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "updatedAt">): Customer => {
@@ -2432,6 +2439,72 @@ export function backfillOpeningBalanceJEs(): void {
     const displayName = c.name + (c.company ? ` (${c.company})` : "");
     const obDate = c.customerSince ?? c.createdAt.slice(0, 10);
     _upsertOpeningBalanceJE(c.ledgerAccountId, isSupplier, c.openingBalance, obDate, displayName);
+  }
+}
+
+/**
+ * Deduplication sweep for Opening Balance JEs.
+ *
+ * Fixes two classes of corruption that existed before the delete-then-create
+ * fix was applied:
+ *
+ *  (A) A single OB JE that has MORE than 2 lines — caused by the
+ *      `updateJournalEntry` lines-merge guard re-appending stale lines when
+ *      the OB amount was changed (new `crypto.randomUUID()` IDs were treated
+ *      as entirely new lines, so old ones were merged back in).
+ *
+ *  (B) Multiple separate OB JEs for the same party ledger — caused if the
+ *      duplicate-detection `.find()` call missed an entry in a race or
+ *      if two code paths both called `_upsertOpeningBalanceJE` simultaneously.
+ *
+ * In both cases the fix is: delete all OB JEs for that ledger and recreate a
+ * single correct 2-line entry using the customer record's current opening balance.
+ *
+ * Safe to call multiple times — only acts when corruption is detected.
+ */
+export function deduplicateOpeningBalanceJEs(): void {
+  const customers = getCustomers();
+  const allJEs    = getJournalEntries();
+  const obJEs     = allJEs.filter(e => e.reference.startsWith(_OB_REF_PREFIX));
+
+  if (obJEs.length === 0) return;
+
+  // Group OB JEs by the non-equity party ledger they contain
+  const byLedger = new Map<string, JournalEntry[]>();
+  for (const je of obJEs) {
+    // The party line is the one that is NOT the Opening Balances equity account
+    const partyLine = je.lines.find(l => l.ledgerId !== SYS_ACCS.OPENING_BAL_EQUITY);
+    if (!partyLine) continue;
+    const group = byLedger.get(partyLine.ledgerId) ?? [];
+    group.push(je);
+    byLedger.set(partyLine.ledgerId, group);
+  }
+
+  for (const [ledgerId, jes] of byLedger.entries()) {
+    // Corruption exists if: more than one JE for this ledger, OR a single JE
+    // has more than 2 lines (the doubled-lines bug).
+    const isCorrupted = jes.length > 1 || jes.some(je => je.lines.length > 2);
+    if (!isCorrupted) continue;
+
+    const cust = customers.find(c => c.ledgerAccountId === ledgerId);
+    if (!cust) {
+      // No customer found — just delete the corrupt entries, don't recreate
+      for (const je of jes) deleteJournalEntry(je.id);
+      continue;
+    }
+
+    const obAmt = cust.openingBalance ?? 0;
+    const isSupplier  = (cust.customerRole ?? "Buyer") === "Supplier";
+    const displayName = cust.name + (cust.company ? ` (${cust.company})` : "");
+    const obDate      = cust.customerSince ?? cust.createdAt.slice(0, 10);
+
+    console.info(
+      `[OB dedup] Fixing corrupted OB for "${displayName}" — ` +
+      `${jes.length} JE(s), max ${Math.max(...jes.map(j => j.lines.length))} lines → recreating with amount ${obAmt}`,
+    );
+
+    // _upsertOpeningBalanceJE already deletes-then-creates, so just call it
+    _upsertOpeningBalanceJE(ledgerId, isSupplier, obAmt, obDate, displayName);
   }
 }
 
