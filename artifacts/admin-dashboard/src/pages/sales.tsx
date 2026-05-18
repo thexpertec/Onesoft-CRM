@@ -573,9 +573,15 @@ function PaymentModal({ saleNumber, total, customer = "", walletBalance = 0, def
                 {paid <= 0.005 ? "Covered by wallet" : "Fully paid"}
               </span>
               {excessCash > 0.005 && paid > 0 && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
-                  <Wallet size={10}/> {fmt(excessCash)} → wallet
-                </span>
+                isWalkIn ? (
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                    <Banknote size={10}/> Change: {fmt(excessCash)}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                    <Wallet size={10}/> {fmt(excessCash)} → wallet
+                  </span>
+                )
               )}
             </div>
           ) : null}
@@ -583,6 +589,13 @@ function PaymentModal({ saleNumber, total, customer = "", walletBalance = 0, def
           {walkInUnderPaid && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 text-xs font-semibold text-red-600 dark:text-red-400">
               Walk-in customers must pay the full amount.
+            </div>
+          )}
+
+          {isWalkIn && excessCash > 0.005 && paid > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-xs font-semibold text-amber-600 dark:text-amber-400">
+              <Banknote size={12} className="shrink-0"/>
+              Walk-in customers cannot hold advance credit — return {fmt(excessCash)} as change.
             </div>
           )}
 
@@ -3122,11 +3135,12 @@ export default function SalesPage() {
       // Adjust customer wallet:
       //   – deduct walletNum (credit used against this sale)
       //   – add back any excess cash overpayment
-      // Must look up the customer by name to obtain their ID — adjustCustomerWallet requires an ID.
+      // Walk-in customers cannot hold advance credit — any excess is treated as
+      // cash change given back, so skip wallet adjustment entirely for Walk-in.
       const walletDelta = excessCash - walletNum;
       if (Math.abs(walletDelta) > 0.005 && localMeta.customer) {
         const walletCust = getCustomers().find(c => c.id === localMeta.customer || c.name === localMeta.customer);
-        if (walletCust) {
+        if (walletCust && walletCust.name.trim().toLowerCase() !== "walk-in") {
           adjustCustomerWallet(
             walletCust.id,
             walletDelta,
