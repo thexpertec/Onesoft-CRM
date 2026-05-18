@@ -7,7 +7,7 @@ import AddressFields, { EMPTY_ADDRESS } from "@/components/address-fields";
 import { CURRENCIES, formatAmount } from "@/lib/currencies";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight, Upload, FileDown, FileText, Receipt, DollarSign, Pencil, Users, Truck, Package } from "lucide-react";
+import { Plus, Search, Trash2, Eye, RefreshCw, X, Save, ArrowRight, Upload, FileDown, FileText, Receipt, DollarSign, Pencil, Users, Truck, Package, Wallet } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -921,19 +921,40 @@ export default function CustomersPage() {
                 </div>
               )}
 
-              {(viewCust.advanceCredit ?? 0) > 0.001 && (
-                <div className="rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-0.5">
-                      {viewCust.customerRole === "Supplier" ? "Advance Payments on Account" : "Advance Receipts on Account"}
-                    </p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 opacity-80">Credit balance from overpayments / advance transactions</p>
-                  </div>
-                  <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+              <div className={`rounded-lg border px-4 py-3 flex items-center justify-between gap-3 ${
+                (viewCust.advanceCredit ?? 0) > 0.001
+                  ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
+                  : "border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50"
+              }`}>
+                <div className="min-w-0">
+                  <p className={`text-[11px] font-semibold uppercase tracking-wider mb-0.5 ${
+                    (viewCust.advanceCredit ?? 0) > 0.001
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-gray-500 dark:text-zinc-400"
+                  }`}>
+                    {viewCust.customerRole === "Supplier" ? "Advance Payments on Account" : "Wallet / Advance Credit"}
+                  </p>
+                  <p className={`text-xs opacity-80 ${
+                    (viewCust.advanceCredit ?? 0) > 0.001
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-gray-400 dark:text-zinc-500"
+                  }`}>Credit balance from overpayments / advance transactions</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-lg font-bold ${
+                    (viewCust.advanceCredit ?? 0) > 0.001
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "text-gray-400 dark:text-zinc-500"
+                  }`}>
                     {formatAmount(viewCust.advanceCredit ?? 0, viewCust.currency || "GBP")}
                   </span>
+                  <button
+                    onClick={() => nav(`/customers/${viewCust.id}/wallet`)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors text-[11px] font-semibold whitespace-nowrap">
+                    <Wallet size={11}/> Statement
+                  </button>
                 </div>
-              )}
+              </div>
               {(viewCust.billingAddress || viewCust.shippingAddress) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

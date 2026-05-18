@@ -5,7 +5,6 @@ import {
   getCustomerWalletBalance, fundCustomerWallet, adjustCustomerWallet,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
-import { formatAmount } from "@/lib/currencies";
 import {
   ArrowLeft, Wallet, TrendingUp, TrendingDown, Printer,
   Search, X, Calendar, ArrowUpRight, ArrowDownLeft,

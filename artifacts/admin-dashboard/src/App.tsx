@@ -50,6 +50,7 @@ const CustomersPage         = lazy(() => import("@/pages/customers"));
 const CustomerNewPage       = lazy(() => import("@/pages/customer-new"));
 const SupplierNewPage       = lazy(() => import("@/pages/supplier-new"));
 const CustomerEditPage      = lazy(() => import("@/pages/customer-edit"));
+const CustomerWalletPage    = lazy(() => import("@/pages/customer-wallet"));
 const ProductsPage          = lazy(() => import("@/pages/products"));
 const ProductNewPage        = lazy(() => import("@/pages/product-new"));
 const CategoriesPage        = lazy(() => import("@/pages/categories"));
@@ -208,10 +209,11 @@ function Router() {
                   <Route path="/documents/edit/:id" component={NewDocument} />
                   <Route path="/documents/:id"      component={DocumentDetail} />
                   <Route path="/documents"          component={Documents} />
-                  <Route path="/customers/new"      component={CustomerNewPage} />
-                  <Route path="/suppliers/new"      component={SupplierNewPage} />
-                  <Route path="/customers/:id/edit" component={CustomerEditPage} />
-                  <Route path="/customers"          component={CustomersPage} />
+                  <Route path="/customers/new"           component={CustomerNewPage} />
+                  <Route path="/suppliers/new"           component={SupplierNewPage} />
+                  <Route path="/customers/:id/wallet"    component={CustomerWalletPage} />
+                  <Route path="/customers/:id/edit"      component={CustomerEditPage} />
+                  <Route path="/customers"               component={CustomersPage} />
                   <Route path="/product-stock-report" component={ProductStockReportPage} />
                   <Route path="/products/new"       component={ProductNewPage} />
                   <Route path="/products"           component={ProductsPage} />
