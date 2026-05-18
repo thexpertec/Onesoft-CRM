@@ -6,3 +6,9 @@ id = "ppy2W1VliJzbjc9k0NtXN"
 uri = "file://onesoft_production_dump.sql.gz"
 type = "unspecified"
 title = "Onesoft Production Database Dump (SQL)"
+
+[[outputs]]
+id = "tpDB2LYoJjwp4oO9ZP-RU"
+uri = "file://docs/wallet-ledger-procedures.md"
+type = "text"
+title = "Customer Wallet / Advance Ledger — Procedure & Use Cases"
