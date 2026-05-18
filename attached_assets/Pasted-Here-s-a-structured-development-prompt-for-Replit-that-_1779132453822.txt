@@ -1,0 +1,226 @@
+Here’s a structured **development prompt for Replit** that your developers can use to implement the **Customer Ledger Wallet / Auto Adjustment System** based on the flow we discussed:
+
+---
+
+## **Replit Development Prompt – Customer Ledger Wallet & Auto Payment Adjustment**
+
+### **Objective**
+
+Develop a customer ledger system where:
+
+1. Customer ledger acts as a **wallet**.
+2. Extra payments are automatically saved as wallet/advance.
+3. Wallet balance is auto-adjusted against future invoices or POS bills.
+4. Sale returns and refunds adjust wallet or outstanding invoices.
+5. Payment can be collected from:
+
+   * POS Payments
+   * Sale Invoice Payment
+   * Journal Entry
+   * Receipt Voucher
+
+---
+
+### **Core Features**
+
+#### **1. Customer Ledger / Wallet**
+
+* Each customer ledger shows:
+
+  * Debit = Customer owes (outstanding)
+  * Credit = Wallet / advance balance
+* Wallet balance is automatically applied against new invoices or POS sales.
+* Ledger should maintain a full **transaction history**:
+
+  * Invoice creation
+  * Payments applied
+  * Wallet adjustments
+  * Sale returns
+
+#### **2. Payment Allocation Engine**
+
+* Payment allocation logic should be **common across all modules**:
+
+  1. Adjust against selected invoice if payment is invoice-specific.
+  2. Adjust against oldest unpaid invoices.
+  3. Remaining goes to wallet/advance.
+* Prevent over-application:
+
+  * Wallet cannot go negative
+  * Invoice cannot be overpaid; extra amount goes to wallet
+
+#### **3. Sale Invoice Module**
+
+* On creating a new invoice:
+
+  * Auto-apply wallet first
+  * Remaining amount becomes outstanding
+* Payment scenarios:
+
+  * Wallet >= invoice → mark invoice as **paid**, reduce wallet
+  * Wallet < invoice → adjust wallet, remaining as due
+* Accounting entries:
+
+  * DR Accounts Receivable / Customer
+  * CR Sales
+  * Wallet adjustment if any: DR Wallet / Customer Advance → CR Customer / Accounts Receivable
+
+#### **4. POS Module**
+
+* POS sale auto-checks customer wallet.
+* Payment scenarios:
+
+  * Wallet covers full bill → mark POS paid, reduce wallet
+  * Wallet covers partial → apply wallet, customer pays remainder
+  * Extra payment → add to wallet
+* Accounting entries same as Sale Invoice, including tax if applicable
+
+#### **5. Sale Return Module**
+
+* On sale return:
+
+  1. Reduce outstanding first
+  2. Excess return goes to wallet or refund
+* Return scenarios:
+
+  * Original invoice unpaid → reduce invoice outstanding
+  * Original invoice fully paid → add to wallet or refund
+  * Partially paid → adjust outstanding and wallet accordingly
+* Accounting entries:
+
+  * DR Sale Return
+  * CR Customer / Accounts Receivable or Wallet
+
+#### **6. Receipt Voucher**
+
+* Payment collection screen must:
+
+  * Show invoice total, outstanding, wallet balance
+  * Auto-adjust wallet by default
+* If payment > outstanding → remaining goes to wallet
+* Accounting entries:
+
+  * DR Cash / Bank
+  * CR Customer / Accounts Receivable (adjusted)
+  * CR Customer Advance / Wallet (if extra)
+
+#### **7. Journal Entry**
+
+* Used for manual adjustment:
+
+  * Opening balances
+  * Manual wallet entries
+  * Customer corrections
+* JE must require:
+
+  * Customer selection
+  * Adjustment type (wallet / outstanding)
+  * Reason / remarks
+* JE allocation can optionally adjust invoices
+
+---
+
+### **Database / Table Design**
+
+#### **1. Customer Ledger**
+
+```sql
+id
+customer_id
+transaction_date
+transaction_type
+reference_id
+reference_no
+debit
+credit
+balance
+remarks
+created_by
+created_at
+```
+
+#### **2. Customer Wallet / Advance**
+
+```sql
+id
+customer_id
+wallet_balance
+updated_at
+```
+
+#### **3. Payment Allocations**
+
+```sql
+id
+customer_id
+payment_source
+payment_source_id
+invoice_id
+allocated_amount
+allocation_type
+created_at
+```
+
+#### **4. Customer Advance Transactions**
+
+```sql
+id
+customer_id
+source_type
+source_id
+debit
+credit
+balance
+remarks
+created_at
+```
+
+---
+
+### **Business Rules**
+
+1. Wallet applied automatically on any new invoice or POS sale.
+2. Payment over outstanding → extra goes to wallet.
+3. Returns first reduce outstanding, excess to wallet or refund.
+4. Invoice status rules:
+
+   * Unpaid / Partially Paid / Paid / Overpaid / Returned / Partially Returned
+5. Ledger must always reconcile:
+
+   * Outstanding + Wallet = net customer balance
+6. JE or Receipt Voucher must respect allocation engine.
+
+---
+
+### **Example Flow**
+
+1. Customer has outstanding 100
+2. Customer pays 200 → 100 applied, 100 saved to wallet
+3. New invoice 5000 → 100 wallet applied, 4900 outstanding
+4. Sale return 500 → reduces outstanding or adds to wallet
+5. POS payment uses wallet automatically, extra goes to wallet
+
+---
+
+### **Technical Notes**
+
+* Implement a **common allocation engine** to be called from:
+
+  * POS Payments
+  * Sale Invoice Payment
+  * Journal Entry
+  * Receipt Voucher
+  * Sale Return
+* Ensure **atomicity**: payment adjustment, wallet update, invoice status update must be **transactional**.
+* Provide APIs / functions for:
+
+  * Get customer wallet balance
+  * Apply wallet to invoice
+  * Record wallet / advance movement
+  * Generate customer ledger report
+
+---
+
+If you want, I can also write a **ready-to-use Replit Python/Node.js pseudo code skeleton** with functions for **wallet adjustment, invoice application, sale return handling, POS payment**, which you can directly start building on.
+
+Do you want me to do that next?

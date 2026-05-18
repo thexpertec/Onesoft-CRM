@@ -1,0 +1,144 @@
+Develop a customer ledger system where:
+
+Customer ledger acts as a wallet.
+Extra payments are automatically saved as wallet/advance.
+Wallet balance is auto-adjusted against future invoices or POS bills.
+Sale returns and refunds adjust wallet or outstanding invoices.
+Payment can be collected from:
+POS Payments
+Sale Invoice Payment
+Journal Entry
+Receipt Voucher
+Core Features
+1. Customer Ledger / Wallet
+Each customer ledger shows:
+Debit = Customer owes (outstanding)
+Credit = Wallet / advance balance
+Wallet balance is automatically applied against new invoices or POS sales.
+Ledger should maintain a full transaction history:
+Invoice creation
+Payments applied
+Wallet adjustments
+Sale returns
+2. Payment Allocation Engine
+Payment allocation logic should be common across all modules:
+Adjust against selected invoice if payment is invoice-specific.
+Adjust against oldest unpaid invoices.
+Remaining goes to wallet/advance.
+Prevent over-application:
+Wallet cannot go negative
+Invoice cannot be overpaid; extra amount goes to wallet
+3. Sale Invoice Module
+On creating a new invoice:
+Auto-apply wallet first
+Remaining amount becomes outstanding
+Payment scenarios:
+Wallet >= invoice → mark invoice as paid, reduce wallet
+Wallet < invoice → adjust wallet, remaining as due
+Accounting entries:
+DR Accounts Receivable / Customer
+CR Sales
+Wallet adjustment if any: DR Wallet / Customer Advance → CR Customer / Accounts Receivable
+4. POS Module
+POS sale auto-checks customer wallet.
+Payment scenarios:
+Wallet covers full bill → mark POS paid, reduce wallet
+Wallet covers partial → apply wallet, customer pays remainder
+Extra payment → add to wallet
+Accounting entries same as Sale Invoice, including tax if applicable
+5. Sale Return Module
+On sale return:
+Reduce outstanding first
+Excess return goes to wallet or refund
+Return scenarios:
+Original invoice unpaid → reduce invoice outstanding
+Original invoice fully paid → add to wallet or refund
+Partially paid → adjust outstanding and wallet accordingly
+Accounting entries:
+DR Sale Return
+CR Customer / Accounts Receivable or Wallet
+6. Receipt Voucher
+Payment collection screen must:
+Show invoice total, outstanding, wallet balance
+Auto-adjust wallet by default
+If payment > outstanding → remaining goes to wallet
+Accounting entries:
+DR Cash / Bank
+CR Customer / Accounts Receivable (adjusted)
+CR Customer Advance / Wallet (if extra)
+7. Journal Entry
+Used for manual adjustment:
+Opening balances
+Manual wallet entries
+Customer corrections
+JE must require:
+Customer selection
+Adjustment type (wallet / outstanding)
+Reason / remarks
+JE allocation can optionally adjust invoices
+Database / Table Design
+1. Customer Ledger
+id
+customer_id
+transaction_date
+transaction_type
+reference_id
+reference_no
+debit
+credit
+balance
+remarks
+created_by
+created_at
+2. Customer Wallet / Advance
+id
+customer_id
+wallet_balance
+updated_at
+3. Payment Allocations
+id
+customer_id
+payment_source
+payment_source_id
+invoice_id
+allocated_amount
+allocation_type
+created_at
+4. Customer Advance Transactions
+id
+customer_id
+source_type
+source_id
+debit
+credit
+balance
+remarks
+created_at
+Business Rules
+Wallet applied automatically on any new invoice or POS sale.
+Payment over outstanding → extra goes to wallet.
+Returns first reduce outstanding, excess to wallet or refund.
+Invoice status rules:
+Unpaid / Partially Paid / Paid / Overpaid / Returned / Partially Returned
+Ledger must always reconcile:
+Outstanding + Wallet = net customer balance
+JE or Receipt Voucher must respect allocation engine.
+Example Flow
+Customer has outstanding 100
+Customer pays 200 → 100 applied, 100 saved to wallet
+New invoice 5000 → 100 wallet applied, 4900 outstanding
+Sale return 500 → reduces outstanding or adds to wallet
+POS payment uses wallet automatically, extra goes to wallet
+Technical Notes
+Implement a common allocation engine to be called from:
+POS Payments
+Sale Invoice Payment
+Journal Entry
+Receipt Voucher
+Sale Return
+Ensure atomicity: payment adjustment, wallet update, invoice status update must be transactional.
+Provide APIs / functions for:
+Get customer wallet balance
+Apply wallet to invoice
+Record wallet / advance movement
+Generate customer ledger report
