@@ -8171,6 +8171,67 @@ export function autoPostCashReceiptJE(params: {
 }
 
 /**
+ * Posts a Supplier Payment JE when a purchase invoice is paid.
+ *
+ *   DR  Supplier AP sub-ledger  (clears the payable)
+ *   CR  Cash / Bank account     (money leaves the company)
+ */
+export function autoPostPurchasePaymentJE(params: {
+  reference:        string;
+  supplier:         string;
+  date:             string;   // YYYY-MM-DD
+  amount:           number;
+  paymentMethod:    SalePayment;
+  paymentAccountId?: string;  // ledgerAccountId of the chosen payment account
+}): JournalEntry | null {
+  if (params.amount <= 0) return null;
+  const s = getSettings();
+
+  // ── Credit side: Cash / Bank going out ────────────────────────────────────
+  const cashId: string | null = (() => {
+    if (params.paymentAccountId) return params.paymentAccountId;
+    const isCash = params.paymentMethod === "Cash";
+    // Try settings-linked accounts first, then fall back to system defaults
+    const fromSettings = isCash
+      ? resolveToLedger(s.accCash)
+      : (resolveToLedger(s.accBank) ?? resolveToLedger(s.accCash));
+    if (fromSettings) return fromSettings;
+    // Try first matching payment account by method
+    const pas = getPaymentAccounts().filter(p => p.isActive && p.ledgerAccountId);
+    const byMethod = pas.find(p => (isCash ? p.paymentMethod === "Cash" : p.paymentMethod !== "Cash"));
+    if (byMethod?.ledgerAccountId) return byMethod.ledgerAccountId;
+    return resolveToLedger(SYS_ACCS.CASH) ?? SYS_ACCS.CASH;
+  })();
+
+  // ── Debit side: Supplier AP ledger (clearing the payable) ─────────────────
+  const apId: string | null =
+    findSubLedgerForParty(params.supplier, SYS_ACCS.AP_GROUP)    ||
+    findSubLedgerForParty(params.supplier, SYS_ACCS.AP_TRADE)    ||
+    resolveToLedger(s.accPurchasePayable)                         ||
+    resolveToLedger(SYS_ACCS.AP_TRADE)                           ||
+    SYS_ACCS.AP_GENERAL;
+
+  if (!cashId || !apId) return null;
+
+  const narration = `Supplier Payment – ${params.reference} – ${params.supplier}`;
+  const lines: JournalEntryLine[] = [
+    { id: crypto.randomUUID(), ledgerId: apId,   narration, debit: params.amount, credit: 0             },
+    { id: crypto.randomUUID(), ledgerId: cashId, narration, debit: 0,             credit: params.amount },
+  ];
+
+  return createJournalEntry({
+    date:        params.date,
+    reference:   `PAY-${params.reference}`,
+    description: `Supplier Payment: ${params.reference} – ${params.supplier}`,
+    lines,
+    status:      "posted",
+    totalDebit:  params.amount,
+    totalCredit: params.amount,
+    isBalanced:  true,
+  });
+}
+
+/**
  * Creates a price-adjustment Journal Entry when an invoice's grand total is
  * revised AFTER the original sale JE has already been posted.
  *

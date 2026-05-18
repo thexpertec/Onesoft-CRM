@@ -9,7 +9,7 @@ import {
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices, getJournalEntries,
   deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
-  autoPostPurchaseJE,
+  autoPostPurchaseJE, autoPostPurchasePaymentJE,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
   updateInvoice, updateProduct, getInvoiceProductName,
   findProductForItem, effectiveItemCost,
@@ -20,6 +20,9 @@ import {
   revertInvoiceStock,
   revertInvoicePayments,
   getRPVouchers,
+  getPaymentAccounts, PaymentAccount,
+  getAccounts,
+  SYS_ACCS, findSubLedgerForParty, resolveToLedger,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -334,62 +337,125 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Collect Payment Modal ─────────────────────────────────────────────────────
 interface CollectPaymentModalProps {
-  open: boolean;
-  onClose: () => void;
+  open:          boolean;
+  onClose:       () => void;
   invoiceNumber: string;
-  outstanding: number;
-  onConfirm: (record: PaymentRecord) => void;
-  isPurchase?: boolean;
+  outstanding:   number;
+  onConfirm:     (record: PaymentRecord, paymentAccountId?: string) => void;
+  isPurchase?:   boolean;
+  party?:        string; // customer name (sale) or supplier name (purchase)
 }
-function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm, isPurchase }: CollectPaymentModalProps) {
+function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm, isPurchase, party }: CollectPaymentModalProps) {
   const sym = getSettingsCurrencySymbol();
-  const [amount, setAmount]   = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
-  const [method, setMethod]   = useState<SalePayment>("Bank Transfer");
-  const [date,   setDate]     = useState(new Date().toISOString().slice(0, 10));
-  const [note,   setNote]     = useState("");
+  const [amount,    setAmount]    = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
+  const [method,    setMethod]    = useState<SalePayment>("Bank Transfer");
+  const [date,      setDate]      = useState(new Date().toISOString().slice(0, 10));
+  const [note,      setNote]      = useState("");
+  const [payAccId,  setPayAccId]  = useState<string>("");
+
+  // Payment accounts available
+  const payAccounts = getPaymentAccounts().filter(p => p.isActive);
 
   useEffect(() => {
     if (open) {
       setAmount(outstanding > 0 ? outstanding.toFixed(dp) : "");
       setDate(new Date().toISOString().slice(0, 10));
       setNote("");
+      // Default: first payment account matching the method, or first overall
+      const first = payAccounts[0];
+      setPayAccId(first?.id ?? "");
     }
-  }, [open, outstanding]);
+  }, [open, outstanding]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
 
-  const amt = parseFloat(amount) || 0;
+  const amt   = parseFloat(amount) || 0;
   const valid = amt > 0;
+
+  // Resolve the chosen payment account for JE preview
+  const chosenPA: PaymentAccount | undefined = payAccId
+    ? payAccounts.find(p => p.id === payAccId)
+    : payAccounts[0];
+  const payLedgerId = chosenPA?.ledgerAccountId;
+
+  // ── JE preview helpers ──────────────────────────────────────────────────────
+  const s = getSettings();
+  const allAccounts = getAccounts();
+  const getName = (id: string | null | undefined) => {
+    if (!id) return "—";
+    return allAccounts.find(a => a.id === id)?.name ?? id;
+  };
+
+  // Cash/bank ledger that will be used
+  const cashLedgerId: string | null = payLedgerId
+    ?? (method === "Cash"
+        ? (resolveToLedger(s.accCash) ?? SYS_ACCS.CASH)
+        : (resolveToLedger(s.accBank) ?? resolveToLedger(s.accCash) ?? SYS_ACCS.CASH));
+
+  // Party ledger
+  const partyLedgerId: string | null = party
+    ? (isPurchase
+        ? (findSubLedgerForParty(party, SYS_ACCS.AP_GROUP)
+           ?? findSubLedgerForParty(party, SYS_ACCS.AP_TRADE)
+           ?? resolveToLedger(SYS_ACCS.AP_TRADE)
+           ?? SYS_ACCS.AP_GENERAL)
+        : (findSubLedgerForParty(party, SYS_ACCS.AR_GROUP)
+           ?? resolveToLedger(s.accReceivable)
+           ?? SYS_ACCS.AR_TRADE))
+    : null;
+
+  // JE lines: for sale → DR Cash, CR AR; for purchase → DR AP, CR Cash
+  const jeLines = isPurchase
+    ? [
+        { side: "DR", ledgerId: partyLedgerId,  label: "Supplier AP",     name: getName(partyLedgerId)  },
+        { side: "CR", ledgerId: cashLedgerId,   label: "Cash / Bank",     name: getName(cashLedgerId)   },
+      ]
+    : [
+        { side: "DR", ledgerId: cashLedgerId,   label: "Cash / Bank",     name: getName(cashLedgerId)   },
+        { side: "CR", ledgerId: partyLedgerId,  label: "Customer AR",     name: getName(partyLedgerId)  },
+      ];
 
   const handleConfirm = () => {
     if (!valid) return;
-    onConfirm({ id: crypto.randomUUID(), date, amount: amount, method, note });
+    onConfirm(
+      { id: crypto.randomUUID(), date, amount, method, note },
+      payLedgerId ?? undefined,
+    );
     onClose();
   };
 
+  const accentBg  = isPurchase ? "bg-purple-50 dark:bg-purple-950/30"   : "bg-emerald-50 dark:bg-emerald-950/30";
+  const accentBtn = isPurchase ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200 dark:shadow-none"
+                               : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 dark:shadow-none";
+  const accentIcon = isPurchase ? "bg-purple-600" : "bg-emerald-600";
+
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[92vh]">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 bg-emerald-50 dark:bg-emerald-950/30">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center">
-              <DollarSign size={15} className="text-white" />
+        <div className={`flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 ${accentBg} shrink-0`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl ${accentIcon} flex items-center justify-center shadow`}>
+              <DollarSign size={16} className="text-white" />
             </div>
             <div>
               <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
                 {isPurchase ? "Pay Supplier" : "Collect Payment"}
               </p>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">{invoiceNumber}</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">{invoiceNumber}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400"><X size={16}/></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-200/60 dark:hover:bg-zinc-800 text-gray-400 transition-colors">
+            <X size={16}/>
+          </button>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {/* Outstanding balance display */}
+        {/* Body — scrollable */}
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
+
+          {/* Outstanding */}
           {outstanding > 0 && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
               <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Outstanding Balance</span>
@@ -399,7 +465,9 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
 
           {/* Amount */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Amount Received *</label>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+              {isPurchase ? "Amount Paid" : "Amount Received"} *
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-sm">{sym}</span>
               <input
@@ -407,14 +475,39 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
                 onChange={e => setAmount(e.target.value)}
                 autoFocus
                 placeholder="0.00"
-                className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-base font-bold text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-base font-bold text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
               />
             </div>
           </div>
 
-          {/* Method */}
+          {/* Payment Account */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Payment Method</label>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+              Payment Account
+            </label>
+            {payAccounts.length > 0 ? (
+              <select
+                value={payAccId}
+                onChange={e => setPayAccId(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+              >
+                {payAccounts.map(pa => (
+                  <option key={pa.id} value={pa.id}>
+                    {pa.accountTitle}{pa.bankName ? ` — ${pa.bankName}` : ""} ({pa.paymentMethod})
+                  </option>
+                ))}
+                <option value="">— Default from Settings —</option>
+              </select>
+            ) : (
+              <p className="text-[12px] text-muted-foreground italic px-1">
+                No payment accounts configured. Using default from Settings.
+              </p>
+            )}
+          </div>
+
+          {/* Payment Method */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Payment Method</label>
             <select
               value={method}
               onChange={e => setMethod(e.target.value as SalePayment)}
@@ -426,7 +519,7 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
 
           {/* Date */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Payment Date</label>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Payment Date</label>
             <input
               type="date" value={date}
               onChange={e => setDate(e.target.value)}
@@ -436,7 +529,7 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
 
           {/* Note */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5">Reference / Note</label>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Reference / Note</label>
             <input
               value={note}
               onChange={e => setNote(e.target.value)}
@@ -444,10 +537,38 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
               className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
+
+          {/* ── JE Preview ──────────────────────────────────────────────────── */}
+          <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 overflow-hidden">
+            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-blue-100 dark:border-blue-900/40">
+              <BookOpen size={12} className="text-blue-500 shrink-0" />
+              <p className="text-[11px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Journal Entry Preview</p>
+              <span className="ml-auto text-[10px] text-blue-400 dark:text-blue-500 font-mono">AUTO-POST</span>
+            </div>
+            <div className="px-3.5 py-3 space-y-2">
+              {jeLines.map((line, i) => (
+                <div key={i} className="flex items-center gap-2 text-[12px]">
+                  <span className={`w-7 text-center text-[10px] font-bold rounded px-1 py-0.5 shrink-0 ${
+                    line.side === "DR"
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                      : "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
+                  }`}>{line.side}</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200 truncate flex-1">{line.name}</span>
+                  <span className="font-mono text-[12px] text-gray-600 dark:text-gray-400 shrink-0">
+                    {amt > 0 ? `${sym}${amt.toFixed(dp)}` : "—"}
+                  </span>
+                </div>
+              ))}
+              <p className="text-[10px] text-blue-500 dark:text-blue-400 pt-1">
+                This entry will be posted to the Journal immediately on confirmation.
+              </p>
+            </div>
+          </div>
+
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 dark:border-zinc-800 flex gap-3">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-zinc-800 flex gap-3 shrink-0">
           <button
             onClick={onClose}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
@@ -457,9 +578,10 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
           <button
             onClick={handleConfirm}
             disabled={!valid}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-md shadow-emerald-200 dark:shadow-none"
+            className={`flex-1 py-2.5 rounded-xl ${accentBtn} disabled:opacity-40 text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-md`}
           >
-            <CheckCircle size={15}/> Record Payment
+            <CheckCircle size={15}/>
+            {isPurchase ? "Post Payment" : "Post & Collect"}
           </button>
         </div>
       </div>
@@ -474,7 +596,7 @@ interface PanelProps {
   onSave: (data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: InvoiceStatus, amountPaid?: string) => void;
-  onCollectPayment: (id: string, record: PaymentRecord, newTotalPaid: string, newStatus: InvoiceStatus) => void;
+  onCollectPayment: (id: string, record: PaymentRecord, newTotalPaid: string, newStatus: InvoiceStatus, paymentAccountId?: string) => void;
   defaultType?: "sale" | "purchase";
 }
 
@@ -2099,14 +2221,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           invoiceNumber={invoice.invoiceNumber}
           outstanding={balance}
           isPurchase={invoiceType === "purchase"}
-          onConfirm={(record) => {
+          party={invoice.customer || ""}
+          onConfirm={(record, paymentAccountId) => {
             const newHistory = [...savedHistory, record];
             const newPaid = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
             const { total: invTotal } = computeTotals(invoice.items, effectiveTaxRate, newPaid.toFixed(dp), form.shippingFee, form.handlingFee);
             const newStatus: InvoiceStatus = newPaid >= invTotal - 0.005 ? "Paid" : "Partial";
             setPayHist(newHistory);
             setPayInput(newPaid.toFixed(dp));
-            onCollectPayment(invoice.id, record, newPaid.toFixed(dp), newStatus);
+            onCollectPayment(invoice.id, record, newPaid.toFixed(dp), newStatus, paymentAccountId);
           }}
         />
       )}
@@ -2706,7 +2829,8 @@ export function InvoiceFormPage() {
     id: string,
     record: PaymentRecord,
     newTotalPaid: string,
-    newStatus: InvoiceStatus
+    newStatus: InvoiceStatus,
+    paymentAccountId?: string
   ) => {
     // Read from in-memory cache for freshest state — React state may lag behind
     const inv = getInvoices().find(i => i.id === id);
@@ -2745,7 +2869,7 @@ export function InvoiceFormPage() {
       updates.stockDeducted = true;
     }
 
-    // ── Journal entries (sale invoices only) ─────────────────────────────────
+    // ── Journal entries (sale invoices) ──────────────────────────────────────
     if (inv.invoiceType !== "purchase") {
       const { after: subtotal, tax: taxAmount, total: grandTotal } = computeTotals(
         inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee,
@@ -2781,9 +2905,28 @@ export function InvoiceFormPage() {
       }
     }
 
+    // ── Journal entries (purchase invoices — supplier payment) ────────────────
+    // Posts: DR Accounts Payable (clears the supplier payable), CR Cash/Bank
+    if (inv.invoiceType === "purchase") {
+      const payAmt    = parseFloat(record.amount) || 0;
+      const payDate   = record.date || new Date().toISOString().slice(0, 10);
+      const payMethod = (record.method as SalePayment) || "Bank Transfer";
+      if (payAmt > 0) {
+        autoPostPurchasePaymentJE({
+          reference:        inv.invoiceNumber,
+          supplier:         inv.customer || "Supplier",
+          date:             payDate,
+          amount:           payAmt,
+          paymentMethod:    payMethod,
+          paymentAccountId: paymentAccountId,
+        });
+      }
+    }
+
     editInvoice(id, updates);
     const sym = getSettingsCurrencySymbol();
-    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} collected · ${newStatus}` });
+    const actionWord = inv.invoiceType === "purchase" ? "paid" : "collected";
+    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} ${actionWord} · ${newStatus}` });
   }, [editInvoice, toast]);
 
   const handleDelete = useCallback((id: string) => {
