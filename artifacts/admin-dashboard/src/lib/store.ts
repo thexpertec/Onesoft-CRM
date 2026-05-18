@@ -8202,20 +8202,27 @@ export function autoPostSaleJE(params: {
  *   CR  Contact's sub-ledger      = amount received  (reverses the accrual)
  */
 export function autoPostCashReceiptJE(params: {
-  reference:     string;
-  customer:      string;
-  date:          string;
-  amount:        number;
-  paymentMethod: SalePayment;
+  reference:        string;
+  customer:         string;
+  date:             string;
+  amount:           number;
+  paymentMethod:    SalePayment;
+  paymentAccountId?: string;  // ledger ID of the chosen payment account — overrides method-based lookup
 }): JournalEntry | null {
   if (params.amount <= 0) return null;
   const s = getSettings();
 
-  // Cash/bank debit account
-  const isCash  = params.paymentMethod === "Cash";
-  const cashId  = isCash
-    ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
-    : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH);
+  // Cash/bank debit account — prefer explicit ledger from the payment account selector
+  let cashId: string | null = null;
+  if (params.paymentAccountId) {
+    cashId = resolveToLedger(params.paymentAccountId) ?? params.paymentAccountId;
+  }
+  if (!cashId) {
+    const isCash = params.paymentMethod === "Cash";
+    cashId = isCash
+      ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
+      : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH);
+  }
 
   // Contact's sub-ledger — CRM-first lookup returns their ledgerAccountId regardless of
   // whether it sits under AR (Receivable) or AP (Payable) in the COA

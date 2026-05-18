@@ -417,8 +417,11 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
 
   const handleConfirm = () => {
     if (!valid) return;
+    // Use the chosen payment account's title as the method label so payment
+    // history shows "Cash" / "Meezan Bank" etc. instead of the stale default.
+    const methodLabel = chosenPA?.accountTitle ?? method;
     onConfirm(
-      { id: crypto.randomUUID(), date, amount, method, note },
+      { id: crypto.randomUUID(), date, amount, method: methodLabel, note },
       payLedgerId ?? undefined,
     );
     onClose();
@@ -2873,11 +2876,15 @@ export function InvoiceFormPage() {
         });
         if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
       } else {
-        // Subsequent payment — post receipt JE (DR Cash/Bank, CR AR) whenever the prior JE used AR
-        if (payAmt > 0 && (isCredit || inv.jeUsesAR)) {
+        // Subsequent payment — post receipt JE (DR Cash/Bank, CR AR).
+        // Invoice-sourced sales always use AR (autoPostSaleJE hardcodes useAR=true for source="Invoice"),
+        // so we post a cash receipt JE whenever there is a prior JE on a sale invoice,
+        // regardless of whether jeUsesAR was stored (handles invoices created before the flag existed).
+        if (payAmt > 0 && (isCredit || inv.jeUsesAR || inv.invoiceType !== "purchase")) {
           autoPostCashReceiptJE({
             reference: inv.invoiceNumber, customer: inv.customer || "Customer",
             date: payDate, amount: payAmt, paymentMethod: payMethod,
+            paymentAccountId,
           });
         }
       }
