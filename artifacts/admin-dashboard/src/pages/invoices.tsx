@@ -513,7 +513,7 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
               onChange={e => setMethod(e.target.value as SalePayment)}
               className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 outline-none"
             >
-              {SALE_PAYMENTS.map(p => <option key={p}>{p}</option>)}
+              {SALE_PAYMENTS.filter(p => p !== "Credit").map(p => <option key={p}>{p}</option>)}
             </select>
           </div>
 
