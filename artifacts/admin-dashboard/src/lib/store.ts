@@ -8250,10 +8250,13 @@ export function findSubLedgerForParty(partyName: string, parentGroupId: string):
   if (!partyName) return null;
   const lower = partyName.toLowerCase();
 
+  // Determine which hierarchy is being requested
+  const requestingAR = parentGroupId === SYS_ACCS.AR_GROUP;
+
   // ── 1. CRM-first lookup ──────────────────────────────────────────────────
   // Find the contact by exact name (or "Name (Company)" format) and use
-  // their assigned ledgerAccountId — this works regardless of which COA
-  // group the account sits under (AR, AP, or even a custom group).
+  // their assigned ledgerAccountId — but only if it belongs to the requested
+  // hierarchy (AR accounts for sales, AP accounts for purchases).
   const contacts = getCustomers();
   const contact = contacts.find(c =>
     (c.name || "").toLowerCase() === lower ||
@@ -8263,36 +8266,63 @@ export function findSubLedgerForParty(partyName: string, parentGroupId: string):
   if (contact) {
     if (contact.ledgerAccountId) {
       const all = getAccounts();
-      // First: try to find the account regardless of isActive status
       const acct = all.find(
         a => a.id === contact.ledgerAccountId && a.accountType === "Ledger"
       );
       if (acct) {
-        // If the account exists but was marked inactive, reactivate it
-        // instead of creating a duplicate — this preserves all historical JE references
-        if (acct.isActive === false) {
-          try { updateAccount(acct.id, { isActive: true }); } catch { /* non-fatal */ }
+        // Validate the account belongs to the correct hierarchy.
+        // A supplier's primary ledger is AP (Liabilities) — it must NOT be used
+        // as the debit account on a sale JE (that needs an AR / Assets account).
+        const acctIsReceivable = acct.head === "Assets";
+        const hierarchyMatch   = requestingAR ? acctIsReceivable : !acctIsReceivable;
+
+        if (hierarchyMatch) {
+          // Reactivate if inactive so we don't create duplicates
+          if (acct.isActive === false) {
+            try { updateAccount(acct.id, { isActive: true }); } catch { /* non-fatal */ }
+          }
+          return acct.id;
         }
-        return acct.id;
+        // Account is in the wrong hierarchy (e.g., AP account when AR is needed).
+        // Fall through: first try name-based search, then auto-create.
       }
     }
-    // Contact found but ledger is truly missing (not just inactive) — auto-create it
-    // so the JE always has a named, individual AR/AP ledger for this party.
-    const isSupplier = (contact.customerRole ?? "Buyer") === "Supplier";
-    const displayName = (contact.name ?? "").trim() +
+
+    // Contact found but ledger missing or belongs to wrong hierarchy.
+    // Before creating a new account, search by name under the requested parent —
+    // this finds previously auto-created accounts for contacts that play dual roles
+    // (e.g., a supplier who also buys from us).
+    const allAccts = getAccounts();
+    const displayName = ((contact.name ?? "").trim() +
+      (contact.company ? ` (${contact.company})` : "")).toLowerCase();
+    const nameMatch = allAccts.find(a =>
+      a.accountType === "Ledger" &&
+      a.isActive !== false &&
+      a.parentId === parentGroupId &&
+      a.name.toLowerCase().includes(displayName || lower)
+    );
+    if (nameMatch) return nameMatch.id;
+
+    // Auto-create a ledger in the requested hierarchy
+    const displayNameStr = (contact.name ?? "").trim() +
       (contact.company ? ` (${contact.company})` : "");
     const ledgerId = createSubsidiaryLedger({
-      parentId:    isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP,
-      parentCode:  isSupplier ? "2111"             : "1130",
-      name:        displayName || partyName,
-      head:        isSupplier ? "Liabilities" : "Assets",
-      subType:     isSupplier ? "Payable"     : "Receivable",
-      description: isSupplier
-        ? `Payable account for supplier: ${contact.name ?? partyName}`
-        : `Receivable account for customer: ${contact.name ?? partyName}`,
+      parentId:    requestingAR ? SYS_ACCS.AR_GROUP : SYS_ACCS.AP_TRADE,
+      parentCode:  requestingAR ? "1130"            : "2111",
+      name:        displayNameStr || partyName,
+      head:        requestingAR ? "Assets"      : "Liabilities",
+      subType:     requestingAR ? "Receivable"  : "Payable",
+      description: requestingAR
+        ? `Receivable account for customer: ${contact.name ?? partyName}`
+        : `Payable account for supplier: ${contact.name ?? partyName}`,
     });
-    // Persist the new ledgerAccountId back onto the contact record
-    try { updateCustomer(contact.id, { ledgerAccountId: ledgerId }); } catch { /* non-fatal */ }
+    // Persist back to the contact only when the new ledger matches their primary role
+    // (avoids overwriting a supplier's AP ledgerAccountId with an AR account)
+    const isSupplier = (contact.customerRole ?? "Buyer") === "Supplier";
+    const primaryRoleMatchesRequest = (isSupplier && !requestingAR) || (!isSupplier && requestingAR);
+    if (primaryRoleMatchesRequest) {
+      try { updateCustomer(contact.id, { ledgerAccountId: ledgerId }); } catch { /* non-fatal */ }
+    }
     return ledgerId;
   }
 
@@ -8365,11 +8395,16 @@ export function autoPostSaleJE(params: {
   const _customerArId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
   const isWalkIn      = _customerArId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
 
+  // Named (non-walk-in) customer with their own AR sub-ledger — always transit via AR
+  // so every POS sale (cash or credit) appears in that customer's individual ledger.
+  // This mirrors the walk-in transit pattern: DR Customer AR then DR Cash / CR Customer AR.
+  const isNamedWithAR = !!_customerArId && !isWalkIn;
+
   // Invoice-source JEs are always accrual (AR debit) unless it's a POS sale paid in full.
-  // Walk-in POS sales always use AR (even cash) so the transit shows in 1130-000.
+  // Walk-in and named-customer POS sales always use AR so the transit shows in the ledger.
   const useAR         = params.source === "Invoice"
                         ? true
-                        : isCredit || isOutstanding || isWalkIn;
+                        : isCredit || isOutstanding || isWalkIn || isNamedWithAR;
 
   // ── Resolve the payment-method debit account ─────────────────────────────
   // Priority:
@@ -8483,13 +8518,15 @@ export function autoPostSaleJE(params: {
     }
   }
 
-  // ── Walk-in immediate cash transit ───────────────────────────────────────
-  // For Walk-in POS cash sales paid in full on the spot: the AR debit above
-  // (DR 1130-000) is immediately cleared by DR Cash / CR 1130-000 so the
-  // account shows the sale transit without leaving a false outstanding balance.
+  // ── Walk-in / named-customer immediate cash transit ──────────────────────
+  // For POS cash sales paid in full on the spot, the AR debit above is
+  // immediately cleared by DR Cash / CR Customer AR so the ledger shows the
+  // sale as a transit entry without leaving a false outstanding balance.
+  // This applies equally to walk-in customers (1130-000) and to named
+  // customers who have their own AR sub-ledger (isNamedWithAR).
   // IMPORTANT: when this transit is embedded here, the caller MUST NOT post a
   // separate cash-receipt JE — check the returned `receiptEmbedded` flag.
-  const _transitEmbedded = isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice";
+  const _transitEmbedded = (isWalkIn || isNamedWithAR) && !isCredit && !isOutstanding && params.source !== "Invoice";
   if (_transitEmbedded) {
     const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
     const pmCashId  = dynLedger
