@@ -3007,6 +3007,23 @@ export default function SalesPage() {
           amountPaid:      paidNum,
         });
         if (je) jeId = je.id;
+
+        // ── Cash receipt for upfront partial payment ────────────────────────
+        // When the sale JE uses AR (because there's an outstanding balance) but
+        // the customer already paid something at the till (paidNum > 0), we must
+        // post a second JE to record the cash received:
+        //   DR Cash / Bank = paidNum
+        //   CR Customer AR  = paidNum
+        // Without this, the 500 received would be invisible in the books.
+        if (je?.usesAR && paidNum > 0) {
+          autoPostCashReceiptJE({
+            reference:     detailSale?.saleNumber || "",
+            customer:      localMeta.customer || "Walk-in",
+            date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
+            amount:        paidNum,
+            paymentMethod,
+          });
+        }
       } else {
         // ── Subsequent collection against an existing AR sale JE ────────────
         // The primary JE (Dr AR / Cr Revenue) already exists.
