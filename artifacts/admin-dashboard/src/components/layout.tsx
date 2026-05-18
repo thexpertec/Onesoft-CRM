@@ -277,6 +277,7 @@ const ACCOUNTS_COLUMNS: MegaColumn[] = [
       { label: "R&P Summary",         href: "/rp-summary",           icon: CreditCard,    desc: "Cash & Bank summary by head"  },
       { label: "Transaction History", href: "/transaction-history",  icon: FileText,      desc: "All transactions in one view" },
       { label: "Cash & Bank Accounts", href: "/payment-accounts",   icon: CreditCard,    desc: "Bank & payment method setup"  },
+      { label: "Wallet Report",         href: "/wallet-report",       icon: Wallet,        desc: "Customer wallet balances & ledger" },
     ],
   },
   {
@@ -1364,6 +1365,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {isModuleAllowed("accounting_journal")  && <NavLink href="/journal-entry"     icon={ClipboardList}   label="Journal Entry" />}
                   {isModuleAllowed("accounting_receipts") && <NavLink href="/receipt-payment"       icon={CreditCard}      label="Receipt & Payment" />}
                   {isModuleAllowed("accounting_receipts") && <NavLink href="/transaction-history"  icon={FileText}        label="Transaction History" />}
+                  {isModuleAllowed("accounting_receipts") && <NavLink href="/wallet-report"         icon={Wallet}          label="Wallet Report" />}
                   {isModuleAllowed("accounting_balance")  && <NavLink href="/balance-sheet"        icon={LayoutDashboard} label="Balance Sheet" />}
                   {isModuleAllowed("accounting_pls")      && <NavLink href="/pls-report"        icon={TrendingUp}      label="P&L Statement" />}
                   {isModuleAllowed("accounting_trial")    && <NavLink href="/trial-balance"     icon={Scale}           label="Trial Balance" />}
