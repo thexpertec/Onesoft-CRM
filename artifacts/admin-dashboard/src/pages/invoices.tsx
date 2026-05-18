@@ -23,7 +23,7 @@ import {
   getPaymentAccounts, PaymentAccount,
   getAccounts,
   SYS_ACCS, findSubLedgerForParty, resolveToLedger,
-  getCustomerWalletBalance, fundCustomerWallet, applyWalletToInvoice,
+  getCustomerWalletBalance, fundCustomerWallet, applyWalletToInvoice, adjustCustomerWallet,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -343,13 +343,17 @@ interface CollectPaymentModalProps {
   invoiceNumber:  string;
   outstanding:    number;
   walletBalance?: number; // customer wallet/advance credit available
-  onConfirm:      (record: PaymentRecord, paymentAccountId?: string) => void;
+  onConfirm:      (record: PaymentRecord, paymentAccountId?: string, walletUsed?: number) => void;
   isPurchase?:    boolean;
   party?:         string; // customer name (sale) or supplier name (purchase)
 }
 function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, walletBalance = 0, onConfirm, isPurchase, party }: CollectPaymentModalProps) {
   const sym = getSettingsCurrencySymbol();
-  const [amount,    setAmount]    = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
+
+  // Wallet auto-apply: for sale invoices only, pre-apply up to outstanding
+  const initWallet = !isPurchase ? Math.min(Math.max(0, walletBalance), outstanding) : 0;
+  const [walletApplied, setWalletApplied] = useState(initWallet);
+  const [amount,    setAmount]    = useState(outstanding > 0 ? Math.max(0, outstanding - initWallet).toFixed(dp) : "");
   const [method,    setMethod]    = useState<SalePayment>("Bank Transfer");
   const [date,      setDate]      = useState(new Date().toISOString().slice(0, 10));
   const [note,      setNote]      = useState("");
@@ -360,7 +364,9 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, wallet
 
   useEffect(() => {
     if (open) {
-      setAmount(outstanding > 0 ? outstanding.toFixed(dp) : "");
+      const init = !isPurchase ? Math.min(Math.max(0, walletBalance), outstanding) : 0;
+      setWalletApplied(init);
+      setAmount(outstanding > 0 ? Math.max(0, outstanding - init).toFixed(dp) : "");
       setDate(new Date().toISOString().slice(0, 10));
       setNote("");
       // Default: first payment account matching the method, or first overall
@@ -371,11 +377,13 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, wallet
 
   if (!open) return null;
 
-  const amt        = parseFloat(amount) || 0;
+  const amt          = parseFloat(amount) || 0;
+  const totalCovered = amt + walletApplied;
   // Purchase invoices: never overpay a supplier. Sale invoices: excess → wallet.
-  const overAmount = isPurchase ? amt > outstanding + 0.005 : false;
-  const excess     = !isPurchase ? Math.max(0, amt - outstanding) : 0;
-  const valid      = amt > 0 && !overAmount;
+  const overAmount   = isPurchase ? amt > outstanding + 0.005 : false;
+  // Excess cash beyond the outstanding (wallet portion already accounted for)
+  const excess       = !isPurchase ? Math.max(0, amt - Math.max(0, outstanding - walletApplied)) : 0;
+  const valid        = (amt > 0 || walletApplied > 0.005) && !overAmount;
 
   // Resolve the chosen payment account for JE preview
   const chosenPA: PaymentAccount | undefined = payAccId
@@ -428,6 +436,7 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, wallet
     onConfirm(
       { id: crypto.randomUUID(), date, amount, method: methodLabel, note },
       payLedgerId ?? undefined,
+      walletApplied > 0.005 ? walletApplied : undefined,
     );
     onClose();
   };
@@ -463,14 +472,50 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, wallet
         {/* Body — scrollable */}
         <div className="px-6 py-5 space-y-4 overflow-y-auto">
 
-          {/* Wallet balance info (sale only) */}
-          {!isPurchase && walletBalance > 0.005 && (
+          {/* Wallet applied strip (sale only) */}
+          {!isPurchase && walletApplied > 0.005 && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50">
               <div className="flex items-center gap-2">
                 <Wallet size={13} className="text-blue-500 shrink-0"/>
-                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">Wallet Balance</span>
+                <div>
+                  <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">Wallet Applied</span>
+                  {walletBalance > walletApplied + 0.005 && (
+                    <span className="block text-[10px] text-blue-400 dark:text-blue-500 font-mono">
+                      Balance: {sym}{walletBalance.toFixed(dp)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <span className="text-base font-bold font-mono text-blue-700 dark:text-blue-400">{sym}{walletBalance.toFixed(dp)}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-base font-bold font-mono text-blue-700 dark:text-blue-400">{sym}{walletApplied.toFixed(dp)}</span>
+                <button
+                  onClick={() => { setWalletApplied(0); setAmount(outstanding > 0 ? outstanding.toFixed(dp) : ""); }}
+                  className="w-5 h-5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 flex items-center justify-center hover:bg-blue-300 dark:hover:bg-blue-700 transition-colors"
+                  title="Remove wallet credit">
+                  <X size={10}/>
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Show wallet balance info when not yet applied */}
+          {!isPurchase && walletBalance > 0.005 && walletApplied <= 0.005 && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30">
+              <div className="flex items-center gap-2">
+                <Wallet size={13} className="text-blue-400 shrink-0"/>
+                <span className="text-sm text-blue-600 dark:text-blue-400">Wallet Balance</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-mono font-semibold text-blue-600 dark:text-blue-400">{sym}{walletBalance.toFixed(dp)}</span>
+                <button
+                  onClick={() => {
+                    const apply = Math.min(walletBalance, outstanding);
+                    setWalletApplied(apply);
+                    setAmount(Math.max(0, outstanding - apply).toFixed(dp));
+                  }}
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
+                  Apply
+                </button>
+              </div>
             </div>
           )}
 
@@ -619,7 +664,7 @@ interface PanelProps {
   onSave: (data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: InvoiceStatus, amountPaid?: string) => void;
-  onCollectPayment: (id: string, record: PaymentRecord, newTotalPaid: string, newStatus: InvoiceStatus, paymentAccountId?: string) => void;
+  onCollectPayment: (id: string, record: PaymentRecord, newTotalPaid: string, newStatus: InvoiceStatus, paymentAccountId?: string, walletUsed?: number) => void;
   defaultType?: "sale" | "purchase";
 }
 
@@ -2283,14 +2328,16 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           walletBalance={invoiceType !== "purchase" && invoice.customer ? getCustomerWalletBalance(invoice.customer) : 0}
           isPurchase={invoiceType === "purchase"}
           party={invoice.customer || ""}
-          onConfirm={(record, paymentAccountId) => {
+          onConfirm={(record, paymentAccountId, walletUsed) => {
             const newHistory = [...savedHistory, record];
-            const newPaid = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+            // Total paid = cash records + wallet applied (wallet doesn't go in paymentHistory)
+            const cashPaid  = newHistory.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+            const newPaid   = cashPaid + (walletUsed ?? 0);
             const { total: invTotal } = computeTotals(invoice.items, effectiveTaxRate, newPaid.toFixed(dp), form.shippingFee, form.handlingFee);
             const newStatus: InvoiceStatus = newPaid >= invTotal - 0.005 ? "Paid" : "Partial";
             setPayHist(newHistory);
             setPayInput(newPaid.toFixed(dp));
-            onCollectPayment(invoice.id, record, newPaid.toFixed(dp), newStatus, paymentAccountId);
+            onCollectPayment(invoice.id, record, newPaid.toFixed(dp), newStatus, paymentAccountId, walletUsed);
           }}
         />
       )}
@@ -2891,7 +2938,8 @@ export function InvoiceFormPage() {
     record: PaymentRecord,
     newTotalPaid: string,
     newStatus: InvoiceStatus,
-    paymentAccountId?: string
+    paymentAccountId?: string,
+    walletUsed?: number
   ) => {
     // Read from in-memory cache for freshest state — React state may lag behind
     const inv = getInvoices().find(i => i.id === id);
@@ -3022,16 +3070,22 @@ export function InvoiceFormPage() {
 
     editInvoice(id, updates);
 
-    // Fund wallet after saving (so customer.advanceCredit reflects the excess)
-    if (walletFunded > 0.005) {
+    // Adjust customer wallet after save:
+    //   – deduct walletUsed (credit consumed against this invoice)
+    //   – add any excess cash overpayment
+    if (inv.invoiceType !== "purchase") {
       const cust = getCustomers().find(c => c.name === inv.customer);
-      if (cust) fundCustomerWallet(cust.id, walletFunded);
+      if (cust) {
+        const walletDelta = (walletFunded > 0.005 ? walletFunded : 0) - (walletUsed ?? 0);
+        if (Math.abs(walletDelta) > 0.005) adjustCustomerWallet(cust.id, walletDelta);
+      }
     }
 
     const sym = getSettingsCurrencySymbol();
     const actionWord = inv.invoiceType === "purchase" ? "paid" : "collected";
-    const walletNote = walletFunded > 0.005 ? ` · ${sym}${walletFunded.toFixed(dp)} added to wallet` : "";
-    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} ${actionWord} · ${newStatus}${walletNote}` });
+    const walletUsedNote   = (walletUsed ?? 0) > 0.005 ? ` · ${sym}${(walletUsed!).toFixed(dp)} wallet used` : "";
+    const walletFundedNote = walletFunded > 0.005 ? ` · ${sym}${walletFunded.toFixed(dp)} → wallet` : "";
+    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} ${actionWord} · ${newStatus}${walletUsedNote}${walletFundedNote}` });
   }, [editInvoice, toast]);
 
   const handleDelete = useCallback((id: string) => {
