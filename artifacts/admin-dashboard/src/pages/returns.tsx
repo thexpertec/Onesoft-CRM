@@ -508,22 +508,10 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
 
       {step === 2 && selectedSale && (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800 grid grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Return Date</label>
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 h-8 text-sm" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Refund Method</label>
-              <select
-                value={refundMethod}
-                onChange={e => setRefundMethod(e.target.value)}
-                className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {saleRefundOptions.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
             </div>
             <div className="col-span-2">
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason</label>
@@ -810,17 +798,10 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
 
       {step === 2 && selectedInv && (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-zinc-800 grid grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Return Date</label>
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 h-8 text-sm" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Credit Method</label>
-              <select value={refundMethod} onChange={e => setRefundMethod(e.target.value)}
-                className="mt-1 h-8 w-full text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring">
-                {creditMethodOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
             </div>
             <div className="col-span-2">
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason</label>

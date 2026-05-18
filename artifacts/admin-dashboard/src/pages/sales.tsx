@@ -2587,7 +2587,7 @@ export default function SalesPage() {
     { field: "balance",       label: `Balance (${sym})`,minW: 110, type: "readonly" },
     { field: "payStatus",     label: "Pay Status",      minW: 100, type: "readonly" },
     { field: "orderStage",    label: "Order Stage",     minW: 120, type: "readonly" },
-    { field: "paymentMethod", label: "Payment",         minW: 140, type: "select",  options: (() => { const pa = getPaymentAccounts().filter(a => a.isActive !== false).map(a => a.accountTitle); return pa.length ? pa : getCashBankLedgers().map(a => a.name); })() },
+    { field: "paymentMethod", label: "Payment",         minW: 140, type: "readonly" },
     { field: "notes",         label: "Notes",           minW: 230, type: "text"     },
   ], [sym, agentNameOpts]);
   const TOTAL_W = useMemo(() => COLS.reduce((a, c) => a + c.minW, 0), [COLS]);

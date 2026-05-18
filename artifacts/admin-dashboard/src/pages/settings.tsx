@@ -66,7 +66,6 @@ const FISCAL_MONTHS = [
   "July","August","September","October","November","December",
 ];
 
-const PAYMENT_METHODS = ["Cash", "Card", "Bank Transfer", "Credit", "Cheque", "Other"];
 
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -1194,21 +1193,6 @@ export default function SettingsPage() {
             {tab === "pos" && (
               <div className="space-y-6">
                 <SectionHeader title="POS Defaults" desc="Default values used when opening the POS terminal." />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Default Payment Method">
-                    <Select value={form.defaultPaymentMethod} onValueChange={v => set("defaultPaymentMethod", v)}>
-                      <SelectTrigger className="h-9 text-[13px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map(m => (
-                          <SelectItem key={m} value={m} className="text-[13px]">{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
 
                 <div className="flex items-center justify-between py-3 px-4 bg-gray-50 dark:bg-muted/30 rounded-lg border border-gray-100 dark:border-border">
                   <div>
