@@ -3052,15 +3052,18 @@ export default function SalesPage() {
         // When the sale JE uses AR (because there's an outstanding balance) but
         // the customer already paid something at the till (paidNum > 0), we must
         // post a second JE to record the cash received:
-        //   DR Cash / Bank = paidNum
-        //   CR Customer AR  = paidNum
-        // Without this, the 500 received would be invisible in the books.
+        //   DR Cash / Bank = receiptAmt
+        //   CR Customer AR  = receiptAmt
+        // Cap at grandTotal_ so excess tender (change for walk-ins, or wallet credit
+        // for named customers) does not create a phantom AR credit balance.
+        // Wallet overpayments are handled separately via adjustCustomerWallet.
         if (je?.usesAR && paidNum > 0) {
+          const receiptAmt = Math.min(paidNum, grandTotal_);
           autoPostCashReceiptJE({
             reference:     detailSale?.saleNumber || "",
             customer:      localMeta.customer || "Walk-in",
             date:          detailSale?.saleDate || new Date().toISOString().slice(0, 10),
-            amount:        paidNum,
+            amount:        receiptAmt,
             paymentMethod,
           });
         }
