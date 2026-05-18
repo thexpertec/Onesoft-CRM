@@ -1,0 +1,91 @@
+Ensure that all POS sales for named customers post correctly to:
+
+Customer AR Ledger (receivable)
+Cash / Bank Ledger (payment collected)
+Revenue Ledger
+COGS / Inventory Ledger
+Customer Advance / Wallet Ledger (if customer pays extra)
+Requirements
+Customer AR line is mandatory for named customers
+Walk-in customers: continue using the existing "transit embedded" JE flow.
+Named customer: AR ledger must appear in JE for both sale and payment portions.
+Wallet/Advance handling
+If the customer has an existing wallet balance → auto-apply to the invoice/sale.
+If customer pays more than sale total → excess → credit customer advance (wallet).
+JE should reflect wallet application as a separate line:
+DR Customer Advance Ledger    appliedWalletAmount
+CR Customer AR Ledger         appliedWalletAmount
+Cash / Bank line
+Only includes the actual cash received after wallet adjustment.
+For example: Sale = 500, Wallet applied = 100, Cash paid = 400 → DR Cash 400.
+Revenue / COGS / Inventory
+Continue posting as before:
+DR Cost of Goods Sold         cogsAmount
+CR Inventory                  cogsAmount
+
+DR Customer AR / Cash (total sale)
+CR Revenue                    saleAmount
+Reference / Narration
+JE reference should indicate POS sale + customer ID + timestamp.
+JE lines should have descriptive narration: e.g., "POS Sale SAL-202605-00001 – Customer PAKISTAN".
+Balance check
+Total DR = Total CR
+Customer ledger should show the sale and wallet adjustments clearly.
+Flow Example
+
+Scenario:
+
+Sale total = 500
+Customer wallet = 100
+Customer pays 450 cash → total received = 550 (overpayment)
+
+JE lines should be:
+
+Ledger	DR	CR	Notes
+Customer AR	500	0	Record sale receivable
+Revenue	0	500	Record sale revenue
+Cash / Bank	450	0	Cash collected
+Customer AR	0	450	Offset AR with cash
+Customer Advance / Wallet	50	0	Extra received → credit wallet
+Customer AR	0	50	Offset AR with extra (to wallet)
+COGS	200	0	Cost of goods sold
+Inventory	0	200	Reduce inventory
+
+Notes:
+
+Wallet application is recorded separately.
+Cash received is adjusted after wallet.
+AR is always debited first, then credited with cash & wallet usage.
+Implementation Checklist
+Fetch named customer and ensure advanceLedgerAccountId exists.
+Calculate wallet available using getCustomerWalletBalance(customerId).
+Calculate applied wallet amount: min(walletBalance, saleTotal).
+Calculate actual cash collected: saleTotal - appliedWalletAmount.
+Post JE with the following lines:
+- DR Customer AR           totalSaleAmount
+- CR Revenue               totalSaleAmount
+- DR Cash / Bank           cashReceived
+- CR Customer AR           cashReceived
+- DR Customer Advance      appliedWalletAmount
+- CR Customer AR           appliedWalletAmount
+- DR COGS                  cogsAmount
+- CR Inventory             cogsAmount
+Ensure JE reference prefixes match your system standards (e.g., AUTO-SAL-YYYYMM-XXXX).
+Validate total DR = total CR before posting.
+Update customer ledger report and wallet balance after posting.
+Log any overpayment to ensure wallet balance is updated.
+Additional Safeguards
+Walk-in customer → skip AR / Wallet lines; keep transit embedded.
+If cash + wallet does not cover sale total → invoice remains partially unpaid.
+Wallet applied should never exceed available wallet balance.
+Post a single JE per POS sale to avoid duplicate entries.
+Add unit tests / simulation with combinations:
+No wallet, wallet < sale, wallet = sale, wallet > sale, overpayment.
+
+This ensures:
+
+Customer ledger is always updated
+Wallet / advance credit handled correctly
+Double-entry accounting maintained
+POS sale shows correctly in reports
+Extra amounts are posted to wallet automatically

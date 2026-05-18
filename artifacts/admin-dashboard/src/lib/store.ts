@@ -8377,13 +8377,19 @@ export function autoPostSaleJE(params: {
   /** Delivery / shipping charges included in grandTotal.
    *  Must be credited separately so DR = CR. Defaults to 0. */
   deliveryAmount?: number;
-  /** When provided, an outstanding balance (grandTotal − amountPaid > 0) routes the debit to AR
-   *  instead of Cash/Bank, so a cash-receipt JE can be posted separately when payment arrives.
-   *  Leave undefined for POS/cash sales where payment is collected immediately. */
+  /** Cash actually collected at the till (before wallet deduction).
+   *  For named customers this amount is embedded in the JE directly.
+   *  For Invoice source / credit sales the caller posts a separate receipt JE. */
   amountPaid?:   number;
   /** Per-category breakdown — drives per-category Revenue and Inventory JE lines */
   categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
-}): JournalEntry & { usesAR: boolean; receiptEmbedded: boolean } | null {
+  /** Advance / wallet credit to apply from the customer's advance ledger.
+   *  Named-customer POS only — embedded as DR Advance / CR Customer AR in the sale JE. */
+  walletApplied?:  number;
+  /** The customer's advance ledger account ID (e.g. "2140-001").
+   *  Required whenever walletApplied > 0 or excess cash → wallet. */
+  walletLedgerId?: string;
+}): JournalEntry & { usesAR: boolean; receiptEmbedded: boolean; walletEmbedded: boolean } | null {
   const s = getSettings();
 
   // ── Debit side: AR / Cash / Bank ─────────────────────────────────────────
@@ -8407,17 +8413,20 @@ export function autoPostSaleJE(params: {
   const _customerLedgerId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
   const isWalkIn           = _customerLedgerId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
 
-  // Running-account rule for named customers:
-  //   Cash POS sale → DR Cash / CR Revenue only. No entry in the customer ledger.
-  //                   The ledger balance is unchanged — cash was collected immediately.
-  //   Credit sale   → DR Customer Ledger / CR Revenue. Balance opens until paid.
-  //   Invoice       → always accrual (AR/AP debit).
-  //
-  // Walk-in is the only case that always transits through the AR ledger (even cash),
-  // so anonymous sales appear in 1130-000 for reporting purposes.
+  // Named (non-walk-in) customer with their own ledger.
+  // Their AR/AP account is ALWAYS the debit target for any sale — cash is embedded
+  // in the same JE as a transit clearing line (see _namedTransit below).
+  const isNamedWithLedger = !!_customerLedgerId && !isWalkIn;
+
+  // useAR = true whenever the sale debit should hit a contact ledger (AR or AP):
+  //   Invoice source        → always accrual
+  //   Credit sale           → AR stays open until paid
+  //   Outstanding balance   → AR stays open until settled
+  //   Walk-in               → transit through 1130-000
+  //   Named customer (any)  → always go through their personal ledger
   const useAR         = params.source === "Invoice"
                         ? true
-                        : isCredit || isOutstanding || isWalkIn;
+                        : isCredit || isOutstanding || isWalkIn || isNamedWithLedger;
 
   // ── Resolve the payment-method debit account ─────────────────────────────
   // Priority:
@@ -8532,27 +8541,90 @@ export function autoPostSaleJE(params: {
     }
   }
 
-  // ── Walk-in immediate cash transit ───────────────────────────────────────
-  // Only Walk-in POS cash sales embed a transit so the 1130-000 ledger shows
-  // the sale passing through without leaving a false outstanding balance.
-  // Named customers do NOT use this transit — their running account (AR or AP)
-  // is only debited for credit sales / invoices, and cleared by a separate
-  // cash-receipt JE when payment arrives.
-  // IMPORTANT: when this transit is embedded here, the caller MUST NOT post a
+  // ── Transit / payment lines embedded in the sale JE ─────────────────────
+  //
+  // Walk-in: simple DR Cash / CR Walk-in AR transit — every anonymous cash sale
+  //   passes through 1130-000 so it appears in that ledger for reporting.
+  //
+  // Named customer (non-credit, non-invoice): full transit that embeds the cash
+  //   receipt AND wallet adjustment directly in the sale JE so there is exactly
+  //   one JE per POS sale.  Structure:
+  //     DR Customer AR   = grandTotal          (already posted above as debitAccId)
+  //     CR Revenue …                           (already posted above)
+  //     DR Cash/Bank     = paidNum             (actual cash received)
+  //     CR Customer AR   = cashToAR            (cash clears AR up to grandTotal−walletApplied)
+  //     CR Advance ledger= excessCash          (overpayment → wallet, if any)
+  //     DR Advance ledger= walletApplied       (wallet credit used to pay remaining AR)
+  //     CR Customer AR   = walletApplied       (wallet clears remaining AR)
+  //
+  // Credit sales (isCredit=true) and Invoice source do NOT embed a transit —
+  // the caller posts a separate receipt JE when payment arrives.
+  //
+  // IMPORTANT: when either transit is embedded, the caller MUST NOT post a
   // separate cash-receipt JE — check the returned `receiptEmbedded` flag.
-  const _transitEmbedded = isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice";
-  if (_transitEmbedded) {
+  const _walkinTransit = isWalkIn       && !isCredit && params.source !== "Invoice";
+  const _namedTransit  = isNamedWithLedger && !isCredit && params.source !== "Invoice";
+  const _transitEmbedded = _walkinTransit || _namedTransit;
+
+  // Shared cash-ledger resolver (used by both walk-in and named transit)
+  const _pmCashId = (() => {
     const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
-    const pmCashId  = dynLedger
-                   || (params.paymentMethod === "Cash"
-                       ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
-                       : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH));
-    lines.push({ id: crypto.randomUUID(), ledgerId: pmCashId,
+    return dynLedger
+      || (params.paymentMethod === "Cash"
+          ? (resolveToLedger(s.accCash) || SYS_ACCS.CASH)
+          : (resolveToLedger(s.accBank) || resolveToLedger(s.accCash) || SYS_ACCS.CASH));
+  })();
+
+  let _walletEmbedded = false;
+
+  if (_walkinTransit) {
+    // ── Walk-in: one-shot transit (DR Cash / CR Walk-in AR) ──────────────
+    lines.push({ id: crypto.randomUUID(), ledgerId: _pmCashId,
       narration: `Cash receipt – ${params.reference} – ${params.customer}`,
       debit: params.grandTotal, credit: 0 });
     lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId!,
       narration: `AR transit cleared – ${params.reference} – ${params.customer}`,
       debit: 0, credit: params.grandTotal });
+  } else if (_namedTransit) {
+    // ── Named customer: full transit with wallet support ─────────────────
+    const _walletApplied = parseFloat(
+      Math.max(0, Math.min(params.walletApplied ?? 0, params.grandTotal)).toFixed(2));
+    const _cashNeeded    = parseFloat((params.grandTotal - _walletApplied).toFixed(2));
+    const _paidNum       = parseFloat(Math.max(0, params.amountPaid ?? 0).toFixed(2));
+    const _excessCash    = parseFloat(Math.max(0, _paidNum - _cashNeeded).toFixed(2));
+    const _cashToAR      = parseFloat(Math.max(0, _paidNum - _excessCash).toFixed(2));
+    const _advLedgerId   = params.walletLedgerId ?? null;
+
+    // DR Cash/Bank = full amount the customer handed over
+    if (_paidNum > 0.005) {
+      lines.push({ id: crypto.randomUUID(), ledgerId: _pmCashId,
+        narration: `POS Sale ${params.reference} – ${params.customer}`,
+        debit: _paidNum, credit: 0 });
+      // CR Customer AR = cash portion that clears the receivable
+      if (_cashToAR > 0.005) {
+        lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId!,
+          narration: `Cash receipt – ${params.reference} – ${params.customer}`,
+          debit: 0, credit: _cashToAR });
+      }
+      // CR Advance ledger = overpayment goes to wallet
+      if (_excessCash > 0.005 && _advLedgerId) {
+        lines.push({ id: crypto.randomUUID(), ledgerId: _advLedgerId,
+          narration: `Overpayment to wallet – ${params.reference}`,
+          debit: 0, credit: _excessCash });
+        _walletEmbedded = true;
+      }
+    }
+
+    // DR Advance / CR Customer AR = wallet credit applied to cover remaining balance
+    if (_walletApplied > 0.005 && _advLedgerId) {
+      lines.push({ id: crypto.randomUUID(), ledgerId: _advLedgerId,
+        narration: `Wallet applied – ${params.reference} – ${params.customer}`,
+        debit: _walletApplied, credit: 0 });
+      lines.push({ id: crypto.randomUUID(), ledgerId: debitAccId!,
+        narration: `Wallet clears receivable – ${params.reference}`,
+        debit: 0, credit: _walletApplied });
+      _walletEmbedded = true;
+    }
   }
 
   const totalDebit  = parseFloat(lines.reduce((s, l) => s + l.debit,  0).toFixed(2));
@@ -8569,7 +8641,7 @@ export function autoPostSaleJE(params: {
     isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
   if (!je) return null;
-  return Object.assign(je, { usesAR: useAR, receiptEmbedded: _transitEmbedded });
+  return Object.assign(je, { usesAR: useAR, receiptEmbedded: _transitEmbedded, walletEmbedded: _walletEmbedded });
 }
 
 /**
