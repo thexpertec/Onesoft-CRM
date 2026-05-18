@@ -700,6 +700,37 @@ const CUSTOMERS_KEY = "admin-customers";
 export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY);
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
+// ─── Wallet Transaction Ledger ────────────────────────────────────────────────
+
+export type WalletTxType = "funded" | "used" | "manual-credit" | "manual-debit" | "refund";
+
+export type WalletTransaction = {
+  id:          string;
+  customerId:  string;
+  date:        string;       // YYYY-MM-DD
+  type:        WalletTxType;
+  delta:       number;       // +positive = credit, -negative = debit
+  reference?:  string;       // invoice / sale number
+  note?:       string;
+  createdAt:   string;
+};
+
+const WALLET_LEDGER_KEY = "admin-wallet-ledger";
+
+export function getWalletLedger(customerId: string): WalletTransaction[] {
+  const all = getStored<WalletTransaction>(WALLET_LEDGER_KEY);
+  return all
+    .filter(t => t.customerId === customerId)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+}
+
+function recordWalletTx(tx: Omit<WalletTransaction, "id" | "createdAt">): void {
+  if (Math.abs(tx.delta) < 0.005) return;
+  const all = getStored<WalletTransaction>(WALLET_LEDGER_KEY);
+  all.push({ ...tx, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+  setStored(WALLET_LEDGER_KEY, all);
+}
+
 // ─── Customer Wallet / Advance Credit Engine ─────────────────────────────────
 
 /** Returns the customer's current wallet balance (advance credit). */
@@ -713,11 +744,19 @@ export function getCustomerWalletBalance(nameOrId: string): number {
  * Called when a customer pays more than their invoice outstanding.
  * The corresponding JE (DR Cash, CR AR) is already posted by the receipt path.
  */
-export function fundCustomerWallet(customerId: string, amount: number): void {
+export function fundCustomerWallet(customerId: string, amount: number, reference?: string, note?: string): void {
   if (amount <= 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
   updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + amount) });
+  recordWalletTx({
+    customerId,
+    date:      new Date().toISOString().slice(0, 10),
+    type:      "funded",
+    delta:     amount,
+    reference,
+    note:      note ?? (reference ? `Excess payment on ${reference}` : "Wallet funded"),
+  });
 }
 
 /**
@@ -726,11 +765,19 @@ export function fundCustomerWallet(customerId: string, amount: number): void {
  *   negative delta → wallet decreases (consumed)
  * Floor at 0 — wallet can never go negative.
  */
-export function adjustCustomerWallet(customerId: string, delta: number): void {
+export function adjustCustomerWallet(customerId: string, delta: number, reference?: string, note?: string): void {
   if (Math.abs(delta) < 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
   updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + delta) });
+  recordWalletTx({
+    customerId,
+    date:      new Date().toISOString().slice(0, 10),
+    type:      delta > 0 ? "manual-credit" : "used",
+    delta,
+    reference,
+    note:      note ?? (delta > 0 ? "Wallet credited" : "Wallet used for payment"),
+  });
 }
 
 /**
@@ -794,6 +841,15 @@ export function applyWalletToInvoice(params: {
 
   updateCustomer(params.customerId, {
     advanceCredit: Math.max(0, wallet - applied),
+  });
+
+  recordWalletTx({
+    customerId: params.customerId,
+    date:       params.date,
+    type:       "used",
+    delta:      -applied,
+    reference:  inv.invoiceNumber,
+    note:       `Wallet applied to invoice ${inv.invoiceNumber}`,
   });
 
   return applied;
