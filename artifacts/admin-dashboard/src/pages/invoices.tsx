@@ -2873,7 +2873,8 @@ export function InvoiceFormPage() {
       const payMethod  = (record.method as SalePayment) || inv.paymentMethod;
 
       if (!inv.jeId) {
-        // First JE: pass amountPaid so AR is used if there's an outstanding balance
+        // Step 1: Accrual JE — DR AR (full grandTotal), CR Revenue, DR COGS / CR Inventory.
+        // Invoice source always uses AR regardless of how much was paid upfront.
         const paidSoFar = parseFloat(newTotalPaid) || 0;
         const { shipping: _s3, handling: _h3 } = computeTotals(inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee);
         const je = autoPostSaleJE({
@@ -2886,7 +2887,22 @@ export function InvoiceFormPage() {
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
         });
-        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; payRecord.jeRef = je.reference; }
+        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
+
+        // Step 2: Cash receipt JE — DR Cash/Bank (amountPaid), CR AR (amountPaid).
+        // This is required for every payment that actually brings money in, including
+        // the very first instalment collected via the "Collect Payment" popup.
+        if (paidSoFar > 0) {
+          const rcptJE = autoPostCashReceiptJE({
+            reference: inv.invoiceNumber, customer: inv.customer || "Customer",
+            date: payDate, amount: paidSoFar, paymentMethod: payMethod,
+            paymentAccountId,
+          });
+          payRecord.jeRef = rcptJE?.reference ?? je?.reference ?? undefined;
+        } else {
+          // Pure credit sale — link the payment record to the accrual JE
+          if (je) payRecord.jeRef = je.reference;
+        }
       } else {
         // Subsequent payment — post receipt JE (DR Cash/Bank, CR AR).
         // Invoice-sourced sales always use AR (autoPostSaleJE hardcodes useAR=true for source="Invoice"),
