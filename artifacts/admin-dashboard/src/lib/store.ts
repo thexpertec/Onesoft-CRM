@@ -4583,6 +4583,7 @@ export type PaymentRecord = {
   amount: string;
   method: string;
   note:   string;
+  jeRef?: string;   // reference of the journal entry posted for this payment (e.g. RCPT-INV-xxx)
 };
 
 export interface InvoiceDoc {

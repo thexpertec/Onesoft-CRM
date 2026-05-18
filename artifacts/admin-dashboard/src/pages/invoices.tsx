@@ -1995,7 +1995,17 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                             <p className="text-[10px] text-gray-400 dark:text-gray-500">{fmtDate(rec.date)}{rec.note ? ` · ${rec.note}` : ""}</p>
                           </div>
                         </div>
-                        <span className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">{sym}{parseFloat(rec.amount || "0").toFixed(2)}</span>
+                        <div className="flex items-center gap-2">
+                          {rec.jeRef && (
+                            <button
+                              onClick={() => window.open(window.location.origin + import.meta.env.BASE_URL + `journal-entry?q=${encodeURIComponent(rec.jeRef!)}`, "_blank")}
+                              title={`View journal entry ${rec.jeRef}`}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 text-[10px] font-bold text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+                              <BookOpen size={9}/> {rec.jeRef}
+                            </button>
+                          )}
+                          <span className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-400">{sym}{parseFloat(rec.amount || "0").toFixed(2)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2817,7 +2827,9 @@ export function InvoiceFormPage() {
     const inv = getInvoices().find(i => i.id === id);
     if (!inv) return;
 
-    const updatedHistory = [...(inv.paymentHistory ?? []), record];
+    // Mutable copy so we can stamp the JE reference after posting
+    const payRecord = { ...record };
+    const updatedHistory = [...(inv.paymentHistory ?? []), payRecord];
     const updates: Partial<Invoice> = {
       paymentHistory: updatedHistory,
       amountPaid:     newTotalPaid,
@@ -2874,18 +2886,19 @@ export function InvoiceFormPage() {
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
           categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
         });
-        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
+        if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; payRecord.jeRef = je.reference; }
       } else {
         // Subsequent payment — post receipt JE (DR Cash/Bank, CR AR).
         // Invoice-sourced sales always use AR (autoPostSaleJE hardcodes useAR=true for source="Invoice"),
         // so we post a cash receipt JE whenever there is a prior JE on a sale invoice,
         // regardless of whether jeUsesAR was stored (handles invoices created before the flag existed).
         if (payAmt > 0 && (isCredit || inv.jeUsesAR || inv.invoiceType !== "purchase")) {
-          autoPostCashReceiptJE({
+          const rcptJE = autoPostCashReceiptJE({
             reference: inv.invoiceNumber, customer: inv.customer || "Customer",
             date: payDate, amount: payAmt, paymentMethod: payMethod,
             paymentAccountId,
           });
+          if (rcptJE) payRecord.jeRef = rcptJE.reference;
         }
       }
     }
@@ -2897,7 +2910,7 @@ export function InvoiceFormPage() {
       const payDate   = record.date || new Date().toISOString().slice(0, 10);
       const payMethod = (record.method as SalePayment) || "Bank Transfer";
       if (payAmt > 0) {
-        autoPostPurchasePaymentJE({
+        const purchJE = autoPostPurchasePaymentJE({
           reference:        inv.invoiceNumber,
           supplier:         inv.customer || "Supplier",
           date:             payDate,
@@ -2905,6 +2918,7 @@ export function InvoiceFormPage() {
           paymentMethod:    payMethod,
           paymentAccountId: paymentAccountId,
         });
+        if (purchJE) payRecord.jeRef = purchJE.reference;
       }
     }
 
