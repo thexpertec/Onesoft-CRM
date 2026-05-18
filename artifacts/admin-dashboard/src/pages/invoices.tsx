@@ -1960,17 +1960,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   )}
                   {balance > 0.005 && s !== "Cancelled" && (
                     <button
-                      onClick={() => {
-                        const params = new URLSearchParams({
-                          invoiceId:     invoice!.id,
-                          invoiceNumber: invoice!.invoiceNumber,
-                          customer:      form.customer,
-                          amount:        balance.toFixed(dp),
-                          type:          invoiceType === "purchase" ? "payment" : "receipt",
-                        });
-                        window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${params.toString()}`, "_blank");
-                      }}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-[11px] font-bold text-white transition-colors">
+                      onClick={() => setCollectPayOpen(true)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white transition-colors ${
+                        invoiceType === "purchase"
+                          ? "bg-purple-500 hover:bg-purple-600"
+                          : "bg-emerald-500 hover:bg-emerald-600"
+                      }`}>
                       <DollarSign size={11}/> {invoiceType === "purchase" ? "Pay Outstanding" : "Collect Outstanding"}
                     </button>
                   )}
