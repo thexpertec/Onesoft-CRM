@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import {
   getCustomer, getWalletLedger, WalletTransaction, WalletTxType,
   getCustomerWalletBalance, fundCustomerWallet, adjustCustomerWallet,
+  getPaymentAccounts,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import {
@@ -122,19 +123,22 @@ interface FundDialogProps {
   onDone:     () => void;
 }
 function FundDialog({ open, onClose, customerId, onDone }: FundDialogProps) {
-  const sym = getSettingsCurrencySymbol();
-  const dp  = getSettingsDecimalPlaces();
-  const [amount, setAmount] = useState("");
-  const [ref,    setRef]    = useState("");
-  const [note,   setNote]   = useState("");
+  const sym          = getSettingsCurrencySymbol();
+  const dp           = getSettingsDecimalPlaces();
+  const payAccounts  = getPaymentAccounts().filter(a => a.isActive && a.ledgerAccountId);
+  const [amount,        setAmount]        = useState("");
+  const [ref,           setRef]           = useState("");
+  const [note,          setNote]          = useState("");
+  const [cashAccountId, setCashAccountId] = useState<string>("");  // holds the COA ledger ID
   const { toast } = useToast();
 
   const handleSave = () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; }
-    fundCustomerWallet(customerId, amt, ref || undefined, note || "Manual wallet top-up");
+    if (!cashAccountId) { toast({ title: "Select a payment account", description: "Choose the Cash or Bank account receiving the funds.", variant: "destructive" }); return; }
+    fundCustomerWallet(customerId, amt, ref || undefined, note || "Manual wallet top-up", "funded", cashAccountId);
     toast({ title: "Wallet funded", description: `${sym}${amt.toFixed(dp)} added` });
-    setAmount(""); setRef(""); setNote("");
+    setAmount(""); setRef(""); setNote(""); setCashAccountId("");
     onDone();
     onClose();
   };
@@ -148,6 +152,18 @@ function FundDialog({ open, onClose, customerId, onDone }: FundDialogProps) {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-1">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Payment Account *</label>
+            <select value={cashAccountId} onChange={e => setCashAccountId(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+              <option value="">— select Cash / Bank account —</option>
+              {payAccounts.map(a => (
+                <option key={a.id} value={a.ledgerAccountId!}>
+                  {a.accountTitle}{a.bankName ? ` — ${a.bankName}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Amount *</label>
             <div className="relative">

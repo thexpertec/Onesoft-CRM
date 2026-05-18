@@ -689,7 +689,8 @@ export type Customer = {
   advanceCredit?: number;    // Overpayment credit balance — deducted from next outstanding
   notes: string;
   tags: string[];
-  ledgerAccountId?: string;  // auto-created subsidiary ledger under Accounts Receivable
+  ledgerAccountId?: string;         // auto-created subsidiary ledger under Accounts Receivable
+  advanceLedgerAccountId?: string;  // auto-created advance ledger under Customer Advance Payments (2140)
   supplierProducts?: string[];  // product IDs this supplier supplies — filters purchase invoice dropdown
   createdAt: string;
   updatedAt: string;
@@ -700,7 +701,13 @@ const CUSTOMERS_KEY = "admin-customers";
 export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY);
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
-// ─── Wallet Transaction Ledger ────────────────────────────────────────────────
+// ─── Customer Advance Ledger (full double-entry wallet) ───────────────────────
+//
+// Every advance operation now posts a real journal entry to the Chart of Accounts.
+//   Credit the advance ledger  → money held for the customer (liability increases)
+//   Debit  the advance ledger  → advance consumed or reversed  (liability decreases)
+//
+// Balance is derived from JE lines; there is no separate KV wallet ledger.
 
 export type WalletTxType = "funded" | "used" | "manual-credit" | "manual-debit" | "refund";
 
@@ -709,101 +716,209 @@ export type WalletTransaction = {
   customerId:  string;
   date:        string;       // YYYY-MM-DD
   type:        WalletTxType;
-  delta:       number;       // +positive = credit, -negative = debit
-  reference?:  string;       // invoice / sale number
+  delta:       number;       // +positive = credit to advance, -negative = debit
+  reference?:  string;
   note?:       string;
   createdAt:   string;
 };
 
-const WALLET_LEDGER_KEY = "admin-wallet-ledger";
+/**
+ * Ensures the per-customer advance ledger account exists under
+ * Customer Advance Payments (2140).  Creates it on first use and persists
+ * the ID back to the customer record.
+ * Returns the ledger account ID, or null for Walk-in / unknown customers.
+ */
+export function ensureCustomerAdvanceLedger(customerId: string): string | null {
+  const c = getCustomer(customerId);
+  if (!c || c.name === "Walk-in") return null;
 
-export function getWalletLedger(customerId: string): WalletTransaction[] {
-  const all = getStored<WalletTransaction>(WALLET_LEDGER_KEY);
-  return all
-    .filter(t => t.customerId === customerId)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
-}
+  if (c.advanceLedgerAccountId) {
+    const accs = getAccounts();
+    if (accs.some(a => a.id === c.advanceLedgerAccountId && a.accountType === "Ledger")) {
+      return c.advanceLedgerAccountId;
+    }
+  }
 
-function recordWalletTx(tx: Omit<WalletTransaction, "id" | "createdAt">): void {
-  if (Math.abs(tx.delta) < 0.005) return;
-  const all = getStored<WalletTransaction>(WALLET_LEDGER_KEY);
-  all.push({ ...tx, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
-  setStored(WALLET_LEDGER_KEY, all);
-}
+  const lid = createSubsidiaryLedger({
+    parentId:    SYS_ACCS.CUST_ADVANCE_GROUP,
+    parentCode:  "2140",
+    name:        `Advance — ${c.name}`,
+    head:        "Liabilities",
+    subType:     "Current Liability",
+    description: `Customer advance / prepayment account for ${c.name}`,
+  });
 
-// ─── Customer Wallet / Advance Credit Engine ─────────────────────────────────
-
-/** Returns the customer's current wallet balance (advance credit). */
-export function getCustomerWalletBalance(nameOrId: string): number {
-  const c = getCustomers().find(cu => cu.id === nameOrId || cu.name === nameOrId);
-  return Math.max(0, c?.advanceCredit ?? 0);
+  updateCustomer(customerId, { advanceLedgerAccountId: lid });
+  return lid;
 }
 
 /**
- * Add to a customer's wallet / advance credit balance.
- * Called when a customer pays more than their invoice outstanding.
- * The corresponding JE (DR Cash, CR AR) is already posted by the receipt path.
+ * Returns the customer's current wallet / advance credit balance,
+ * derived from the net credit balance on their advance ledger account.
  */
-export function fundCustomerWallet(customerId: string, amount: number, reference?: string, note?: string, type: WalletTxType = "funded"): void {
+export function getCustomerWalletBalance(nameOrId: string): number {
+  const c = getCustomers().find(cu => cu.id === nameOrId || cu.name === nameOrId);
+  if (!c?.advanceLedgerAccountId) return 0;
+  const lid = c.advanceLedgerAccountId;
+  const balance = getJournalEntries().reduce((sum, je) => {
+    for (const line of je.lines) {
+      if (line.ledgerId === lid) sum += line.credit - line.debit;
+    }
+    return sum;
+  }, 0);
+  return Math.max(0, balance);
+}
+
+/**
+ * Returns the wallet transaction ledger for a customer,
+ * derived from journal entries that include their advance ledger account.
+ */
+export function getWalletLedger(customerId: string): WalletTransaction[] {
+  const c = getCustomer(customerId);
+  if (!c?.advanceLedgerAccountId) return [];
+  const lid = c.advanceLedgerAccountId;
+  const txs: WalletTransaction[] = [];
+  for (const je of getJournalEntries()) {
+    const line = je.lines.find(l => l.ledgerId === lid);
+    if (!line) continue;
+    const delta = line.credit - line.debit;
+    if (Math.abs(delta) < 0.005) continue;
+    const ref = je.reference ?? "";
+    const type: WalletTxType =
+      ref.startsWith("ADV-REFUND-") ? "refund"         :
+      ref.startsWith("ADV-ADJ-")    ? (delta > 0 ? "manual-credit" : "manual-debit") :
+      ref.startsWith("ADV-MIGRATE") ? "manual-credit"  :
+      delta > 0                     ? "funded"          : "used";
+    txs.push({
+      id:        je.id,
+      customerId,
+      date:      je.date,
+      type,
+      delta,
+      reference: je.reference,
+      note:      je.description,
+      createdAt: je.createdAt,
+    });
+  }
+  return txs.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * Credit a customer's advance account.
+ *
+ * When `cashAccountId` is provided (manual "Add Funds" from the UI):
+ *   DR cashAccountId (Cash / Bank)  →  CR Customer Advance
+ *
+ * When omitted (auto-funding from overpayment / sale return):
+ *   DR Customer AR ledger           →  CR Customer Advance
+ *   (reclassifies the over-paid AR credit balance into the advance account)
+ *
+ * For receipt-voucher excess the advance line is embedded directly in the
+ * voucher JE (see postRPVoucherJE), so fundCustomerWallet is NOT called there.
+ */
+export function fundCustomerWallet(
+  customerId: string, amount: number, reference?: string, note?: string,
+  type: WalletTxType = "funded", cashAccountId?: string,
+): void {
   if (amount <= 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
-  updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + amount) });
-  recordWalletTx({
-    customerId,
-    date:      new Date().toISOString().slice(0, 10),
-    type,
-    delta:     amount,
-    reference,
-    note:      note ?? (reference ? `Excess payment on ${reference}` : "Wallet funded"),
-  });
+  const advLid = ensureCustomerAdvanceLedger(customerId);
+  if (!advLid) return;
+
+  const drLid     = cashAccountId ?? c.ledgerAccountId ?? SYS_ACCS.AR_TRADE;
+  const refPrefix = type === "refund" ? "ADV-REFUND" : cashAccountId ? "ADV-MANUAL" : "ADV-FUND";
+  const refKey    = `${refPrefix}-${(reference ?? customerId).slice(0, 24)}`;
+  const narration = note ?? (reference ? `Advance — ${reference}` : "Customer advance");
+
+  try {
+    createJournalEntry({
+      date:        new Date().toISOString().slice(0, 10),
+      reference:   refKey,
+      description: narration,
+      lines: [
+        { id: crypto.randomUUID(), ledgerId: drLid,  narration, debit: amount, credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: advLid, narration, debit: 0, credit: amount },
+      ],
+      status:      "posted",
+      totalDebit:  amount,
+      totalCredit: amount,
+      isBalanced:  true,
+    });
+  } catch (err) {
+    console.warn("[Wallet] fundCustomerWallet JE failed:", err);
+  }
 }
 
 /**
- * Adjust a customer's wallet balance by a signed delta.
- *   positive delta → wallet increases (funded)
- *   negative delta → wallet decreases (consumed)
- * Floor at 0 — wallet can never go negative.
+ * Adjust a customer's advance balance by a signed delta.
+ *   positive delta → advance increases
+ *   negative delta → advance decreases
+ *
+ * JE logic:
+ *   "funded" / "refund" (delta > 0) : DR AR ledger   → CR Advance
+ *   "used"              (delta < 0) : DR Advance      → CR AR ledger
+ *   "manual-credit"     (delta > 0) : DR Adj account  → CR Advance
+ *   "manual-debit"      (delta < 0) : DR Advance      → CR Adj account
  */
-export function adjustCustomerWallet(customerId: string, delta: number, reference?: string, note?: string, type?: WalletTxType): void {
+export function adjustCustomerWallet(
+  customerId: string, delta: number, reference?: string, note?: string, type?: WalletTxType,
+): void {
   if (Math.abs(delta) < 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
-  updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + delta) });
-  recordWalletTx({
-    customerId,
-    date:      new Date().toISOString().slice(0, 10),
-    type:      type ?? (delta > 0 ? "manual-credit" : "used"),
-    delta,
-    reference,
-    note:      note ?? (delta > 0 ? "Wallet credited" : "Wallet deducted"),
-  });
+  const advLid = ensureCustomerAdvanceLedger(customerId);
+  if (!advLid) return;
+
+  const arLid  = c.ledgerAccountId ?? SYS_ACCS.AR_TRADE;
+  const adjLid = SYS_ACCS.CUST_ADVANCE_ADJ;
+  const amt    = Math.abs(delta);
+  const resolvedType = type ?? (delta > 0 ? "manual-credit" : "manual-debit");
+  const isArBased    = resolvedType === "funded" || resolvedType === "refund" || resolvedType === "used";
+  const drLid  = delta > 0 ? (isArBased ? arLid : adjLid) : advLid;
+  const crLid  = delta > 0 ? advLid                        : (isArBased ? arLid : adjLid);
+  const refKey    = `ADV-ADJ-${(reference ?? crypto.randomUUID()).slice(0, 24)}`;
+  const narration = note ?? (delta > 0 ? "Advance credit" : "Advance debit");
+
+  try {
+    createJournalEntry({
+      date:        new Date().toISOString().slice(0, 10),
+      reference:   refKey,
+      description: narration,
+      lines: [
+        { id: crypto.randomUUID(), ledgerId: drLid, narration, debit: amt,  credit: 0 },
+        { id: crypto.randomUUID(), ledgerId: crLid, narration, debit: 0,    credit: amt },
+      ],
+      status:      "posted",
+      totalDebit:  amt,
+      totalCredit: amt,
+      isBalanced:  true,
+    });
+  } catch (err) {
+    console.warn("[Wallet] adjustCustomerWallet JE failed:", err);
+  }
 }
 
 /**
  * Apply wallet / advance credit to a sale invoice.
  *
- * Records a "Wallet" payment entry on the invoice, adjusts amountPaid / status,
- * and deducts the applied amount from customer.advanceCredit.
+ *   DR Customer Advance ledger  →  CR Customer AR ledger
  *
- * No JE is posted here — the AR credit balance already exists from the
- * original overpayment receipt JE (DR Cash fullAmt, CR AR fullAmt).
- *
+ * Also records a payment entry on the invoice and updates its status.
  * Returns the amount actually applied (0 if wallet empty or invoice settled).
  */
 export function applyWalletToInvoice(params: {
   invoiceId:  string;
   customerId: string;
-  date:       string; // YYYY-MM-DD
+  date:       string;
 }): number {
   const inv      = getInvoices().find(i => i.id === params.invoiceId);
   const customer = getCustomer(params.customerId);
   if (!inv || !customer) return 0;
 
-  const wallet = Math.max(0, customer.advanceCredit ?? 0);
+  const wallet = getCustomerWalletBalance(params.customerId);
   if (wallet <= 0.005) return 0;
 
-  // Compute grand total (mirrors _applyInvoicePayment logic)
   const subtotal = (inv.items || []).reduce((s, it) => {
     const qty   = parseFloat(it.qty)       || 0;
     const price = parseFloat(it.unitPrice) || 0;
@@ -814,7 +929,6 @@ export function applyWalletToInvoice(params: {
   const grand       = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
   const paid        = parseFloat(inv.amountPaid) || 0;
   const outstanding = grand - paid;
-
   if (outstanding <= 0.005) return 0;
 
   const applied  = Math.min(wallet, outstanding);
@@ -824,6 +938,31 @@ export function applyWalletToInvoice(params: {
     newPaid > 0              ? "Partial" :
     inv.status;
 
+  // ── Post JE: DR Advance, CR AR ───────────────────────────────────────────────
+  const advLid = ensureCustomerAdvanceLedger(params.customerId);
+  const arLid  = customer.ledgerAccountId ?? SYS_ACCS.AR_TRADE;
+  if (advLid) {
+    const narration = `Advance applied — ${inv.invoiceNumber}`;
+    try {
+      createJournalEntry({
+        date:        params.date,
+        reference:   `ADV-USED-${inv.invoiceNumber}`,
+        description: narration,
+        lines: [
+          { id: crypto.randomUUID(), ledgerId: advLid, narration, debit: applied, credit: 0 },
+          { id: crypto.randomUUID(), ledgerId: arLid,  narration, debit: 0, credit: applied },
+        ],
+        status:      "posted",
+        totalDebit:  applied,
+        totalCredit: applied,
+        isBalanced:  true,
+      });
+    } catch (err) {
+      console.warn("[Wallet] applyWalletToInvoice JE failed:", err);
+    }
+  }
+
+  // ── Update invoice ────────────────────────────────────────────────────────────
   const record: PaymentRecord = {
     id:     crypto.randomUUID(),
     date:   params.date,
@@ -831,25 +970,11 @@ export function applyWalletToInvoice(params: {
     method: "Wallet",
     note:   "Wallet / advance credit applied",
   };
-
   updateInvoice(inv.id, {
     amountPaid:     newPaid.toFixed(2),
     status:         newStatus,
     paymentHistory: [...(inv.paymentHistory ?? []), record],
     paidAt:         newStatus === "Paid" ? new Date().toISOString() : inv.paidAt,
-  });
-
-  updateCustomer(params.customerId, {
-    advanceCredit: Math.max(0, wallet - applied),
-  });
-
-  recordWalletTx({
-    customerId: params.customerId,
-    date:       params.date,
-    type:       "used",
-    delta:      -applied,
-    reference:  inv.invoiceNumber,
-    note:       `Wallet applied to invoice ${inv.invoiceNumber}`,
   });
 
   return applied;
@@ -6178,6 +6303,9 @@ export const SYS_ACCS = {
   OWNERS_CAPITAL:     "sys-5100",   // Owner's Capital / Share Capital (5100)
   RETAINED_EARN:      "sys-5200",   // Retained Earnings (5200)
   OPENING_BAL_EQUITY: "sys-5300",   // Opening Balances Equity (5300) — contra account for OB journal entries
+  // Customer Advance Payments (2140) — full double-entry wallet system
+  CUST_ADVANCE_GROUP: "sys-2140",   // Customer Advance Payments GROUP — per-customer subsidiary ledgers
+  CUST_ADVANCE_ADJ:   "sys-2141",   // Advance Adjustments LEDGER — counter for manual credit/debit adj
 } as const;
 
 type SysAccDef = {
@@ -6216,6 +6344,8 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.VAT_PAYABLE,        code: "2120", name: "VAT Payable",                head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Tax Payable",      description: "VAT / tax collected and owed to HMRC" },
   { id: SYS_ACCS.ACCRUED_EXP,        code: "2130", name: "Accrued Expenses",           head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Accrued",          description: "Expenses incurred but not yet paid — subsidiary ledgers per expense type" },
   { id: SYS_ACCS.SALARY_PAYABLE,     code: "2131", name: "Salary Payable",             head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.ACCRUED_EXP,         subType: "Accrued",          description: "Salaries approved but not yet paid to staff", openingBalance: 0, paymentType: "Credit", isActive: true } as unknown as SysAccDef,
+  { id: SYS_ACCS.CUST_ADVANCE_GROUP, code: "2140", name: "Customer Advance Payments",  head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.CURRENT_LIAB,        subType: "Current Liability", description: "Advance payments received from customers before invoicing — per-customer subsidiary ledgers" },
+  { id: SYS_ACCS.CUST_ADVANCE_ADJ,   code: "2141", name: "Advance Adjustments",        head: "Liabilities",      accountType: "Ledger", parentId: SYS_ACCS.CUST_ADVANCE_GROUP,  subType: "Current Liability", description: "Counter account for manual advance credit and debit adjustments", openingBalance: 0, paymentType: null, isActive: true } as unknown as SysAccDef,
   // Non-Current Liabilities
   { id: SYS_ACCS.NON_CURRENT_LIAB,   code: "2200", name: "Non-Current Liabilities",    head: "Liabilities",      accountType: "Group",  parentId: SYS_ACCS.LIAB_ROOT,           subType: "Non-Current Liability", description: "Obligations due after 12 months" },
 
@@ -6554,6 +6684,42 @@ export function seedDefaultCoaAccounts(): void {
       _apiWrite(jeSk, repairedJEs).catch(() => { /* handled via onesoft:write-error event */ });
     }
     done.add("m11"); migrationsChanged = true;
+  }
+
+  // ── m12: Migrate existing advanceCredit balances to double-entry ledger JEs ──
+  // For any customer that has a non-zero advanceCredit field but no JE-based
+  // advance ledger yet, we post a one-time opening JE to seed the new system.
+  if (!done.has("m12")) {
+    const _allCustomers = getStored<Customer>(CUSTOMERS_KEY);
+    let _jePosted = false;
+    for (const _c of _allCustomers) {
+      const _oldBal = _c.advanceCredit ?? 0;
+      if (_oldBal <= 0.005) continue;
+      if (_c.advanceLedgerAccountId) continue; // already migrated
+      const _advLid = ensureCustomerAdvanceLedger(_c.id);
+      if (!_advLid) continue;
+      try {
+        const _narr = `Wallet balance migration — ${_c.name}`;
+        createJournalEntry({
+          date:        new Date().toISOString().slice(0, 10),
+          reference:   `ADV-MIGRATE-${_c.id.slice(0, 8)}`,
+          description: _narr,
+          lines: [
+            { id: crypto.randomUUID(), ledgerId: SYS_ACCS.OPENING_BAL_EQUITY, narration: _narr, debit: _oldBal, credit: 0 },
+            { id: crypto.randomUUID(), ledgerId: _advLid,                      narration: _narr, debit: 0, credit: _oldBal },
+          ],
+          status:      "posted",
+          totalDebit:  _oldBal,
+          totalCredit: _oldBal,
+          isBalanced:  true,
+        });
+        _jePosted = true;
+      } catch (_err) {
+        console.warn("[m12] Advance migration JE failed for", _c.name, _err);
+      }
+    }
+    if (_jePosted) console.info("[m12] Migrated existing advanceCredit balances to double-entry ledger JEs");
+    done.add("m12"); migrationsChanged = true;
   }
 
   // ── Persist static migration results ────────────────────────────────────────
@@ -9060,20 +9226,7 @@ export function deleteRPVoucher(id: string): void {
         }
       }
     }
-    // Reverse any advance credit that was stored when posting (runs for both multi-invoice and no-invoice)
-    if (v.partyName && Array.isArray(v.linkedInvoiceIds)) {
-      const bankLinesTotal = (v.bankLines || []).reduce((s, l) => s + l.amount, 0);
-      const invoiceApplied = v.lines.reduce((s, l) => s + (l.invoiceId ? l.amount : 0), 0);
-      const excess = bankLinesTotal - invoiceApplied;
-      if (excess > 0.01) {
-        const contact = getCustomers().find(c =>
-          c.name.toLowerCase() === v.partyName!.toLowerCase()
-        );
-        if (contact) {
-          adjustCustomerWallet(contact.id, -excess, v.voucherNumber, "Advance credit reversed — voucher deleted");
-        }
-      }
-    }
+    // Advance credit was embedded in the voucher JE — deleting the JE above reverses it automatically.
   }
 
   // 3. Remove the voucher
@@ -9159,6 +9312,28 @@ export function postRPVoucherJE(id: string): JournalEntry {
     }
   }
 
+  // ── Embed advance credit line when receipt bank total exceeds invoices applied ─
+  // This balances the JE: DR Cash [full], CR AR [invoice amounts], CR Advance [excess].
+  // The advance liability is recorded in one atomic entry — no separate JE needed.
+  if (v.voucherType === "receipt" && v.partyName && Array.isArray(v.linkedInvoiceIds)) {
+    const _bankTotal  = (v.bankLines || []).reduce((s, l) => s + l.amount, 0);
+    const _invApplied = v.lines.reduce((s, l) => s + (l.invoiceId ? l.amount : 0), 0);
+    const _excess     = parseFloat((_bankTotal - _invApplied).toFixed(2));
+    if (_excess > 0.01) {
+      const _contact = getCustomers().find(c => c.name.toLowerCase() === v.partyName!.toLowerCase());
+      if (_contact) {
+        const _advLid = ensureCustomerAdvanceLedger(_contact.id);
+        if (_advLid) {
+          lines.push({
+            id: crypto.randomUUID(), ledgerId: _advLid,
+            narration: `Advance credit — ${v.voucherNumber}`,
+            debit: 0, credit: _excess,
+          });
+        }
+      }
+    }
+  }
+
   const je = createJournalEntry({
     date: v.date,
     reference: v.voucherNumber,
@@ -9219,21 +9394,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
     }
   }
 
-  // Track advance credit when bank total exceeds invoices paid.
-  // Runs for both multi-invoice and no-invoice (advance-only) receipts/payments.
-  if (v.partyName && Array.isArray(v.linkedInvoiceIds)) {
-    const bankLinesTotal = (v.bankLines || []).reduce((s, l) => s + l.amount, 0);
-    const invoiceApplied = v.lines.reduce((s, l) => s + (l.invoiceId ? l.amount : 0), 0);
-    const excess = bankLinesTotal - invoiceApplied;
-    if (excess > 0.01) {
-      const contact = getCustomers().find(c =>
-        c.name.toLowerCase() === v.partyName!.toLowerCase()
-      );
-      if (contact) {
-        fundCustomerWallet(contact.id, excess, v.voucherNumber, "Advance credit — receipt voucher");
-      }
-    }
-  }
+  // Advance credit line is now embedded in the JE above — no separate wallet call.
 
   return je;
 }
