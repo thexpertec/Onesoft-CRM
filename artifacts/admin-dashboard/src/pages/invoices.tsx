@@ -2147,20 +2147,15 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
             </button>
           )}
 
-          {/* Collect / Pay — navigate to receipt-payment page with invoice pre-filled */}
+          {/* Collect / Pay — open the payment modal inline */}
           {!isNew && s !== "Cancelled" && balance > 0.005 && (
             <button
-              onClick={() => {
-                const params = new URLSearchParams({
-                  invoiceId:     invoice!.id,
-                  invoiceNumber: invoice!.invoiceNumber,
-                  customer:      form.customer,
-                  amount:        balance.toFixed(dp),
-                  type:          invoiceType === "purchase" ? "payment" : "receipt",
-                });
-                window.open(window.location.origin + import.meta.env.BASE_URL + `receipt-payment?${params.toString()}`, "_blank");
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+              onClick={() => setCollectPayOpen(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+                invoiceType === "purchase"
+                  ? "border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/40"
+                  : "border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+              }`}
             >
               <DollarSign size={14}/> {invoiceType === "purchase" ? "Pay Supplier" : "Collect Payment"}
             </button>
