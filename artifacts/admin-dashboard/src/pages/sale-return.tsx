@@ -5,7 +5,7 @@ import {
   getSales, getSaleReturns, createSaleReturn, updateSaleReturn, deleteSaleReturn,
   restoreStockForSale, autoPostSaleReturnJE, getPaymentAccounts,
   type Sale, type SaleReturn, type SaleReturnItem, type SalePayment,
-  getProducts,
+  getProducts, getCustomers, getCustomerWalletBalance, fundCustomerWallet,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Undo2, Plus, Search, Trash2, Eye, Printer, CheckCircle2,
-  ShoppingBag, ChevronRight, AlertCircle, Package, X, ExternalLink,
+  ShoppingBag, ChevronRight, AlertCircle, Package, X, ExternalLink, Wallet,
 } from "lucide-react";
 
 const dp = getSettingsDecimalPlaces();
@@ -235,6 +235,12 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   }, []);
   const sym = getSettingsCurrencySymbol();
 
+  // Wallet helpers — only meaningful for named (non walk-in) customers
+  const isWalkIn    = !selectedSale?.customer?.trim() || selectedSale.customer.trim().toLowerCase() === "walk-in";
+  const custWallet  = selectedSale?.customer && !isWalkIn
+    ? getCustomerWalletBalance(selectedSale.customer)
+    : 0;
+
   const filteredSales = useMemo(() => {
     if (!saleSearch.trim()) return sales;
     const q = saleSearch.toLowerCase();
@@ -355,7 +361,21 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
         updateSaleReturn(sr.id, { jeId: je.id });
       }
 
-      toast({ title: `${sr.returnNumber} posted`, description: `Stock restored · ${je ? "JE posted" : "JE skipped (configure COA accounts in Settings)"}` });
+      // Fund customer wallet if the refund method is "Wallet"
+      if (refundMethod === "Wallet" && sr.customer && sr.customer !== "Walk-in") {
+        const cust = getCustomers().find(c => c.name === sr.customer);
+        if (cust) {
+          fundCustomerWallet(
+            cust.id,
+            grandTotal,
+            sr.returnNumber,
+            `Sale return credit — ${sr.returnNumber}`,
+          );
+        }
+      }
+
+      const walletNote = refundMethod === "Wallet" ? " · Refund credited to wallet" : "";
+      toast({ title: `${sr.returnNumber} posted`, description: `Stock restored · ${je ? "JE posted" : "JE skipped (configure COA accounts in Settings)"}${walletNote}` });
       onSaved();
     } catch (e: unknown) {
       toast({ title: "Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
@@ -436,11 +456,49 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Return Date</label>
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 h-8 text-sm" />
             </div>
-            <div className="col-span-2">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Refund Via</label>
+              <select
+                value={refundMethod}
+                onChange={e => setRefundMethod(e.target.value as SalePayment)}
+                className="mt-1 w-full h-8 px-2 rounded-md border border-input bg-background text-sm focus:ring-2 focus:ring-ring outline-none"
+              >
+                {refundMethodOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                <option value="Wallet">Wallet / Advance Credit</option>
+              </select>
+            </div>
+            <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reason</label>
               <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Defective product…" className="mt-1 h-8 text-sm" />
             </div>
           </div>
+
+          {/* Wallet info strip */}
+          {refundMethod === "Wallet" && (
+            <div className={`px-6 py-3 border-b flex items-center gap-2.5 ${
+              isWalkIn
+                ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800/40"
+                : "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/40"
+            }`}>
+              <Wallet size={14} className={isWalkIn ? "text-orange-500 shrink-0" : "text-blue-500 shrink-0"}/>
+              {isWalkIn ? (
+                <p className="text-[12px] font-semibold text-orange-700 dark:text-orange-400">
+                  Wallet refunds are not available for walk-in customers. Please select a cash or bank method.
+                </p>
+              ) : (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-[12px] font-semibold text-blue-700 dark:text-blue-400">
+                    Wallet Balance: {sym}{custWallet.toFixed(dp)}
+                  </span>
+                  <span className="text-[11px] text-blue-600 dark:text-blue-500">
+                    · {fmt(grandTotal)} will be credited to <strong>{selectedSale.customer}</strong>'s wallet on posting.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Items to return */}
           <div className="px-6 py-4 space-y-3">
@@ -524,7 +582,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
               <Button
                 size="sm"
                 onClick={handlePost}
-                disabled={submitting || returnItems.filter(i => parseFloat(i.qty) > 0).length === 0}
+                disabled={submitting || returnItems.filter(i => parseFloat(i.qty) > 0).length === 0 || (refundMethod === "Wallet" && isWalkIn)}
                 className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5"
               >
                 <CheckCircle2 size={14} />
