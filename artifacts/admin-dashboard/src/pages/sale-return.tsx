@@ -252,7 +252,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
       productName: item.productName,
       sku:         item.sku || "",
       unit:        item.unit || "pcs",
-      qty:         item.qty,
+      qty:         "0",           // all unchecked by default
       unitPrice:   item.unitPrice,
       discount:    item.discount || "0",
       // Use costPrice locked at sale time first; fall back to catalogue with variant-aware lookup
@@ -458,7 +458,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
           <div className="px-6 py-4 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Items to Return</p>
-              <p className="text-xs text-muted-foreground">Set qty to 0 to exclude an item</p>
+              <p className="text-xs text-muted-foreground">Check items you want to return</p>
             </div>
 
             {returnItems.length === 0 ? (
@@ -468,13 +468,21 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                 {returnItems.map(item => {
                   const maxQty = selectedSale.items.find(i => i.sku === item.sku)?.qty || item.qty;
                   const q = parseFloat(item.qty) || 0;
+                  const checked = q > 0;
                   const p = parseFloat(item.unitPrice) || 0;
                   const d = parseFloat(item.discount) || 0;
                   const lineTotal = q * p * (1 - d / 100);
                   return (
-                    <div key={item.id} className={`rounded-xl border p-3 transition-all ${q === 0 ? "border-gray-100 dark:border-zinc-800 opacity-50" : "border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/10"}`}>
+                    <div key={item.id} className={`rounded-xl border p-3 transition-all ${checked ? "border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/10" : "border-gray-100 dark:border-zinc-800 opacity-60"}`}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5 min-w-0">
+                          {/* Checkbox */}
+                          <button
+                            onClick={() => patchItem(item.id, "qty", checked ? "0" : maxQty)}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-rose-500 border-rose-500 text-white" : "border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800"}`}
+                          >
+                            {checked && <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3"><path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </button>
                           <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
                             <Package size={14} className="text-gray-500" />
                           </div>
@@ -483,25 +491,22 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                             <p className="text-[10px] text-muted-foreground">{item.sku || "—"} · {sym}{p.toFixed(dp)} each{d > 0 ? ` · ${d}% disc` : ""}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="flex flex-col items-end gap-1">
+                        {checked && (
+                          <div className="flex flex-col items-end gap-1 shrink-0">
                             <div className="flex items-center gap-1.5">
                               <label className="text-[10px] text-muted-foreground">Qty (max {maxQty})</label>
                               <Input
                                 type="number"
-                                min="0"
+                                min="1"
                                 max={maxQty}
                                 value={item.qty}
                                 onChange={e => patchItem(item.id, "qty", e.target.value)}
                                 className="w-20 h-7 text-sm text-right"
                               />
                             </div>
-                            {q > 0 && <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{sym}{lineTotal.toFixed(dp)}</p>}
+                            <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{sym}{lineTotal.toFixed(dp)}</p>
                           </div>
-                          <button onClick={() => removeItem(item.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
+                        )}
                       </div>
                     </div>
                   );
