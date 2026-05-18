@@ -369,8 +369,9 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
 
   if (!open) return null;
 
-  const amt   = parseFloat(amount) || 0;
-  const valid = amt > 0;
+  const amt        = parseFloat(amount) || 0;
+  const overAmount = amt > outstanding + 0.005;
+  const valid      = amt > 0 && !overAmount;
 
   // Resolve the chosen payment account for JE preview
   const chosenPA: PaymentAccount | undefined = payAccId
@@ -478,9 +479,18 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
                 onChange={e => setAmount(e.target.value)}
                 autoFocus
                 placeholder="0.00"
-                className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-base font-bold text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                className={`w-full pl-8 pr-4 py-3 rounded-xl border-2 bg-white dark:bg-zinc-800 text-base font-bold text-gray-900 dark:text-gray-100 focus:ring-2 outline-none transition-colors ${
+                  overAmount
+                    ? "border-red-400 dark:border-red-600 focus:ring-red-400 focus:border-red-400"
+                    : "border-gray-200 dark:border-zinc-700 focus:ring-emerald-500 focus:border-emerald-500"
+                }`}
               />
             </div>
+            {overAmount && (
+              <p className="mt-1.5 text-[11px] font-semibold text-red-500">
+                Cannot exceed outstanding balance ({sym}{outstanding.toFixed(dp)})
+              </p>
+            )}
           </div>
 
           {/* Payment Account */}

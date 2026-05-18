@@ -8233,6 +8233,16 @@ export function autoPostCashReceiptJE(params: {
 
   if (!cashId || !contactLedgerId) return null;
 
+  // Generate a unique reference per payment: RCPT-INV-xxx for the first receipt,
+  // RCPT-INV-xxx-2, -3, … for subsequent ones.
+  // This prevents the idempotency guard in createJournalEntry from silently
+  // returning the first JE instead of creating a new one for later instalments.
+  const _rcptBase = `RCPT-${params.reference}`;
+  const _rcptCount = getJournalEntries().filter(je =>
+    je.reference === _rcptBase || je.reference.startsWith(_rcptBase + "-")
+  ).length;
+  const _rcptRef = _rcptCount === 0 ? _rcptBase : `${_rcptBase}-${_rcptCount + 1}`;
+
   const narration = `Receipt – ${params.reference} – ${params.customer}`;
   const lines: JournalEntryLine[] = [
     { id: crypto.randomUUID(), ledgerId: cashId,          narration, debit: params.amount,  credit: 0 },
@@ -8241,7 +8251,7 @@ export function autoPostCashReceiptJE(params: {
 
   return createJournalEntry({
     date:        params.date,
-    reference:   `RCPT-${params.reference}`,
+    reference:   _rcptRef,
     description: `Cash Receipt: ${params.reference} – ${params.customer}`,
     lines,
     status:      "posted",
@@ -8294,6 +8304,13 @@ export function autoPostPurchasePaymentJE(params: {
 
   if (!cashId || !apId) return null;
 
+  // Unique reference per payment instalment (same logic as autoPostCashReceiptJE)
+  const _payBase  = `PAY-${params.reference}`;
+  const _payCount = getJournalEntries().filter(je =>
+    je.reference === _payBase || je.reference.startsWith(_payBase + "-")
+  ).length;
+  const _payRef = _payCount === 0 ? _payBase : `${_payBase}-${_payCount + 1}`;
+
   const narration = `Supplier Payment – ${params.reference} – ${params.supplier}`;
   const lines: JournalEntryLine[] = [
     { id: crypto.randomUUID(), ledgerId: apId,   narration, debit: params.amount, credit: 0             },
@@ -8302,7 +8319,7 @@ export function autoPostPurchasePaymentJE(params: {
 
   return createJournalEntry({
     date:        params.date,
-    reference:   `PAY-${params.reference}`,
+    reference:   _payRef,
     description: `Supplier Payment: ${params.reference} – ${params.supplier}`,
     lines,
     status:      "posted",
