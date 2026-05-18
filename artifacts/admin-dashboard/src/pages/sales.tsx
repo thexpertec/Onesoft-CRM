@@ -3057,7 +3057,10 @@ export default function SalesPage() {
         // Cap at grandTotal_ so excess tender (change for walk-ins, or wallet credit
         // for named customers) does not create a phantom AR credit balance.
         // Wallet overpayments are handled separately via adjustCustomerWallet.
-        if (je?.usesAR && paidNum > 0) {
+        // SKIP when receiptEmbedded = true: Walk-in cash POS sales already have the
+        // transit (DR Cash / CR Walk-in AR) embedded in the sale JE — a separate
+        // receipt JE would double-credit the Walk-in AR ledger.
+        if (je?.usesAR && !je.receiptEmbedded && paidNum > 0) {
           const receiptAmt = Math.min(paidNum, grandTotal_);
           autoPostCashReceiptJE({
             reference:     detailSale?.saleNumber || "",

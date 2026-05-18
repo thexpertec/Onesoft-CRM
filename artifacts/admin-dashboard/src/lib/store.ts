@@ -8343,7 +8343,7 @@ export function autoPostSaleJE(params: {
   amountPaid?:   number;
   /** Per-category breakdown — drives per-category Revenue and Inventory JE lines */
   categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
-}): JournalEntry & { usesAR: boolean } | null {
+}): JournalEntry & { usesAR: boolean; receiptEmbedded: boolean } | null {
   const s = getSettings();
 
   // ── Debit side: AR / Cash / Bank ─────────────────────────────────────────
@@ -8487,7 +8487,10 @@ export function autoPostSaleJE(params: {
   // For Walk-in POS cash sales paid in full on the spot: the AR debit above
   // (DR 1130-000) is immediately cleared by DR Cash / CR 1130-000 so the
   // account shows the sale transit without leaving a false outstanding balance.
-  if (isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice") {
+  // IMPORTANT: when this transit is embedded here, the caller MUST NOT post a
+  // separate cash-receipt JE — check the returned `receiptEmbedded` flag.
+  const _transitEmbedded = isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice";
+  if (_transitEmbedded) {
     const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
     const pmCashId  = dynLedger
                    || (params.paymentMethod === "Cash"
@@ -8515,7 +8518,7 @@ export function autoPostSaleJE(params: {
     isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
   if (!je) return null;
-  return Object.assign(je, { usesAR: useAR });
+  return Object.assign(je, { usesAR: useAR, receiptEmbedded: _transitEmbedded });
 }
 
 /**
