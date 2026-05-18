@@ -17,6 +17,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8080 pnpm --filter @workspace/api-server run dev & PORT=22133 BASE_PATH=/admin-dashboard/ pnpm --filter @workspace/admin-dashboard run dev & PORT=25357 BASE_PATH=/ pnpm --filter @workspace/requirement-doc run dev & PORT=23434 BASE_PATH=/customer-portal/ pnpm --filter @workspace/customer-portal run dev & PORT=23993 BASE_PATH=/tenant-store/ pnpm --filter @workspace/tenant-store run dev & wait"
+waitForPort = 8080
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
