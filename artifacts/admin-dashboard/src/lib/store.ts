@@ -8404,21 +8404,20 @@ export function autoPostSaleJE(params: {
   // so every anonymous POS sale (cash or credit) appears in the Walk-in Customer ledger.
   // For named customers, findSubLedgerForParty returns their single primary ledger
   // (may be AR under 1130 for buyers, or AP under 2111 for supplier-customers).
-  // Both account types are valid debit targets for a sale — a supplier's AP account
-  // debited on a sale reduces the balance owed, implementing a running/combined account.
   const _customerLedgerId = findSubLedgerForParty(params.customer, SYS_ACCS.AR_GROUP);
   const isWalkIn           = _customerLedgerId === SYS_ACCS.WALK_IN_CUSTOMER_AR;
 
-  // Named (non-walk-in) customer with their own ledger — always transit so the sale
-  // appears in their individual account regardless of whether it is AR or AP.
-  // This mirrors the walk-in transit pattern and keeps a single running account clean.
-  const isNamedWithLedger = !!_customerLedgerId && !isWalkIn;
-
-  // Invoice-source JEs are always accrual (ledger debit) unless it's a POS sale paid in full.
-  // Walk-in and named-customer POS sales always use the ledger so the transit shows.
+  // Running-account rule for named customers:
+  //   Cash POS sale → DR Cash / CR Revenue only. No entry in the customer ledger.
+  //                   The ledger balance is unchanged — cash was collected immediately.
+  //   Credit sale   → DR Customer Ledger / CR Revenue. Balance opens until paid.
+  //   Invoice       → always accrual (AR/AP debit).
+  //
+  // Walk-in is the only case that always transits through the AR ledger (even cash),
+  // so anonymous sales appear in 1130-000 for reporting purposes.
   const useAR         = params.source === "Invoice"
                         ? true
-                        : isCredit || isOutstanding || isWalkIn || isNamedWithLedger;
+                        : isCredit || isOutstanding || isWalkIn;
 
   // ── Resolve the payment-method debit account ─────────────────────────────
   // Priority:
@@ -8533,15 +8532,15 @@ export function autoPostSaleJE(params: {
     }
   }
 
-  // ── Walk-in / named-customer immediate cash transit ──────────────────────
-  // For POS cash sales paid in full on the spot, the ledger debit above is
-  // immediately cleared by DR Cash / CR Customer Ledger so the account shows
-  // the sale as a transit entry without leaving a false outstanding balance.
-  // Applies equally to walk-in customers (1130-000) and to named customers
-  // who have their own sub-ledger (AR or AP — single running account).
+  // ── Walk-in immediate cash transit ───────────────────────────────────────
+  // Only Walk-in POS cash sales embed a transit so the 1130-000 ledger shows
+  // the sale passing through without leaving a false outstanding balance.
+  // Named customers do NOT use this transit — their running account (AR or AP)
+  // is only debited for credit sales / invoices, and cleared by a separate
+  // cash-receipt JE when payment arrives.
   // IMPORTANT: when this transit is embedded here, the caller MUST NOT post a
   // separate cash-receipt JE — check the returned `receiptEmbedded` flag.
-  const _transitEmbedded = (isWalkIn || isNamedWithLedger) && !isCredit && !isOutstanding && params.source !== "Invoice";
+  const _transitEmbedded = isWalkIn && !isCredit && !isOutstanding && params.source !== "Invoice";
   if (_transitEmbedded) {
     const dynLedger = _resolvePayMethodLedger(params.paymentMethod);
     const pmCashId  = dynLedger
