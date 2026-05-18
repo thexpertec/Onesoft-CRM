@@ -23,6 +23,7 @@ import {
   getPaymentAccounts, PaymentAccount,
   getAccounts,
   SYS_ACCS, findSubLedgerForParty, resolveToLedger,
+  getCustomerWalletBalance, fundCustomerWallet, applyWalletToInvoice,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
@@ -35,7 +36,7 @@ import {
   Save, CreditCard, ArrowLeft, Eye,
   ChevronDown, ChevronUp, PlusCircle, FileDown,
   DollarSign, Receipt, BookOpen, ChevronRight, PackagePlus,
-  Calculator, Upload, RefreshCw, Tag, Lock,
+  Calculator, Upload, RefreshCw, Tag, Lock, Wallet,
 } from "lucide-react";
 import { downloadExcel } from "@/lib/export-excel";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -337,15 +338,16 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Collect Payment Modal ─────────────────────────────────────────────────────
 interface CollectPaymentModalProps {
-  open:          boolean;
-  onClose:       () => void;
-  invoiceNumber: string;
-  outstanding:   number;
-  onConfirm:     (record: PaymentRecord, paymentAccountId?: string) => void;
-  isPurchase?:   boolean;
-  party?:        string; // customer name (sale) or supplier name (purchase)
+  open:           boolean;
+  onClose:        () => void;
+  invoiceNumber:  string;
+  outstanding:    number;
+  walletBalance?: number; // customer wallet/advance credit available
+  onConfirm:      (record: PaymentRecord, paymentAccountId?: string) => void;
+  isPurchase?:    boolean;
+  party?:         string; // customer name (sale) or supplier name (purchase)
 }
-function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConfirm, isPurchase, party }: CollectPaymentModalProps) {
+function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, walletBalance = 0, onConfirm, isPurchase, party }: CollectPaymentModalProps) {
   const sym = getSettingsCurrencySymbol();
   const [amount,    setAmount]    = useState(outstanding > 0 ? outstanding.toFixed(dp) : "");
   const [method,    setMethod]    = useState<SalePayment>("Bank Transfer");
@@ -370,7 +372,9 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
   if (!open) return null;
 
   const amt        = parseFloat(amount) || 0;
-  const overAmount = amt > outstanding + 0.005;
+  // Purchase invoices: never overpay a supplier. Sale invoices: excess → wallet.
+  const overAmount = isPurchase ? amt > outstanding + 0.005 : false;
+  const excess     = !isPurchase ? Math.max(0, amt - outstanding) : 0;
   const valid      = amt > 0 && !overAmount;
 
   // Resolve the chosen payment account for JE preview
@@ -459,6 +463,17 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
         {/* Body — scrollable */}
         <div className="px-6 py-5 space-y-4 overflow-y-auto">
 
+          {/* Wallet balance info (sale only) */}
+          {!isPurchase && walletBalance > 0.005 && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50">
+              <div className="flex items-center gap-2">
+                <Wallet size={13} className="text-blue-500 shrink-0"/>
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">Wallet Balance</span>
+              </div>
+              <span className="text-base font-bold font-mono text-blue-700 dark:text-blue-400">{sym}{walletBalance.toFixed(dp)}</span>
+            </div>
+          )}
+
           {/* Outstanding */}
           {outstanding > 0 && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
@@ -482,6 +497,8 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
                 className={`w-full pl-8 pr-4 py-3 rounded-xl border-2 bg-white dark:bg-zinc-800 text-base font-bold text-gray-900 dark:text-gray-100 focus:ring-2 outline-none transition-colors ${
                   overAmount
                     ? "border-red-400 dark:border-red-600 focus:ring-red-400 focus:border-red-400"
+                    : excess > 0.005
+                    ? "border-blue-400 dark:border-blue-600 focus:ring-blue-400 focus:border-blue-400"
                     : "border-gray-200 dark:border-zinc-700 focus:ring-emerald-500 focus:border-emerald-500"
                 }`}
               />
@@ -489,6 +506,11 @@ function CollectPaymentModal({ open, onClose, invoiceNumber, outstanding, onConf
             {overAmount && (
               <p className="mt-1.5 text-[11px] font-semibold text-red-500">
                 Cannot exceed outstanding balance ({sym}{outstanding.toFixed(dp)})
+              </p>
+            )}
+            {excess > 0.005 && !overAmount && (
+              <p className="mt-1.5 text-[11px] font-semibold text-blue-500 flex items-center gap-1">
+                <Wallet size={10}/> {sym}{excess.toFixed(dp)} excess will be saved to customer wallet
               </p>
             )}
           </div>
@@ -1970,6 +1992,30 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       <DollarSign size={11}/> {invoiceType === "purchase" ? "Pay Outstanding" : "Collect Outstanding"}
                     </button>
                   )}
+                  {(() => {
+                    const wb = invoiceType !== "purchase" && invoice?.customer
+                      ? getCustomerWalletBalance(invoice.customer)
+                      : 0;
+                    return wb > 0.005 && balance > 0.005 && s !== "Cancelled" ? (
+                      <button
+                        onClick={() => {
+                          const sym2 = getSettingsCurrencySymbol();
+                          const today = new Date().toISOString().slice(0, 10);
+                          const cust  = getCustomers().find(c => c.name === invoice?.customer);
+                          if (!cust || !invoice?.id) return;
+                          const applied = applyWalletToInvoice({ invoiceId: invoice.id, customerId: cust.id, date: today });
+                          if (applied > 0) {
+                            const freshInv = getInvoices().find(i => i.id === invoice.id);
+                            if (freshInv) { setPayHist(freshInv.paymentHistory ?? []); setPayInput(freshInv.amountPaid); }
+                            toast({ title: "Wallet applied", description: `${sym2}${applied.toFixed(dp)} applied from customer wallet` });
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-blue-500 hover:bg-blue-600 transition-colors"
+                      >
+                        <Wallet size={11}/> Apply Wallet
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
               </div>
               <div className="px-5 py-4">
@@ -1993,6 +2039,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     </p>
                   </div>
                 </div>
+                {/* Wallet balance strip (sale invoices only) */}
+                {invoiceType !== "purchase" && (() => {
+                  const wb = invoice?.customer ? getCustomerWalletBalance(invoice.customer) : 0;
+                  return wb > 0.005 ? (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Wallet size={12} className="text-blue-500 shrink-0"/>
+                        <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Customer Wallet</span>
+                      </div>
+                      <span className="text-sm font-bold font-mono text-blue-700 dark:text-blue-400">{sym}{wb.toFixed(dp)}</span>
+                    </div>
+                  ) : null;
+                })()}
                 {savedHistory.length > 0 ? (
                   <div className="space-y-2">
                     <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Payment History</p>
@@ -2221,6 +2280,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
           onClose={() => setCollectPayOpen(false)}
           invoiceNumber={invoice.invoiceNumber}
           outstanding={balance}
+          walletBalance={invoiceType !== "purchase" && invoice.customer ? getCustomerWalletBalance(invoice.customer) : 0}
           isPurchase={invoiceType === "purchase"}
           party={invoice.customer || ""}
           onConfirm={(record, paymentAccountId) => {
@@ -2948,10 +3008,30 @@ export function InvoiceFormPage() {
       }
     }
 
+    // ── Wallet: cap amountPaid at invoice total; excess goes to customer wallet ─
+    let walletFunded = 0;
+    if (inv.invoiceType !== "purchase") {
+      const { total: grandCap } = computeTotals(inv.items, inv.taxRate, newTotalPaid, inv.shippingFee, inv.handlingFee);
+      const newPaidNum = parseFloat(newTotalPaid) || 0;
+      walletFunded = Math.max(0, newPaidNum - grandCap);
+      if (walletFunded > 0.005) {
+        updates.amountPaid = grandCap.toFixed(dp);
+        updates.status     = "Paid";
+      }
+    }
+
     editInvoice(id, updates);
+
+    // Fund wallet after saving (so customer.advanceCredit reflects the excess)
+    if (walletFunded > 0.005) {
+      const cust = getCustomers().find(c => c.name === inv.customer);
+      if (cust) fundCustomerWallet(cust.id, walletFunded);
+    }
+
     const sym = getSettingsCurrencySymbol();
     const actionWord = inv.invoiceType === "purchase" ? "paid" : "collected";
-    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} ${actionWord} · ${newStatus}` });
+    const walletNote = walletFunded > 0.005 ? ` · ${sym}${walletFunded.toFixed(dp)} added to wallet` : "";
+    toast({ title: "Payment recorded", description: `${sym}${parseFloat(newTotalPaid).toFixed(2)} ${actionWord} · ${newStatus}${walletNote}` });
   }, [editInvoice, toast]);
 
   const handleDelete = useCallback((id: string) => {

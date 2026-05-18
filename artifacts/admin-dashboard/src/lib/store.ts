@@ -700,6 +700,94 @@ const CUSTOMERS_KEY = "admin-customers";
 export const getCustomers = (): Customer[] => getStored<Customer>(CUSTOMERS_KEY);
 export const getCustomer = (id: string): Customer | undefined => getCustomers().find(c => c.id === id);
 
+// ─── Customer Wallet / Advance Credit Engine ─────────────────────────────────
+
+/** Returns the customer's current wallet balance (advance credit). */
+export function getCustomerWalletBalance(nameOrId: string): number {
+  const c = getCustomers().find(cu => cu.id === nameOrId || cu.name === nameOrId);
+  return Math.max(0, c?.advanceCredit ?? 0);
+}
+
+/**
+ * Add to a customer's wallet / advance credit balance.
+ * Called when a customer pays more than their invoice outstanding.
+ * The corresponding JE (DR Cash, CR AR) is already posted by the receipt path.
+ */
+export function fundCustomerWallet(customerId: string, amount: number): void {
+  if (amount <= 0.005) return;
+  const c = getCustomer(customerId);
+  if (!c) return;
+  updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + amount) });
+}
+
+/**
+ * Apply wallet / advance credit to a sale invoice.
+ *
+ * Records a "Wallet" payment entry on the invoice, adjusts amountPaid / status,
+ * and deducts the applied amount from customer.advanceCredit.
+ *
+ * No JE is posted here — the AR credit balance already exists from the
+ * original overpayment receipt JE (DR Cash fullAmt, CR AR fullAmt).
+ *
+ * Returns the amount actually applied (0 if wallet empty or invoice settled).
+ */
+export function applyWalletToInvoice(params: {
+  invoiceId:  string;
+  customerId: string;
+  date:       string; // YYYY-MM-DD
+}): number {
+  const inv      = getInvoices().find(i => i.id === params.invoiceId);
+  const customer = getCustomer(params.customerId);
+  if (!inv || !customer) return 0;
+
+  const wallet = Math.max(0, customer.advanceCredit ?? 0);
+  if (wallet <= 0.005) return 0;
+
+  // Compute grand total (mirrors _applyInvoicePayment logic)
+  const subtotal = (inv.items || []).reduce((s, it) => {
+    const qty   = parseFloat(it.qty)       || 0;
+    const price = parseFloat(it.unitPrice) || 0;
+    const disc  = parseFloat(it.discount)  || 0;
+    return s + (qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc));
+  }, 0);
+  const tax         = subtotal * (parseFloat(inv.taxRate) || 0) / 100;
+  const grand       = subtotal + tax + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
+  const paid        = parseFloat(inv.amountPaid) || 0;
+  const outstanding = grand - paid;
+
+  if (outstanding <= 0.005) return 0;
+
+  const applied  = Math.min(wallet, outstanding);
+  const newPaid  = paid + applied;
+  const newStatus: InvoiceStatus =
+    newPaid >= grand - 0.005 ? "Paid"    :
+    newPaid > 0              ? "Partial" :
+    inv.status;
+
+  const record: PaymentRecord = {
+    id:     crypto.randomUUID(),
+    date:   params.date,
+    amount: applied.toFixed(2),
+    method: "Wallet",
+    note:   "Wallet / advance credit applied",
+  };
+
+  updateInvoice(inv.id, {
+    amountPaid:     newPaid.toFixed(2),
+    status:         newStatus,
+    paymentHistory: [...(inv.paymentHistory ?? []), record],
+    paidAt:         newStatus === "Paid" ? new Date().toISOString() : inv.paidAt,
+  });
+
+  updateCustomer(params.customerId, {
+    advanceCredit: Math.max(0, wallet - applied),
+  });
+
+  return applied;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Reference tag used to identify auto-generated opening-balance JEs. */
 const _OB_REF_PREFIX = "OB-";
 
