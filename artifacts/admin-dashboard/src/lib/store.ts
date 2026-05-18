@@ -721,6 +721,19 @@ export function fundCustomerWallet(customerId: string, amount: number): void {
 }
 
 /**
+ * Adjust a customer's wallet balance by a signed delta.
+ *   positive delta → wallet increases (funded)
+ *   negative delta → wallet decreases (consumed)
+ * Floor at 0 — wallet can never go negative.
+ */
+export function adjustCustomerWallet(customerId: string, delta: number): void {
+  if (Math.abs(delta) < 0.005) return;
+  const c = getCustomer(customerId);
+  if (!c) return;
+  updateCustomer(customerId, { advanceCredit: Math.max(0, (c.advanceCredit ?? 0) + delta) });
+}
+
+/**
  * Apply wallet / advance credit to a sale invoice.
  *
  * Records a "Wallet" payment entry on the invoice, adjusts amountPaid / status,

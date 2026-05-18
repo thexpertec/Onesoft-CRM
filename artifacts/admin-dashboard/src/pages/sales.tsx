@@ -9,6 +9,7 @@ import {
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
   getCashBankLedgers, getPaymentAccounts, Account, autoPostCashReceiptJE, getJournalEntries, getAccounts,
+  getCustomerWalletBalance, adjustCustomerWallet,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -436,12 +437,13 @@ function SaleCompleteModal({
 
 // ─── Payment Modal ────────────────────────────────────────────────────────────
 interface PaymentModalProps {
-  saleNumber: string;
-  total: number;
-  customer?: string;
+  saleNumber:            string;
+  total:                 number;
+  customer?:             string;
+  walletBalance?:        number; // customer advance credit available
   defaultPaymentMethod?: SalePayment;
-  defaultNotes?: string;
-  onConfirm: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
+  defaultNotes?:         string;
+  onConfirm: (amountPaid: string, paymentMethod: SalePayment, notes: string, walletUsed: number) => void;
   onCancel: () => void;
 }
 
@@ -462,7 +464,7 @@ function payTileIcon(name: string) {
   return <CreditCard size={26} />;
 }
 
-function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
+function PaymentModal({ saleNumber, total, customer = "", walletBalance = 0, defaultPaymentMethod = "Cash", defaultNotes = "", onConfirm, onCancel }: PaymentModalProps) {
   // Walk-in = no named customer selected
   const isWalkIn = !customer.trim() || customer.trim().toLowerCase() === "walk-in";
 
@@ -478,17 +480,25 @@ function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod =
     return match ? match.name : cbLedgers[0].name;
   };
 
-  const [payAmount, setPayAmount] = useState(() => isWalkIn ? total.toFixed(2) : "0");
+  // Wallet: auto-applied for named customers (not walk-in)
+  const initWalletUsed = !isWalkIn ? Math.min(Math.max(0, walletBalance), total) : 0;
+  const [walletUsed, setWalletUsed] = useState(initWalletUsed);
+  const [payAmount, setPayAmount]   = useState(() => {
+    if (isWalkIn) return total.toFixed(2);
+    return Math.max(0, total - initWalletUsed).toFixed(2);
+  });
   const [payMethod, setPayMethod] = useState<SalePayment>(resolveDefault);
   const [notes,     setNotes]     = useState(defaultNotes);
 
   const sym  = getSettingsCurrencySymbol();
   const dp   = getSettingsDecimalPlaces();
   const fmt  = (n: number) => `${sym}${n.toFixed(dp)}`;
-  const paid = parseFloat(payAmount) || 0;
-  const remaining = total - paid;
+  const paid         = parseFloat(payAmount) || 0;
+  const totalCovered = paid + walletUsed;
+  const remaining    = total - totalCovered;
+  const excessCash   = Math.max(0, totalCovered - total);
 
-  // For walk-ins: confirm is disabled unless the full amount is covered
+  // For walk-ins: confirm is disabled unless the full cash amount covers the bill
   const walkInUnderPaid = isWalkIn && paid < total - 0.005;
 
   const presets = [
@@ -532,15 +542,41 @@ function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod =
             ))}
           </div>
 
+          {/* Wallet applied strip */}
+          {walletUsed > 0.005 && (
+            <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <Wallet size={14} className="text-blue-500 shrink-0"/>
+                <span className="text-[12px] font-semibold text-blue-600 dark:text-blue-400">Wallet Applied</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[18px] font-black text-blue-600 dark:text-blue-400 font-mono tabular-nums">{fmt(walletUsed)}</span>
+                <button
+                  onClick={() => { setWalletUsed(0); setPayAmount(total.toFixed(dp)); }}
+                  className="w-5 h-5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 flex items-center justify-center hover:bg-blue-300 dark:hover:bg-blue-700 transition-colors"
+                  title="Remove wallet">
+                  <X size={10}/>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Balance / excess display */}
           {remaining > 0.005 ? (
             <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-xl px-4 py-2.5">
               <span className="text-[12px] font-semibold text-orange-600 dark:text-orange-400">Remaining</span>
               <span className="text-[22px] font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums leading-none">{fmt(remaining)}</span>
             </div>
-          ) : paid > 0 ? (
+          ) : totalCovered > 0 ? (
             <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl px-4 py-2.5">
-              <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Fully paid</span>
-              {paid > total + 0.005 && <span className="text-[12px] text-blue-600 font-semibold">Change: {fmt(paid - total)}</span>}
+              <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+                {paid <= 0.005 ? "Covered by wallet" : "Fully paid"}
+              </span>
+              {excessCash > 0.005 && paid > 0 && (
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                  <Wallet size={10}/> {fmt(excessCash)} → wallet
+                </span>
+              )}
             </div>
           ) : null}
 
@@ -552,7 +588,7 @@ function PaymentModal({ saleNumber, total, customer = "", defaultPaymentMethod =
 
           <div className="flex gap-2 mt-auto">
             <button
-              onClick={() => !walkInUnderPaid && onConfirm(payAmount, payMethod, notes)}
+              onClick={() => !walkInUnderPaid && onConfirm(payAmount, payMethod, notes, walletUsed)}
               disabled={walkInUnderPaid}
               className={`flex-1 h-11 rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-all ${walkInUnderPaid ? "bg-gray-300 dark:bg-zinc-600 cursor-not-allowed shadow-none" : "bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200/60 dark:shadow-none"}`}>
               <Check size={16} /> Confirm Payment
@@ -846,7 +882,7 @@ interface POSViewProps {
   priceMode: "retail" | "wholesale" | "clubcard";
   onPriceModeChange: (mode: "retail" | "wholesale" | "clubcard") => void;
   onSetStatus: (status: SaleStatus) => void;
-  onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string) => void;
+  onComplete: (amountPaid: string, paymentMethod: SalePayment, notes: string, walletUsed?: number) => void;
   onAcceptOrder?: () => void;
   onAddCustomer: (name: string, phone: string, city: string, company?: string) => void;
   tenantId: string | null;
@@ -2322,11 +2358,12 @@ function POSView({
         saleNumber={sale.saleNumber}
         total={grandTotal}
         customer={localMeta.customer ?? ""}
+        walletBalance={localMeta.customer ? getCustomerWalletBalance(localMeta.customer) : 0}
         defaultPaymentMethod={localMeta.paymentMethod}
         defaultNotes={localMeta.notes ?? ""}
-        onConfirm={(amountPaid, paymentMethod, notes) => {
+        onConfirm={(amountPaid, paymentMethod, notes, walletUsed) => {
           setPayModalOpen(false);
-          onComplete(amountPaid, paymentMethod, notes);
+          onComplete(amountPaid, paymentMethod, notes, walletUsed);
         }}
         onCancel={() => setPayModalOpen(false)}
       />
@@ -2939,7 +2976,7 @@ export default function SalesPage() {
     setLocalItems([]);
   };
 
-  const handleComplete = (amountPaid: string, paymentMethod: SalePayment, notes: string) => {
+  const handleComplete = (amountPaid: string, paymentMethod: SalePayment, notes: string, walletUsed: number = 0) => {
     if (!detailId || !localMeta) return;
 
     try {
@@ -2966,8 +3003,11 @@ export default function SalesPage() {
 
       // Auto-post journal entry (only once — skip if already linked)
       let jeId: string | undefined = detailSale?.jeId;
-      const prevPaid = parseFloat(detailSale?.amountPaid || "0") || 0;
-      const paidNum  = parseFloat(amountPaid || "0") || 0;
+      const prevPaid     = parseFloat(detailSale?.amountPaid || "0") || 0;
+      const paidNum      = parseFloat(amountPaid || "0") || 0;   // cash received
+      const walletNum    = Math.max(0, walletUsed);              // wallet credit used
+      const totalCovered = paidNum + walletNum;                  // total value applied
+      const excessCash   = Math.max(0, totalCovered - grandTotal_); // overpayment → refund to wallet
 
       if (!jeId) {
         // ── First completion: post the primary sale JE ─────────────────────
@@ -3057,20 +3097,32 @@ export default function SalesPage() {
         }
       }
 
+      // Amount to record on the sale = cash + wallet, capped at grand total
+      const recordedPaid = Math.min(totalCovered, grandTotal_).toFixed(2);
+
       const completedSale = editSale(detailId, {
         ...localMeta,
         notes,
         paymentMethod,
         status: "Completed",
         items: localItems,
-        amountPaid,
+        amountPaid: recordedPaid,
         taxRate: localMeta.taxRate ?? "0",
         paidAt: new Date().toISOString(),
         stockDeducted: true,
         ...(jeId ? { jeId } : {}),
       });
 
-      toast({ title: "Sale completed!", description: `${sym}${parseFloat(amountPaid || "0").toFixed(2)} received` });
+      // Adjust customer wallet:
+      //   – deduct walletNum (credit used against this sale)
+      //   – add back any excess cash overpayment
+      const walletDelta = excessCash - walletNum;
+      if (Math.abs(walletDelta) > 0.005 && localMeta.customer) {
+        adjustCustomerWallet(localMeta.customer, walletDelta);
+      }
+
+      const walletNote = walletNum > 0.005 ? ` (${sym}${walletNum.toFixed(2)} wallet)` : "";
+      toast({ title: "Sale completed!", description: `${sym}${paidNum.toFixed(2)} received${walletNote}` });
 
       // Sale is now saved — clear the fresh flag so closePOS won't delete it
       freshSaleIdRef.current = null;
