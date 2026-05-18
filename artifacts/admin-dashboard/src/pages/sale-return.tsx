@@ -370,6 +370,7 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
             grandTotal,
             sr.returnNumber,
             `Sale return credit — ${sr.returnNumber}`,
+            "refund",
           );
         }
       }

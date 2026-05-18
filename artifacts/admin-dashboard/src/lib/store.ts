@@ -744,7 +744,7 @@ export function getCustomerWalletBalance(nameOrId: string): number {
  * Called when a customer pays more than their invoice outstanding.
  * The corresponding JE (DR Cash, CR AR) is already posted by the receipt path.
  */
-export function fundCustomerWallet(customerId: string, amount: number, reference?: string, note?: string): void {
+export function fundCustomerWallet(customerId: string, amount: number, reference?: string, note?: string, type: WalletTxType = "funded"): void {
   if (amount <= 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
@@ -752,7 +752,7 @@ export function fundCustomerWallet(customerId: string, amount: number, reference
   recordWalletTx({
     customerId,
     date:      new Date().toISOString().slice(0, 10),
-    type:      "funded",
+    type,
     delta:     amount,
     reference,
     note:      note ?? (reference ? `Excess payment on ${reference}` : "Wallet funded"),
@@ -765,7 +765,7 @@ export function fundCustomerWallet(customerId: string, amount: number, reference
  *   negative delta → wallet decreases (consumed)
  * Floor at 0 — wallet can never go negative.
  */
-export function adjustCustomerWallet(customerId: string, delta: number, reference?: string, note?: string): void {
+export function adjustCustomerWallet(customerId: string, delta: number, reference?: string, note?: string, type?: WalletTxType): void {
   if (Math.abs(delta) < 0.005) return;
   const c = getCustomer(customerId);
   if (!c) return;
@@ -773,10 +773,10 @@ export function adjustCustomerWallet(customerId: string, delta: number, referenc
   recordWalletTx({
     customerId,
     date:      new Date().toISOString().slice(0, 10),
-    type:      delta > 0 ? "manual-credit" : "used",
+    type:      type ?? (delta > 0 ? "manual-credit" : "used"),
     delta,
     reference,
-    note:      note ?? (delta > 0 ? "Wallet credited" : "Wallet used for payment"),
+    note:      note ?? (delta > 0 ? "Wallet credited" : "Wallet deducted"),
   });
 }
 
@@ -9070,9 +9070,7 @@ export function deleteRPVoucher(id: string): void {
           c.name.toLowerCase() === v.partyName!.toLowerCase()
         );
         if (contact) {
-          updateCustomer(contact.id, {
-            advanceCredit: Math.max(0, (contact.advanceCredit || 0) - excess),
-          });
+          adjustCustomerWallet(contact.id, -excess, v.voucherNumber, "Advance credit reversed — voucher deleted");
         }
       }
     }
@@ -9232,7 +9230,7 @@ export function postRPVoucherJE(id: string): JournalEntry {
         c.name.toLowerCase() === v.partyName!.toLowerCase()
       );
       if (contact) {
-        updateCustomer(contact.id, { advanceCredit: (contact.advanceCredit || 0) + excess });
+        fundCustomerWallet(contact.id, excess, v.voucherNumber, "Advance credit — receipt voucher");
       }
     }
   }

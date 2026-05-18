@@ -3077,7 +3077,7 @@ export function InvoiceFormPage() {
       const cust = getCustomers().find(c => c.name === inv.customer);
       if (cust) {
         const walletDelta = (walletFunded > 0.005 ? walletFunded : 0) - (walletUsed ?? 0);
-        if (Math.abs(walletDelta) > 0.005) adjustCustomerWallet(cust.id, walletDelta);
+        if (Math.abs(walletDelta) > 0.005) adjustCustomerWallet(cust.id, walletDelta, inv.invoiceNumber, undefined, walletDelta > 0 ? "funded" : "used");
       }
     }
 

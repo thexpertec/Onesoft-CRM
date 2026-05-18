@@ -3116,9 +3116,19 @@ export default function SalesPage() {
       // Adjust customer wallet:
       //   – deduct walletNum (credit used against this sale)
       //   – add back any excess cash overpayment
+      // Must look up the customer by name to obtain their ID — adjustCustomerWallet requires an ID.
       const walletDelta = excessCash - walletNum;
       if (Math.abs(walletDelta) > 0.005 && localMeta.customer) {
-        adjustCustomerWallet(localMeta.customer, walletDelta);
+        const walletCust = getCustomers().find(c => c.id === localMeta.customer || c.name === localMeta.customer);
+        if (walletCust) {
+          adjustCustomerWallet(
+            walletCust.id,
+            walletDelta,
+            detailSale?.saleNumber,
+            undefined,
+            walletDelta > 0 ? "funded" : "used",
+          );
+        }
       }
 
       const walletNote = walletNum > 0.005 ? ` (${sym}${walletNum.toFixed(2)} wallet)` : "";
