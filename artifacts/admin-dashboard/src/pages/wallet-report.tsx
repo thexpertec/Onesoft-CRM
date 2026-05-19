@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
-  getCustomers, getWalletLedger,
+  getCustomers, getWalletLedger, getCustomerWalletBalance,
   type Customer, type WalletTransaction, type WalletTxType,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
@@ -58,7 +58,7 @@ export default function WalletReportPage() {
       const last    = txs.length > 0 ? txs[txs.length - 1] : null;
       return {
         customer:    c,
-        balance:     Math.max(0, c.advanceCredit ?? 0),
+        balance:     getCustomerWalletBalance(c.id),
         totalCredit: credit,
         totalDebit:  debit,
         txCount:     periodTxs.length,

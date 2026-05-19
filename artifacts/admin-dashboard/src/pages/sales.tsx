@@ -9,7 +9,7 @@ import {
   getStock, deductStockForSale, restoreStockForSale, getSettings, saveSettings, autoPostSaleJE,
   importOnlineSalesFromKv, findProductForItem, effectiveItemCost, getProductStockQty,
   getCashBankLedgers, getPaymentAccounts, Account, autoPostCashReceiptJE, getJournalEntries, getAccounts,
-  getCustomerWalletBalance, adjustCustomerWallet, ensureCustomerAdvanceLedger,
+  getCustomerWalletBalance,
 } from "@/lib/store";
 import { buildSaleReceiptHtml, printReceiptHtml, printSaleInvoice } from "@/lib/print-invoice";
 import { kvGet } from "@/lib/api";
@@ -3021,17 +3021,6 @@ export default function SalesPage() {
       const walletNum    = Math.max(0, walletUsed);              // wallet credit used
       const totalCovered = paidNum + walletNum;                  // total value applied
       const excessCash   = Math.max(0, totalCovered - grandTotal_); // overpayment → refund to wallet
-      // Flag: true when the sale JE already embedded wallet lines (skip separate JE below)
-      let _walletEmbeddedInJE = false;
-
-      // Resolve the customer's advance ledger (creates it on first use for named customers)
-      const _custRecord = getCustomers().find(c =>
-        c.id === localMeta.customer || c.name === localMeta.customer
-      );
-      const _advLedgerId = (_custRecord && _custRecord.name?.trim().toLowerCase() !== "walk-in")
-        ? (ensureCustomerAdvanceLedger(_custRecord.id) ?? undefined)
-        : undefined;
-
       if (!jeId) {
         // ── First completion: post the primary sale JE ─────────────────────
         // Always use a fresh product list so cost prices are up-to-date
@@ -3068,12 +3057,9 @@ export default function SalesPage() {
           costTotal:       parseFloat(costTotal.toFixed(2)),
           categoryLines,
           amountPaid:      paidNum,
-          walletApplied:   walletNum,
-          walletLedgerId:  _advLedgerId,
         });
         if (je) {
           jeId = je.id;
-          if (je.walletEmbedded) _walletEmbeddedInJE = true;
         }
 
         // ── Cash receipt for credit sales with upfront partial payment ──────
@@ -3141,25 +3127,9 @@ export default function SalesPage() {
         ...(jeId ? { jeId } : {}),
       });
 
-      // Adjust customer wallet via a separate JE only when NOT already embedded
-      // in the sale JE (named-customer cash POS always embeds wallet lines).
-      // Walk-in customers cannot hold advance credit — skip entirely for them.
-      // For credit sales (separate RCPT flow), wallet delta still needs a JE.
-      if (!_walletEmbeddedInJE && localMeta.customer) {
-        const walletDelta = excessCash - walletNum;
-        if (Math.abs(walletDelta) > 0.005) {
-          const walletCust = getCustomers().find(c => c.id === localMeta.customer || c.name === localMeta.customer);
-          if (walletCust && walletCust.name.trim().toLowerCase() !== "walk-in") {
-            adjustCustomerWallet(
-              walletCust.id,
-              walletDelta,
-              detailSale?.saleNumber,
-              undefined,
-              walletDelta > 0 ? "funded" : "used",
-            );
-          }
-        }
-      }
+      // Wallet balance is now the net CR position on the customer's primary ledger —
+      // the sale JE transit (DR Cash / CR Customer Ledger) handles it automatically.
+      // No separate wallet-adjustment JE is needed.
 
       const walletNote = walletNum > 0.005 ? ` (${sym}${walletNum.toFixed(2)} wallet)` : "";
       toast({ title: "Sale completed!", description: `${sym}${paidNum.toFixed(2)} received${walletNote}` });

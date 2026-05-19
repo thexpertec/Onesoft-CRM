@@ -5,7 +5,7 @@ import {
   getSales, getSaleReturns, createSaleReturn, updateSaleReturn, deleteSaleReturn,
   restoreStockForSale, autoPostSaleReturnJE, getPaymentAccounts,
   type Sale, type SaleReturn, type SaleReturnItem, type SalePayment,
-  getProducts, getCustomers, getCustomerWalletBalance, fundCustomerWallet,
+  getProducts, getCustomers, getCustomerWalletBalance,
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
@@ -361,19 +361,9 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
         updateSaleReturn(sr.id, { jeId: je.id });
       }
 
-      // Fund customer wallet if the refund method is "Wallet"
-      if (refundMethod === "Wallet" && sr.customer && sr.customer !== "Walk-in") {
-        const cust = getCustomers().find(c => c.name === sr.customer);
-        if (cust) {
-          fundCustomerWallet(
-            cust.id,
-            grandTotal,
-            sr.returnNumber,
-            `Sale return credit — ${sr.returnNumber}`,
-            "refund",
-          );
-        }
-      }
+      // Single-ledger model: the return JE already credits the customer's primary
+      // ledger (CR Customer Ledger = grandTotal), which automatically creates or
+      // increases their wallet balance.  No separate fundCustomerWallet JE needed.
 
       const walletNote = refundMethod === "Wallet" ? " · Refund credited to wallet" : "";
       toast({ title: `${sr.returnNumber} posted`, description: `Stock restored · ${je ? "JE posted" : "JE skipped (configure COA accounts in Settings)"}${walletNote}` });
