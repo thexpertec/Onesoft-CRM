@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -205,18 +205,19 @@ interface ReturnFormProps {
 
 function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   const { toast } = useToast();
-  const [step, setStep]                   = useState<1 | 2>(1);
-  const [saleSearch, setSaleSearch]       = useState("");
-  const [selectedSale, setSelectedSale]   = useState<Sale | null>(null);
-  const [returnItems, setReturnItems]     = useState<SaleReturnItem[]>([]);
+  const [step, setStep]                       = useState<1 | 2>(1);
+  const [saleSearch, setSaleSearch]           = useState("");
+  const [selectedSale, setSelectedSale]       = useState<Sale | null>(null);
+  const [returnItems, setReturnItems]         = useState<SaleReturnItem[]>([]);
+  const [alreadyReturnedMap, setAlreadyReturnedMap] = useState<Record<string, number>>({});
   const refundMethodOptions = useMemo(() => getSaleRefundOptions(), []);
-  const [refundMethod, setRefundMethod]   = useState<SalePayment>(
+  const [refundMethod, setRefundMethod]       = useState<SalePayment>(
     () => getSaleRefundOptions()[0]?.value ?? "Cash"
   );
-  const [reason, setReason]               = useState("");
-  const [notes, setNotes]                 = useState("");
-  const [date, setDate]                   = useState(today());
-  const [submitting, setSubmitting]       = useState(false);
+  const [reason, setReason]                   = useState("");
+  const [notes, setNotes]                     = useState("");
+  const [date, setDate]                       = useState(today());
+  const [submitting, setSubmitting]           = useState(false);
 
   // Re-read from store whenever data syncs from the server. Without this, opening
   // the "New Return" sheet right after a fresh page load (before sync completes)
@@ -253,6 +254,21 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
 
   const handleSelectSale = (sale: Sale) => {
     setSelectedSale(sale);
+
+    // Build a map of sku (or productName) → qty already returned via posted returns
+    // for this exact original sale, so we can cap the max returnable qty per item.
+    const postedReturns = getSaleReturns().filter(
+      sr => sr.originalSaleId === sale.id && sr.status === "posted"
+    );
+    const retMap: Record<string, number> = {};
+    for (const sr of postedReturns) {
+      for (const it of sr.items) {
+        const key = it.sku || it.productName;
+        retMap[key] = (retMap[key] ?? 0) + (parseFloat(it.qty) || 0);
+      }
+    }
+    setAlreadyReturnedMap(retMap);
+
     setReturnItems(sale.items.map(item => ({
       id:          crypto.randomUUID(),
       productName: item.productName,
@@ -274,6 +290,26 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
   };
 
   const removeItem = (id: string) => setReturnItems(prev => prev.filter(i => i.id !== id));
+
+  /** Check all items that still have available (un-returned) qty. */
+  const handleSelectAll = () => {
+    if (!selectedSale) return;
+    setReturnItems(prev => prev.map(item => {
+      const origItem = selectedSale.items.find(
+        i => (item.sku && i.sku === item.sku) || i.productName === item.productName
+      );
+      const origQty = parseFloat(origItem?.qty || item.qty) || 0;
+      const key     = item.sku || item.productName;
+      const already = alreadyReturnedMap[key] ?? 0;
+      const avail   = Math.max(0, origQty - already);
+      return avail > 0 ? { ...item, qty: String(avail) } : item;
+    }));
+  };
+
+  /** Uncheck all items. */
+  const handleDeselectAll = () => {
+    setReturnItems(prev => prev.map(item => ({ ...item, qty: "0" })));
+  };
 
   const subtotal = calcItems(returnItems);
   const grandTotal = subtotal;
@@ -493,9 +529,28 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
 
           {/* Items to return */}
           <div className="px-6 py-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Items to Return</p>
-              <p className="text-xs text-muted-foreground">Check items you want to return</p>
+            {/* Header row with Select All / Deselect All */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Items to Return
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline px-1.5 py-0.5 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                >
+                  Select All
+                </button>
+                <span className="text-muted-foreground text-[11px]">·</span>
+                <button
+                  type="button"
+                  onClick={handleDeselectAll}
+                  className="text-[11px] font-semibold text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300 hover:underline px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Deselect All
+                </button>
+              </div>
             </div>
 
             {returnItems.length === 0 ? (
@@ -503,45 +558,102 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
             ) : (
               <div className="space-y-2">
                 {returnItems.map(item => {
-                  const maxQty = selectedSale.items.find(i => i.sku === item.sku)?.qty || item.qty;
-                  const q = parseFloat(item.qty) || 0;
-                  const checked = q > 0;
-                  const p = parseFloat(item.unitPrice) || 0;
-                  const d = parseFloat(item.discount) || 0;
+                  // Compute available qty (original qty − already returned via prior returns)
+                  const origItem  = selectedSale.items.find(
+                    i => (item.sku && i.sku === item.sku) || i.productName === item.productName
+                  );
+                  const origQty   = parseFloat(origItem?.qty || item.qty) || 0;
+                  const key       = item.sku || item.productName;
+                  const already   = alreadyReturnedMap[key] ?? 0;
+                  const maxQty    = Math.max(0, origQty - already);
+                  const fullyDone = maxQty <= 0;
+
+                  const q         = parseFloat(item.qty) || 0;
+                  const checked   = q > 0 && !fullyDone;
+                  const p         = parseFloat(item.unitPrice) || 0;
+                  const d         = parseFloat(item.discount)  || 0;
                   const lineTotal = q * p * (1 - d / 100);
+
                   return (
-                    <div key={item.id} className={`rounded-xl border p-3 transition-all ${checked ? "border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/10" : "border-gray-100 dark:border-zinc-800 opacity-60"}`}>
+                    <div
+                      key={item.id}
+                      className={`rounded-xl border p-3 transition-all ${
+                        fullyDone
+                          ? "border-gray-100 dark:border-zinc-800 opacity-40 cursor-not-allowed"
+                          : checked
+                            ? "border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/10"
+                            : "border-gray-100 dark:border-zinc-800 opacity-60"
+                      }`}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5 min-w-0">
                           {/* Checkbox */}
                           <button
-                            onClick={() => patchItem(item.id, "qty", checked ? "0" : maxQty)}
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-rose-500 border-rose-500 text-white" : "border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800"}`}
+                            type="button"
+                            disabled={fullyDone}
+                            onClick={() => !fullyDone && patchItem(item.id, "qty", checked ? "0" : String(maxQty))}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                              fullyDone
+                                ? "border-gray-200 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800 cursor-not-allowed"
+                                : checked
+                                  ? "bg-rose-500 border-rose-500 text-white"
+                                  : "border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800"
+                            }`}
                           >
-                            {checked && <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3"><path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            {checked && !fullyDone && (
+                              <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3">
+                                <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
                           </button>
+
                           <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
                             <Package size={14} className="text-gray-500" />
                           </div>
+
                           <div className="min-w-0">
-                            <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 truncate">{item.productName}</p>
-                            <p className="text-[10px] text-muted-foreground">{item.sku || "—"} · {sym}{p.toFixed(dp)} each{d > 0 ? ` · ${d}% disc` : ""}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 truncate">
+                                {item.productName}
+                              </p>
+                              {fullyDone && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 shrink-0">
+                                  Fully returned
+                                </span>
+                              )}
+                              {!fullyDone && already > 0 && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 shrink-0">
+                                  {already} already returned
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              {item.sku || "—"} · {sym}{p.toFixed(dp)} each
+                              {d > 0 ? ` · ${d}% disc` : ""}
+                              {!fullyDone && ` · max ${maxQty} ${item.unit}`}
+                            </p>
                           </div>
                         </div>
-                        {checked && (
+
+                        {checked && !fullyDone && (
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             <div className="flex items-center gap-1.5">
-                              <label className="text-[10px] text-muted-foreground">Qty (max {maxQty})</label>
+                              <label className="text-[10px] text-muted-foreground">Qty</label>
                               <Input
                                 type="number"
                                 min="1"
-                                max={maxQty}
+                                max={String(maxQty)}
                                 value={item.qty}
-                                onChange={e => patchItem(item.id, "qty", e.target.value)}
+                                onChange={e => {
+                                  const v = Math.min(parseFloat(e.target.value) || 0, maxQty);
+                                  patchItem(item.id, "qty", String(v));
+                                }}
                                 className="w-20 h-7 text-sm text-right"
                               />
                             </div>
-                            <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{sym}{lineTotal.toFixed(dp)}</p>
+                            <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                              {sym}{lineTotal.toFixed(dp)}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -550,6 +662,32 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
                 })}
               </div>
             )}
+
+            {/* Selected items summary */}
+            {(() => {
+              const checkedItems = returnItems.filter(i => parseFloat(i.qty) > 0);
+              if (checkedItems.length === 0) return null;
+              return (
+                <div className="rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 p-3 space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400">
+                    Return Summary — {checkedItems.length} item{checkedItems.length !== 1 ? "s" : ""} selected
+                  </p>
+                  <div className="space-y-0.5">
+                    {checkedItems.map(i => {
+                      const q = parseFloat(i.qty) || 0;
+                      const p = parseFloat(i.unitPrice) || 0;
+                      const d = parseFloat(i.discount) || 0;
+                      return (
+                        <div key={i.id} className="flex justify-between text-[11px] text-rose-700 dark:text-rose-300">
+                          <span className="truncate mr-2">{i.productName} × {q}</span>
+                          <span className="tabular-nums shrink-0">{sym}{(q * p * (1 - d / 100)).toFixed(dp)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Notes */}
             <div>

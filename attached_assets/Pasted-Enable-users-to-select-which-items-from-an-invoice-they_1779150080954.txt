@@ -1,0 +1,47 @@
+Enable users to select which items from an invoice they want to return without deleting other items.
+
+By default, all items are unchecked.
+User can check the items to return.
+Total refund and JE generation should only consider checked items.
+UI Requirements
+Invoice Return Page / Modal
+Display all invoice items in a list/table.
+Add a checkbox column at the start.
+Default state: unchecked for all items.
+Users can select one or multiple items to return.
+Total Refund Calculation
+Dynamically calculate refund amount based only on checked items.
+Update Total Refund field in real-time when checkboxes are toggled.
+Return Action
+Only the checked items are included when posting the return.
+Generate JE lines only for checked items.
+Optional Enhancements
+Show item details (name, SKU, price, quantity).
+Allow selecting quantity per checked item.
+Disable return of items with zero quantity or already returned.
+Backend / JE Logic
+Filter the invoice items by checked flag.
+For each checked item, calculate:
+lineAmount = quantityToReturn * unitPrice
+COGS = quantityToReturn * unitCost
+Post Journal Entries for checked items only:
+DR Sales Return / Revenue Contra       totalLineAmount
+CR Customer Ledger / AP Ledger        totalLineAmount
+DR Inventory / Stock                   totalCOGS
+CR COGS                                 totalCOGS
+Update invoice record with returned items status.
+Replit Implementation Notes
+Use reactive framework (React / Vue / Svelte) to bind checkbox states.
+Maintain a state array for checked items:
+const [checkedItems, setCheckedItems] = useState([]);
+Compute total refund:
+const totalRefund = invoiceItems
+    .filter(item => checkedItems.includes(item.id))
+    .reduce((sum, item) => sum + item.price * item.quantityToReturn, 0);
+On Post Return, send only checked items to backend API.
+Ensure double-entry JEs are generated for those items only.
+UX Guidelines
+All items unchecked by default.
+Show a summary of selected items with total refund.
+Provide “Select All” / “Deselect All” buttons for convenience.
+Prevent posting return if no items are checked.
