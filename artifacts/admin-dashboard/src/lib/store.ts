@@ -3857,6 +3857,44 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
       total:            poTotal,
       supplierLedgerId: _suppContact?.ledgerAccountId,
     });
+    // Write-back: keep the supplier contact's ledgerAccountId in sync with the
+    // ledger that the JE actually credited. Without this, a cascade-fallback
+    // (e.g. AP_TRADE → findSubLedgerForParty → AP_GENERAL) can post a JE
+    // against a UUID the contact record doesn't know about — and a later
+    // deleteCustomer would only see (and protect) the contact's OWN id,
+    // leaving the JE's id eligible for orphaning. Closes the "Unknown ledger"
+    // foreign-key gap end-to-end.
+    // Only write back to contacts explicitly flagged as suppliers — never
+    // bind a customer-role contact to an AP ledger just because their name
+    // happened to collide with the PO's supplier text. Walk-in / system
+    // contacts are also excluded.
+    const _suppQualifies = !!_suppContact
+      && _suppContact.id !== SYS_WALKIN_CUSTOMER_ID
+      && (_suppContact.customerRole ?? "Buyer") === "Supplier";
+    if (je && _suppContact && _suppQualifies) {
+      const _apLine = je.lines.find(l => l.credit > 0 && l.debit === 0);
+      const _resolvedApId = _apLine?.ledgerId;
+      if (_resolvedApId && _resolvedApId !== _suppContact.ledgerAccountId) {
+        // Only persist if the resolved id is a real Ledger account (not a
+        // system group/header) — and is, in fact, a per-party sub-ledger we
+        // want this contact bound to. We skip writeback when the cascade
+        // resolved to a system fallback (AP_TRADE / AP_GENERAL / inv-cat-*)
+        // because binding the contact to a shared system account would
+        // pollute future lookups for other suppliers.
+        const _allAccs = getAccounts();
+        const _resolvedAcct = _allAccs.find(a => a.id === _resolvedApId);
+        const _isSystemFallback =
+          _resolvedApId === SYS_ACCS.AP_TRADE
+          || _resolvedApId === SYS_ACCS.AP_GENERAL
+          || _resolvedApId === SYS_ACCS.AP_GROUP
+          || _resolvedApId === SYS_ACCS.AR_GROUP
+          || (_resolvedAcct?.code === "2111" || _resolvedAcct?.code === "2110");
+        if (_resolvedAcct?.accountType === "Ledger" && !_isSystemFallback) {
+          try { updateCustomer(_suppContact.id, { ledgerAccountId: _resolvedApId }); }
+          catch { /* non-fatal: contact may have been edited concurrently */ }
+        }
+      }
+    }
     pos[i] = { ...pos[i], status: "Received", jeId: je?.id, updatedAt: new Date().toISOString() };
   } else {
     pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
@@ -8473,6 +8511,33 @@ export function deleteAccount(id: string): void {
   const entries = getJournalEntries();
   if (entries.some(je => je.lines.some(l => l.ledgerId === id))) {
     throw new Error("This account has journal entries posted to it and cannot be deleted.");
+  }
+
+  // Guard 3 — is linked from another entity record (customer / supplier,
+  // payment account, staff payroll/payable, or shareholder). Hard-deleting
+  // here would leave that entity pointing at a missing ledger, then a future
+  // JE posted via the cascade would create a brand-new orphaned UUID with
+  // no contact back-link — the exact "Unknown ledger" pattern. Block the
+  // delete; the caller can deactivate via the entity-level delete flow,
+  // which routes through _safeDeactivateLedgerAccount.
+  const linkedCustomer = getCustomers().find(c => c.ledgerAccountId === id);
+  if (linkedCustomer) {
+    throw new Error(
+      `This account is linked to ${linkedCustomer.customerRole === "Supplier" ? "supplier" : "customer"} "${linkedCustomer.name}". `
+      + `Delete or unlink that record first.`);
+  }
+  const linkedPA = getPaymentAccounts().find(a => a.ledgerAccountId === id);
+  if (linkedPA) {
+    throw new Error(`This account is linked to payment account "${linkedPA.accountTitle ?? linkedPA.paymentMethod}". Delete that payment account first.`);
+  }
+  const linkedStaff = getStaff().find(s =>
+    s.ledgerAccountId === id || s.staffPayableLedgerId === id);
+  if (linkedStaff) {
+    throw new Error(`This account is linked to staff member "${linkedStaff.name}". Delete that staff record first.`);
+  }
+  const linkedShare = getShareholders().find(s => s.ledgerAccountId === id);
+  if (linkedShare) {
+    throw new Error(`This account is linked to shareholder "${linkedShare.name}". Delete that shareholder record first.`);
   }
 
   _saveAccounts(all.filter(a => a.id !== id));
