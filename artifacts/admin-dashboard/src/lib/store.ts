@@ -4351,6 +4351,7 @@ export type LedgerTxType =
   | "sale-refund"
   | "mfg-input"
   | "mfg-output"
+  | "mfg-cancel"
   | "manual-adjustment"
   | "opening-balance";
 
@@ -4360,6 +4361,7 @@ export const LEDGER_TX_LABELS: Record<LedgerTxType, string> = {
   "sale-refund":      "Sale Refund",
   "mfg-input":        "Mfg. Consumed",
   "mfg-output":       "Mfg. Produced",
+  "mfg-cancel":       "Mfg. Cancelled",
   "manual-adjustment":"Manual Adjustment",
   "opening-balance":  "Opening Balance",
 };
@@ -5362,8 +5364,86 @@ export const updateManufacturingOrder = (id: string, updates: Partial<Omit<Manuf
 
 export const deleteManufacturingOrder = (id: string): void => {
   const o = getManufacturingOrders().find(o => o.id === id);
-  setStored(MFG_KEY, getManufacturingOrders().filter(o => o.id !== id));
-  addActivity({ action: "deleted", entity: "ManufacturingOrder", entityName: o?.orderNumber || id });
+  if (!o) {
+    setStored(MFG_KEY, getManufacturingOrders().filter(x => x.id !== id));
+    return;
+  }
+
+  // ── Reverse stock impact of a Completed order ──────────────────────────────
+  // Previously, deleting a Completed MO removed the order record but left the
+  // RM deduction and FG production *in place* — orphaned ledger rows pointing
+  // at a vanished source, and stock balances that no longer matched any
+  // document. We now compensate exactly what the Complete step recorded by
+  // walking the original ledger rows for this order's reference and writing
+  // an inverse entry for each (preserving the original entries as a true
+  // audit trail — "no ledger should disappear itself").
+  if (o.status === "Completed") {
+    const today          = new Date().toISOString().slice(0, 10);
+    const ref            = o.orderNumber;
+    const originalLedger = getStockLedger().filter(
+      e => e.reference === ref && (e.txType === "mfg-input" || e.txType === "mfg-output")
+    );
+
+    if (originalLedger.length > 0) {
+      const compensations: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+      const rms          = getRawMaterials();
+      const stocks       = getStock();
+      let rmsDirty       = false;
+      let stocksDirty    = false;
+
+      for (const e of originalLedger) {
+        // Reverse delta — flip the sign of the original change.
+        const reverseDelta = -e.qtyChange;
+
+        if (e.entityType === "raw-material") {
+          const ri = rms.findIndex(r => r.id === e.entityId);
+          if (ri >= 0) {
+            const cur = Math.max(0, parseFloat(rms[ri].currentStock) || 0);
+            // For a Completed MO, the original qtyChange was negative
+            // (consumption), so reverseDelta is positive → we put the RM back.
+            const after = Math.max(0, cur + reverseDelta);
+            rms[ri] = { ...rms[ri], currentStock: String(after), updatedAt: new Date().toISOString() };
+            rmsDirty = true;
+            compensations.push({
+              entityType: "raw-material", entityId: rms[ri].id, entityName: rms[ri].name,
+              date: today, txType: "mfg-cancel", reference: ref,
+              qtyBefore: cur, qtyChange: reverseDelta, qtyAfter: after,
+              unit: rms[ri].unit,
+              notes: `Order ${ref} deleted — raw material restored`,
+            });
+          }
+        } else {
+          // entityType === "product" — entityId points at a StockItem.id
+          const si = stocks.findIndex(s => s.id === e.entityId);
+          if (si >= 0) {
+            const cur = Math.max(0, parseFloat(stocks[si].quantity) || 0);
+            // Original qtyChange was positive (production); reverseDelta is
+            // negative. Floor at 0 so we can't go below zero if some of the
+            // produced goods were already sold or written off.
+            const after = Math.max(0, cur + reverseDelta);
+            stocks[si] = { ...stocks[si], quantity: String(after), updatedAt: new Date().toISOString() };
+            stocksDirty = true;
+            compensations.push({
+              entityType: "product", entityId: stocks[si].id, entityName: e.entityName,
+              date: today, txType: "mfg-cancel", reference: ref,
+              qtyBefore: cur, qtyChange: after - cur, qtyAfter: after,
+              unit: stocks[si].unit,
+              notes: cur + reverseDelta < 0
+                ? `Order ${ref} deleted — finished-goods reversal capped at 0 (some units already moved)`
+                : `Order ${ref} deleted — finished-goods reversed`,
+            });
+          }
+        }
+      }
+
+      if (rmsDirty)    setStored(RM_KEY, rms);
+      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (compensations.length > 0) batchLedger(compensations);
+    }
+  }
+
+  setStored(MFG_KEY, getManufacturingOrders().filter(x => x.id !== id));
+  addActivity({ action: "deleted", entity: "ManufacturingOrder", entityName: o.orderNumber || id });
 };
 
 export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
