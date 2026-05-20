@@ -314,9 +314,10 @@ const OTHER_NAV: NavItem[] = [
   {
     key: "manufacturing", label: "Manufacturing", icon: Factory,
     items: [
-      { label: "Workflow Guide", href: "/production-guide", icon: ArrowRight,   desc: "Step-by-step production help" },
-      { label: "Raw Materials",  href: "/raw-materials",    icon: FlaskConical, desc: "Track raw material stock"     },
-      { label: "Mfg. Orders",   href: "/manufacturing",    icon: Factory,      desc: "Production & batch orders"    },
+      { label: "Workflow Guide",    href: "/production-guide",  icon: ArrowRight,   desc: "Step-by-step production help"           },
+      { label: "Raw Materials",     href: "/raw-materials",     icon: FlaskConical, desc: "Track raw material stock"               },
+      { label: "Mfg. Orders",       href: "/manufacturing",     icon: Factory,      desc: "Production & batch orders"              },
+      { label: "Production Report", href: "/production-report", icon: BarChart3,    desc: "RM cost, overhead & per-unit analysis"  },
     ],
   },
   { key: "accounts", label: "Accounts", icon: BookOpen, isMega: true },
@@ -356,7 +357,7 @@ const SALES_ROUTES         = ["/sales", "/invoices", "/calc-invoice", "/returns"
 const HRM_ROUTES           = ["/staff", "/hrm-setup", "/salary", "/salary-template", "/salary-allowances", "/salary-deductions", "/attendance", "/sales-agents", "/agent-performance", "/advance-salary", "/my-application", "/manage-application"];
 const SALARY_TEMPLATE_ROUTES = ["/salary-template", "/salary-allowances", "/salary-deductions", "/advance-salary", "/my-application", "/manage-application"];
 const ADMIN_ROUTES         = ["/users", "/tenants", "/module-groups", "/database", "/activity-log"];
-const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide"];
+const MANUFACTURING_ROUTES = ["/raw-materials", "/manufacturing", "/production-guide", "/production-report"];
 const INVESTMENTS_ROUTES   = ["/investment-plans", "/shareholders"];
 const ACCOUNTS_ROUTES      = ["/chart-of-accounts", "/journal-entry", "/balance-sheet", "/ledger-report", "/pls-report", "/trial-balance", "/trial-balance-6col", "/receipt-payment", "/rp-summary", "/transaction-history", "/expense-report", "/income-report", "/payment-accounts"];
 const REPAIR_ROUTES        = ["/repair", "/repair-report"];
@@ -1349,9 +1350,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {/* Manufacturing */}
                 {!isSuperAdminOwn && isModuleAllowed("manufacturing") && <>
                   <SectionLabel label="Manufacturing" />
-                  <NavLink href="/production-guide" icon={ArrowRight}    label="Workflow Guide" />
-                  <NavLink href="/raw-materials"    icon={FlaskConical}  label="Raw Materials" />
-                  <NavLink href="/manufacturing"    icon={Factory}       label="Mfg. Orders" />
+                  <NavLink href="/production-guide"  icon={ArrowRight}    label="Workflow Guide" />
+                  <NavLink href="/raw-materials"     icon={FlaskConical}  label="Raw Materials" />
+                  <NavLink href="/manufacturing"     icon={Factory}       label="Mfg. Orders" />
+                  <NavLink href="/production-report" icon={BarChart3}     label="Production Report" />
                 </>}
 
                 {/* Accounts */}
