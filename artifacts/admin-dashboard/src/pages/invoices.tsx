@@ -2155,6 +2155,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     // are already recorded — just mark stock as received.
                     let _jeId = invoice!.jeId;
                     if (!_jeId) {
+                      const _existingJE = getJournalEntries().find(je => je.reference === `AUTO-${invoice!.invoiceNumber}`);
+                      if (_existingJE) {
+                        _jeId = _existingJE.id;
+                      }
+                    }
+                    if (!_jeId) {
                       const _invTotal = invoice!.items.reduce((s, it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.unitPrice)||0), 0)
                         + (parseFloat(invoice!.shippingFee)||0) + (parseFloat(invoice!.handlingFee)||0);
                       const _allProds = getProducts();
@@ -2601,6 +2607,8 @@ export function InvoiceFormPage() {
   const postPurchaseInvoiceJE = useCallback((inv: Invoice): JournalEntry | null => {
     if (inv.jeId) return null;
     if (inv.invoiceType !== "purchase") return null;
+    const _existingJE = getJournalEntries().find(je => je.reference === `AUTO-${inv.invoiceNumber}`);
+    if (_existingJE) return _existingJE;
     const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
       + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
     if (total <= 0) return null;
@@ -2623,6 +2631,8 @@ export function InvoiceFormPage() {
     // If an accrual JE was already posted when the invoice was created/sent,
     // do NOT create a second JE — inventory & AP are already recorded.
     if (inv.jeId) return null;
+    const _existingJE = getJournalEntries().find(je => je.reference === `AUTO-${inv.invoiceNumber}`);
+    if (_existingJE) return _existingJE;
     const total = inv.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0)
       + (parseFloat(inv.shippingFee) || 0) + (parseFloat(inv.handlingFee) || 0);
     return autoPostPurchaseJE({
