@@ -63,7 +63,23 @@ export default function TrialBalance6ColPage() {
     type Acc = { openDr: number; openCr: number; moveDr: number; moveCr: number };
     const map: Record<string, Acc> = {};
 
+    // ── Seed opening balances from the Chart of Accounts ───────────────────
+    // Convention (store.ts:688): openingBalance > 0 → Dr, < 0 → Cr.
+    // Matches Balance Sheet and RP Summary, which already read this field.
+    for (const a of ledgers) {
+      const ob = a.openingBalance ?? 0;
+      if (!ob) continue;
+      map[a.id] = {
+        openDr: ob > 0 ?  ob : 0,
+        openCr: ob < 0 ? -ob : 0,
+        moveDr: 0,
+        moveCr: 0,
+      };
+    }
+
     for (const je of entries) {
+      // Match Balance Sheet — only posted entries affect TB totals.
+      if (je.status !== "posted") continue;
       const jeDate       = je.date?.slice(0, 10) ?? "";
       const beforePeriod = jeDate < appliedFrom;
       const inPeriod     = jeDate >= appliedFrom && jeDate <= appliedTo;
@@ -94,7 +110,9 @@ export default function TrialBalance6ColPage() {
           closeCr: m.openCr + m.moveCr,
         } as TBRow;
       })
-      .filter(r => r.openDr || r.openCr || r.moveDr || r.moveCr)
+      // Include closeDr/closeCr so ledgers seeded purely from
+      // account.openingBalance (no JE activity) still appear on the report.
+      .filter(r => r.openDr || r.openCr || r.moveDr || r.moveCr || r.closeDr || r.closeCr)
       .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   }, [submitted, appliedFrom, appliedTo, entries, ledgers]);
 

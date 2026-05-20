@@ -80,7 +80,29 @@ export default function TrialBalancePage() {
     type Acc = { openDr: number; openCr: number; perDr: number; perCr: number };
     const map: Record<string, Acc> = {};
 
+    // ── Seed opening balances from the Chart of Accounts ───────────────────
+    // Convention (store.ts:688): openingBalance > 0 → Dr, < 0 → Cr.
+    // This is the canonical opening source for ledgers carried over from a
+    // previous system (e.g. bank balances, equity capital, fixed assets) that
+    // were entered directly on the COA instead of via an opening-balance JE.
+    // Balance Sheet (balance-sheet.tsx) and RP Summary (rp-summary.tsx)
+    // already honour this field — the TB must agree with them.
+    for (const a of ledgers) {
+      const ob = a.openingBalance ?? 0;
+      if (!ob) continue;
+      map[a.id] = {
+        openDr: ob > 0 ?  ob : 0,
+        openCr: ob < 0 ? -ob : 0,
+        perDr:  0,
+        perCr:  0,
+      };
+    }
+
     for (const je of entries) {
+      // Match Balance Sheet behaviour — only posted entries hit the books.
+      // Drafts are visible in the JE register but must not affect TB totals,
+      // otherwise TB will not tie to the Balance Sheet.
+      if (je.status !== "posted") continue;
       const jeDate = je.date?.slice(0, 10) ?? "";
       const beforePeriod = jeDate < appliedFrom;
       const inPeriod     = jeDate >= appliedFrom && jeDate <= appliedTo;
@@ -118,7 +140,11 @@ export default function TrialBalancePage() {
           closeCr,
         } as TBRow;
       })
-      .filter(r => r.openDr || r.openCr || r.periodDr || r.periodCr) // hide zero-activity
+      // Keep rows that have ANY non-zero figure (opening, period, or closing).
+      // Including closeDr/closeCr ensures a ledger whose opening was seeded
+      // purely from account.openingBalance still appears even when there is
+      // no JE activity in the range.
+      .filter(r => r.openDr || r.openCr || r.periodDr || r.periodCr || r.closeDr || r.closeCr)
       .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   }, [submitted, appliedFrom, appliedTo, entries, ledgers]);
 
