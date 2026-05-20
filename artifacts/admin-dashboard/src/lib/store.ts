@@ -627,6 +627,10 @@ export const updatePaymentAccount = (id: string, updates: Partial<Omit<PaymentAc
 
 export const deletePaymentAccount = (id: string): void => {
   const pa = getPaymentAccounts().find(a => a.id === id);
+  if (pa) {
+    const blockers = _paymentAccountFinancialBlockers(pa);
+    if (blockers.length) throw new Error(_formatBlockerError("payment account", pa.accountTitle, blockers));
+  }
   setStored(PAYMENT_ACCOUNTS_KEY, getPaymentAccounts().filter(a => a.id !== id));
   // Safe removal: deactivates instead of hard-deleting if any JE or other
   // entity still references this account — preserves historical JE resolution.
@@ -1426,6 +1430,173 @@ function _customerFinancialBlockers(c: Customer): string[] {
   return blockers;
 }
 
+// ─── Master-data delete guards ───────────────────────────────────────────────
+// Every helper below returns an empty array when the entity is safe to delete,
+// or a list of human-readable reasons why deletion would orphan live data.
+// The user rule: "No ledger or record should disappear while any invoice,
+// transaction, DR or CR refers to it."
+
+/** Blockers preventing safe deletion of a Shareholder. */
+function _shareholderFinancialBlockers(s: Shareholder): string[] {
+  const blockers: string[] = [];
+  const plans = getInvestmentPlans().filter(p => p.shareholderId === s.id);
+  if (plans.length) blockers.push(`${plans.length} investment plan(s)`);
+  const vs = getRPVouchers().filter(v => (v.partyName ?? "").trim().toLowerCase() === s.name.trim().toLowerCase());
+  if (vs.length) blockers.push(`${vs.length} payment voucher(s)`);
+  if (s.ledgerAccountId) {
+    const lid = s.ledgerAccountId;
+    const jeLines = getJournalEntries().filter(e => e.lines.some(l => l.ledgerId === lid));
+    if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this shareholder's capital ledger`);
+  }
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a SalesAgent. */
+function _salesAgentFinancialBlockers(a: SalesAgent): string[] {
+  const blockers: string[] = [];
+  const nameL = a.name.trim().toLowerCase();
+  const sales = getSales().filter(s => s.agentId === a.id || (s.agentName ?? "").trim().toLowerCase() === nameL);
+  if (sales.length) blockers.push(`${sales.length} sale(s) attributed to this agent`);
+  const invs = getInvoices().filter(i => i.agentId === a.id || (i.agentName ?? "").trim().toLowerCase() === nameL);
+  if (invs.length) blockers.push(`${invs.length} invoice(s) attributed to this agent`);
+  const vs = getRPVouchers().filter(v => (v.partyName ?? "").trim().toLowerCase() === nameL);
+  if (vs.length) blockers.push(`${vs.length} payment voucher(s)`);
+  if (a.ledgerAccountId) {
+    const lid = a.ledgerAccountId;
+    const jeLines = getJournalEntries().filter(e => e.lines.some(l => l.ledgerId === lid));
+    if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this agent's commission ledger`);
+  }
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a PaymentAccount (record-side). */
+function _paymentAccountFinancialBlockers(pa: PaymentAccount): string[] {
+  const blockers: string[] = [];
+  const sales = getSales().filter(s => s.paymentMethod === pa.id || (pa.ledgerAccountId !== undefined && s.paymentMethod === pa.ledgerAccountId));
+  if (sales.length) blockers.push(`${sales.length} sale(s) paid through this account`);
+  const lid = pa.ledgerAccountId;
+  if (lid) {
+    const vs = getRPVouchers().filter(v =>
+      v.cashBankAccountId === lid ||
+      (v.bankLines ?? []).some(l => l.accountId === lid)
+    );
+    if (vs.length) blockers.push(`${vs.length} payment voucher(s) drawn on this account`);
+    const jeLines = getJournalEntries().filter(e => e.lines.some(l => l.ledgerId === lid));
+    if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this account's ledger`);
+  }
+  const slips = getSalarySlips().filter(sl => sl.paymentAccountId === pa.id);
+  if (slips.length) blockers.push(`${slips.length} salary slip(s) paid from this account`);
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a Product. */
+function _productFinancialBlockers(p: Product): string[] {
+  const blockers: string[] = [];
+  const nameL = p.name.trim().toLowerCase();
+  // SKU is the canonical identifier; include the product SKU and every variant SKU.
+  const skus = new Set<string>();
+  if (p.sku?.trim()) skus.add(p.sku.trim().toLowerCase());
+  p.variants?.forEach(v => { if (v.sku?.trim()) skus.add(v.sku.trim().toLowerCase()); });
+  const matchName = (n?: string) => !!n && n.trim().toLowerCase() === nameL;
+  const matchSku  = (s?: string) => !!s && skus.has(s.trim().toLowerCase());
+  const matchAny  = (sku?: string, name?: string) => matchSku(sku) || matchName(name);
+
+  const sales = getSales().filter(s => (s.items ?? []).some(i => matchAny(i.sku, i.productName)));
+  if (sales.length) blockers.push(`${sales.length} sale(s) containing this product`);
+  const invs = getInvoices().filter(i => (i.items ?? []).some(it => matchAny(it.sku, it.productName)));
+  if (invs.length) blockers.push(`${invs.length} invoice(s) containing this product`);
+  const pos = getPurchaseOrders().filter(po => (po.items ?? []).some(it => matchAny(it.sku, it.productName)));
+  if (pos.length) blockers.push(`${pos.length} purchase order(s) containing this product`);
+  const sr = getSaleReturns().filter(r => (r.items ?? []).some(it => matchAny(it.sku, it.productName)));
+  if (sr.length) blockers.push(`${sr.length} sale return(s) containing this product`);
+  const pr = getPurchaseReturns().filter(r => (r.items ?? []).some(it => matchAny(it.sku, it.productName)));
+  if (pr.length) blockers.push(`${pr.length} purchase return(s) containing this product`);
+  const mos = getManufacturingOrders().filter(o => (o.outputs ?? []).some(out => out.productId === p.id));
+  if (mos.length) blockers.push(`${mos.length} manufacturing order(s) producing this product`);
+  const recipes = getRecipes().filter(r => (r.outputs ?? []).some(out => out.productId === p.id));
+  if (recipes.length) blockers.push(`${recipes.length} recipe(s) producing this product`);
+  const ledger = getStockLedger().filter(e => e.entityType === "product" && matchName(e.entityName));
+  if (ledger.length) blockers.push(`${ledger.length} stock ledger entry record(s) for this product`);
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a Raw Material. */
+function _rawMaterialFinancialBlockers(rm: RawMaterial): string[] {
+  const blockers: string[] = [];
+  const nameL = rm.name.trim().toLowerCase();
+  const codeU = (rm.rmCode || "").trim().toUpperCase();
+  const mos = getManufacturingOrders().filter(o => (o.inputs ?? []).some(i => i.rmId === rm.id));
+  if (mos.length) blockers.push(`${mos.length} manufacturing order(s) using this raw material`);
+  const recipes = getRecipes().filter(r => (r.inputs ?? []).some(i => i.rmId === rm.id));
+  if (recipes.length) blockers.push(`${recipes.length} recipe(s) using this raw material`);
+  // PO receipt logic falls back to RM code (RM-###) or name when `rmId` is absent,
+  // so the blocker must check those forms too — otherwise a name-only line slips through.
+  const pos = getPurchaseOrders().filter(po => (po.items ?? []).some(it => {
+    if (it.rmId === rm.id) return true;
+    if (it.itemType !== "raw-material") return false;
+    if (codeU && (it.sku || "").trim().toUpperCase() === codeU) return true;
+    if ((it.productName || "").trim().toLowerCase() === nameL) return true;
+    return false;
+  }));
+  if (pos.length) blockers.push(`${pos.length} purchase order(s) for this raw material`);
+  const ledger = getStockLedger().filter(e => e.entityType === "raw-material" && (e.entityId === rm.id || e.entityName.trim().toLowerCase() === nameL));
+  if (ledger.length) blockers.push(`${ledger.length} stock ledger entry record(s)`);
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a Stock balance row. */
+function _stockItemFinancialBlockers(s: StockItem): string[] {
+  const blockers: string[] = [];
+  const ledger = getStockLedger().filter(e => e.entityId === s.id);
+  if (ledger.length) blockers.push(`${ledger.length} stock ledger entry record(s)`);
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a Staff record (record-side). */
+function _staffFinancialBlockers(s: Staff): string[] {
+  const blockers: string[] = [];
+  const slips = getSalarySlips().filter(sl => sl.staffId === s.id);
+  if (slips.length) blockers.push(`${slips.length} salary slip(s)`);
+  const advs = getAdvanceSalaries().filter(a => a.staffId === s.id);
+  if (advs.length) blockers.push(`${advs.length} advance salary record(s)`);
+  const att = getAttendanceRecords().filter(a => a.staffId === s.id);
+  if (att.length) blockers.push(`${att.length} attendance record(s)`);
+  const vs = getRPVouchers().filter(v => (v.partyName ?? "").trim().toLowerCase() === s.name.trim().toLowerCase());
+  if (vs.length) blockers.push(`${vs.length} payment voucher(s)`);
+  const linkedLedgerIds = [s.ledgerAccountId, s.staffPayableLedgerId].filter((x): x is string => !!x);
+  if (linkedLedgerIds.length) {
+    const idSet = new Set(linkedLedgerIds);
+    const jeLines = getJournalEntries().filter(e => e.lines.some(l => idSet.has(l.ledgerId)));
+    if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this staff member's ledger(s)`);
+  }
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a ProductCategory. */
+function _categoryFinancialBlockers(c: ProductCategory): string[] {
+  const blockers: string[] = [];
+  const prods = getProducts().filter(p => p.category === c.name);
+  if (prods.length) blockers.push(`${prods.length} product(s) using this category`);
+  const slug = c.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+  const catIds = new Set([`sr-cat-${slug}`, `pur-cat-${slug}`, `inv-cat-${slug}`]);
+  const jes = getJournalEntries().filter(e => e.lines.some(l => catIds.has(l.ledgerId)));
+  if (jes.length) blockers.push(`${jes.length} journal entry record(s) on this category's ledgers`);
+  return blockers;
+}
+
+/** Blockers preventing safe deletion of a Salary Slip. */
+function _salarySlipFinancialBlockers(s: SalarySlip): string[] {
+  const blockers: string[] = [];
+  const paid = s.amountPaid ?? 0;
+  if (paid > 0) blockers.push(`payment of ${paid.toFixed(2)} recorded`);
+  const jeIds = [s.journalEntryId, s.accrualJournalEntryId].filter((x): x is string => !!x);
+  if (jeIds.length) {
+    const jes = getJournalEntries().filter(e => jeIds.includes(e.id));
+    if (jes.length) blockers.push(`${jes.length} linked journal entry record(s)`);
+  }
+  return blockers;
+}
+
 const _formatBlockerError = (label: string, name: string, blockers: string[]): string =>
   `Cannot delete ${label} "${name}": ${blockers.join("; ")}. Remove the linked records first.`;
 
@@ -1546,7 +1717,14 @@ export const updateShareholder = (id: string, updates: Partial<Omit<Shareholder,
 
 export const deleteShareholder = (id: string): void => {
   const item = getShareholders().find(s => s.id === id);
+  if (item) {
+    const blockers = _shareholderFinancialBlockers(item);
+    if (blockers.length) throw new Error(_formatBlockerError("shareholder", item.name, blockers));
+  }
   setStored(SHAREHOLDERS_KEY, getShareholders().filter(s => s.id !== id));
+  // Safe removal: deactivates instead of hard-deleting any linked capital
+  // sub-ledger if a JE still references it — preserves historical JE resolution.
+  if (item?.ledgerAccountId) _safeDeactivateLedgerAccount(item.ledgerAccountId);
   addActivity({ action: "deleted", entity: "Shareholder", entityName: item?.name || id });
 };
 
@@ -1651,6 +1829,10 @@ export const updateProductCategory = (id: string, updates: Partial<Omit<ProductC
 
 export const deleteProductCategory = (id: string): void => {
   const cat = getProductCategories().find(c => c.id === id);
+  if (cat) {
+    const blockers = _categoryFinancialBlockers(cat);
+    if (blockers.length) throw new Error(_formatBlockerError("product category", cat.name, blockers));
+  }
   setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
   // Clear the deleted category from any products still referencing it,
   // so products don't silently hold a dangling category ID.
@@ -3166,6 +3348,10 @@ export function bulkReplaceProductImages(
 
 export const deleteProduct = (id: string): void => {
   const item = getProducts().find(p => p.id === id);
+  if (item) {
+    const blockers = _productFinancialBlockers(item);
+    if (blockers.length) throw new Error(_formatBlockerError("product", item.name, blockers));
+  }
   setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
   _removeProductLedgers(id);
@@ -4525,6 +4711,11 @@ export const updateStockItem = (id: string, updates: Partial<Omit<StockItem, "id
 };
 
 export const deleteStockItem = (id: string): void => {
+  const item = getStock().find(s => s.id === id);
+  if (item) {
+    const blockers = _stockItemFinancialBlockers(item);
+    if (blockers.length) throw new Error(_formatBlockerError("stock balance", `${item.productName} @ ${item.store}`, blockers));
+  }
   setStored(STOCK_KEY, getStock().filter(s => s.id !== id));
 };
 
@@ -5437,7 +5628,14 @@ export const updateSalesAgent = (id: string, updates: Partial<Omit<SalesAgent, "
 
 export const deleteSalesAgent = (id: string): void => {
   const agent = getSalesAgents().find(a => a.id === id);
+  if (agent) {
+    const blockers = _salesAgentFinancialBlockers(agent);
+    if (blockers.length) throw new Error(_formatBlockerError("sales agent", agent.name, blockers));
+  }
   setStored(SALES_AGENTS_KEY, getSalesAgents().filter(a => a.id !== id));
+  // Safe removal: deactivates any linked commission sub-ledger when a JE still
+  // references it — preserves historical JE resolution.
+  if (agent?.ledgerAccountId) _safeDeactivateLedgerAccount(agent.ledgerAccountId);
   addActivity({ action: "deleted", entity: "SalesAgent", entityName: agent?.name || id });
 };
 
@@ -5535,6 +5733,10 @@ export const updateRawMaterial = (id: string, updates: Partial<Omit<RawMaterial,
 
 export const deleteRawMaterial = (id: string): void => {
   const rm = getRawMaterials().find(r => r.id === id);
+  if (rm) {
+    const blockers = _rawMaterialFinancialBlockers(rm);
+    if (blockers.length) throw new Error(_formatBlockerError("raw material", rm.name, blockers));
+  }
   setStored(RM_KEY, getRawMaterials().filter(r => r.id !== id));
   addActivity({ action: "deleted", entity: "RawMaterial", entityName: rm?.name || id });
 };
@@ -6057,6 +6259,10 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
 
 export const deleteStaff = (id: string): void => {
   const staff = getStaff().find(s => s.id === id);
+  if (staff) {
+    const blockers = _staffFinancialBlockers(staff);
+    if (blockers.length) throw new Error(_formatBlockerError("staff member", staff.name, blockers));
+  }
   setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
   // Remove linked ledgers only when they have no JE history.
   // Accounts with posted JEs are left fully active so those JEs continue to resolve correctly.
@@ -10027,29 +10233,27 @@ export function deleteRPVoucher(id: string): void {
   const v = getRPVouchers().find(r => r.id === id);
   if (!v) return;
 
-  // 1. Delete linked Journal Entry
+  // Posted vouchers represent committed DR/CR transactions. Per the rule
+  // "no transaction should silently disappear," refuse outright — the user
+  // must explicitly reverse / unpost the voucher first, which keeps the
+  // audit trail intact instead of cascading a JE deletion. Drafts are
+  // still freely deletable (no JE was ever written).
+  if (v.status === "posted") {
+    throw new Error(
+      `Cannot delete posted voucher ${v.voucherNumber || id}: it carries a posted journal entry and may have settled invoice payments. ` +
+      `Reverse (unpost) the voucher first, then delete it.`
+    );
+  }
+
+  // Draft vouchers never wrote a JE and never touched invoice payments, so
+  // simply removing the voucher record is sufficient. The defensive JE filter
+  // below is kept because legacy data could carry a `journalEntryId` on a
+  // draft (e.g. from an earlier post that was rolled back without clearing
+  // the id) — drop it so no orphan JE survives.
   if (v.journalEntryId) {
     _saveJournalEntries(getJournalEntries().filter(e => e.id !== v.journalEntryId), true);
   }
 
-  // 2. Reverse invoice payment(s) if this voucher was posted
-  if (v.status === "posted") {
-    // Single-invoice link (receipt vouchers + legacy payment)
-    if (v.linkedInvoiceId) {
-      _reverseInvoicePayment(v.linkedInvoiceId, v.totalAmount, v.voucherNumber);
-    }
-    // Multi-invoice payment — each AP line knows its invoice
-    if (v.linkedInvoiceIds?.length) {
-      for (const line of v.lines) {
-        if (line.invoiceId) {
-          _reverseInvoicePayment(line.invoiceId, line.amount, v.voucherNumber);
-        }
-      }
-    }
-    // Advance credit was embedded in the voucher JE — deleting the JE above reverses it automatically.
-  }
-
-  // 3. Remove the voucher
   _saveRPVouchers(getRPVouchers().filter(r => r.id !== id));
 }
 
@@ -10753,6 +10957,11 @@ export const updateSalarySlip = (id: string, updates: Partial<Omit<SalarySlip, "
 };
 
 export const deleteSalarySlip = (id: string): void => {
+  const slip = getSalarySlips().find(s => s.id === id);
+  if (slip) {
+    const blockers = _salarySlipFinancialBlockers(slip);
+    if (blockers.length) throw new Error(_formatBlockerError("salary slip", `${slip.staffName} ${slip.period}`, blockers));
+  }
   setStored(SALARY_SLIPS_KEY, getSalarySlips().filter(s => s.id !== id));
 };
 
