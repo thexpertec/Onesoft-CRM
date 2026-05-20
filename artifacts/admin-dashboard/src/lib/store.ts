@@ -7438,9 +7438,22 @@ export function seedDefaultCoaAccounts(): void {
     }
   }
 
+  // Pre-collect every ledger ID referenced by any JE line so we never delete an account
+  // that still has historical transaction data — even if the entity's back-pointer was
+  // cleared by a server sync that didn't include the field, or the entity itself was
+  // removed (e.g. category renamed, sales agent deleted). Used by both the category
+  // cleanup and the contact/commission cleanup below.
+  const jeReferencedLedgerIds = new Set<string>();
+  for (const je of getJournalEntries()) {
+    for (const l of je.lines) jeReferencedLedgerIds.add(l.ledgerId);
+  }
+
   // ── Orphaned category ledger cleanup ──────────────────────────────────────
   // Remove sr-cat-*, pur-cat-*, inv-cat-* entries whose category no longer
-  // exists in any product.
+  // exists in any product — UNLESS a journal entry still references them.
+  // The JE-fallback ensures that renaming/removing a product category cannot
+  // orphan historical purchase/sale JE lines that posted to per-category
+  // Inventory / Sales Revenue / Purchase Expense ledgers.
   // NOTE: sys-3101 (General Sales Revenue) and sys-1141 (General Inventory) are
   //       NOT prefixed with these patterns and are always preserved.
   const activeCatSlugs = new Set(uniqueCategories.map(c => _catSlug(c)));
@@ -7452,11 +7465,11 @@ export function seedDefaultCoaAccounts(): void {
     const pfx = CAT_PREFIXES.find(p => a.id.startsWith(p));
     if (!pfx) return true;
     const slug = a.id.slice(pfx.length);
-    return activeCatSlugs.has(slug);
+    return activeCatSlugs.has(slug) || jeReferencedLedgerIds.has(a.id);
   });
   const orphansRemoved = beforeCatClean - dynamicAccounts.length;
   if (orphansRemoved > 0) {
-    console.info(`[COA] Removed ${orphansRemoved} orphaned category ledger(s) — no products use those categories`);
+    console.info(`[COA] Removed ${orphansRemoved} orphaned category ledger(s) — no products use those categories and no JE references them`);
     dynamicChanged = true;
   }
 
@@ -7477,14 +7490,6 @@ export function seedDefaultCoaAccounts(): void {
   const staffSalaryLedgerIds  = new Set(allStaffForClean.map(s => s.ledgerAccountId).filter(Boolean) as string[]);
   const staffPayableLedgerIds = new Set(allStaffForClean.map(s => s.staffPayableLedgerId).filter(Boolean) as string[]);
 
-  // Pre-collect every ledger ID referenced by any JE line so we never delete an account
-  // that still has historical transaction data — even if the contact's ledgerAccountId
-  // was cleared by a server sync that didn't include the field.
-  const jeReferencedLedgerIds = new Set<string>();
-  for (const je of getJournalEntries()) {
-    for (const l of je.lines) jeReferencedLedgerIds.add(l.ledgerId);
-  }
-
   const CONTACT_PARENT_IDS = new Set<string>([SYS_ACCS.AP_TRADE, SYS_ACCS.AR_GROUP]);
   const beforeContactClean = dynamicAccounts.length;
   dynamicAccounts = dynamicAccounts.filter(a => {
@@ -7496,8 +7501,12 @@ export function seedDefaultCoaAccounts(): void {
       // when a server sync replaces customer records without the ledgerAccountId field.
       return contactLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
     }
-    // Commission ledgers — keep only if a sales agent in THIS tenant still references it
-    if (parentId === SYS_ACCS.COMMISSION_GROUP) return agentLedgerIds.has(a.id);
+    // Commission ledgers — keep if a sales agent still references it, OR if any JE
+    // references it. The JE-fallback prevents deleting a sales agent from orphaning
+    // their historical commission JEs into "Unknown ledger".
+    if (parentId === SYS_ACCS.COMMISSION_GROUP) {
+      return agentLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
+    }
     // Salary expense ledgers — keep if a staff member still references it, or has JE history
     if (parentId === SYS_ACCS.SALARY_GROUP) {
       return staffSalaryLedgerIds.has(a.id) || jeReferencedLedgerIds.has(a.id);
@@ -9283,6 +9292,49 @@ export function autoPostSaleJE(params: {
     isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
   });
   if (!je) return null;
+
+  // ── Write-back: bind the customer contact to the AR ledger we actually used ─
+  // Mirrors the supplier write-back in receivePurchaseOrder. If autoPostSaleJE's
+  // cascade resolved to a per-party ledger (not a system fallback) that doesn't
+  // match the contact's stored ledgerAccountId, persist the resolved id onto the
+  // contact so that:
+  //   • future deleteCustomer guards see and protect the JE-referenced id
+  //   • future sale JEs for this customer post to the same ledger consistently
+  // Without this, the JE references a UUID the contact doesn't know about — and
+  // a later contact deletion or seed cleanup could orphan the JE into "Unknown
+  // ledger". Only write back for Buyer-role contacts hitting a real AR ledger;
+  // skip walk-in, system contacts, and system-fallback ledgers (AR_TRADE / AR_GROUP).
+  if (useAR && _customerLedgerId && !isWalkIn) {
+    try {
+      const _allContacts = getCustomers();
+      // Match the same forms findSubLedgerForParty resolves against:
+      // either bare "name" or "name (company)". Without the second form,
+      // sales for customers entered as "John Doe (Acme Corp)" would resolve
+      // a ledger but skip write-back, leaving the JE-referenced id unbound.
+      const _target = (params.customer ?? "").trim().toLowerCase();
+      const _custContact = _allContacts.find(c => {
+        const _n  = (c.name ?? "").trim().toLowerCase();
+        const _nc = _n + (c.company ? ` (${c.company})`.toLowerCase() : "");
+        return _n === _target || _nc === _target;
+      });
+      const _custQualifies = !!_custContact
+        && _custContact.id !== SYS_WALKIN_CUSTOMER_ID
+        && (_custContact.customerRole ?? "Buyer") !== "Supplier";
+      if (_custContact && _custQualifies && _customerLedgerId !== _custContact.ledgerAccountId) {
+        const _resolvedAcct = _allAccounts.find(a => a.id === _customerLedgerId);
+        const _isSystemFallback =
+          _customerLedgerId === SYS_ACCS.AR_TRADE
+          || _customerLedgerId === SYS_ACCS.AR_GROUP
+          || _customerLedgerId === SYS_ACCS.AP_TRADE
+          || _customerLedgerId === SYS_ACCS.AP_GROUP
+          || (_resolvedAcct?.code === "1130" || _resolvedAcct?.code === "1131");
+        if (_resolvedAcct?.accountType === "Ledger" && !_isSystemFallback) {
+          updateCustomer(_custContact.id, { ledgerAccountId: _customerLedgerId });
+        }
+      }
+    } catch { /* non-fatal: contact may have been edited concurrently */ }
+  }
+
   return Object.assign(je, { usesAR: useAR, receiptEmbedded: _transitEmbedded });
 }
 
