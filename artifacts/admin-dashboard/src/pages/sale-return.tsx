@@ -289,8 +289,6 @@ function NewReturnSheet({ onClose, onSaved }: ReturnFormProps) {
     setReturnItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
-  const removeItem = (id: string) => setReturnItems(prev => prev.filter(i => i.id !== id));
-
   /** Check all items that still have available (un-returned) qty. */
   const handleSelectAll = () => {
     if (!selectedSale) return;
