@@ -138,10 +138,15 @@ export default function ProductionReportPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // Normalise to YYYY-MM-DD on both sides so the comparison is correct even
+    // if orderDate carries a time component or extra whitespace.
+    const fromN = from ? from.slice(0, 10) : "";
+    const toN   = to   ? to.slice(0, 10)   : "";
     return allRows.filter(r => {
+      const od = (r.order.orderDate || "").slice(0, 10);
       if (status !== "all" && r.order.status !== status) return false;
-      if (from && r.order.orderDate < from) return false;
-      if (to && r.order.orderDate > to) return false;
+      if (fromN && od < fromN) return false;
+      if (toN   && od > toN)   return false;
       if (productFilter !== "all" && !r.outRows.some(o => o.productName === productFilter)) return false;
       if (q) {
         const hay = `${r.order.orderNumber} ${r.outRows.map(o => o.productName).join(" ")} ${r.rmRows.map(rm => rm.rmName).join(" ")} ${r.order.notes || ""}`.toLowerCase();
@@ -153,17 +158,23 @@ export default function ProductionReportPage() {
 
   const totals = useMemo(() => {
     const sessions = filtered.length;
-    const completed = filtered.filter(r => r.order.status === "Completed").length;
-    const rmTotal = filtered.reduce((s, r) => s + r.rmTotal, 0);
-    const prodTotal = filtered.reduce((s, r) => s + r.prodTotal, 0);
-    const batchTotal = filtered.reduce((s, r) => s + r.batchTotal, 0);
-    const unitsProduced = filtered.reduce((s, r) => s + r.totalOutQty, 0);
+    // Financial summaries only consider Completed orders. Draft / In Progress
+    // / Cancelled orders have not actually consumed RM or produced cost and
+    // including them inflates "spent" totals.
+    const settled = filtered.filter(r => r.order.status === "Completed");
+    const completed = settled.length;
+    const rmTotal = settled.reduce((s, r) => s + r.rmTotal, 0);
+    const prodTotal = settled.reduce((s, r) => s + r.prodTotal, 0);
+    const batchTotal = settled.reduce((s, r) => s + r.batchTotal, 0);
+    const unitsProduced = settled.reduce((s, r) => s + r.totalOutQty, 0);
     return { sessions, completed, rmTotal, prodTotal, batchTotal, unitsProduced };
   }, [filtered]);
 
   const perProductSummary = useMemo(() => {
     const map = new Map<string, { qty: number; cost: number }>();
+    // Only Completed orders feed product cost rollups.
     for (const r of filtered) {
+      if (r.order.status !== "Completed") continue;
       const cpu = r.costPerUnit;
       for (const out of r.outRows) {
         const cur = map.get(out.productName) || { qty: 0, cost: 0 };

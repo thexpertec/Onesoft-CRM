@@ -817,13 +817,30 @@ export default function ManufacturingPage() {
     if (!form.mainOutput.productName.trim() || mainQty <= 0) {
       toast({ title: "Select a main product and enter a quantity", variant: "destructive" }); return;
     }
+    // Block any input row that has a qty but no rmId (would never deduct
+    // from stock on completion and would silently corrupt cost tracking).
+    const ghostInputs = form.inputs.filter(i => {
+      const q = parseFloat(i.qtyUsed) || 0;
+      return q > 0 && !i.rmId;
+    });
+    if (ghostInputs.length > 0) {
+      toast({
+        title: "Pick a raw material for every input row",
+        description: "Each input with a quantity must be selected from the Raw Material dropdown so it can be deducted from stock.",
+        variant: "destructive",
+      });
+      return;
+    }
     const validByProducts = form.byProducts.filter(o => o.productName.trim() && (parseFloat(o.qty) || 0) > 0);
+    // Only persist input rows that actually consume something — drop blank
+    // or 0-qty placeholders so they don't bloat the ledger on completion.
+    const validInputs = form.inputs.filter(i => i.rmId && (parseFloat(i.qtyUsed) || 0) > 0);
     add({
       orderDate:       form.orderDate,
       status:          form.status as ManufacturingOrder["status"],
-      inputs:          form.inputs.filter(i => i.rmName.trim()),
+      inputs:          validInputs,
       outputs:         [form.mainOutput, ...validByProducts],
-      productionCosts: form.productionCosts.filter(c => c.description.trim()),
+      productionCosts: form.productionCosts.filter(c => c.description.trim() && (parseFloat(c.amount) || 0) > 0),
       wasteQty:        form.wasteQty,
       wasteUnit:       form.wasteUnit,
       wasteNotes:      form.wasteNotes,
@@ -1230,8 +1247,12 @@ export default function ManufacturingPage() {
                                   </SelectContent>
                                 </Select>
                               ) : (
-                                <Input value={inp.rmName} onChange={e => updInput(inp.id, { rmName: e.target.value })}
-                                  placeholder="Material name" className="h-10 text-[13px]" />
+                                // No raw materials defined — free-text rows can't deduct from stock
+                                // and break cost tracking on completion, so the field is locked.
+                                // User must go to Raw Materials and add at least one entry first.
+                                <Input value="" disabled
+                                  placeholder="Add a Raw Material first (Raw Materials page)"
+                                  className="h-10 text-[13px] italic" />
                               )}
                             </td>
                             <td className="px-2 py-2">
@@ -2057,14 +2078,17 @@ export default function ManufacturingPage() {
               className="text-[13px]"
               onKeyDown={e => {
                 if (e.key === "Enter" && recipeName.trim()) {
+                  // Same validation as handleSave — only persist input rows
+                  // that have a linked raw material and a positive qty, so the
+                  // saved recipe can actually be used for completion later.
                   addRecipe({
                     name: recipeName.trim(),
-                    inputs: form.inputs.filter(i => i.rmName.trim()),
+                    inputs: form.inputs.filter(i => i.rmId && (parseFloat(i.qtyUsed) || 0) > 0),
                     outputs: [
                       form.mainOutput,
-                      ...form.byProducts.filter(o => o.productName.trim()),
+                      ...form.byProducts.filter(o => o.productName.trim() && (parseFloat(o.qty) || 0) > 0),
                     ],
-                    productionCosts: form.productionCosts.filter(c => c.description.trim()),
+                    productionCosts: form.productionCosts.filter(c => c.description.trim() && (parseFloat(c.amount) || 0) > 0),
                     notes: form.notes,
                   });
                   toast({ title: `Recipe "${recipeName.trim()}" saved` });
@@ -2080,14 +2104,17 @@ export default function ManufacturingPage() {
               disabled={!recipeName.trim()}
               onClick={() => {
                 if (!recipeName.trim()) return;
+                // Same validation as handleSave — only persist input rows
+                // that have a linked raw material and a positive qty, so the
+                // saved recipe can actually be used for completion later.
                 addRecipe({
                   name: recipeName.trim(),
-                  inputs: form.inputs.filter(i => i.rmName.trim()),
+                  inputs: form.inputs.filter(i => i.rmId && (parseFloat(i.qtyUsed) || 0) > 0),
                   outputs: [
                     form.mainOutput,
-                    ...form.byProducts.filter(o => o.productName.trim()),
+                    ...form.byProducts.filter(o => o.productName.trim() && (parseFloat(o.qty) || 0) > 0),
                   ],
-                  productionCosts: form.productionCosts.filter(c => c.description.trim()),
+                  productionCosts: form.productionCosts.filter(c => c.description.trim() && (parseFloat(c.amount) || 0) > 0),
                   notes: form.notes,
                 });
                 toast({ title: `Recipe "${recipeName.trim()}" saved` });

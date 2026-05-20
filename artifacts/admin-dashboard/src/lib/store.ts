@@ -5473,31 +5473,24 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   if (order.status === "Completed") throw new Error("Order already completed");
 
   // ── Pre-flight validation ──────────────────────────────────────────────────
-  // Reject completion if any input refers to a raw material that has since
-  // been deleted. Silently skipping would leave the cost calc / order record
-  // referencing a "ghost" material that never deducts from any ledger.
-  const rms    = getRawMaterials();
-  const orphanedInputs = (order.inputs || []).filter(inp => {
+  // Every input row with a positive qty MUST point to an existing raw
+  // material. This catches three failure modes that would otherwise silently
+  // corrupt cost tracking:
+  //   1. rmId references a raw material that has since been deleted
+  //   2. Free-text rmName with no rmId (legacy UI fallback)
+  //   3. Fully blank row with only a qty (corrupt data)
+  const rms = getRawMaterials();
+  const badInputs = (order.inputs || []).filter(inp => {
     const qty = parseFloat(inp.qtyUsed) || 0;
-    return qty > 0 && inp.rmId && !rms.some(r => r.id === inp.rmId);
+    if (qty <= 0) return false;
+    if (!inp.rmId) return true;
+    return !rms.some(r => r.id === inp.rmId);
   });
-  if (orphanedInputs.length > 0) {
+  if (badInputs.length > 0) {
     throw new Error(
-      `Cannot complete: raw material(s) no longer exist — ${
-        orphanedInputs.map(i => i.rmName || i.rmId).join(", ")
-      }. Edit the order and replace them first.`
-    );
-  }
-  // Also reject completion if any input lacks an rmId (free-text "ghost" line).
-  const freeTextInputs = (order.inputs || []).filter(inp => {
-    const qty = parseFloat(inp.qtyUsed) || 0;
-    return qty > 0 && !inp.rmId && inp.rmName?.trim();
-  });
-  if (freeTextInputs.length > 0) {
-    throw new Error(
-      `Cannot complete: input(s) without a linked raw material — ${
-        freeTextInputs.map(i => i.rmName).join(", ")
-      }. Pick each material from the dropdown so stock can be deducted.`
+      `Cannot complete: ${badInputs.length} input row(s) reference a missing or unlinked raw material — ${
+        badInputs.map(i => i.rmName?.trim() || i.rmId || "(blank)").join(", ")
+      }. Edit the order and fix them first.`
     );
   }
 
@@ -5566,6 +5559,45 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   const mainRemainder = Math.max(0, totalCost - carvedOutCost);
   const mainUnitCost  = mainQty > 0 ? mainRemainder / mainQty : 0;
 
+  // Guard: if every output has a manual cost but the carved totals don't
+  // cover the batch, the remainder has nowhere to go. Refusing completion is
+  // safer than silently losing the money — user must remove a manual cost
+  // from at least one output so it can absorb the remainder.
+  if (mainQty === 0 && mainRemainder > 0.005) {
+    throw new Error(
+      `Cannot complete: all outputs have a manual cost, but ${mainRemainder.toFixed(2)} ` +
+      `of batch cost is unallocated. Remove the manual cost from at least one output (the "main" product) ` +
+      `so it can absorb the remainder.`
+    );
+  }
+
+  // ── Per-output cost allocation, weighted-average per product ──────────────
+  // We aggregate cost contributions per *product* first so that when multiple
+  // output rows map to the same product (e.g. two grades of the same SKU),
+  // we write a single weighted-average costPrice rather than letting the last
+  // iteration overwrite the first.
+  const productCostAgg = new Map<string, { totalCost: number; totalQty: number }>();
+  for (const out of effectiveOutputs) {
+    const q = parseFloat(out.qty) || 0;
+    if (!out.productName || q <= 0) continue;
+    let pi = out.productId ? allProducts.findIndex(p => p.id === out.productId) : -1;
+    if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === out.productName.toLowerCase().trim());
+    if (pi < 0) continue;
+    const unitCost = hasManual(out) ? (parseFloat(out.manualCost!) || 0) : mainUnitCost;
+    const key = allProducts[pi].id;
+    const cur = productCostAgg.get(key) || { totalCost: 0, totalQty: 0 };
+    cur.totalCost += unitCost * q;
+    cur.totalQty  += q;
+    productCostAgg.set(key, cur);
+  }
+  for (const [pid, agg] of productCostAgg) {
+    const pi = allProducts.findIndex(p => p.id === pid);
+    if (pi >= 0 && agg.totalQty > 0 && agg.totalCost > 0) {
+      const wAvg = agg.totalCost / agg.totalQty;
+      allProducts[pi] = { ...allProducts[pi], costPrice: wAvg.toFixed(2), updatedAt: new Date().toISOString() };
+    }
+  }
+
   // Load stocks once so we can check for existing records and update in-place
   const allStocks = getStock();
   let stocksDirty = false;
@@ -5577,12 +5609,6 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
     let pi = out.productId ? allProducts.findIndex(p => p.id === out.productId) : -1;
     if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === out.productName.toLowerCase().trim());
     const product = pi >= 0 ? allProducts[pi] : undefined;
-
-    // Auto-update costPrice based on actual production cost (user can still override manually)
-    if (pi >= 0 && totalCost > 0 && totalOutputQty > 0) {
-      const unitCost = (totalCost / totalOutputQty).toFixed(2);
-      allProducts[pi] = { ...allProducts[pi], costPrice: unitCost, updatedAt: new Date().toISOString() };
-    }
 
     const effectiveSku = product?.sku || out.productName.toLowerCase().replace(/\s+/g, "-");
     const skuLower = effectiveSku.trim().toLowerCase();
@@ -5611,10 +5637,16 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
     } else {
       // ── Create new record with quantity "0" to suppress the auto
       //    opening-balance entry in createStockItem, then set the real qty ────
+      // Default new produced stock to "For Sale" / "Warehouse A" so that future
+      // mfg runs reuse this same record (the SKU lookup above prefers
+      // stockType "For Sale"). Previously this was created in store
+      // "Manufacturing", which the search prioritised below "For Sale" — if a
+      // user later added a "For Sale" record for the same SKU, the next mfg
+      // run would target that newer record and orphan the "Manufacturing" one.
       const newStock = createStockItem({
         productName:  out.productName,
         sku:          effectiveSku,
-        store:        "Manufacturing",
+        store:        "Warehouse A",
         stockType:    "For Sale",
         quantity:     "0",          // ← zero prevents spurious opening-balance ledger entry
         minLevel:     "0",
