@@ -1,6 +1,6 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { useEffect, Component, lazy, Suspense } from "react";
-import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs, deduplicateOpeningBalanceJEs } from "@/lib/store";
+import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs } from "@/lib/store";
 import type { ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -154,7 +154,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isAuthenticated) {
-      deduplicateOpeningBalanceJEs(); // must run before backfill to fix any corrupted entries first
       backfillMissingSKUs();
       backfillOpeningBalanceJEs();
       backfillPOSCreditSaleJEs();
