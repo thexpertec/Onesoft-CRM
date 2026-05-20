@@ -1235,8 +1235,13 @@ export default function ManufacturingPage() {
                               )}
                             </td>
                             <td className="px-2 py-2">
-                              <Input value={inp.unit} onChange={e => updInput(inp.id, { unit: e.target.value })}
-                                placeholder="kg" className="h-10 text-[13px]" />
+                              {/* Unit is locked to the raw material's defined unit — change it on the Raw Materials page if needed. */}
+                              <div
+                                className="h-10 px-3 flex items-center text-[13px] rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 text-muted-foreground font-medium"
+                                title="Unit is set on the raw material and cannot be changed here"
+                              >
+                                {inp.unit || (rm?.unit ?? "—")}
+                              </div>
                             </td>
                             <td className="px-2 py-2">
                               <Input type="number" min="0" value={inp.qtyUsed}

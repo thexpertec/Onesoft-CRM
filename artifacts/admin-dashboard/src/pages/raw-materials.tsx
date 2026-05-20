@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { FlaskConical, Eye, Trash2, Plus, Minus, Package, RefreshCw, History, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useRawMaterials } from "@/hooks/use-data";
+import { useRawMaterials, useUnits } from "@/hooks/use-data";
 import { getEntityLedger, LEDGER_TX_LABELS } from "@/lib/store";
 import { useAuth } from "@/contexts/auth-context";
 import { getSettingsCurrencySymbol } from "@/lib/currencies";
@@ -35,11 +35,27 @@ const blankRow = (): Partial<RM> => ({
 
 export default function RawMaterialsPage() {
   const { rms, add, edit, remove } = useRawMaterials();
+  const { units } = useUnits();
   const { isStaff, staffPermissions } = useAuth();
   const { toast } = useToast();
   const sym = getSettingsCurrencySymbol();
 
   const canEdit = !isStaff || staffPermissions.manufacturing !== "view";
+
+  // Unit column — dropdown sourced from Settings → Units. Falls back to free
+  // text only when no units are defined yet, so legacy installs keep working.
+  const unitOptions = useMemo(
+    () => Array.from(new Set(units.map(u => (u.symbol || u.name || "").trim()).filter(Boolean))),
+    [units],
+  );
+  const cols: ColDef[] = useMemo(
+    () => COLS.map(c =>
+      c.field === "unit" && unitOptions.length > 0
+        ? { ...c, type: "select", options: unitOptions }
+        : c,
+    ),
+    [unitOptions],
+  );
 
   // ── New row state ─────────────────────────────────────────────────────────
   const [newRow,    setNewRow]    = useState<Partial<RM> | null>(null);
@@ -106,13 +122,13 @@ export default function RawMaterialsPage() {
       </div>
 
       {/* Grid */}
-      <ExcelGridShell cols={COLS} totalMinW={TOTAL_MIN_W} tableId="raw-materials">
+      <ExcelGridShell cols={cols} totalMinW={TOTAL_MIN_W} tableId="raw-materials">
         {rms.map((rm, rowIdx) => (
           <tr key={rm.id} style={{ height: CELL_H }}>
             <td className="border-r border-border text-center text-[11px] text-muted-foreground select-none" style={{ width: 48, minWidth: 48 }}>
               {rowIdx + 1}
             </td>
-            {COLS.map(col => {
+            {cols.map(col => {
               const k = `${rm.id}-${col.field}`;
               const val = col.field === "rmCode" ? rm.rmCode : String((rm as Record<string, unknown>)[col.field] ?? "");
               return (
@@ -126,8 +142,8 @@ export default function RawMaterialsPage() {
                     onCommit={v => { edit(rm.id, { [col.field]: v }); setActiveKey(""); }}
                     onCancel={() => setActiveKey("")}
                     onTab={() => {
-                      const ci = COLS.indexOf(col);
-                      const next = ci < COLS.length - 1 ? COLS[ci + 1] : null;
+                      const ci = cols.indexOf(col);
+                      const next = ci < cols.length - 1 ? cols[ci + 1] : null;
                       setActiveKey(next ? `${rm.id}-${next.field}` : "");
                     }}
                     onEnter={() => setActiveKey("")}
@@ -160,7 +176,7 @@ export default function RawMaterialsPage() {
         {newRow && (
           <tr style={{ height: CELL_H, background: NEW_ROW_BG }}>
             <td className="border-r border-border text-center text-[11px] text-muted-foreground select-none" style={{ width: 48, minWidth: 48 }}>*</td>
-            {COLS.map(col => {
+            {cols.map(col => {
               const k = `new-${col.field}`;
               return (
                 <td key={col.field} style={{ minWidth: col.minW }} className="border-r border-border p-0 relative">
@@ -171,10 +187,10 @@ export default function RawMaterialsPage() {
                     canEdit={col.field !== "rmCode" && col.field !== "currentStock"}
                     onActivate={() => setActiveKey(k)}
                     onCommit={v => { setNewRow(r => ({ ...r, [col.field]: v })); setActiveKey(""); }}
-                    onCancel={() => { setActiveKey(""); if (col.field === COLS[0].field) setNewRow(null); }}
+                    onCancel={() => { setActiveKey(""); if (col.field === cols[0].field) setNewRow(null); }}
                     onTab={() => {
-                      const ci = COLS.indexOf(col);
-                      const next = ci < COLS.length - 1 ? COLS[ci + 1] : null;
+                      const ci = cols.indexOf(col);
+                      const next = ci < cols.length - 1 ? cols[ci + 1] : null;
                       if (next) setActiveKey(`new-${next.field}`); else commitNew();
                     }}
                     onEnter={() => commitNew()}
