@@ -1627,7 +1627,7 @@ export type ModuleId =
   | "accounting_income" | "accounting_expense" | "accounting_receipts"
   | "shareholders" | "investment_plans"
   // Manufacturing
-  | "manufacturing" | "production_guide"
+  | "manufacturing" | "production_guide" | "production_report"
   // Website / CMS
   | "website_cms"
   // Repairs
@@ -1692,6 +1692,7 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   // ── Manufacturing ─────────────────────────────────────────────────────────
   { id: "manufacturing",    label: "Manufacturing",       desc: "Production orders & job tracking",  group: "Manufacturing", href: "/manufacturing"   },
   { id: "production_guide", label: "Production Guide",    desc: "Manufacturing guides & BOMs",       group: "Manufacturing", href: "/production-guide"},
+  { id: "production_report",label: "Production Report",   desc: "Cost report by production session", group: "Manufacturing", href: "/production-report"},
 
   // ── Website / CMS ─────────────────────────────────────────────────────────
   { id: "website_cms", label: "Website CMS", desc: "Store & website content management", group: "Website", href: "/website-cms" },

@@ -88,6 +88,7 @@ const AreasPage             = lazy(() => import("@/pages/areas"));
 const RawMaterialsPage      = lazy(() => import("@/pages/raw-materials"));
 const ManufacturingPage     = lazy(() => import("@/pages/manufacturing"));
 const ProductionGuidePage   = lazy(() => import("@/pages/production-guide"));
+const ProductionReportPage  = lazy(() => import("@/pages/production-report"));
 const WebsiteCmsPage        = lazy(() => import("@/pages/website-cms"));
 const RepairPage            = lazy(() => import("@/pages/repair"));
 const RepairReportPage      = lazy(() => import("@/pages/repair-report"));
@@ -238,6 +239,7 @@ function Router() {
                   <Route path="/raw-materials"      component={RawMaterialsPage} />
                   <Route path="/manufacturing"      component={ManufacturingPage} />
                   <Route path="/production-guide"   component={ProductionGuidePage} />
+                  <Route path="/production-report"  component={ProductionReportPage} />
                   <Route path="/sales/new"          component={SalesPage} />
                   <Route path="/sales"              component={SalesPage} />
                   <Route path="/stock-ledger"       component={StockLedgerPage} />
