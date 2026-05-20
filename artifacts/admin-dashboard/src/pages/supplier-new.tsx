@@ -87,25 +87,35 @@ export default function SupplierNewPage() {
       ? billingDetails
       : (isAddressEmpty(shipping) ? billingDetails : shipping);
 
-    addCustomer({
-      name: form.name.trim(), company: form.company.trim(),
-      email: form.email.trim(), phone: form.phone.trim(),
-      industry: form.industry.trim(), city: form.city.trim(),
-      area: form.area.trim() || undefined, status: form.status,
-      customerSince: form.supplierSince || new Date().toISOString().split("T")[0],
-      totalValue: form.totalValue.trim(),
-      currency: form.currency.trim() || "GBP",
-      openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : undefined,
-      notes: form.notes.trim(), source: "direct",
-      customerType: "Regular Customer",
-      customerRole: "Supplier",
-      supplierProducts: supplierProducts.length > 0 ? supplierProducts : undefined,
-      tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
-      billingAddressDetails:  billingDetails,
-      shippingAddressDetails: shippingDetails,
-      billingAddress:  formatAddress(billingDetails)  || undefined,
-      shippingAddress: formatAddress(shippingDetails) || undefined,
-    });
+    try {
+      addCustomer({
+        name: form.name.trim(), company: form.company.trim(),
+        email: form.email.trim(), phone: form.phone.trim(),
+        industry: form.industry.trim(), city: form.city.trim(),
+        area: form.area.trim() || undefined, status: form.status,
+        customerSince: form.supplierSince || new Date().toISOString().split("T")[0],
+        totalValue: form.totalValue.trim(),
+        currency: form.currency.trim() || "GBP",
+        openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : undefined,
+        notes: form.notes.trim(), source: "direct",
+        customerType: "Regular Customer",
+        customerRole: "Supplier",
+        supplierProducts: supplierProducts.length > 0 ? supplierProducts : undefined,
+        tags: form.tags ? form.tags.split(";").map(t => t.trim()).filter(Boolean) : [],
+        billingAddressDetails:  billingDetails,
+        shippingAddressDetails: shippingDetails,
+        billingAddress:  formatAddress(billingDetails)  || undefined,
+        shippingAddress: formatAddress(shippingDetails) || undefined,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not save supplier",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+        duration: 8000,
+      });
+      return;
+    }
     toast({ title: "Supplier added", description: `${form.name.trim()} has been added.` });
     nav("/customers?type=Suppliers");
   };

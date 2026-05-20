@@ -1022,6 +1022,39 @@ function _nextObRef(): string {
  * doubled) entry.  OB entries are always exactly 2 lines and are never linked
  * to sales / vouchers, so delete-then-create is both safe and correct here.
  */
+/**
+ * Returns all OB journal entries that reference the given ledger.
+ * Exported so callers (createCustomer/updateCustomer) can preflight-check
+ * for duplicates before mutating any other state.
+ */
+export function _findOpeningBalanceJEs(ledgerAccountId: string): JournalEntry[] {
+  return getJournalEntries().filter(
+    e => e.reference.startsWith(_OB_REF_PREFIX) &&
+         e.lines.some(l => l.ledgerId === ledgerAccountId)
+  );
+}
+
+/**
+ * INTERNAL: writes the OB JE without the duplicate guard.
+ * Deletes ALL existing OB JEs for the ledger and creates one fresh entry.
+ * Only `deduplicateOpeningBalanceJEs` (the explicit repair path) should use this.
+ */
+function _rebuildOpeningBalanceJE(
+  ledgerAccountId: string,
+  isSupplier: boolean,
+  amount: number,
+  date: string,
+  entityName: string,
+): void {
+  const existingAll = _findOpeningBalanceJEs(ledgerAccountId);
+  const keepRef = existingAll
+    .map(e => e.reference)
+    .find(r => !_isLegacyObRef(r));
+  for (const e of existingAll) deleteJournalEntry(e.id);
+  if (amount === 0) return;
+  _writeOpeningBalanceJELines(ledgerAccountId, isSupplier, amount, date, entityName, keepRef);
+}
+
 function _upsertOpeningBalanceJE(
   ledgerAccountId: string,
   isSupplier: boolean,
@@ -1029,27 +1062,59 @@ function _upsertOpeningBalanceJE(
   date: string,
   entityName: string,
 ): void {
-  // ── Find ALL existing OB JEs that reference this ledger ──────────────────
-  // Use filter (not find) so accumulated duplicates are all captured.
-  const existingAll = getJournalEntries().filter(
-    e => e.reference.startsWith(_OB_REF_PREFIX) &&
-         e.lines.some(l => l.ledgerId === ledgerAccountId)
-  );
+  const existingAll = _findOpeningBalanceJEs(ledgerAccountId);
 
-  // Preserve the first clean sequential ref so OB numbering stays stable.
-  const keepRef = existingAll
-    .map(e => e.reference)
-    .find(r => !_isLegacyObRef(r));
-
-  // ── Delete every existing OB entry for this ledger ───────────────────────
-  for (const e of existingAll) {
-    deleteJournalEntry(e.id);
+  // ── Hard guard: refuse to operate when duplicates are already present ───
+  // This forces an admin to reconcile the data manually rather than silently
+  // overwriting whatever happens to be there.
+  if (existingAll.length > 1) {
+    throw new Error(
+      `Duplicate opening balance entries detected for "${entityName}" ` +
+      `(${existingAll.length} OB journal entries found). ` +
+      `Please reconcile the ledger manually before changing the opening balance.`,
+    );
   }
 
-  if (amount === 0) return; // deleted above — nothing more to do
+  const existing = existingAll[0];
 
-  const ref    = keepRef ?? _nextObRef();
+  // ── Clearing the opening balance (amount = 0) ───────────────────────────
+  if (amount === 0) {
+    if (existing) deleteJournalEntry(existing.id);
+    return;
+  }
+
+  // ── No-op if the existing entry already matches what we'd write ─────────
   const absAmt = Math.abs(amount);
+  if (existing) {
+    const sameAmount =
+      existing.totalDebit === absAmt &&
+      existing.totalCredit === absAmt &&
+      existing.lines.length === 2;
+    const sameDate = existing.date === date;
+    if (sameAmount && sameDate) return; // nothing to do
+  }
+
+  // Preserve the existing ref so OB numbering stays stable when amount changes.
+  const keepRef = existing && !_isLegacyObRef(existing.reference)
+    ? existing.reference
+    : undefined;
+
+  // Delete only the single existing entry (if any) before re-creating.
+  if (existing) deleteJournalEntry(existing.id);
+
+  _writeOpeningBalanceJELines(ledgerAccountId, isSupplier, amount, date, entityName, keepRef);
+}
+
+function _writeOpeningBalanceJELines(
+  ledgerAccountId: string,
+  isSupplier: boolean,
+  amount: number,
+  date: string,
+  entityName: string,
+  keepRef: string | undefined,
+): void {
+  const absAmt = Math.abs(amount);
+  const ref = keepRef ?? _nextObRef();
 
   // For a buyer:    Dr customer ledger (receivable),  Cr Opening Balances equity
   // For a supplier: Dr Opening Balances equity,        Cr supplier ledger (payable)
@@ -1089,6 +1154,20 @@ export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "update
       ? `Payable account for supplier: ${data.name}`
       : `Receivable account for customer: ${data.name}`,
   });
+  // ── Preflight: refuse if a duplicate OB JE already exists for this ledger ──
+  // (For a brand-new customer the ledger is brand-new, so this is purely defensive
+  //  against re-using an existing `data.ledgerAccountId` that already has OB JEs.)
+  if (data.openingBalance && data.openingBalance !== 0) {
+    const existingObs = _findOpeningBalanceJEs(ledgerAccountId);
+    if (existingObs.length > 0) {
+      throw new Error(
+        `Cannot set opening balance for "${displayName}": ${existingObs.length} ` +
+        `opening-balance journal entr${existingObs.length === 1 ? "y" : "ies"} ` +
+        `already exist${existingObs.length === 1 ? "s" : ""} for this ledger.`,
+      );
+    }
+  }
+
   const newCustomer: Customer = {
     ...data,
     ledgerAccountId,
@@ -1157,6 +1236,22 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
   }
 
   const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+
+  // ── Preflight: detect OB duplicate corruption BEFORE persisting customer ──
+  // If we're about to touch the OB JE, fail fast so the customer record is not
+  // left half-committed when _upsertOpeningBalanceJE would throw.
+  if ("openingBalance" in updates && updated.ledgerAccountId) {
+    const existingObs = _findOpeningBalanceJEs(updated.ledgerAccountId);
+    if (existingObs.length > 1) {
+      const displayName = updated.name + (updated.company ? ` (${updated.company})` : "");
+      throw new Error(
+        `Duplicate opening balance entries detected for "${displayName}" ` +
+        `(${existingObs.length} OB journal entries found). ` +
+        `Please reconcile the ledger manually before changing the opening balance.`,
+      );
+    }
+  }
+
   customers[index] = updated;
   setStored(CUSTOMERS_KEY, customers);
   const detail = updates.status ? `Status → ${updates.status}` : undefined;
@@ -2788,8 +2883,9 @@ export function deduplicateOpeningBalanceJEs(): void {
       `${jes.length} JE(s), max ${Math.max(...jes.map(j => j.lines.length))} lines → recreating with amount ${obAmt}`,
     );
 
-    // _upsertOpeningBalanceJE already deletes-then-creates, so just call it
-    _upsertOpeningBalanceJE(ledgerId, isSupplier, obAmt, obDate, displayName);
+    // Use the unguarded rebuild path — the duplicate guard in _upsertOpeningBalanceJE
+    // would refuse to operate (correctly) on the very corruption we're trying to fix.
+    _rebuildOpeningBalanceJE(ledgerId, isSupplier, obAmt, obDate, displayName);
   }
 }
 
