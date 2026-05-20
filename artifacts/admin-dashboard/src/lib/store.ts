@@ -628,10 +628,10 @@ export const updatePaymentAccount = (id: string, updates: Partial<Omit<PaymentAc
 export const deletePaymentAccount = (id: string): void => {
   const pa = getPaymentAccounts().find(a => a.id === id);
   setStored(PAYMENT_ACCOUNTS_KEY, getPaymentAccounts().filter(a => a.id !== id));
-  // Remove the linked COA ledger (soft-fail if it has JE transactions)
+  // Safe removal: deactivates instead of hard-deleting if any JE or other
+  // entity still references this account — preserves historical JE resolution.
   if (pa?.ledgerAccountId) {
-    try { deleteAccount(pa.ledgerAccountId); } catch { /* has posted JEs — deactivate instead */ }
-    try { updateAccount(pa.ledgerAccountId, { isActive: false }); } catch { /* ignore */ }
+    _safeDeactivateLedgerAccount(pa.ledgerAccountId);
   }
 };
 
@@ -1441,10 +1441,10 @@ export const deleteCustomer = (id: string): void => {
     }
   }
   setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
-  // Remove the linked COA ledger (soft-fail if it has posted journal entries)
+  // Safe removal: deactivates instead of hard-deleting if any JE references
+  // this sub-ledger — preserves "Unknown ledger" from ever appearing on a JE.
   if (customer?.ledgerAccountId) {
-    try { deleteAccount(customer.ledgerAccountId); } catch { /* has JEs — deactivate instead */ }
-    try { updateAccount(customer.ledgerAccountId, { isActive: false }); } catch { /* ignore */ }
+    _safeDeactivateLedgerAccount(customer.ledgerAccountId);
   }
   addActivity({ action: "deleted", entity: "Customer", entityName: customer?.name || id });
 };
@@ -6023,12 +6023,10 @@ export const deleteStaff = (id: string): void => {
   // Remove linked ledgers only when they have no JE history.
   // Accounts with posted JEs are left fully active so those JEs continue to resolve correctly.
   // The dynamicAccounts filter in seedDefaultCoaAccounts cleans up zero-history orphans on next login.
-  if (staff?.ledgerAccountId) {
-    try { deleteAccount(staff.ledgerAccountId); } catch { /* has JEs — leave active */ }
-  }
-  if (staff?.staffPayableLedgerId) {
-    try { deleteAccount(staff.staffPayableLedgerId); } catch { /* has JEs — leave active */ }
-  }
+  // Safe removal: deactivates instead of hard-deleting if any JE references
+  // these sub-ledgers — preserves historical JE resolution.
+  if (staff?.ledgerAccountId)        _safeDeactivateLedgerAccount(staff.ledgerAccountId);
+  if (staff?.staffPayableLedgerId)   _safeDeactivateLedgerAccount(staff.staffPayableLedgerId);
 };
 
 /** Find a staff member by login credentials (only if loginEnabled). */
@@ -8478,6 +8476,56 @@ export function deleteAccount(id: string): void {
   }
 
   _saveAccounts(all.filter(a => a.id !== id));
+}
+
+/**
+ * Safe entry-point for "delete a linked sub-ledger when its owning entity is
+ * deleted" (customer, supplier, payment account, staff). Never destroys an
+ * account whose UUID is referenced by any journal entry line OR by any other
+ * entity record — instead it deactivates the account so historical JEs keep
+ * resolving to a real, named ledger. Only when nothing references the account
+ * is it physically removed.
+ *
+ * This is the single chokepoint that closes the "Unknown ledger" data-loss
+ * path: even if the per-entity blocker missed a stale fallback ID, the JE-
+ * line foreign key cannot be invalidated here.
+ */
+function _safeDeactivateLedgerAccount(id: string): void {
+  if (!id) return;
+  const all = getAccounts();
+  const acct = all.find(a => a.id === id);
+  if (!acct) return;
+
+  // Build a set of all account UUIDs that are referenced anywhere a deletion
+  // would invalidate. JE lines are the primary concern; child accounts and
+  // other entity back-pointers (customers, payment accounts, staff,
+  // shareholders) are included for full safety.
+  const jes = getJournalEntries();
+  const referencedByJE = jes.some(je => je.lines.some(l => l.ledgerId === id));
+  const hasChildren    = all.some(a => a.parentId === id);
+  const referencedByCustomer = getCustomers().some(c => c.ledgerAccountId === id);
+  const referencedByPA       = getPaymentAccounts().some(a => a.ledgerAccountId === id);
+  const referencedByStaff    = getStaff().some(s =>
+    s.ledgerAccountId === id || s.staffPayableLedgerId === id);
+  const referencedByShare    = getShareholders().some(s => s.ledgerAccountId === id);
+
+  const isReferenced = referencedByJE || hasChildren
+    || referencedByCustomer || referencedByPA || referencedByStaff || referencedByShare;
+
+  if (isReferenced) {
+    // Preserve the account row so the JE line / back-pointer still resolves.
+    if (acct.isActive !== false) {
+      try { updateAccount(id, { isActive: false }); } catch { /* non-fatal */ }
+    }
+    return;
+  }
+
+  // No references anywhere — physically remove.
+  try { deleteAccount(id); } catch { /* defensive: if a race added a ref, deactivate */
+    if (acct.isActive !== false) {
+      try { updateAccount(id, { isActive: false }); } catch { /* non-fatal */ }
+    }
+  }
 }
 
 // ─── Journal Entry ────────────────────────────────────────────────────────────
