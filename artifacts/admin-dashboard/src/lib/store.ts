@@ -5356,6 +5356,25 @@ export const updateManufacturingOrder = (id: string, updates: Partial<Omit<Manuf
   const orders = getManufacturingOrders();
   const i = orders.findIndex(o => o.id === id);
   if (i === -1) throw new Error("Manufacturing order not found");
+
+  // ── Lock editing of finalized orders ───────────────────────────────────────
+  // Completed orders already moved stock and wrote ledger entries; allowing
+  // input/output/cost edits afterwards would silently desync the order record
+  // from those entries. To cancel a completed order use Delete (writes a
+  // compensating mfg-cancel entry). Editing the notes/orderDate is still
+  // allowed — only structural fields are locked.
+  const existing = orders[i];
+  if (existing.status === "Completed") {
+    const structural: (keyof ManufacturingOrder)[] = ["inputs", "outputs", "productionCosts", "wasteQty", "wasteUnit", "status"];
+    const touched = structural.filter(k => k in updates);
+    if (touched.length > 0) {
+      throw new Error(
+        `Completed orders cannot be edited (${touched.join(", ")}). ` +
+        `Delete this order to reverse it, then create a new one.`
+      );
+    }
+  }
+
   orders[i] = { ...orders[i], ...updates, updatedAt: new Date().toISOString() };
   setStored(MFG_KEY, orders);
   addActivity({ action: "updated", entity: "ManufacturingOrder", entityName: orders[i].orderNumber });
@@ -5453,39 +5472,99 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   const order = orders[i];
   if (order.status === "Completed") throw new Error("Order already completed");
 
-  // Deduct raw materials + record ledger
+  // ── Pre-flight validation ──────────────────────────────────────────────────
+  // Reject completion if any input refers to a raw material that has since
+  // been deleted. Silently skipping would leave the cost calc / order record
+  // referencing a "ghost" material that never deducts from any ledger.
   const rms    = getRawMaterials();
+  const orphanedInputs = (order.inputs || []).filter(inp => {
+    const qty = parseFloat(inp.qtyUsed) || 0;
+    return qty > 0 && inp.rmId && !rms.some(r => r.id === inp.rmId);
+  });
+  if (orphanedInputs.length > 0) {
+    throw new Error(
+      `Cannot complete: raw material(s) no longer exist — ${
+        orphanedInputs.map(i => i.rmName || i.rmId).join(", ")
+      }. Edit the order and replace them first.`
+    );
+  }
+  // Also reject completion if any input lacks an rmId (free-text "ghost" line).
+  const freeTextInputs = (order.inputs || []).filter(inp => {
+    const qty = parseFloat(inp.qtyUsed) || 0;
+    return qty > 0 && !inp.rmId && inp.rmName?.trim();
+  });
+  if (freeTextInputs.length > 0) {
+    throw new Error(
+      `Cannot complete: input(s) without a linked raw material — ${
+        freeTextInputs.map(i => i.rmName).join(", ")
+      }. Pick each material from the dropdown so stock can be deducted.`
+    );
+  }
+
+  // ── Deduct raw materials + record ledger ───────────────────────────────────
+  // Track the ACTUAL deducted qty per input so cost is computed on what was
+  // really consumed, not what the order requested. (When on-hand stock is less
+  // than the requested qty, the deduction is capped at on-hand and a short-qty
+  // warning is written into the ledger note.)
   const today  = new Date().toISOString().slice(0, 10);
   const ledger: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+  const actualDeductedByInputId = new Map<string, number>();
 
   order.inputs.forEach(inp => {
+    const requested = parseFloat(inp.qtyUsed) || 0;
+    if (requested <= 0) return;                          // skip blank / 0-qty rows
     const ri = rms.findIndex(r => r.id === inp.rmId);
-    if (ri >= 0) {
-      const current = Math.max(0, parseFloat(rms[ri].currentStock) || 0);
-      const deduct  = Math.min(current, parseFloat(inp.qtyUsed) || 0);
-      rms[ri] = { ...rms[ri], currentStock: String(current - deduct), updatedAt: new Date().toISOString() };
-      if (deduct > 0) ledger.push({
+    if (ri < 0) return;                                  // already rejected above; defensive
+    const current = Math.max(0, parseFloat(rms[ri].currentStock) || 0);
+    const deduct  = Math.min(current, requested);
+    actualDeductedByInputId.set(inp.id, deduct);
+    rms[ri] = { ...rms[ri], currentStock: String(current - deduct), updatedAt: new Date().toISOString() };
+    if (deduct > 0) {
+      const short = requested - deduct;
+      ledger.push({
         entityType: "raw-material", entityId: rms[ri].id, entityName: rms[ri].name,
         date: today, txType: "mfg-input", reference: order.orderNumber,
         qtyBefore: current, qtyChange: -deduct, qtyAfter: current - deduct,
-        unit: rms[ri].unit, notes: `Consumed by ${order.orderNumber}`,
+        unit: rms[ri].unit,
+        notes: short > 0
+          ? `Consumed by ${order.orderNumber} — short ${short.toFixed(4).replace(/\.?0+$/, "")} ${rms[ri].unit} (insufficient stock)`
+          : `Consumed by ${order.orderNumber}`,
       });
     }
   });
   setStored(RM_KEY, rms);
 
-  // Calculate total production cost (RM inputs + extra production costs)
+  // Calculate total production cost based on ACTUAL deduction (not requested)
   const rmInputCost = order.inputs.reduce((sum, inp) => {
     const rm = rms.find(r => r.id === inp.rmId);
-    return sum + (parseFloat(inp.qtyUsed) || 0) * (parseFloat(rm?.costPerUnit || "0") || 0);
+    const actual = actualDeductedByInputId.get(inp.id) ?? 0;
+    return sum + actual * (parseFloat(rm?.costPerUnit || "0") || 0);
   }, 0);
   const extraCost = (order.productionCosts || []).reduce((sum, pc) => sum + (parseFloat(pc.amount) || 0), 0);
   const totalCost = rmInputCost + extraCost;
 
-  // Add outputs to product stock (multi-output support) + record ledger
+  // ── Multi-output cost allocation ───────────────────────────────────────────
+  // Outputs with a manualCost (by-products) are valued at that fixed unit cost
+  // and carve their share out of the batch total. The remainder is allocated
+  // across the remaining outputs (the "main" products) proportional to qty.
+  // This replaces the old logic that overwrote EVERY output's costPrice with
+  // a single batch-average — destroying the cost of any by-product.
   const allProducts = getProducts();
   const effectiveOutputs: MfgOutput[] = (order.outputs && order.outputs.length > 0) ? order.outputs : [];
   const totalOutputQty = effectiveOutputs.reduce((sum, out) => sum + (parseFloat(out.qty) || 0), 0);
+
+  const hasManual = (out: MfgOutput) => {
+    const mc = parseFloat(out.manualCost || "");
+    return !isNaN(mc) && mc >= 0;
+  };
+  const carvedOutCost = effectiveOutputs.reduce((s, out) => {
+    if (!hasManual(out)) return s;
+    return s + (parseFloat(out.manualCost!) || 0) * (parseFloat(out.qty) || 0);
+  }, 0);
+  const mainOutputs = effectiveOutputs.filter(o => !hasManual(o));
+  const mainQty     = mainOutputs.reduce((s, o) => s + (parseFloat(o.qty) || 0), 0);
+  const mainRemainder = Math.max(0, totalCost - carvedOutCost);
+  const mainUnitCost  = mainQty > 0 ? mainRemainder / mainQty : 0;
 
   // Load stocks once so we can check for existing records and update in-place
   const allStocks = getStock();
