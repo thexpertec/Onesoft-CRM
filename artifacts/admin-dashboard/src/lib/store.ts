@@ -3172,8 +3172,14 @@ export const deleteProduct = (id: string): void => {
     if (item.sku?.trim()) skus.add(item.sku.trim().toLowerCase());
     item.variants?.forEach(v => { if (v.sku?.trim()) skus.add(v.sku.trim().toLowerCase()); });
     if (skus.size > 0) {
+      // Drop the live stock balances for this product's SKUs.
       setStored(STOCK_KEY, getStock().filter(s => !skus.has(s.sku?.trim().toLowerCase())));
-      setStored(LEDGER_KEY, getStockLedger().filter(e => !skus.has(e.entityId?.trim().toLowerCase())));
+      // DO NOT touch the stock ledger. Ledger rows are the permanent audit
+      // trail of every purchase, sale, return, and mfg movement that ever
+      // happened for these SKUs. `entityName` is denormalised onto each row
+      // so the history stays readable even after the product record is
+      // gone. Silently wiping years of movements on a single click was a
+      // P0 data-loss bug — keep them.
     }
   }
 };
@@ -9843,8 +9849,15 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         }
       }
 
-      // Step 4a — Remove orphaned voucher Journal Entries.
-      _purgeOrphanedVoucherJEs(tenantId, true);
+      // Step 4a — Orphaned-voucher JE auto-purge DISABLED.
+      // Previously this ran on every sync and silently deleted any JE whose
+      // RV-/PV- reference no longer matched a live voucher. That meant a
+      // partial sync, a renumbering migration, or a single voucher delete
+      // could permanently wipe accounting history with no audit trail.
+      // The rule is: "no ledger should disappear by itself." If you need to
+      // clean up genuine orphans, run the manual button on the Journal Entry
+      // page (calls `purgeOrphanedVoucherJEs()` explicitly).
+      // _purgeOrphanedVoucherJEs(tenantId, true);
 
       // Step 4b — Self-healing orphan migration.
       // Guards against the historical bug where setActiveTenant() was not
