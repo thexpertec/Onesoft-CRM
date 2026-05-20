@@ -3459,9 +3459,21 @@ export default function InvoicesPage() {
                     {paid > 0 ? fmtCcy(paid) : "—"}
                   </div>
 
-                  {/* Payment Status */}
+                  {/* Payment Status — derived from amount paid so it always reflects
+                       reality (Unpaid / Partial / Paid), regardless of where the
+                       workflow status sits. Cancelled is honoured as a terminal state.
+                       The stored `inv.status` is never mutated by this rendering. */}
                   <div>
-                    <StatusBadge status={inv.status} />
+                    {(() => {
+                      if (inv.status === "Cancelled") return <StatusBadge status="Cancelled" />;
+                      // Zero-total invoice — nothing is owed, treat as settled.
+                      if (total <= 0.005) return <StatusBadge status="Paid" />;
+                      if (paid >= total - 0.005) return <StatusBadge status="Paid" />;
+                      if (paid > 0.005) return <StatusBadge status="Partial" />;
+                      // Positive total, no money collected yet — show the underlying
+                      // workflow status (Draft / Pending / Sent / Overdue).
+                      return <StatusBadge status={inv.status} />;
+                    })()}
                   </div>
 
                   {/* Sale / Purchase Status — shown for all invoices */}
