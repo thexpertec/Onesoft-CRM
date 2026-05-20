@@ -9,7 +9,7 @@ import {
   Package2, Image as ImageIcon, Settings, Globe, BookOpen,
   PlusCircle, Pencil, Trash2, CheckCircle2, RefreshCw, ArrowLeftRight, Trash,
   Landmark, TrendingUp, TrendingDown, ClipboardList, Calculator, Factory, FlaskConical, Wallet, FileBarChart, CreditCard, Undo2, Banknote,
-  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2, Truck, Layers3,
+  MapPin, BarChart3, Wrench, Scale, Briefcase, CalendarCheck2, Calendar, Truck, Layers3,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -283,6 +283,8 @@ const SALES_COLUMNS: MegaColumn[] = [
     desc: "Bills & purchase orders",
     links: [
       { label: "Sales Invoices",    href: "/invoices",               icon: FileText,     desc: "Invoice management"          },
+      { label: "Booking Invoice",   href: "/booking-invoice",        icon: Calendar,     desc: "Event hall bookings & invoicing" },
+      { label: "Halls / Venues",    href: "/halls",                  icon: Building2,    desc: "Hall master data"            },
       { label: "Calc Invoice",      href: "/calc-invoice",           icon: Calculator,   desc: "Calculation-based invoicing", agentHide: true },
       { label: "Purchase Invoices", href: "/invoices?type=purchase", icon: ShoppingCart, desc: "Stock & vendor invoices",     agentHide: true },
     ],

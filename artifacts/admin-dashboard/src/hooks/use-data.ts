@@ -40,6 +40,8 @@ import {
   SalaryTemplate, getSalaryTemplates, createSalaryTemplate, updateSalaryTemplate, deleteSalaryTemplate,
   SalaryAllowanceCategory, getSalaryAllowanceCategories, createSalaryAllowanceCategory, updateSalaryAllowanceCategory, deleteSalaryAllowanceCategory,
   SalaryDeductionCategory, getSalaryDeductionCategories, createSalaryDeductionCategory, updateSalaryDeductionCategory, deleteSalaryDeductionCategory,
+  Hall, getHalls, createHall, updateHall, deleteHall,
+  Booking, getBookings, createBooking, updateBooking, deleteBooking, confirmBooking, completeBooking, cancelBooking,
 } from "@/lib/store";
 
 /**
@@ -545,4 +547,27 @@ export function useAdvanceSalaries() {
   const edit   = (id: string, u: Parameters<typeof updateAdvanceSalary>[1])     => { const r = updateAdvanceSalary(id, u); fetch(); return r; };
   const remove = (id: string)                                                     => { deleteAdvanceSalary(id);              fetch(); };
   return { records, add, edit, remove, refresh: fetch };
+}
+
+export function useHalls() {
+  const [halls, setHalls] = useState<Hall[]>([]);
+  const fetch = useCallback(() => setHalls(getHalls()), []);
+  useStoreEffect(fetch);
+  const add    = (d: Parameters<typeof createHall>[0])             => { const h = createHall(d);    fetch(); return h; };
+  const edit   = (id: string, u: Parameters<typeof updateHall>[1]) => { const h = updateHall(id, u); fetch(); return h; };
+  const remove = (id: string)                                       => { deleteHall(id);              fetch(); };
+  return { halls, add, edit, remove, refresh: fetch };
+}
+
+export function useBookings() {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const fetch = useCallback(() => setBookings(getBookings()), []);
+  useStoreEffect(fetch);
+  const add      = (d: Parameters<typeof createBooking>[0])             => { const b = createBooking(d);    fetch(); return b; };
+  const edit     = (id: string, u: Parameters<typeof updateBooking>[1]) => { const b = updateBooking(id, u); fetch(); return b; };
+  const remove   = (id: string)                                          => { deleteBooking(id);              fetch(); };
+  const confirm  = (id: string)                                          => { const b = confirmBooking(id);  fetch(); return b; };
+  const complete = (id: string)                                          => { const b = completeBooking(id); fetch(); return b; };
+  const cancel   = (id: string)                                          => { const b = cancelBooking(id);   fetch(); return b; };
+  return { bookings, add, edit, remove, confirm, complete, cancel, refresh: fetch };
 }

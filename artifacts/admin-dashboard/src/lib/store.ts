@@ -1898,6 +1898,7 @@ export type ModuleId =
   // Sales
   | "sales" | "invoices" | "sale_return" | "calc_invoice"
   | "sales_agents" | "agent_performance" | "areas"
+  | "booking_invoice" | "halls"
   // HRM
   | "hrm_staff" | "hrm_setup" | "hrm_salary" | "hrm_attendance"
   // Products organisation
@@ -1949,6 +1950,8 @@ export const MODULE_DEFINITIONS: ModuleDef[] = [
   { id: "sales_agents",      label: "Sales Agents",       desc: "Agent accounts & commission tracking",  group: "Sales", href: "/sales-agents"      },
   { id: "agent_performance", label: "Agent Performance",  desc: "Sales performance analytics & reports", group: "Sales", href: "/agent-performance" },
   { id: "areas",             label: "Delivery Areas",     desc: "Regional delivery zones & coverage",    group: "Sales", href: "/areas"             },
+  { id: "booking_invoice",   label: "Booking Invoice",    desc: "Event hall bookings & invoicing",       group: "Sales", href: "/booking-invoice"   },
+  { id: "halls",             label: "Halls / Venues",     desc: "Hall & venue master data",              group: "Sales", href: "/halls"             },
 
   // ── HRM ───────────────────────────────────────────────────────────────────
   { id: "hrm_staff",       label: "Staff",                       desc: "Employee records & departments",        group: "HRM", href: "/staff"       },
@@ -9226,6 +9229,22 @@ export function deleteJournalEntry(id: string): void {
   }
   if (slipsChanged) setStored(SALARY_SLIPS_KEY, slips);
 
+  // Bookings — Confirmed/Completed revert to Draft; jeId cleared so the
+  // record can be edited again, re-confirmed (which posts a fresh JE), or
+  // deleted normally. Prevents "stranded" bookings after a JE is wiped.
+  const bks = getBookings();
+  let bksChanged = false;
+  for (let i = 0; i < bks.length; i++) {
+    if (bks[i].jeId !== id) continue;
+    bks[i] = { ...bks[i], jeId: undefined, status: "Draft", updatedAt: now };
+    bksChanged = true;
+    addActivity({
+      action: "status_changed", entity: "Booking", entityName: bks[i].bookingNumber,
+      detail: "JE removed → reverted to Draft",
+    });
+  }
+  if (bksChanged) setStored(BOOKINGS_KEY, bks);
+
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id), true);
 }
 
@@ -11809,3 +11828,315 @@ export const updateAdvanceSalary = (
 export const deleteAdvanceSalary = (id: string): void => {
   setStored(ADVANCE_SALARY_KEY, getAdvanceSalaries().filter(x => x.id !== id));
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HALL & BOOKING INVOICE (Event hall booking module — Shadihall style)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type Hall = {
+  id: string;
+  name: string;          // e.g. "Grand Hall", "Sapphire Hall"
+  capacity: number;      // max pax
+  baseRent: number;      // default hall rent
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const HALLS_KEY = "admin-halls";
+
+export function getHalls(): Hall[] {
+  try {
+    const raw = _lsGet(tenantKey(HALLS_KEY));
+    if (raw) return JSON.parse(raw) as Hall[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+export function createHall(data: Omit<Hall, "id" | "createdAt" | "updatedAt">): Hall {
+  const now = new Date().toISOString();
+  const h: Hall = { id: crypto.randomUUID(), createdAt: now, updatedAt: now, ...data };
+  setStored(HALLS_KEY, [...getHalls(), h]);
+  return h;
+}
+
+export function updateHall(id: string, updates: Partial<Hall>): Hall | undefined {
+  const arr = getHalls();
+  const idx = arr.findIndex(x => x.id === id);
+  if (idx < 0) return undefined;
+  arr[idx] = { ...arr[idx], ...updates, id: arr[idx].id, updatedAt: new Date().toISOString() };
+  setStored(HALLS_KEY, arr);
+  return arr[idx];
+}
+
+export function deleteHall(id: string): void {
+  setStored(HALLS_KEY, getHalls().filter(h => h.id !== id));
+}
+
+// ─── Booking Invoice ──────────────────────────────────────────────────────────
+
+export type BookingMenuItem = {
+  id: string;
+  category: string;     // e.g. "Starter", "Main Course", "Dessert", "Beverage"
+  name: string;
+};
+
+export type BookingExtraService = {
+  id: string;
+  name: string;         // e.g. "DJ", "Photographer", "Valet"
+  amount: number;
+};
+
+export type BookingStatus = "Draft" | "Confirmed" | "Completed" | "Cancelled";
+export type BookingSlot = "Lunch" | "Dinner" | "Full Day";
+
+export type Booking = {
+  id: string;
+  bookingNumber: string;       // BKG-YYYYMM-####
+  // Customer
+  customerId?: string;         // optional link to Customer record
+  customerName: string;
+  customerPhone: string;
+  customerAddress?: string;
+  // Event
+  hallId: string;
+  hallName: string;            // denormalised for history
+  eventDate: string;           // YYYY-MM-DD
+  eventSlot: BookingSlot;
+  eventType?: string;          // Wedding / Engagement / Birthday / Corporate / Other
+  pax: number;
+  // Food
+  perPlateRate: number;
+  menuItems: BookingMenuItem[];
+  // Charges
+  hallRent: number;
+  decorCharges: number;
+  extraServices: BookingExtraService[];
+  // Totals
+  discount: number;            // flat amount
+  taxPercent: number;          // VAT/GST %
+  advancePaid: number;
+  advanceMethod?: string;      // Cash / Bank Transfer / Card
+  // Workflow
+  status: BookingStatus;
+  jeId?: string;               // JE id when Confirmed
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const BOOKINGS_KEY = "admin-bookings";
+
+export function getBookings(): Booking[] {
+  try {
+    const raw = _lsGet(tenantKey(BOOKINGS_KEY));
+    if (raw) return JSON.parse(raw) as Booking[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function _nextBookingNumber(): string {
+  const d = new Date();
+  const yyyymm = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const prefix = `BKG-${yyyymm}-`;
+  const arr = getBookings();
+  let max = 0;
+  for (const b of arr) {
+    if (b.bookingNumber?.startsWith(prefix)) {
+      const n = parseInt(b.bookingNumber.slice(prefix.length), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+}
+
+/** Compute the financial totals for a booking. */
+export function computeBookingTotals(b: Pick<Booking,
+  "pax" | "perPlateRate" | "hallRent" | "decorCharges" | "extraServices" | "discount" | "taxPercent" | "advancePaid"
+>) {
+  const foodTotal     = (Number(b.pax) || 0) * (Number(b.perPlateRate) || 0);
+  const extrasTotal   = (b.extraServices || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const subtotal      = foodTotal + (Number(b.hallRent) || 0) + (Number(b.decorCharges) || 0) + extrasTotal;
+  const discount      = Number(b.discount) || 0;
+  const afterDiscount = Math.max(0, subtotal - discount);
+  const tax           = afterDiscount * ((Number(b.taxPercent) || 0) / 100);
+  const grandTotal    = afterDiscount + tax;
+  const advance       = Number(b.advancePaid) || 0;
+  const balanceDue    = Math.max(0, grandTotal - advance);
+  return { foodTotal, extrasTotal, subtotal, discount, afterDiscount, tax, grandTotal, advance, balanceDue };
+}
+
+/**
+ * Check for double-booking conflict. Returns the conflicting booking if any
+ * Confirmed booking exists on the same hall+date with overlapping slot.
+ */
+export function findBookingConflict(
+  hallId: string,
+  eventDate: string,
+  eventSlot: BookingSlot,
+  excludeId?: string,
+): Booking | undefined {
+  if (!hallId || !eventDate) return undefined;
+  const arr = getBookings();
+  const overlaps = (a: BookingSlot, b: BookingSlot) =>
+    a === b || a === "Full Day" || b === "Full Day";
+  return arr.find(b =>
+    b.id !== excludeId &&
+    b.status === "Confirmed" &&
+    b.hallId === hallId &&
+    b.eventDate === eventDate &&
+    overlaps(b.eventSlot, eventSlot)
+  );
+}
+
+export function createBooking(data: Omit<Booking, "id" | "bookingNumber" | "createdAt" | "updatedAt">): Booking {
+  const now = new Date().toISOString();
+  const b: Booking = {
+    id: crypto.randomUUID(),
+    bookingNumber: _nextBookingNumber(),
+    createdAt: now,
+    updatedAt: now,
+    ...data,
+  };
+  setStored(BOOKINGS_KEY, [...getBookings(), b]);
+  return b;
+}
+
+export function updateBooking(id: string, updates: Partial<Booking>): Booking | undefined {
+  const arr = getBookings();
+  const idx = arr.findIndex(b => b.id === id);
+  if (idx < 0) return undefined;
+  arr[idx] = { ...arr[idx], ...updates, id: arr[idx].id, updatedAt: new Date().toISOString() };
+  setStored(BOOKINGS_KEY, arr);
+  return arr[idx];
+}
+
+export function deleteBooking(id: string): void {
+  const b = getBookings().find(x => x.id === id);
+  if (b?.jeId) {
+    throw new Error(
+      `Cannot delete booking ${b.bookingNumber}: a journal entry is posted against it. ` +
+      `Delete the journal entry first to unlink the financial postings.`
+    );
+  }
+  setStored(BOOKINGS_KEY, getBookings().filter(b => b.id !== id));
+}
+
+/**
+ * Confirm a booking: validates no double-book, then posts a JE.
+ *   DR Customer AR  (or AR_TRADE fallback)        = grandTotal
+ *   CR Sales Revenue                              = grandTotal
+ *   (if advancePaid > 0)
+ *   DR Cash/Bank   = advance
+ *   CR Customer AR = advance
+ * Returns the updated booking.
+ */
+export function confirmBooking(id: string): Booking {
+  const arr = getBookings();
+  const idx = arr.findIndex(b => b.id === id);
+  if (idx < 0) throw new Error("Booking not found");
+  const b = arr[idx];
+  if (b.status === "Cancelled") throw new Error("Cannot confirm a cancelled booking");
+  // Recovery-safe early return: only short-circuit if Confirmed AND the JE
+  // still exists in the ledger. If the JE was wiped (orphan/manual delete),
+  // fall through and recreate it so the booking can never be "stranded".
+  if (b.status === "Confirmed" && b.jeId) {
+    const existingJe = getJournalEntries().find(e => e.id === b.jeId);
+    if (existingJe) return b;
+    // JE is missing — clear the stale pointer and re-post below.
+  }
+
+  const conflict = findBookingConflict(b.hallId, b.eventDate, b.eventSlot, b.id);
+  if (conflict) {
+    throw new Error(
+      `Hall "${b.hallName}" is already booked on ${b.eventDate} (${b.eventSlot}) ` +
+      `by ${conflict.customerName} — booking ${conflict.bookingNumber}.`
+    );
+  }
+
+  const totals = computeBookingTotals(b);
+  if (totals.grandTotal <= 0) throw new Error("Booking total must be greater than zero to confirm");
+
+  // Resolve customer AR ledger
+  let customerArLid: string | undefined;
+  if (b.customerId) {
+    const cust = getCustomers().find(c => c.id === b.customerId);
+    if (cust?.ledgerAccountId) customerArLid = cust.ledgerAccountId;
+    if (!customerArLid && cust?.name) customerArLid = findSubLedgerForParty(cust.name, SYS_ACCS.AR_GROUP) ?? undefined;
+  }
+  if (!customerArLid && b.customerName) {
+    customerArLid = findSubLedgerForParty(b.customerName, SYS_ACCS.AR_GROUP) ?? undefined;
+  }
+  customerArLid = customerArLid || SYS_ACCS.AR_TRADE;
+
+  // Resolve cash account for advance
+  const cashLid = SYS_ACCS.CASH;
+
+  const lines: JournalEntryLine[] = [
+    {
+      id: crypto.randomUUID(),
+      ledgerId: customerArLid,
+      narration: `Booking ${b.bookingNumber} — ${b.customerName} — ${b.hallName} (${b.eventDate})`,
+      debit:  totals.grandTotal,
+      credit: 0,
+    },
+    {
+      id: crypto.randomUUID(),
+      ledgerId: SYS_ACCS.SALES_REVENUE,
+      narration: `Booking ${b.bookingNumber} — Event revenue`,
+      debit:  0,
+      credit: totals.grandTotal,
+    },
+  ];
+
+  if (totals.advance > 0) {
+    lines.push({
+      id: crypto.randomUUID(),
+      ledgerId: cashLid,
+      narration: `Booking ${b.bookingNumber} — Advance received (${b.advanceMethod || "Cash"})`,
+      debit:  totals.advance,
+      credit: 0,
+    });
+    lines.push({
+      id: crypto.randomUUID(),
+      ledgerId: customerArLid,
+      narration: `Booking ${b.bookingNumber} — Advance settles AR`,
+      debit:  0,
+      credit: totals.advance,
+    });
+  }
+
+  const je = createJournalEntry({
+    date:        b.eventDate || new Date().toISOString().slice(0, 10),
+    reference:   b.bookingNumber,
+    description: `Hall Booking — ${b.customerName} — ${b.hallName}`,
+    lines,
+    status:      "posted",
+    totalDebit:  lines.reduce((s, l) => s + l.debit,  0),
+    totalCredit: lines.reduce((s, l) => s + l.credit, 0),
+    isBalanced:  true,
+  });
+
+  arr[idx] = { ...b, status: "Confirmed", jeId: je.id, updatedAt: new Date().toISOString() };
+  setStored(BOOKINGS_KEY, arr);
+  return arr[idx];
+}
+
+/** Mark a confirmed booking as completed (event happened). No financial changes. */
+export function completeBooking(id: string): Booking | undefined {
+  return updateBooking(id, { status: "Completed" });
+}
+
+/** Cancel a booking. If a JE exists, throws — user must remove JE first. */
+export function cancelBooking(id: string): Booking | undefined {
+  const b = getBookings().find(x => x.id === id);
+  if (!b) return undefined;
+  if (b.jeId) {
+    throw new Error(
+      `Cannot cancel booking ${b.bookingNumber}: a journal entry is posted. ` +
+      `Delete the journal entry first to unwind the financial postings.`
+    );
+  }
+  return updateBooking(id, { status: "Cancelled" });
+}

@@ -35,6 +35,28 @@ Global keys (users, tenants) use namespace `global`. Tenant-scoped keys use `t:{
 | `/tenants` | Tenant management (superadmin) — create/edit/delete client orgs, switch views | `admin-tenants` (global) |
 | `/module-groups` | Module Group management (superadmin) — define feature sets for tenant plans | `admin-module-groups` (global) |
 | `/settings` | App settings — company profile, financial, POS defaults, data management | `admin-settings` |
+| `/booking-invoice` | Booking Invoice list — event hall bookings (Shadihall style) | `admin-bookings` |
+| `/booking-invoice/new`, `/booking-invoice/:id` | Booking form — customer, hall, date/slot, menu, decor, extras, advance | `admin-bookings` |
+| `/booking-invoice/:id/print` | A4 printable booking invoice (auto-opens print dialog) | `admin-bookings` |
+| `/halls` | Halls / Venues master — capacity, base rent | `admin-halls` |
+
+### Booking Invoice module (event halls)
+
+Full-package event invoicing for hall/venue rentals. Combines catering (per-plate × pax), hall rent, decor, and à-la-carte extras (DJ, photographer, valet, etc.) into a single invoice with deposit + balance-due workflow.
+
+- **Double-booking prevention**: `findBookingConflict(hallId, date, slot, excludeId?)` blocks `Confirmed` bookings on the same hall+date when slots overlap (`Lunch`/`Dinner`/`Full Day`; Full Day collides with everything). The UI shows a red banner the moment a conflict is detected and the Save & Confirm button refuses with a toast.
+- **Statuses**: `Draft → Confirmed → Completed`, plus `Cancelled`. Once Confirmed/Completed the form is read-only (locked).
+- **Accounting**: `confirmBooking(id)` posts one balanced JE via `createJournalEntry`:
+  - DR Customer AR (resolved from `customer.ledgerAccountId`, else `findSubLedgerForParty` under `AR_GROUP`, else fallback `AR_TRADE`) = grand total
+  - CR `SALES_REVENUE` (sys-3100) = grand total
+  - If `advancePaid > 0`: DR `CASH` (sys-1200) / CR Customer AR for the advance amount
+  - JE id is stored back onto the booking; deletion is blocked while `jeId` exists (matching the rest of the financial integrity guards).
+- **Totals**: `computeBookingTotals()` returns `{foodTotal, extrasTotal, subtotal, discount, afterDiscount, tax, grandTotal, advance, balanceDue}`. Tax % is applied AFTER discount. Live preview in the right-rail card.
+- **Booking number**: auto `BKG-YYYYMM-####` (per-month sequence).
+- **Print view**: clean A4 invoice with header (company profile from settings), billing block, event details, menu grouped by category, line-item charges table, totals box, notes, footer. Auto-triggers `window.print()` 400 ms after mount; `@media print` hides the toolbar and sets A4 page size.
+- **Module IDs**: `booking_invoice` and `halls` are added to `ModuleId` so tenants can opt-in via Module Groups. Nav: `Purchase & Sale → Invoicing → Booking Invoice / Halls`.
+
+Files: `src/pages/booking-invoice.tsx` (list + form + print + Halls master, all exports from one file), store additions appended to `src/lib/store.ts`, hooks `useHalls`/`useBookings` in `src/hooks/use-data.ts`.
 
 Key files: `src/lib/store.ts`, `src/hooks/use-data.ts`, `src/components/editable-cell.tsx`, `src/components/layout.tsx`
 
