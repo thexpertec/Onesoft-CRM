@@ -93,10 +93,6 @@ const UsersPage             = lazyWithRetry(() => import("@/pages/users"));
 const SalesPage             = lazyWithRetry(() => import("@/pages/sales"));
 const InvoicesPage          = lazyWithRetry(() => import("@/pages/invoices"));
 const InvoiceFormPage       = lazyWithRetry(() => import("@/pages/invoices").then(m => ({ default: m.InvoiceFormPage })));
-const BookingInvoiceListPage = lazyWithRetry(() => import("@/pages/booking-invoice"));
-const BookingInvoiceFormPage = lazyWithRetry(() => import("@/pages/booking-invoice").then(m => ({ default: m.BookingInvoiceFormPage })));
-const BookingInvoicePrintPage = lazyWithRetry(() => import("@/pages/booking-invoice").then(m => ({ default: m.BookingInvoicePrintPage })));
-const HallsPage             = lazyWithRetry(() => import("@/pages/booking-invoice").then(m => ({ default: m.HallsPage })));
 const CalcInvoicePage       = lazyWithRetry(() => import("@/pages/calc-invoice"));
 const StockLedgerPage       = lazyWithRetry(() => import("@/pages/stock-ledger"));
 const ProductStockReportPage = lazyWithRetry(() => import("@/pages/product-stock-report"));
@@ -310,11 +306,6 @@ function Router() {
                   <Route path="/invoices/new"       component={InvoiceFormPage} />
                   <Route path="/invoices/:id"       component={InvoiceFormPage} />
                   <Route path="/invoices"           component={InvoicesPage} />
-                  <Route path="/booking-invoice/new"        component={BookingInvoiceFormPage} />
-                  <Route path="/booking-invoice/:id/print"  component={BookingInvoicePrintPage} />
-                  <Route path="/booking-invoice/:id"        component={BookingInvoiceFormPage} />
-                  <Route path="/booking-invoice"            component={BookingInvoiceListPage} />
-                  <Route path="/halls"                      component={HallsPage} />
                   <Route path="/calc-invoice"       component={CalcInvoicePage} />
                   <Route path="/sales-agents/new"   component={AgentNewPage} />
                   <Route path="/sales-agents"       component={SalesAgentsPage} />
