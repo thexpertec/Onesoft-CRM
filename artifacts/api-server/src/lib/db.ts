@@ -2,12 +2,13 @@ import pg from "pg";
 
 const { Pool } = pg;
 
-// NEON_DATABASE_URL takes priority — used when connecting to an external Neon
+// NEON_EXTERNAL_URL takes priority — used when connecting to an external Neon
 // database instead of the Replit-managed one.
-const dbUrl = process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
+// Note: NEON_DATABASE_URL is reserved by Replit and maps to the local DB.
+const dbUrl = process.env.NEON_EXTERNAL_URL ?? process.env.DATABASE_URL ?? "";
 
 if (!dbUrl) {
-  throw new Error("DATABASE_URL (or NEON_DATABASE_URL) environment variable is required");
+  throw new Error("DATABASE_URL (or NEON_EXTERNAL_URL) environment variable is required");
 }
 
 const needsSsl = dbUrl.includes("neon.tech") || dbUrl.includes("sslmode=require") || process.env.NODE_ENV === "production";
