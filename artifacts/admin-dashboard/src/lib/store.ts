@@ -1380,7 +1380,11 @@ function _invoiceFinancialBlockers(inv: Invoice): string[] {
 
 function _purchaseOrderFinancialBlockers(po: PurchaseOrder): string[] {
   const blockers: string[] = [];
-  if (po.status === "Received") blockers.push("status is Received (stock has been added)");
+  // Note: "Received" used to be a blocker here, but `deletePurchaseOrder` now
+  // writes compensating `purchase-cancel` ledger entries and rolls back stock
+  // on delete, so a Received PO can be safely removed. The remaining blockers
+  // (posted JEs, payment vouchers) still apply because reversing accounting
+  // is outside this delete path's responsibility.
   const jes = _jesReferencingToken(po.poNumber, po.jeId);
   if (jes.length) {
     const sample = jes.map(j => j.reference || j.id.slice(0, 8)).slice(0, 2).join(", ");
@@ -3349,7 +3353,12 @@ export const bulkImportProducts = async (
 
   if (newStockItems.length > 0) {
     _lsSetLocal(stockSk, finalStock);
-    const existingLedger = getStockLedger();
+    // Flush any queued ledger appends first so the microtask flush doesn't
+    // re-append them on top of our rewrite (causing duplicate rows). Then
+    // read directly from storage (not via getStockLedger() which merges the
+    // pending buffer) so what we write is exactly: persisted + our new rows.
+    if (_pendingLedger.length > 0) _flushLedger();
+    const existingLedger = getStored<StockLedgerEntry>(LEDGER_KEY);
     const fullEntries: StockLedgerEntry[] = ledgerEntries.map(e => ({
       ...e,
       id:        crypto.randomUUID(),
@@ -3623,6 +3632,81 @@ export const deletePurchaseOrder = (id: string): void => {
   if (item) {
     const blockers = _purchaseOrderFinancialBlockers(item);
     if (blockers.length) throw new Error(_formatBlockerError("purchase order", item.poNumber, blockers));
+
+    // ── Stock reversal ────────────────────────────────────────────────────────
+    // If the PO was received, `receivePurchaseOrder` wrote `purchase-receipt`
+    // ledger entries and bumped stock. Deleting the PO without reversing
+    // would leave stock permanently inflated and the receipt ledger rows
+    // pointing to a vanished document. We append a compensating
+    // `purchase-cancel` entry per affected entity (sized to the receipt qty,
+    // capped by current on-hand so we never drive stock negative) and roll
+    // back the qty on the underlying RM / stock record.
+    const receiptEntries = getStockLedger().filter(
+      e => e.txType === "purchase-receipt" && e.reference === item.poNumber
+    );
+    if (receiptEntries.length > 0) {
+      const today    = new Date().toISOString().slice(0, 10);
+      const stocks   = getStock();
+      const rms      = getRawMaterials();
+      let stocksDirty = false;
+      let rmsDirty    = false;
+      const reversal: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+      // Aggregate by entityId so multiple receipt lines for the same item
+      // collapse into a single reversal row.
+      const byEntity = new Map<string, { qty: number; entry: typeof receiptEntries[number] }>();
+      for (const r of receiptEntries) {
+        const cur = byEntity.get(r.entityId);
+        if (cur) cur.qty += r.qtyChange;
+        else byEntity.set(r.entityId, { qty: r.qtyChange, entry: r });
+      }
+
+      for (const { qty: receivedQty, entry: r } of byEntity.values()) {
+        if (r.entityType === "product") {
+          const si = stocks.findIndex(s => s.id === r.entityId);
+          if (si < 0) continue;
+          const before  = parseFloat(stocks[si].quantity) || 0;
+          // Cap reversal at current on-hand so we never go negative — if the
+          // user has already sold some, only the remaining qty is rolled back.
+          const reverse = Math.min(before, receivedQty);
+          if (reverse <= 0) continue;
+          const after = before - reverse;
+          stocks[si] = { ...stocks[si], quantity: String(after), updatedAt: new Date().toISOString() };
+          stocksDirty = true;
+          reversal.push({
+            entityType: "product", entityId: r.entityId, entityName: stocks[si].productName,
+            date: today, txType: "purchase-cancel", reference: item.poNumber,
+            qtyBefore: before, qtyChange: -reverse, qtyAfter: after,
+            unit: stocks[si].unit,
+            notes: reverse < receivedQty
+              ? `PO deleted · only ${reverse} of ${receivedQty} reversed (rest already consumed)`
+              : `PO deleted · received qty reversed`,
+          });
+        } else {
+          const ri = rms.findIndex(x => x.id === r.entityId);
+          if (ri < 0) continue;
+          const before  = parseFloat(rms[ri].currentStock || "0") || 0;
+          const reverse = Math.min(before, receivedQty);
+          if (reverse <= 0) continue;
+          const after = before - reverse;
+          rms[ri] = { ...rms[ri], currentStock: String(after), updatedAt: new Date().toISOString() };
+          rmsDirty = true;
+          reversal.push({
+            entityType: "raw-material", entityId: r.entityId, entityName: rms[ri].name,
+            date: today, txType: "purchase-cancel", reference: item.poNumber,
+            qtyBefore: before, qtyChange: -reverse, qtyAfter: after,
+            unit: rms[ri].unit,
+            notes: reverse < receivedQty
+              ? `PO deleted · only ${reverse} of ${receivedQty} reversed (rest already consumed)`
+              : `PO deleted · received qty reversed`,
+          });
+        }
+      }
+
+      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (rmsDirty)    setStored(RM_KEY, rms);
+      if (reversal.length > 0) batchLedger(reversal);
+    }
   }
   setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Order", entityName: item?.poNumber || id });
@@ -3888,6 +3972,68 @@ export const deleteSale = (id: string): void => {
   if (sale) {
     const blockers = _saleFinancialBlockers(sale);
     if (blockers.length) throw new Error(_formatBlockerError("sale", sale.saleNumber, blockers));
+
+    // ── Stock reversal ────────────────────────────────────────────────────────
+    // If the sale's stock was deducted, `deductStockForSale` wrote `sale`
+    // ledger entries and reduced on-hand. Deleting without reversal would
+    // leave on-hand permanently short and the sale ledger rows orphaned.
+    // We append a compensating `sale-cancel` entry per affected entity
+    // (positive qtyChange = stock returned) and bump the stock record back.
+    //
+    // Only `sale` entries are netted here. `sale-refund` rows written by
+    // `restoreStockForSale` use the SaleReturn's returnNumber (not this
+    // saleNumber) as reference, so they would not match anyway — AND the
+    // `_saleFinancialBlockers` check above already blocks deletion entirely
+    // when any SaleReturn linked to this sale exists. So at this point we
+    // know there are no outstanding refunds to net against.
+    const allEntries = getStockLedger();
+    const saleEntries = allEntries.filter(
+      e => e.reference === sale.saleNumber && e.txType === "sale"
+    );
+    if (saleEntries.length > 0) {
+      const today  = new Date().toISOString().slice(0, 10);
+      const stocks = getStock();
+      let stocksDirty = false;
+      const reversal: Omit<StockLedgerEntry, "id" | "createdAt">[] = [];
+
+      // Aggregate qty that left stock per entity (sale qtyChange is negative
+      // because qty went out). netOut = -sum(qtyChange) is what we restore.
+      const netOutByEntity = new Map<string, { netOut: number; entityName: string; unit: string }>();
+      for (const e of saleEntries) {
+        const cur = netOutByEntity.get(e.entityId);
+        if (cur) cur.netOut += -e.qtyChange;
+        else netOutByEntity.set(e.entityId, { netOut: -e.qtyChange, entityName: e.entityName, unit: e.unit });
+      }
+
+      for (const [entityId, { netOut, entityName, unit }] of netOutByEntity) {
+        if (netOut <= 0) continue;
+        const si = stocks.findIndex(s => s.id === entityId);
+        if (si < 0) {
+          // Stock record was deleted after the sale — record a "ghost" reversal
+          // so the ledger still balances, with a clear note for the auditor.
+          reversal.push({
+            entityType: "product", entityId, entityName,
+            date: today, txType: "sale-cancel", reference: sale.saleNumber,
+            qtyBefore: 0, qtyChange: netOut, qtyAfter: netOut,
+            unit, notes: `Sale deleted · stock record missing, qty logged for audit only`,
+          });
+          continue;
+        }
+        const before = parseFloat(stocks[si].quantity) || 0;
+        const after  = before + netOut;
+        stocks[si] = { ...stocks[si], quantity: String(after), updatedAt: new Date().toISOString() };
+        stocksDirty = true;
+        reversal.push({
+          entityType: "product", entityId, entityName: stocks[si].productName,
+          date: today, txType: "sale-cancel", reference: sale.saleNumber,
+          qtyBefore: before, qtyChange: netOut, qtyAfter: after,
+          unit: stocks[si].unit, notes: `Sale deleted · stock returned`,
+        });
+      }
+
+      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (reversal.length > 0) batchLedger(reversal);
+    }
   }
   setStored(SALES_KEY, getSales().filter(s => s.id !== id));
   addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
@@ -4347,8 +4493,10 @@ export const deleteStockItem = (id: string): void => {
 // ─── Stock Ledger ─────────────────────────────────────────────────────────────
 export type LedgerTxType =
   | "purchase-receipt"
+  | "purchase-cancel"
   | "sale"
   | "sale-refund"
+  | "sale-cancel"
   | "mfg-input"
   | "mfg-output"
   | "mfg-cancel"
@@ -4357,8 +4505,10 @@ export type LedgerTxType =
 
 export const LEDGER_TX_LABELS: Record<LedgerTxType, string> = {
   "purchase-receipt": "Purchase Receipt",
+  "purchase-cancel":  "Purchase Cancelled",
   "sale":             "Sale",
   "sale-refund":      "Sale Refund",
+  "sale-cancel":      "Sale Cancelled",
   "mfg-input":        "Mfg. Consumed",
   "mfg-output":       "Mfg. Produced",
   "mfg-cancel":       "Mfg. Cancelled",
@@ -4385,10 +4535,30 @@ export type StockLedgerEntry = {
 
 const LEDGER_KEY = "admin-stock-ledger";
 
-export const getStockLedger        = (): StockLedgerEntry[] => getStored<StockLedgerEntry>(LEDGER_KEY);
+export const getStockLedger        = (): StockLedgerEntry[] => {
+  // Merge in queued-but-unflushed appends so callers reading right after a
+  // `batchLedger(...)` in the same tick see their own writes. Without this,
+  // the microtask-coalesced flush would make recent writes invisible until
+  // the next tick, breaking duplicate-guard checks like the one in
+  // `deductStockForSale` that look up "did we already record this sale?".
+  const stored = getStored<StockLedgerEntry>(LEDGER_KEY);
+  return _pendingLedger.length > 0 ? [...stored, ..._pendingLedger] : stored;
+};
 export const getEntityLedger       = (entityId: string) => getStockLedger().filter(e => e.entityId === entityId);
-export const clearEntityLedger     = (entityId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.entityId !== entityId));
-export const deleteStockLedgerEntry = (entryId: string) => setStored(LEDGER_KEY, getStockLedger().filter(e => e.id !== entryId));
+// Both of these rewrite the entire ledger array, so they MUST flush any
+// queued appends first. Otherwise the post-flush microtask would re-append
+// entries that the filter just removed (clearEntityLedger), or resurrect
+// entries the user manually deleted (deleteStockLedgerEntry). Reading
+// directly from storage (not via getStockLedger() which merges pending)
+// guarantees the write reflects exactly what flushed + the user's filter.
+export const clearEntityLedger     = (entityId: string) => {
+  if (_pendingLedger.length > 0) _flushLedger();
+  setStored(LEDGER_KEY, getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.entityId !== entityId));
+};
+export const deleteStockLedgerEntry = (entryId: string) => {
+  if (_pendingLedger.length > 0) _flushLedger();
+  setStored(LEDGER_KEY, getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.id !== entryId));
+};
 
 /**
  * Remove duplicate purchase-receipt ledger entries that share the same
@@ -4397,7 +4567,10 @@ export const deleteStockLedgerEntry = (entryId: string) => setStored(LEDGER_KEY,
  * corrects the actual stock-item quantity to match the deduplicated ledger.
  */
 export function deduplicatePurchaseReceipts(): { removedEntries: number; fixedItems: number } {
-  const allEntries = getStockLedger();
+  // Flush queued appends before rewriting the ledger — otherwise the next
+  // microtask would re-append entries we just deduped away.
+  if (_pendingLedger.length > 0) _flushLedger();
+  const allEntries = getStored<StockLedgerEntry>(LEDGER_KEY);
 
   // Chronological sort (date primary, createdAt secondary)
   const sorted = [...allEntries].sort((a, b) =>
@@ -4477,7 +4650,10 @@ export function deduplicatePurchaseReceipts(): { removedEntries: number; fixedIt
  * corrects the actual stock-item quantity to match the deduplicated ledger.
  */
 export function deduplicateSaleEntries(): { removedEntries: number; fixedItems: number } {
-  const allEntries = getStockLedger();
+  // Flush queued appends before rewriting the ledger — otherwise the next
+  // microtask would re-append entries we just deduped away.
+  if (_pendingLedger.length > 0) _flushLedger();
+  const allEntries = getStored<StockLedgerEntry>(LEDGER_KEY);
 
   // Chronological sort (date primary, createdAt secondary)
   const sorted = [...allEntries].sort((a, b) =>
@@ -4550,11 +4726,47 @@ export function deduplicateSaleEntries(): { removedEntries: number; fixedItems: 
   return { removedEntries: removedCount, fixedItems };
 }
 
+// ── Ledger write coalescing ──────────────────────────────────────────────────
+// `batchLedger` is the sole append path for the stock ledger. Two callers
+// firing in the same tick (e.g. completing a MO while a POS sale finalises)
+// could each read the same `getStockLedger()` snapshot, append, and write —
+// the second write would clobber the first's entries. Cross-tab writes have
+// the same shape.
+//
+// Fix: queue every append into an in-memory buffer and flush ONCE per microtask.
+// At flush time we re-read the latest storage so any cross-tab write that
+// landed between our caller's logic and our flush is preserved. Synchronous
+// readers see queued-but-unflushed entries via `getStockLedger()`'s merge
+// (so the rest of the codebase keeps its read-after-write guarantee).
+let _pendingLedger: StockLedgerEntry[] = [];
+let _ledgerFlushScheduled = false;
+
+function _flushLedger() {
+  _ledgerFlushScheduled = false;
+  if (_pendingLedger.length === 0) return;
+  const drained = _pendingLedger;
+  _pendingLedger = [];
+  // Re-read latest at write time so cross-tab appends are not overwritten.
+  const latest = getStored<StockLedgerEntry>(LEDGER_KEY);
+  setStored(LEDGER_KEY, [...latest, ...drained]);
+}
+
 function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
   if (entries.length === 0) return;
   const now = new Date().toISOString();
   const full: StockLedgerEntry[] = entries.map(e => ({ ...e, id: crypto.randomUUID(), createdAt: now }));
-  setStored(LEDGER_KEY, [...getStockLedger(), ...full]);
+  _pendingLedger.push(...full);
+  if (!_ledgerFlushScheduled) {
+    _ledgerFlushScheduled = true;
+    queueMicrotask(_flushLedger);
+  }
+}
+
+// Flush on tab unload so queued entries are not lost mid-tick.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    if (_pendingLedger.length > 0) _flushLedger();
+  });
 }
 
 export const addManualLedgerEntry = (entry: Omit<StockLedgerEntry, "id" | "createdAt">) => {
