@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import {
-  getManufacturingOrders, getRawMaterials, getProducts, getStock,
+  getRawMaterials,
   type ManufacturingOrder, type MfgStatus, MFG_STATUSES,
 } from "@/lib/store";
+import { useRawMaterials, useProducts, useStock, useManufacturingOrders } from "@/hooks/use-data";
 import { fmtMoney } from "@/lib/currencies";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -115,10 +116,10 @@ function exportCSV(rows: Row[]) {
 }
 
 export default function ProductionReportPage() {
-  const rms = useMemo(() => getRawMaterials(), []);
-  const products = useMemo(() => getProducts(), []);
-  const stock = useMemo(() => getStock(), []);
-  const orders = useMemo(() => getManufacturingOrders(), []);
+  const { rms } = useRawMaterials();
+  const { products } = useProducts();
+  const { stock } = useStock();
+  const { orders } = useManufacturingOrders();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | MfgStatus>("all");
