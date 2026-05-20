@@ -10498,6 +10498,243 @@ export function purgeOrphanedVoucherJEs(): number {
   return _purgeOrphanedVoucherJEs(tenantId, true /* write to DB */);
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Bulk repair: "Unknown ledger" lines in historical Journal Entries
+// ───────────────────────────────────────────────────────────────────────────────
+export type OrphanRepairReport = {
+  scannedEntries: number;
+  orphanLedgerIds: number;     // distinct missing UUIDs found
+  repointedLines: number;      // JE lines whose ledgerId was changed to a live CRM ledger
+  resurrectedAccounts: number; // new COA rows created with the original orphan UUID
+  unresolvedLines: number;     // lines we could not heal (no narration / no context)
+  details: Array<{
+    orphanId: string;
+    partyName: string;
+    parentGroup: string;
+    action: "repointed" | "resurrected" | "unresolved";
+    newLedgerId?: string;      // for repointed
+    accountCode?: string;      // for resurrected
+    affectedLines: number;
+  }>;
+};
+
+/**
+ * One-time bulk repair for historical "Unknown ledger" JE lines (created
+ * before the delete/seed hardening). Walks every Journal Entry, finds any
+ * line whose `ledgerId` no longer resolves in the Chart of Accounts, and
+ * heals it by ONE of:
+ *
+ *   1. **Repoint** — narration carries a party name AND that party still
+ *      exists in the CRM with a live sub-ledger → patch the line's ledgerId
+ *      to the live ledger so all reporting rolls up correctly.
+ *
+ *   2. **Resurrect** — party cannot be matched (record deleted, renamed
+ *      past recognition, etc.) → recreate the missing COA account row using
+ *      the ORIGINAL orphan UUID, named "Archived — <party>" under the
+ *      best-guess parent group (AP_TRADE, AR_GROUP, SALARY_GROUP,
+ *      STAFF_PAYABLE_GROUP, COMMISSION_GROUP, OWNERS_CAPITAL). Because the
+ *      account is recreated with the same id, every JE line that references
+ *      it resolves immediately with no JE rewrite required. The account is
+ *      marked `isActive: false` so it does not appear in new-posting
+ *      dropdowns — only in historical reports.
+ *
+ *   3. **Unresolved** — narration carries no recoverable party hint AND no
+ *      other context (staffId, etc.). Returned in the report so the user
+ *      can review them manually.
+ *
+ * Safe to re-run: idempotent. If everything is already healed, returns a
+ * zero report. Caller should refresh COA + JE caches after this completes.
+ */
+export function repairOrphanedJournalEntryLedgers(): OrphanRepairReport {
+  const report: OrphanRepairReport = {
+    scannedEntries: 0,
+    orphanLedgerIds: 0,
+    repointedLines: 0,
+    resurrectedAccounts: 0,
+    unresolvedLines: 0,
+    details: [],
+  };
+
+  const jes = getJournalEntries();
+  report.scannedEntries = jes.length;
+  if (jes.length === 0) return report;
+
+  let accounts = getAccounts();
+  const knownIds = new Set(accounts.map(a => a.id));
+
+  // ── Pass 1: collect all orphan UUIDs and sample one line each ───────────────
+  type Sample = { line: JournalEntryLine; jeRef: string; jeDate: string; affected: number };
+  const orphans = new Map<string, Sample>();
+  for (const je of jes) {
+    for (const line of je.lines) {
+      if (knownIds.has(line.ledgerId)) continue;
+      const existing = orphans.get(line.ledgerId);
+      if (existing) {
+        existing.affected += 1;
+      } else {
+        orphans.set(line.ledgerId, { line, jeRef: je.reference, jeDate: je.date, affected: 1 });
+      }
+    }
+  }
+  report.orphanLedgerIds = orphans.size;
+  if (orphans.size === 0) return report;
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  const extractPartyName = (narration: string | undefined): string => {
+    if (!narration) return "";
+    // Standard format: "Source – REF – PARTY" or "Source - REF - PARTY"
+    const parts = narration.split(/\s[–-]\s/);
+    if (parts.length >= 3) return parts.slice(2).join(" – ").trim();
+    return "";
+  };
+
+  const inferParentGroup = (line: JournalEntryLine, narration: string): {
+    parentId: string; parentCode: string; head: AccountHead; subType: string;
+  } => {
+    const n = (narration || "").toLowerCase();
+    // Salary first — has dedicated staffId anchor
+    if (line.staffId) {
+      if (line.credit > 0 || n.includes("payable")) {
+        return { parentId: SYS_ACCS.STAFF_PAYABLE_GROUP, parentCode: "2113", head: "Liabilities", subType: "Payable" };
+      }
+      return { parentId: SYS_ACCS.SALARY_GROUP, parentCode: "4200", head: "Expense", subType: "Operating Expense" };
+    }
+    if (n.includes("commission")) {
+      return { parentId: SYS_ACCS.COMMISSION_GROUP, parentCode: "4300", head: "Expense", subType: "Operating Expense" };
+    }
+    if (n.includes("capital") || n.includes("shareholder") || n.includes("owner")) {
+      return { parentId: SYS_ACCS.OWNERS_CAPITAL, parentCode: "5100", head: "Equity", subType: "Equity" };
+    }
+    // Supplier-side: purchase receipt, supplier payment, purchase return, PO
+    if (n.includes("purchase") || n.includes("supplier") || n.includes("po-") || n.includes(" po ")) {
+      return { parentId: SYS_ACCS.AP_TRADE, parentCode: "2111", head: "Liabilities", subType: "Payable" };
+    }
+    // Customer-side: invoice, sale, receipt, POS, sale return
+    if (n.includes("invoice") || n.includes("sale") || n.includes("pos") || n.includes("receipt") || n.includes("customer")) {
+      return { parentId: SYS_ACCS.AR_GROUP, parentCode: "1130", head: "Assets", subType: "Receivable" };
+    }
+    // Last-resort fallback by debit/credit sign — supplier sub-ledgers are
+    // CR on receipts (line.credit > 0) and DR on payments (line.debit > 0);
+    // customer sub-ledgers are DR on invoices and CR on receipts. Both shapes
+    // are ambiguous in isolation, so default to AP_TRADE (most common cause
+    // observed in production).
+    return { parentId: SYS_ACCS.AP_TRADE, parentCode: "2111", head: "Liabilities", subType: "Payable" };
+  };
+
+  // ── Pass 2: heal each orphan ────────────────────────────────────────────────
+  const accountsToAdd: Account[] = [];
+  const repointMap = new Map<string, string>(); // orphanId → liveLedgerId
+  const nowIso = new Date().toISOString();
+
+  for (const [orphanId, sample] of orphans) {
+    const partyName = extractPartyName(sample.line.narration);
+    const parent = inferParentGroup(sample.line, sample.line.narration || "");
+
+    // Try repoint via CRM first (only if we have a name to look up)
+    if (partyName) {
+      const resolved = findSubLedgerForParty(partyName, parent.parentId);
+      if (resolved && resolved !== orphanId) {
+        // Refresh knownIds — findSubLedgerForParty may have created the account
+        accounts = getAccounts();
+        knownIds.clear(); accounts.forEach(a => knownIds.add(a.id));
+        repointMap.set(orphanId, resolved);
+        report.repointedLines += sample.affected;
+        report.details.push({
+          orphanId, partyName, parentGroup: parent.parentId,
+          action: "repointed", newLedgerId: resolved, affectedLines: sample.affected,
+        });
+        continue;
+      }
+    }
+
+    // No CRM hit → resurrect the original UUID as an Archived ledger
+    if (!partyName) {
+      // Can still resurrect with a synthetic name so the JE renders something
+      // meaningful instead of "Unknown ledger".
+      const synthetic = `Archived ledger ${orphanId.slice(0, 8)}`;
+      accountsToAdd.push({
+        id: orphanId,
+        code: `ARC-${orphanId.slice(0, 8)}`,
+        name: synthetic,
+        head: parent.head,
+        subType: parent.subType,
+        description: `Recovered from historical journal entry ${sample.jeRef} (${sample.jeDate}). Party name could not be inferred from narration — review and rename if needed.`,
+        parentId: parent.parentId,
+        accountType: "Ledger",
+        openingBalance: 0,
+        paymentType: null,
+        isActive: false,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      report.resurrectedAccounts += 1;
+      report.unresolvedLines += sample.affected;
+      report.details.push({
+        orphanId, partyName: "(unknown)", parentGroup: parent.parentId,
+        action: "unresolved", accountCode: `ARC-${orphanId.slice(0, 8)}`, affectedLines: sample.affected,
+      });
+      continue;
+    }
+
+    accountsToAdd.push({
+      id: orphanId,
+      code: `${parent.parentCode}-ARC-${orphanId.slice(0, 6)}`,
+      name: `${partyName} (Archived)`,
+      head: parent.head,
+      subType: parent.subType,
+      description: `Recovered subsidiary ledger for "${partyName}" — referenced by historical journal entries (first seen on ${sample.jeRef} dated ${sample.jeDate}). The original party record was removed before delete-guards were enforced; this account is preserved so historical JEs continue to resolve.`,
+      parentId: parent.parentId,
+      accountType: "Ledger",
+      openingBalance: 0,
+      paymentType: null,
+      isActive: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    report.resurrectedAccounts += 1;
+    report.details.push({
+      orphanId, partyName, parentGroup: parent.parentId,
+      action: "resurrected", accountCode: `${parent.parentCode}-ARC-${orphanId.slice(0, 6)}`, affectedLines: sample.affected,
+    });
+  }
+
+  // ── Persist COA changes ─────────────────────────────────────────────────────
+  if (accountsToAdd.length > 0) {
+    _saveAccounts([...getAccounts(), ...accountsToAdd]);
+  }
+
+  // ── Patch JE lines that were repointed (resurrected ones need no patch) ────
+  if (repointMap.size > 0) {
+    const patched = jes.map(je => {
+      let touched = false;
+      const newLines = je.lines.map(l => {
+        const target = repointMap.get(l.ledgerId);
+        if (!target) return l;
+        touched = true;
+        return { ...l, ledgerId: target };
+      });
+      return touched ? { ...je, lines: newLines, updatedAt: nowIso } : je;
+    });
+    const jeSk = tenantKey(JE_KEY);
+    _lsSet(jeSk, patched);
+    _apiWrite(jeSk, patched).catch(() => { /* surfaced via onesoft:write-error */ });
+  }
+
+  // ── Activity log ────────────────────────────────────────────────────────────
+  try {
+    addActivity({
+      action: "updated",
+      entity: "Journal Entry",
+      entityName: "Bulk orphan repair",
+      detail: `Healed ${report.orphanLedgerIds} unknown-ledger reference(s): `
+        + `${report.repointedLines} line(s) repointed to live CRM ledgers, `
+        + `${report.resurrectedAccounts} archived account(s) resurrected.`,
+    });
+  } catch { /* non-fatal */ }
+
+  return report;
+}
+
 /**
  * Pull all data from the PostgreSQL KV store into the in-memory cache.
  * The server is the single source of truth — no localStorage involved.

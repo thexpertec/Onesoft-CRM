@@ -3,12 +3,12 @@ import { useSearch } from "wouter";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Save, BookOpen, CheckCircle, XCircle, ChevronDown, ChevronUp,
-  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil, ShieldAlert,
+  Search, FileText, AlertTriangle, RotateCcw, Eye, EyeOff, Pencil, ShieldAlert, Wrench,
 } from "lucide-react";
 import { useAccounts, useStaff } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { Account, JournalEntry, purgeOrphanedVoucherJEs } from "@/lib/store";
+import { Account, JournalEntry, purgeOrphanedVoucherJEs, repairOrphanedJournalEntryLedgers } from "@/lib/store";
 import { getSettingsDecimalPlaces } from "@/lib/currencies";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -231,6 +231,30 @@ export default function JournalEntryPage() {
   const [listSearch, setListSearch] = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [viewEntry, setViewEntry] = useState<string | null>(null);
   const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
+  const [repairReport, setRepairReport] = useState<ReturnType<typeof repairOrphanedJournalEntryLedgers> | null>(null);
+
+  const runOrphanRepair = useCallback(() => {
+    setRepairing(true);
+    try {
+      const rep = repairOrphanedJournalEntryLedgers();
+      setRepairReport(rep);
+      if (rep.orphanLedgerIds === 0) {
+        toast({ title: "Nothing to repair", description: "All journal entries already resolve to valid ledger accounts." });
+      } else {
+        const parts: string[] = [];
+        if (rep.repointedLines)       parts.push(`${rep.repointedLines} line(s) repointed`);
+        if (rep.resurrectedAccounts)  parts.push(`${rep.resurrectedAccounts} archived account(s) restored`);
+        toast({ title: `Healed ${rep.orphanLedgerIds} unknown ledger(s)`, description: parts.join(" • ") });
+        // Force a data refresh so the JE list re-renders against the new COA
+        window.dispatchEvent(new Event("onesoft:data-synced"));
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "Repair failed", description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRepairing(false);
+    }
+  }, [toast]);
 
   // Auto-open from URL param: ?open=<journalEntryId>  (from ledger / transaction-history)
   useEffect(() => {
@@ -343,13 +367,24 @@ export default function JournalEntryPage() {
               <p className="text-[11px] text-gray-400">Double-entry bookkeeping</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowSaved(s => !s)}
-            className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            {showSaved ? <EyeOff size={13} /> : <Eye size={13} />}
-            {showSaved ? "Hide" : "Show"} saved ({entries.length})
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={runOrphanRepair}
+              disabled={repairing}
+              title="Scan all journal entries and heal any 'Unknown ledger' rows by re-creating the missing account or repointing to the live one."
+              className="flex items-center gap-1.5 text-[12px] font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/30 border border-amber-200 dark:border-amber-800 transition-colors disabled:opacity-50"
+            >
+              <Wrench size={13} className={repairing ? "animate-spin" : ""} />
+              {repairing ? "Repairing…" : "Repair Unknown Ledgers"}
+            </button>
+            <button
+              onClick={() => setShowSaved(s => !s)}
+              className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              {showSaved ? <EyeOff size={13} /> : <Eye size={13} />}
+              {showSaved ? "Hide" : "Show"} saved ({entries.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -875,6 +910,79 @@ export default function JournalEntryPage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Bulk repair report ──────────────────────────────────────────────── */}
+      <AlertDialog open={!!repairReport && repairReport.orphanLedgerIds > 0} onOpenChange={open => { if (!open) setRepairReport(null); }}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Wrench size={16} className="text-amber-600" />
+              Unknown-ledger repair report
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <div className="grid grid-cols-4 gap-2 text-center pt-2">
+                  <div className="rounded-lg border border-gray-200 dark:border-zinc-800 p-2">
+                    <div className="text-[18px] font-bold text-gray-800 dark:text-gray-200">{repairReport?.scannedEntries ?? 0}</div>
+                    <div className="text-[10px] text-gray-500 uppercase">Entries scanned</div>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 p-2">
+                    <div className="text-[18px] font-bold text-amber-700 dark:text-amber-400">{repairReport?.orphanLedgerIds ?? 0}</div>
+                    <div className="text-[10px] text-amber-700/80 dark:text-amber-400/80 uppercase">Orphans found</div>
+                  </div>
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20 p-2">
+                    <div className="text-[18px] font-bold text-blue-700 dark:text-blue-400">{repairReport?.repointedLines ?? 0}</div>
+                    <div className="text-[10px] text-blue-700/80 dark:text-blue-400/80 uppercase">Lines repointed</div>
+                  </div>
+                  <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/40 dark:bg-green-950/20 p-2">
+                    <div className="text-[18px] font-bold text-green-700 dark:text-green-400">{repairReport?.resurrectedAccounts ?? 0}</div>
+                    <div className="text-[10px] text-green-700/80 dark:text-green-400/80 uppercase">Archived restored</div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  <strong>Repointed</strong> = line was redirected to the existing CRM ledger for that party.{" "}
+                  <strong>Restored</strong> = the deleted COA account was re-created with the same id and marked archived (won't appear in new posting dropdowns).
+                </p>
+                {(repairReport?.details ?? []).length > 0 && (
+                  <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-zinc-800 rounded-lg">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-gray-50 dark:bg-zinc-900 sticky top-0">
+                        <tr className="text-left text-gray-500">
+                          <th className="px-2 py-1.5 font-medium">Party</th>
+                          <th className="px-2 py-1.5 font-medium">Action</th>
+                          <th className="px-2 py-1.5 font-medium text-right">Lines</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repairReport?.details.map((d, i) => (
+                          <tr key={i} className="border-t border-gray-100 dark:border-zinc-800">
+                            <td className="px-2 py-1.5">
+                              <div className="font-medium text-gray-800 dark:text-gray-200">{d.partyName}</div>
+                              <div className="text-[9px] font-mono text-gray-400 truncate" title={d.orphanId}>{d.orphanId.slice(0, 18)}…</div>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <span className={
+                                d.action === "repointed"   ? "px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" :
+                                d.action === "resurrected" ? "px-1.5 py-0.5 rounded text-[10px] bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" :
+                                                             "px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300"
+                              }>{d.action}</span>
+                              {d.accountCode && <span className="ml-1.5 font-mono text-[10px] text-gray-500">{d.accountCode}</span>}
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-mono">{d.affectedLines}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setRepairReport(null)}>Close</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
