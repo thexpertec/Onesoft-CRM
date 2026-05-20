@@ -29,7 +29,7 @@ import {
   getLeads, getCustomers, getDocs, getProducts, getStaff,
   getSales, getModuleGroupById, ModuleId,
   getActivities, clearActivities, ActivityEntry, ActivityAction,
-  getSettings,
+  getSettings, getJournalEntries, getAccounts,
 } from "@/lib/store";
 import { getPresetById } from "@/lib/ui-presets";
 import {
@@ -40,6 +40,75 @@ import { useDemoReset } from "@/hooks/use-demo-reset";
 import logoUrl from "@assets/Onesoft_Logo_1775302706939.png";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { LoginAsDialog } from "@/components/login-as-dialog";
+
+// ─── Unknown-ledger health-check banner ──────────────────────────────────────
+// Surfaces journal-entry lines whose `ledgerId` no longer resolves in the live
+// COA so the user can heal them in one click. Re-evaluates on mount and on
+// every data sync. Hidden when everything resolves cleanly.
+function UnknownLedgerHealthBanner() {
+  const [, setLocation] = useLocation();
+  const [orphans, setOrphans] = useState<{ entries: number; lines: number }>({ entries: 0, lines: 0 });
+  const [dismissed, setDismissed] = useState(false);
+
+  const recompute = useCallback(() => {
+    try {
+      const accs = getAccounts();
+      const validIds = new Set(accs.map(a => a.id));
+      const jes = getJournalEntries();
+      let badEntries = 0, badLines = 0;
+      for (const je of jes) {
+        let entryHasBad = false;
+        for (const l of je.lines) {
+          if (!validIds.has(l.ledgerId)) { badLines++; entryHasBad = true; }
+        }
+        if (entryHasBad) badEntries++;
+      }
+      setOrphans({ entries: badEntries, lines: badLines });
+    } catch { /* non-fatal */ }
+  }, []);
+
+  useEffect(() => {
+    recompute();
+    const h = () => { setDismissed(false); recompute(); };
+    window.addEventListener("onesoft:data-synced", h);
+    window.addEventListener("storage", h);
+    return () => {
+      window.removeEventListener("onesoft:data-synced", h);
+      window.removeEventListener("storage", h);
+    };
+  }, [recompute]);
+
+  if (dismissed || orphans.lines === 0) return null;
+
+  return (
+    <div className="bg-amber-600 text-white px-5 py-2 flex items-center gap-3 shadow-sm flex-shrink-0">
+      <Wrench size={14} className="flex-shrink-0" />
+      <span className="text-[13px] font-semibold flex-1">
+        Ledger integrity check:{" "}
+        <span className="font-bold">{orphans.lines} line{orphans.lines === 1 ? "" : "s"}</span>
+        {" "}across{" "}
+        <span className="font-bold">{orphans.entries} journal entr{orphans.entries === 1 ? "y" : "ies"}</span>
+        {" "}reference a missing account.
+        <span className="ml-2 text-amber-100 font-normal text-[11px]">
+          — Open the Journal Entry page and click <em>Repair Unknown Ledgers</em> to heal them automatically.
+        </span>
+      </span>
+      <button
+        onClick={() => setLocation("/journal-entry")}
+        className="flex items-center gap-1.5 text-[12px] font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
+      >
+        <Wrench size={12} /> Repair now
+      </button>
+      <button
+        onClick={() => setDismissed(true)}
+        title="Hide until next sync"
+        className="flex items-center gap-1 text-[12px] font-medium bg-white/10 hover:bg-white/20 px-2 py-1 rounded-full transition-colors"
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
 
 // ─── HRM sub-tab helpers ─────────────────────────────────────────────────────
 
@@ -1659,6 +1728,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           )}
+
+          {/* Unknown-ledger health-check banner — surfaces orphaned JE lines so the user can repair them */}
+          <UnknownLedgerHealthBanner />
 
           {/* Impersonation banner (manager logged in as a business) */}
           {isImpersonating && currentTenant && (

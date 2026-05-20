@@ -8717,44 +8717,40 @@ export function updateAccount(id: string, updates: Partial<Omit<Account, "id" | 
 export function deleteAccount(id: string): void {
   const all = getAccounts();
 
-  // Guard 1 — has child accounts
+  // Guard 1 — has child accounts (UI hierarchy integrity).
+  // Always enforced — soft-deleting a parent would orphan its visible children.
   if (all.some(a => a.parentId === id)) {
     throw new Error("This account has child accounts. Remove or reassign them first.");
   }
 
-  // Guard 2 — has journal entry lines posted to it
+  // ── Soft-delete policy ─────────────────────────────────────────────────────
+  // If the account is referenced anywhere (JE lines, customers/suppliers,
+  // payment accounts, staff, shareholders), we DEACTIVATE it instead of
+  // physically removing the row. This guarantees every historical JE line
+  // can still resolve to a real account name — "Unknown ledger" becomes
+  // impossible by construction. The account simply disappears from pickers
+  // (which already filter on `isActive !== false`).
   const entries = getJournalEntries();
-  if (entries.some(je => je.lines.some(l => l.ledgerId === id))) {
-    throw new Error("This account has journal entries posted to it and cannot be deleted.");
-  }
-
-  // Guard 3 — is linked from another entity record (customer / supplier,
-  // payment account, staff payroll/payable, or shareholder). Hard-deleting
-  // here would leave that entity pointing at a missing ledger, then a future
-  // JE posted via the cascade would create a brand-new orphaned UUID with
-  // no contact back-link — the exact "Unknown ledger" pattern. Block the
-  // delete; the caller can deactivate via the entity-level delete flow,
-  // which routes through _safeDeactivateLedgerAccount.
-  const linkedCustomer = getCustomers().find(c => c.ledgerAccountId === id);
-  if (linkedCustomer) {
-    throw new Error(
-      `This account is linked to ${linkedCustomer.customerRole === "Supplier" ? "supplier" : "customer"} "${linkedCustomer.name}". `
-      + `Delete or unlink that record first.`);
-  }
-  const linkedPA = getPaymentAccounts().find(a => a.ledgerAccountId === id);
-  if (linkedPA) {
-    throw new Error(`This account is linked to payment account "${linkedPA.accountTitle ?? linkedPA.paymentMethod}". Delete that payment account first.`);
-  }
-  const linkedStaff = getStaff().find(s =>
+  const referencedByJE       = entries.some(je => je.lines.some(l => l.ledgerId === id));
+  const referencedByCustomer = getCustomers().some(c => c.ledgerAccountId === id);
+  const referencedByPA       = getPaymentAccounts().some(a => a.ledgerAccountId === id);
+  const referencedByStaff    = getStaff().some(s =>
     s.ledgerAccountId === id || s.staffPayableLedgerId === id);
-  if (linkedStaff) {
-    throw new Error(`This account is linked to staff member "${linkedStaff.name}". Delete that staff record first.`);
-  }
-  const linkedShare = getShareholders().find(s => s.ledgerAccountId === id);
-  if (linkedShare) {
-    throw new Error(`This account is linked to shareholder "${linkedShare.name}". Delete that shareholder record first.`);
+  const referencedByShare    = getShareholders().some(s => s.ledgerAccountId === id);
+
+  const isReferenced = referencedByJE || referencedByCustomer
+    || referencedByPA || referencedByStaff || referencedByShare;
+
+  if (isReferenced) {
+    // Soft-delete: deactivate but preserve the row so JE lookups still resolve.
+    const acct = all.find(a => a.id === id);
+    if (acct && acct.isActive !== false) {
+      updateAccount(id, { isActive: false });
+    }
+    return;
   }
 
+  // No references anywhere → safe to physically remove.
   _saveAccounts(all.filter(a => a.id !== id));
 }
 
@@ -8845,6 +8841,27 @@ export function getJournalEntries(): JournalEntry[] {
 }
 
 function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
+  // ── Sequencing guard: if a COA write is still in flight, the server-side
+  // JE validator (api-server/routes/kv.ts) could 422-reject this JE because
+  // the new ledger isn't yet visible in the DB. Await the pending COA write
+  // first so the server sees a consistent snapshot. Fire-and-forget on the
+  // resulting promise — _apiWrite still surfaces errors via onesoft:write-error.
+  const coaSk = tenantKey(COA_KEY);
+  const pendingCoa = _pendingWrites.get(coaSk);
+  if (pendingCoa) {
+    pendingCoa.catch(() => { /* already surfaced via event */ }).then(() => {
+      _doSaveJournalEntries(entries, _isDelete);
+    });
+    // Still update the in-memory cache immediately so the UI doesn't lag —
+    // _doSaveJournalEntries also writes _memRaw, but doing it here too keeps
+    // synchronous reads consistent with the rest of setStored/_lsCache pattern.
+    _lsCache(tenantKey(JE_KEY), entries);
+    return;
+  }
+  _doSaveJournalEntries(entries, _isDelete);
+}
+
+function _doSaveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
   if (!_isDelete) {
     // ── Merge guard: re-read fresh to pick up any concurrently added entries ──
     // This prevents a race where two writes both read [A,B], one saves [A,B,C],

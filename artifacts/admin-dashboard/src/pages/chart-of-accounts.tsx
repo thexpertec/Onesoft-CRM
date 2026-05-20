@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries } from "@/lib/store";
+import { Account, AccountHead, AccountKind, ACCOUNT_HEADS, HEAD_SUB_TYPES, getJournalEntries, getCustomers, getPaymentAccounts, getStaff, getShareholders } from "@/lib/store";
 import { useAccounts } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -724,13 +724,25 @@ export default function ChartOfAccountsPage() {
       return "This is a system account and is protected from deletion.";
     if (hasChildren(deleteId))
       return "This account has child accounts. Remove or reassign all children before deleting.";
-    const entries = getJournalEntries();
-    const hasEntries = entries.some(je => je.lines.some(l => l.ledgerId === deleteId));
-    if (hasEntries)
-      return "This account has journal entries or amounts posted to it. Accounts with recorded transactions cannot be deleted.";
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteId, accounts]);
+
+  // Will this delete physically remove the row, or only deactivate it?
+  // Mirrors the soft-delete logic in store.ts → deleteAccount: any reference
+  // from a JE line, customer, supplier, payment account, staff (payroll or
+  // payable), or shareholder triggers soft-delete.
+  const willSoftDelete: boolean = useMemo(() => {
+    if (!deleteId || deleteBlockReason) return false;
+    const entries = getJournalEntries();
+    if (entries.some(je => je.lines.some(l => l.ledgerId === deleteId))) return true;
+    if (getCustomers().some(c => c.ledgerAccountId === deleteId)) return true;
+    if (getPaymentAccounts().some(a => a.ledgerAccountId === deleteId)) return true;
+    if (getStaff().some(s => s.ledgerAccountId === deleteId || s.staffPayableLedgerId === deleteId)) return true;
+    if (getShareholders().some(s => s.ledgerAccountId === deleteId)) return true;
+    return false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteId, deleteBlockReason, accounts]);
 
   // ── Edit parent options ───────────────────────────────────────────────────────
   const editParentOptions = useMemo(() => {
@@ -1774,7 +1786,7 @@ export default function ChartOfAccountsPage() {
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
+            <AlertDialogTitle>{willSoftDelete ? "Deactivate Account?" : "Delete Account?"}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
@@ -1785,9 +1797,16 @@ export default function ChartOfAccountsPage() {
                     <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                     <span>{deleteBlockReason}</span>
                   </div>
+                ) : willSoftDelete ? (
+                  <div className="flex items-start gap-2 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <Info size={15} className="mt-0.5 shrink-0" />
+                    <span>
+                      This account has journal entries posted to it. It will be <strong>deactivated</strong> (hidden from pickers) but kept in the database so historical entries still resolve to a real account name. No data is lost.
+                    </span>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    This account will be permanently removed. This cannot be undone.
+                    This account is not referenced anywhere and will be permanently removed.
                   </p>
                 )}
               </div>
@@ -1801,15 +1820,15 @@ export default function ChartOfAccountsPage() {
                 if (!deleteId) return;
                 try {
                   removeAccount(deleteId);
-                  toast({ title: "Account deleted" });
+                  toast({ title: willSoftDelete ? "Account deactivated" : "Account deleted" });
                   setDeleteId(null);
                 } catch (e: unknown) {
                   toast({ title: "Cannot delete account", description: (e as Error).message, variant: "destructive" });
                 }
               }}
-              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`text-white disabled:opacity-50 disabled:cursor-not-allowed ${willSoftDelete ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}
             >
-              Delete
+              {willSoftDelete ? "Deactivate" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
