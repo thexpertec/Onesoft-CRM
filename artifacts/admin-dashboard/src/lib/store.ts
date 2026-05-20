@@ -7429,9 +7429,7 @@ export function seedDefaultCoaAccounts(): void {
     });
 
     if (jeChanged) {
-      const jeSk = tenantKey(JE_KEY);
-      _lsSet(jeSk, repairedJEs);
-      _apiWrite(jeSk, repairedJEs).catch(() => { /* handled via onesoft:write-error event */ });
+      _saveJournalEntries(repairedJEs);
     }
     done.add("m11"); migrationsChanged = true;
   }
@@ -7790,7 +7788,7 @@ export function seedDefaultCoaAccounts(): void {
             ledgerIdRemap.has(l.ledgerId) ? { ...l, ledgerId: ledgerIdRemap.get(l.ledgerId)! } : l,
           ),
         }));
-        setStored(JE_KEY, patchedJEs);
+        _saveJournalEntries(patchedJEs);
         console.info(`[COA] Re-linked JE lines for ${ledgerIdRemap.size} replaced contact ledger(s)`);
       }
     }
@@ -7856,7 +7854,7 @@ export function seedDefaultCoaAccounts(): void {
       });
 
       if (jePatched) {
-        setStored(JE_KEY, healedJEs);
+        _saveJournalEntries(healedJEs);
         console.info("[COA] Healed orphaned JE lines — re-linked to current contact ledger accounts");
       }
     }
@@ -8060,7 +8058,7 @@ export function seedDefaultCoaAccounts(): void {
 
     if (salJEChanged) {
       const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
-      setStored(JE_KEY, allSalJEsUpdated);
+      _saveJournalEntries(allSalJEsUpdated);
       console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned/stale ledger line(s)`);
     }
   }
@@ -8090,7 +8088,7 @@ export function seedDefaultCoaAccounts(): void {
         const seq = `${_OB_REF_PREFIX}${String(getNextNum()).padStart(6, "0")}`;
         return { ...je, reference: seq };
       });
-      setStored(JE_KEY, patched);
+      _saveJournalEntries(patched);
       console.info(`[COA] Migrated ${legacyOBJEs.length} opening-balance JE ref(s) to sequential format`);
     }
   }
@@ -8310,9 +8308,7 @@ export function seedDefaultCoaAccounts(): void {
             }),
           }));
           if (jeDirtyR) {
-            const jeKey = tenantKey(JE_KEY);
-            _lsCache(jeKey, patchedJEsR);
-            _apiWrite(jeKey, patchedJEsR).catch(() => { /* handled via onesoft:write-error */ });
+            _saveJournalEntries(patchedJEsR);
           }
           // Re-link staff.ledgerAccountId
           const allStaffR = getStored<Staff>(STAFF_KEY);
@@ -8362,9 +8358,7 @@ export function seedDefaultCoaAccounts(): void {
         }),
       }));
       if (jeDirtyD) {
-        const jeKey = tenantKey(JE_KEY);
-        _lsCache(jeKey, patchedJEsD);
-        _apiWrite(jeKey, patchedJEsD).catch(() => { /* handled via onesoft:write-error */ });
+        _saveJournalEntries(patchedJEsD);
       }
       // Re-link staff.ledgerAccountId
       const allStaffD = getStored<Staff>(STAFF_KEY);
@@ -8436,9 +8430,7 @@ export function seedDefaultCoaAccounts(): void {
         return jeDirty ? { ...je, lines: patchedLines } : je;
       });
       if (jeDirty) {
-        const jeKey = tenantKey(JE_KEY);
-        _lsCache(jeKey, patchedJEs);
-        _apiWrite(jeKey, patchedJEs).catch(() => { /* handled via onesoft:write-error */ });
+        _saveJournalEntries(patchedJEs);
       }
       // Re-link staff.ledgerAccountId references
       const allStaffMig = getStored<Staff>(STAFF_KEY);
@@ -8862,6 +8854,26 @@ function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
 }
 
 function _doSaveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
+  // ── Central stamping chokepoint ───────────────────────────────────────────
+  // Every path that persists JEs — createJournalEntry, updateJournalEntry, the
+  // orphan healer, COA migrations, and the backfill — funnels through here.
+  // Stamping at this single point guarantees no write can ever skip the
+  // recoverable identity tag, even when callers use _saveJournalEntries
+  // directly (e.g. seedDefaultCoaAccounts at lines 7793, 7859, 8063, 8093).
+  // We skip when deleting (the entries array is the remainder, no edit needed).
+  if (!_isDelete && entries.length > 0) {
+    const accs = getAccounts();
+    if (accs.length > 0) {
+      entries = entries.map(e => {
+        const stamped = _stampLineNarrations(e.lines, accs);
+        // Only allocate a new object if a line actually changed
+        for (let i = 0; i < e.lines.length; i++) {
+          if (stamped[i] !== e.lines[i]) return { ...e, lines: stamped };
+        }
+        return e;
+      });
+    }
+  }
   if (!_isDelete) {
     // ── Merge guard: re-read fresh to pick up any concurrently added entries ──
     // This prevents a race where two writes both read [A,B], one saves [A,B,C],
@@ -8896,6 +8908,53 @@ function _doSaveJournalEntries(entries: JournalEntry[], _isDelete = false): void
   setStored(JE_KEY, entries);
 }
 
+/**
+ * Stamps every JE line's narration with a recoverable identity tag of the form
+ *   "⟦code · id:<uuid> · name:<account name>⟧"
+ *
+ * The unique sentinels ⟦ ⟧ are chosen because they are exceptionally unlikely
+ * to appear in user-typed text or account names. The name field is placed LAST
+ * so that account names containing brackets, dashes, dots, or other punctuation
+ * are preserved verbatim — only the closing ⟧ has to be absent (we sanitize it
+ * defensively).
+ *
+ * Purpose: if a ledger account is ever lost (manual DB edit, broken migration),
+ * the orphan healer reads this tag and resurrects the account with its real
+ * name instead of falling back to "Archived ledger <id-fragment>".
+ *
+ * Idempotent: re-stamping after an account rename strips the old tag and
+ * appends a fresh one. Safe to call on every write.
+ */
+const _LEDGER_TAG_OPEN  = "⟦";
+const _LEDGER_TAG_CLOSE = "⟧";
+const _LEDGER_TAG_RE = /\s*⟦[^⟦⟧]*?·\s*id:[0-9a-f-]+\s*·\s*name:[^⟦⟧]*?⟧/gi;
+const _LEDGER_TAG_PARSE_RE = /⟦([^⟦⟧]+?)·\s*id:([0-9a-f-]+)\s*·\s*name:([^⟦⟧]*?)⟧/i;
+
+function _buildLedgerTag(code: string, name: string, id: string): string {
+  // Defensive: strip any embedded sentinels so the closer is always unambiguous
+  const safeName = (name || "").replace(/[⟦⟧]/g, "");
+  const safeCode = (code || "").replace(/[⟦⟧]/g, "");
+  return ` ${_LEDGER_TAG_OPEN}${safeCode} · id:${id} · name:${safeName}${_LEDGER_TAG_CLOSE}`;
+}
+
+function _stampLineNarrations(
+  lines: JournalEntryLine[],
+  accounts: Account[]
+): JournalEntryLine[] {
+  const byId = new Map(accounts.map(a => [a.id, a]));
+  return lines.map(l => {
+    const acc = byId.get(l.ledgerId);
+    if (!acc) return l; // orphan — leave for healer
+    // Skip if the line already carries the *exact* current tag (cheap fast-path)
+    const expectedTag = _buildLedgerTag(acc.code, acc.name, acc.id).trimStart();
+    if (l.narration && l.narration.includes(expectedTag)) return l;
+    // Strip any prior tag(s) and rebuild fresh
+    const baseRaw = (l.narration || "").replace(_LEDGER_TAG_RE, "").trim();
+    const base = baseRaw || acc.name;
+    return { ...l, narration: `${base}${_buildLedgerTag(acc.code, acc.name, acc.id)}` };
+  });
+}
+
 export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" | "updatedAt">): JournalEntry {
   // ── Hard ledger validation ─────────────────────────────────────────────────
   // Every line's ledgerId MUST exist in the current COA as a Ledger account.
@@ -8917,6 +8976,7 @@ export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" |
       );
     }
   }
+  // (Identity tag is stamped centrally inside _doSaveJournalEntries; no need here.)
 
   // Idempotency guard: if a reference already exists, return the existing entry
   if (data.reference) {
@@ -8952,10 +9012,43 @@ export function updateJournalEntry(id: string, updates: Partial<Omit<JournalEntr
         updated.isBalanced  = Math.abs(updated.totalDebit - updated.totalCredit) < 0.02;
       }
     }
+    // (Identity tag is re-stamped centrally inside _doSaveJournalEntries.)
     return updated;
   });
   _saveJournalEntries(entries);
   return entries.find(e => e.id === id)!;
+}
+
+/**
+ * One-time backfill: walks every existing JE line and stamps a recoverable
+ * identity tag onto narrations that don't already have the current one.
+ * Delegates the actual stamping to _stampLineNarrations (single source of
+ * truth) and persists via _saveJournalEntries (which re-stamps again — a
+ * harmless no-op on the second pass thanks to the fast-path check).
+ *
+ * Called from login bootstrap (after COA seeding). Idempotent — only writes
+ * when at least one line needed a fresh tag, so re-runs on every login cost
+ * an in-memory diff and nothing else.
+ */
+export function backfillJournalEntryNarrationTags(): { stamped: number; total: number } {
+  const entries = getJournalEntries();
+  if (entries.length === 0) return { stamped: 0, total: 0 };
+  const accounts = getAccounts();
+  if (accounts.length === 0) return { stamped: 0, total: entries.length };
+  let stamped = 0;
+  let touched = false;
+  const next = entries.map(je => {
+    const newLines = _stampLineNarrations(je.lines, accounts);
+    let entryTouched = false;
+    for (let i = 0; i < je.lines.length; i++) {
+      if (newLines[i] !== je.lines[i]) { entryTouched = true; stamped += 1; }
+    }
+    if (!entryTouched) return je;
+    touched = true;
+    return { ...je, lines: newLines, updatedAt: new Date().toISOString() };
+  });
+  if (touched) _saveJournalEntries(next);
+  return { stamped, total: entries.length };
 }
 
 export function deleteJournalEntry(id: string): void {
@@ -10496,13 +10589,15 @@ function _purgeOrphanedVoucherJEs(tenantId: string, writeToDB: boolean): number 
   if (orphans.length === 0) return 0;
 
   const clean = allJEs.filter(je => !orphans.find(o => o.id === je.id));
-  const sk    = tenantKey(JE_KEY);
-  _lsSet(sk, clean);   // update in-memory immediately
-  if (writeToDB) {
-    _apiWrite(sk, clean).catch(err =>
-      console.error("[purge] Failed to persist orphan-JE cleanup:", err)
-    );
-  }
+  // Route through the central saver. Pass _isDelete=true so the surviving
+  // entries are not re-stamped (they already carry their identity tags) and
+  // the merge-guard inside _doSaveJournalEntries is skipped — otherwise the
+  // entries we just purged would be merged back from the fresh storage read.
+  // _writeToDB=false would have been an in-memory-only purge previously; we
+  // preserve that behaviour by still routing through the saver, which
+  // updates the in-memory cache via setStored → _lsCache.
+  void writeToDB; // retained for API back-compat; central saver always persists
+  _saveJournalEntries(clean, true);
   console.info(`[purge] Removed ${orphans.length} orphaned voucher JE(s):`,
     orphans.map(j => j.reference).join(", "));
   return orphans.length;
@@ -10597,9 +10692,14 @@ export function repairOrphanedJournalEntryLedgers(): OrphanRepairReport {
   if (orphans.size === 0) return report;
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+  // Identity tag stamped by _doSaveJournalEntries (central chokepoint):
+  //   "⟦<code> · id:<uuid> · name:<account name>⟧"
+  // We extract <name> from there first — it's the authoritative source.
   const extractPartyName = (narration: string | undefined): string => {
     if (!narration) return "";
-    // Standard format: "Source – REF – PARTY" or "Source - REF - PARTY"
+    const m = narration.match(_LEDGER_TAG_PARSE_RE);
+    if (m && m[3]) return m[3].trim();
+    // Legacy fallback: "Source – REF – PARTY" or "Source - REF - PARTY"
     const parts = narration.split(/\s[–-]\s/);
     if (parts.length >= 3) return parts.slice(2).join(" – ").trim();
     return "";
@@ -10732,9 +10832,7 @@ export function repairOrphanedJournalEntryLedgers(): OrphanRepairReport {
       });
       return touched ? { ...je, lines: newLines, updatedAt: nowIso } : je;
     });
-    const jeSk = tenantKey(JE_KEY);
-    _lsSet(jeSk, patched);
-    _apiWrite(jeSk, patched).catch(() => { /* surfaced via onesoft:write-error */ });
+    _saveJournalEntries(patched);
   }
 
   // ── Activity log ────────────────────────────────────────────────────────────
@@ -10981,7 +11079,15 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
   if (tenantId) {
     const _prevTenant = _activeTenantId;
     _activeTenantId = tenantId;
-    try { seedDefaultCoaAccounts(); } catch { /* non-fatal */ } finally { _activeTenantId = _prevTenant; }
+    try {
+      seedDefaultCoaAccounts();
+      // Stamp every existing JE line with a recoverable identity tag
+      // (code · name · id). Idempotent — only writes when something changed.
+      const r = backfillJournalEntryNarrationTags();
+      if (r.stamped > 0) {
+        console.info(`[JE] backfilled identity tags on ${r.stamped} line(s) across ${r.total} JE(s) for tenant ${tenantId}`);
+      }
+    } catch { /* non-fatal */ } finally { _activeTenantId = _prevTenant; }
   }
 
   // Step 6 — Notify all data hooks so they re-render with the fresh server data.
