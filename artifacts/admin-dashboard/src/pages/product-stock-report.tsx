@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Package, Search, Download, FileText, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle2, Layers, Tag, BarChart3, Boxes,
-  TrendingUp, X, Filter, Loader2,
+  TrendingUp, X, Filter, Loader2, MinusCircle,
 } from "lucide-react";
 import {
   Document, Page as PdfPage, Text as PdfText, View as PdfView,
@@ -417,7 +417,7 @@ function StockReportPDFDoc({
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function KpiCard({ icon: Icon, label, value, sub, accent }: {
+function KpiCard({ icon: Icon, label, value, sub, accent, onClick, active }: {
   icon: React.ElementType; label: string; value: string | number;
   sub?: string;
   accent: {
@@ -426,22 +426,35 @@ function KpiCard({ icon: Icon, label, value, sub, accent }: {
     iconColor: string; // icon colour class
     valueCls: string;  // value text colour
   };
+  onClick?: () => void;
+  active?: boolean;
 }) {
+  const clickable = !!onClick;
   return (
-    <div className="relative rounded-2xl border border-border bg-white dark:bg-card shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col">
-      {/* coloured top accent bar */}
-      <div className={`h-1 w-full ${accent.bar}`} />
-      <div className="flex flex-col gap-3 px-4 pt-3 pb-4 flex-1">
-        {/* icon */}
-        <div className={`w-9 h-9 rounded-xl ${accent.iconBg} flex items-center justify-center shrink-0`}>
-          <Icon size={16} className={accent.iconColor} />
-        </div>
-        {/* value */}
-        <div className="min-w-0">
-          <p className={`text-[26px] font-black tabular-nums leading-none tracking-tight ${accent.valueCls}`}>{value}</p>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">{label}</p>
-          {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 leading-snug">{sub}</p>}
-        </div>
+    <div
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } } : undefined}
+      className={`relative rounded-xl border bg-white dark:bg-card shadow-sm transition-all duration-150 overflow-hidden flex flex-row items-center gap-2.5 px-3 py-2 ${
+        clickable ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""
+      } ${
+        active
+          ? "border-foreground/40 ring-2 ring-foreground/10"
+          : "border-border"
+      }`}
+    >
+      {/* coloured left accent bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-0.5 ${accent.bar}`} />
+      {/* icon */}
+      <div className={`w-7 h-7 rounded-lg ${accent.iconBg} flex items-center justify-center shrink-0`}>
+        <Icon size={13} className={accent.iconColor} />
+      </div>
+      {/* value + label */}
+      <div className="min-w-0 flex-1">
+        <p className={`text-[17px] font-black tabular-nums leading-none tracking-tight ${accent.valueCls}`}>{value}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-0.5 truncate">{label}</p>
+        {sub && <p className="text-[9px] text-muted-foreground/70 leading-tight truncate">{sub}</p>}
       </div>
     </div>
   );
@@ -651,6 +664,7 @@ export default function ProductStockReportPage() {
     const totalVariants  = enriched.reduce((s, e) => s + (e.product.variants?.length ?? 0), 0);
     const lowStock       = enriched.filter(e => e.minLevel > 0 && e.totalStock > 0 && e.totalStock <= e.minLevel).length;
     const outOfStock     = enriched.filter(e => e.totalStock === 0).length;
+    const negativeStock  = enriched.filter(e => e.totalStock < 0).length;
     const inStock        = enriched.filter(e => e.totalStock > 0 && !(e.minLevel > 0 && e.totalStock <= e.minLevel)).length;
     const uniqueCats     = new Set(enriched.map(e => e.product.category).filter(Boolean)).size;
     const stockValue     = enriched.reduce((s, e) => {
@@ -663,7 +677,7 @@ export default function ProductStockReportPage() {
       const cp = parseFloat(e.product.purchasePrice || e.product.costPrice || e.product.price || "0") || 0;
       return s + e.totalStock * cp;
     }, 0);
-    return { total: enriched.length, totalVariants, lowStock, outOfStock, inStock, uniqueCats, stockValue };
+    return { total: enriched.length, totalVariants, lowStock, outOfStock, negativeStock, inStock, uniqueCats, stockValue };
   }, [enriched]);
 
   // ── filter & search ──────────────────────────────────────────────────────
@@ -679,8 +693,10 @@ export default function ProductStockReportPage() {
         if (!(e.minLevel > 0 && e.totalStock > 0 && e.totalStock <= e.minLevel)) return false;
       } else if (filterStock === "out") {
         if (e.totalStock !== 0) return false;
+      } else if (filterStock === "neg") {
+        if (!(e.totalStock < 0)) return false;
       } else if (filterStock === "ok") {
-        if (e.totalStock === 0 || (e.minLevel > 0 && e.totalStock <= e.minLevel)) return false;
+        if (e.totalStock <= 0 || (e.minLevel > 0 && e.totalStock <= e.minLevel)) return false;
       }
       if (q) {
         const inName    = p.name.toLowerCase().includes(q);
@@ -809,8 +825,8 @@ export default function ProductStockReportPage() {
         </div>
       </div>
 
-      {/* ── KPI cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+      {/* ── KPI cards (two rows × four; stock-status cards act as filters) ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <KpiCard
           icon={Package} label="Products" value={kpi.total}
           accent={{ bar: "bg-blue-500", iconBg: "bg-blue-50 dark:bg-blue-950/60", iconColor: "text-blue-600 dark:text-blue-400", valueCls: "text-blue-700 dark:text-blue-300" }}
@@ -824,22 +840,34 @@ export default function ProductStockReportPage() {
           accent={{ bar: "bg-violet-500", iconBg: "bg-violet-50 dark:bg-violet-950/60", iconColor: "text-violet-600 dark:text-violet-400", valueCls: "text-violet-700 dark:text-violet-300" }}
         />
         <KpiCard
-          icon={CheckCircle2} label="In Stock" value={kpi.inStock}
-          accent={{ bar: "bg-emerald-500", iconBg: "bg-emerald-50 dark:bg-emerald-950/60", iconColor: "text-emerald-600 dark:text-emerald-400", valueCls: "text-emerald-700 dark:text-emerald-300" }}
-        />
-        <KpiCard
-          icon={AlertTriangle} label="Low Stock" value={kpi.lowStock}
-          accent={{ bar: "bg-amber-500", iconBg: "bg-amber-50 dark:bg-amber-950/60", iconColor: "text-amber-600 dark:text-amber-400", valueCls: "text-amber-700 dark:text-amber-300" }}
-        />
-        <KpiCard
-          icon={Boxes} label="Out of Stock" value={kpi.outOfStock}
-          accent={{ bar: "bg-red-500", iconBg: "bg-red-50 dark:bg-red-950/60", iconColor: "text-red-600 dark:text-red-400", valueCls: "text-red-700 dark:text-red-300" }}
-        />
-        <KpiCard
           icon={TrendingUp} label="Stock Value"
           value={`${sym}${kpi.stockValue >= 1_000_000 ? (kpi.stockValue / 1_000_000).toFixed(1) + "M" : kpi.stockValue >= 1000 ? (kpi.stockValue / 1000).toFixed(1) + "K" : kpi.stockValue.toFixed(0)}`}
           sub="est. at purchase price"
           accent={{ bar: "bg-teal-500", iconBg: "bg-teal-50 dark:bg-teal-950/60", iconColor: "text-teal-600 dark:text-teal-400", valueCls: "text-teal-700 dark:text-teal-300" }}
+        />
+        <KpiCard
+          icon={CheckCircle2} label="In Stock" value={kpi.inStock}
+          accent={{ bar: "bg-emerald-500", iconBg: "bg-emerald-50 dark:bg-emerald-950/60", iconColor: "text-emerald-600 dark:text-emerald-400", valueCls: "text-emerald-700 dark:text-emerald-300" }}
+          active={filterStock === "ok"}
+          onClick={() => setFilterStock(filterStock === "ok" ? "all" : "ok")}
+        />
+        <KpiCard
+          icon={AlertTriangle} label="Low Stock" value={kpi.lowStock}
+          accent={{ bar: "bg-amber-500", iconBg: "bg-amber-50 dark:bg-amber-950/60", iconColor: "text-amber-600 dark:text-amber-400", valueCls: "text-amber-700 dark:text-amber-300" }}
+          active={filterStock === "low"}
+          onClick={() => setFilterStock(filterStock === "low" ? "all" : "low")}
+        />
+        <KpiCard
+          icon={Boxes} label="Out of Stock" value={kpi.outOfStock}
+          accent={{ bar: "bg-red-500", iconBg: "bg-red-50 dark:bg-red-950/60", iconColor: "text-red-600 dark:text-red-400", valueCls: "text-red-700 dark:text-red-300" }}
+          active={filterStock === "out"}
+          onClick={() => setFilterStock(filterStock === "out" ? "all" : "out")}
+        />
+        <KpiCard
+          icon={MinusCircle} label="Negative Stock" value={kpi.negativeStock}
+          accent={{ bar: "bg-rose-600", iconBg: "bg-rose-50 dark:bg-rose-950/60", iconColor: "text-rose-700 dark:text-rose-400", valueCls: "text-rose-800 dark:text-rose-300" }}
+          active={filterStock === "neg"}
+          onClick={() => setFilterStock(filterStock === "neg" ? "all" : "neg")}
         />
       </div>
 
@@ -896,6 +924,7 @@ export default function ProductStockReportPage() {
             <SelectItem value="ok">In Stock</SelectItem>
             <SelectItem value="low">Low Stock</SelectItem>
             <SelectItem value="out">Out of Stock</SelectItem>
+            <SelectItem value="neg">Negative Stock</SelectItem>
           </SelectContent>
         </Select>
 
