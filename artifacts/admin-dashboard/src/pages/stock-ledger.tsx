@@ -3,6 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   getStock, getStockLedger, getSettings, getProducts,
+  getSales, getInvoices, getPurchaseOrders, getSaleReturns, getPurchaseReturns,
   StockLedgerEntry, LedgerTxType, LEDGER_TX_LABELS,
   reconcileStockItem, reconcileAllStock, deduplicatePurchaseReceipts, deduplicateSaleEntries,
   Product, StockItem,
@@ -28,14 +29,6 @@ const TX_COLORS: Record<LedgerTxType, string> = {
   "mfg-output":        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
   "manual-adjustment": "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
   "opening-balance":   "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-400",
-};
-
-const SOURCE_BADGE_COLORS: Record<string, string> = {
-  "Invoiced":        "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300",
-  "POS":             "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300",
-  "Online":          "bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300",
-  "Purchase":        "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
-  "Opening Balance": "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300",
 };
 
 const TX_PRINT_COLORS: Record<LedgerTxType, string> = {
@@ -124,6 +117,7 @@ function printLedger(
   companyName: string,
   isAllProducts: boolean,
   variantMap: Map<string, string>,
+  partyMap: Map<string, string>,
 ) {
   const now = new Date().toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
@@ -133,12 +127,14 @@ function printLedger(
 
   const rowsHtml = rows.map((r, i) => {
     const varLabel = variantMap.get(r.entityId) ?? "";
+    const party    = partyMap.get(r.reference) ?? "";
     return `
     <tr class="${i % 2 === 0 ? "even" : "odd"}">
       <td class="center">${i + 1}</td>
       <td class="nowrap">${fmtDate(r.date)}</td>
       <td><span class="ref">${r.reference || "—"}</span></td>
       <td><span class="badge" style="color:${TX_PRINT_COLORS[r.txType] || "#374151"}">${LEDGER_TX_LABELS[r.txType] || r.txType}</span></td>
+      <td class="ellipsis">${party || "—"}</td>
       ${isAllProducts ? `<td class="ellipsis">${r.entityName}</td><td class="ellipsis variant">${varLabel || "—"}</td>` : ""}
       <td class="right in">${r.qtyChange > 0 ? "+" + fmtN(r.qtyChange) : ""}</td>
       <td class="right out">${r.qtyChange < 0 ? fmtN(Math.abs(r.qtyChange)) : ""}</td>
@@ -263,6 +259,7 @@ function printLedger(
         <th style="width:90px">Date</th>
         <th style="width:100px">Reference</th>
         <th style="width:110px">Type</th>
+        <th>Party</th>
         ${isAllProducts ? "<th>Product</th><th>Variant</th>" : ""}
         <th class="right" style="width:80px">Qty In</th>
         <th class="right" style="width:80px">Qty Out</th>
@@ -274,7 +271,7 @@ function printLedger(
       <tr class="opening">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(from)}</td>
-        <td colspan="${isAllProducts ? 4 : 2}" style="font-style:italic;color:#374151;">Opening Balance</td>
+        <td colspan="${isAllProducts ? 5 : 3}" style="font-style:italic;color:#374151;">Opening Balance</td>
         <td colspan="2"></td>
         <td class="right bal">${fmtN(openingQty)}</td>
         <td></td>
@@ -283,7 +280,7 @@ function printLedger(
       <tr class="sumrow">
         <td class="center">—</td>
         <td class="nowrap">${fmtDate(to)}</td>
-        <td colspan="${isAllProducts ? 4 : 2}" style="font-style:italic;">Closing Balance</td>
+        <td colspan="${isAllProducts ? 5 : 3}" style="font-style:italic;">Closing Balance</td>
         <td class="right in">+${fmtN(totalIn)}</td>
         <td class="right out">${fmtN(totalOut)}</td>
         <td class="right bal">${fmtN(closingQty)}</td>
@@ -333,6 +330,20 @@ export default function StockLedgerPage() {
   const ledger   = useMemo(() => getStockLedger(),  [revision]); // eslint-disable-line
   const products = useMemo(() => getProducts(),     [revision]); // eslint-disable-line
   const settings = useMemo(() => getSettings(),     []);
+
+  // ── Party lookup (reference → customer/supplier name) ─────────────────────
+  // Maps every business-document number that can appear in `row.reference`
+  // (PO/SAL/INV/SR/PR) to the customer or supplier on the source record. Used
+  // by the new "Party" column to identify who the in/out movement was with.
+  const partyByRef = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const po of getPurchaseOrders())  if (po.poNumber)       m.set(po.poNumber,           po.supplier || "");
+    for (const s  of getSales())           if (s.saleNumber)      m.set(s.saleNumber,          s.customer || "");
+    for (const i  of getInvoices())        if (i.invoiceNumber)   m.set(i.invoiceNumber,       i.customer || "");
+    for (const sr of getSaleReturns())     if (sr.returnNumber)   m.set(sr.returnNumber,       sr.customer || "");
+    for (const pr of getPurchaseReturns()) if (pr.returnNumber)   m.set(pr.returnNumber,       pr.supplier || "");
+    return m;
+  }, [revision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Product groups ────────────────────────────────────────────────────────
   const productGroups = useMemo(
@@ -570,6 +581,7 @@ export default function StockLedgerPage() {
                 settings.companyName || "Onesoft",
                 isAllSelected,
                 printVariantMap,
+                partyByRef,
               );
             }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gray-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:bg-gray-700 dark:hover:bg-white transition-colors shadow-sm"
@@ -953,7 +965,7 @@ export default function StockLedgerPage() {
                         <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
                         <th className="text-left px-4 py-3">Reference</th>
                         <th className="text-left px-4 py-3">Type</th>
-                        <th className="text-left px-4 py-3">Source</th>
+                        <th className="text-left px-4 py-3">Party</th>
                         {isAllSelected && (
                           <th className="text-left px-4 py-3">Product</th>
                         )}
@@ -1009,14 +1021,13 @@ export default function StockLedgerPage() {
                                 {LEDGER_TX_LABELS[row.txType] || row.txType}
                               </span>
                             </td>
-                            <td className="px-4 py-2.5">
-                              {row.sourceType ? (
-                                <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${SOURCE_BADGE_COLORS[row.sourceType] ?? "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300"}`}>
-                                  {row.sourceType}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300 dark:text-zinc-700 text-xs">—</span>
-                              )}
+                            <td className="px-4 py-2.5 text-xs font-medium text-gray-700 dark:text-zinc-300 max-w-[160px] truncate">
+                              {(() => {
+                                const party = partyByRef.get(row.reference);
+                                return party
+                                  ? party
+                                  : <span className="text-gray-300 dark:text-zinc-700">—</span>;
+                              })()}
                             </td>
                             {isAllSelected && (
                               <td className="px-4 py-2.5 text-xs font-medium text-gray-700 dark:text-zinc-300 max-w-[160px] truncate">{rowProductName}</td>
