@@ -31,6 +31,10 @@ export function SelectCombobox({
 
   useEffect(() => { setText(committedLabel); }, [committedLabel]);
 
+  // Auto-pin the first option when it represents a "clear filter" / "All X"
+  // entry (empty-string value). This keeps the reset choice always visible.
+  const pinFirst = options.length > 0 && options[0].value === "";
+
   return (
     <Combobox
       id={id}
@@ -43,8 +47,13 @@ export function SelectCombobox({
       maxResults={maxResults}
       minDropdownWidth={minDropdownWidth}
       options={options}
+      pinFirstOption={pinFirst}
       onChange={setText}
       onSelect={opt => { setText(opt.label); onChange(opt.value); }}
+      // Clear the input on focus so the user immediately sees the full list
+      // and can search freely. The committed label is restored on blur if no
+      // new selection was made.
+      onFocus={() => setText("")}
       onBlur={() => { setText(committedLabel); }}
     />
   );

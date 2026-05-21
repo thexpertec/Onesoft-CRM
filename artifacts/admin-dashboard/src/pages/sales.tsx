@@ -3610,7 +3610,7 @@ export default function SalesPage() {
               {(() => {
                 // Combine COA Cash & Bank ledger names with any payment methods already on existing sales
                 const coaNames = getCashBankLedgers().map(a => a.name);
-                const inData   = [...new Set(rows.map(s => s.paymentMethod).filter(Boolean))];
+                const inData   = [...new Set(sales.map(s => s.paymentMethod).filter(Boolean))] as string[];
                 const modes    = [...new Set([...coaNames, ...inData])];
                 return (
                   <SelectCombobox

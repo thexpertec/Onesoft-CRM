@@ -20,17 +20,22 @@ interface ComboboxProps {
   minDropdownWidth?: number;
   autoFocus?: boolean;
   onBlur?: () => void;
+  onFocus?: () => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   disabled?: boolean;
   id?: string;
   "data-testid"?: string;
+  // When true, always render `options[0]` at the top of the filtered list,
+  // even if it does not match the current query. Useful for "All X" / clear
+  // entries in filter-style dropdowns so users can always reset.
+  pinFirstOption?: boolean;
 }
 
 export function Combobox({
   value, onChange, onSelect, options, placeholder,
   className, inputClassName, maxResults = 10, minDropdownWidth = 240,
-  autoFocus, onBlur, onKeyDown, disabled, id,
-  "data-testid": testId,
+  autoFocus, onBlur, onFocus, onKeyDown, disabled, id,
+  "data-testid": testId, pinFirstOption,
 }: ComboboxProps) {
   const [open, setOpen]               = useState(false);
   const [highlighted, setHighlighted] = useState(0);
@@ -40,7 +45,7 @@ export function Combobox({
   const listRef      = useRef<HTMLUListElement>(null);
 
   const q = value.toLowerCase().trim();
-  const filtered = q.length === 0
+  const baseFiltered = q.length === 0
     ? options.slice(0, maxResults)
     : options
         .filter(o =>
@@ -50,6 +55,15 @@ export function Combobox({
           o.tag?.toLowerCase().includes(q)
         )
         .slice(0, maxResults);
+  // If caller asked, always keep the first option visible at the top
+  // (e.g. an "All Categories" / clear-filter entry) regardless of query.
+  const filtered = (() => {
+    if (!pinFirstOption || options.length === 0) return baseFiltered;
+    const first = options[0];
+    if (baseFiltered[0]?.value === first.value) return baseFiltered;
+    const rest = baseFiltered.filter(o => o.value !== first.value);
+    return [first, ...rest].slice(0, maxResults);
+  })();
 
   useEffect(() => { setHighlighted(0); }, [value]);
 
@@ -182,7 +196,7 @@ export function Combobox({
         autoComplete="off"
         spellCheck={false}
         onChange={e => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { setOpen(true); onFocus?.(); }}
         onBlur={() => { setTimeout(() => { setOpen(false); onBlur?.(); }, 160); }}
         onKeyDown={handleKeyDown}
         className={inputClassName}
