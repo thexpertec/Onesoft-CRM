@@ -2675,7 +2675,16 @@ export function InvoiceFormPage() {
 
   const handleSave = useCallback((data: Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">, id?: string) => {
     const isPurchase = data.invoiceType === "purchase";
-    const isReceived = data.saleStatus === "Received";
+    // ── Draft means "nothing posted yet" — coerce delivery/receipt status ──
+    // The new-purchase form defaults saleStatus="Received" so submitting via
+    // "Save as Draft" would otherwise trigger goods-receipt and post a JE,
+    // contradicting the user's intent. When status is Draft, force the
+    // delivery side back to its pre-active value so receive/JE branches below
+    // short-circuit AND the persisted record reads correctly in the list.
+    if (data.status === "Draft") {
+      data = { ...data, saleStatus: isPurchase ? "Ordered" : "Pending" };
+    }
+    const isReceived = data.saleStatus === "Received" && data.status !== "Draft";
 
     if (id) {
       const existing = getInvoices().find(i => i.id === id);
