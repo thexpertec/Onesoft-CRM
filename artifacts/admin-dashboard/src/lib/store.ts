@@ -115,6 +115,21 @@ function _purgeForeignCacheEntries(id: string | null): void {
       if (myPrefix !== null && !isPlatformGlobalKey(k)) _memRaw.delete(k);
     }
   }
+  // Drop any failed-write entries that no longer belong to the active scope.
+  // (1) Holding on to them would let the 15s auto-retry interval continue
+  //     pushing the prior tenant's payload after a tenant switch / logout —
+  //     correct destination (storageKey is fully qualified), but wasted
+  //     traffic and a confusing UX if the prior server outage recovered.
+  // (2) syncAllFromServer's Guard 3 would otherwise skip these keys forever
+  //     (cache was purged in the loop above), leaving the new scope unable
+  //     to ever load that key from the server.
+  for (const k of [..._failedWrites.keys()]) {
+    if (k.startsWith("t:")) {
+      if (myPrefix === null || !k.startsWith(myPrefix)) _failedWrites.delete(k);
+    } else {
+      if (myPrefix !== null && !isPlatformGlobalKey(k)) _failedWrites.delete(k);
+    }
+  }
 }
 
 export function setActiveTenant(id: string | null): void {
@@ -234,6 +249,61 @@ const _pendingWrites = new Map<string, Promise<void>>();
  */
 const _lastWriteCompletedAt = new Map<string, number>();
 
+/**
+ * Records every storageKey whose most-recent server write FAILED after all
+ * automatic retries.  The in-memory cache for these keys holds data that was
+ * never persisted — exactly the "Owner 2 vanishes" scenario.  Two guards
+ * use this map:
+ *
+ *   1. syncAllFromServer SKIPS any key present here.  Reading the server
+ *      would overwrite the user's unsaved change with stale data.
+ *   2. The UI ("Save failed — please refresh" banner) calls
+ *      retryFailedWrites() to re-attempt every failed write at once.  On
+ *      success, the entry is removed and sync is allowed again.
+ *
+ * Stored value is the exact payload we tried to PUT, so retry needs no
+ * extra plumbing.
+ */
+interface _FailedWrite { value: unknown; firstFailedAt: number; lastError: string; attempts: number; }
+const _failedWrites = new Map<string, _FailedWrite>();
+
+/** True when any write has failed and not yet been successfully retried. */
+export function hasFailedWrites(): boolean { return _failedWrites.size > 0; }
+
+/** Keys of all writes currently in the failed-state.  Used by the UI banner. */
+export function getFailedWriteKeys(): string[] { return [..._failedWrites.keys()]; }
+
+/**
+ * Re-fire _apiWrite for every failed entry.  Resolves to {success, failed}
+ * counts.  Called by the "Retry" button on the save-failed banner and also
+ * automatically (with backoff) by an interval timer in layout.tsx.
+ */
+export async function retryFailedWrites(): Promise<{ success: number; failed: number }> {
+  const entries = [..._failedWrites.entries()];
+  let success = 0, failed = 0;
+  await Promise.all(entries.map(async ([sk, fw]) => {
+    try {
+      await _apiWrite(sk, fw.value);
+      success++;
+    } catch {
+      failed++;
+    }
+  }));
+  return { success, failed };
+}
+
+/** Classifies an error as transient (retryable) or permanent. */
+function _isRetryableWriteError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  // Permanent: 4xx validation errors (server rejected the payload deliberately).
+  // Retry would just fail the same way.
+  if (/^HTTP 4\d\d/.test(msg)) return false;
+  // Everything else — 5xx, network failures, AbortError/timeouts, fetch TypeError —
+  // is treated as transient.  This covers EADDRINUSE windows during API restarts,
+  // Neon cold-starts, and brief Replit proxy hiccups.
+  return true;
+}
+
 /** Read from in-memory cache. Returns null if not yet synced from server. */
 function _lsGet(storageKey: string): string | null {
   return _memRaw.get(storageKey) ?? null;
@@ -291,15 +361,72 @@ function _apiWrite(storageKey: string, value: unknown): Promise<void> {
     ns = "global";
     key = storageKey;
   }
-  const p: Promise<void> = kvPut(ns, key, value).then(() => {
+
+  // ── Per-key serialization ─────────────────────────────────────────────────
+  // Chain this write onto any prior in-flight write for the SAME storageKey,
+  // so PUTs land at the server in strictly the order they were issued.
+  // Without this, only the most recent promise was tracked in _pendingWrites;
+  // an older slow PUT could complete AFTER a newer one and overwrite it
+  // server-side (true ABA race).  syncAllFromServer's drain awaits the
+  // tail of this chain, which now transitively guarantees every prior write
+  // is settled before any GET fires.
+  const prior = _pendingWrites.get(storageKey);
+
+  // ── Retry loop ─────────────────────────────────────────────────────────────
+  // Up to 3 attempts with exponential backoff (≈500 ms, 1.5 s, 4 s).  This
+  // covers the most common transient failure modes on Replit:
+  //   • API server EADDRINUSE during a workflow restart (~5–10 s window)
+  //   • Neon cold-start on first query after idle
+  //   • Brief proxy/mTLS hiccup
+  // Permanent failures (4xx) bail out on the first attempt — no point in
+  // hammering the server with the same invalid payload.
+  const attemptWrite = async (): Promise<void> => {
+    // Wait for the prior write to settle (success or fail) before issuing ours.
+    if (prior) { try { await prior; } catch { /* prior already surfaced its error */ } }
+    const BACKOFFS_MS = [500, 1500, 4000];
+    let lastErr: unknown = new Error("no attempts ran");
+    for (let attempt = 1; attempt <= BACKOFFS_MS.length; attempt++) {
+      try {
+        await kvPut(ns, key, value);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (!_isRetryableWriteError(err) || attempt === BACKOFFS_MS.length) break;
+        console.warn(`[kv] write attempt ${attempt} failed for ${ns}/${key}; retrying in ${BACKOFFS_MS[attempt - 1]}ms:`,
+          err instanceof Error ? err.message : err);
+        await new Promise(r => setTimeout(r, BACKOFFS_MS[attempt - 1]));
+      }
+    }
+    throw lastErr;
+  };
+
+  const p: Promise<void> = attemptWrite().then(() => {
     // Record the exact moment this write succeeded.  Any kvGetAll/kvGet
     // response that was already in-flight when the write completed and carries
     // a timestamp EARLIER than this will be discarded by the sync guard below,
     // preventing stale server data from overwriting the post-write _memRaw.
     _lastWriteCompletedAt.set(storageKey, Date.now());
+    // Clear any prior failed-state for this key — the write made it through,
+    // so the cache is back in sync with the server and sync may resume.
+    if (_failedWrites.delete(storageKey)) {
+      try {
+        window.dispatchEvent(new CustomEvent("onesoft:write-recovered", {
+          detail: { key: `${ns}/${key}` },
+        }));
+      } catch { /* SSR guard */ }
+    }
   }).catch((err) => {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[kv] server write FAILED for ${ns}/${key}:`, msg);
+    console.error(`[kv] server write FAILED for ${ns}/${key} after retries:`, msg);
+    // Park the payload in _failedWrites so (a) syncAllFromServer cannot
+    // overwrite the unsaved cache, and (b) the retry banner can re-fire it.
+    const prior = _failedWrites.get(storageKey);
+    _failedWrites.set(storageKey, {
+      value,
+      firstFailedAt: prior?.firstFailedAt ?? Date.now(),
+      lastError: msg,
+      attempts: (prior?.attempts ?? 0) + 1,
+    });
     // Dispatch a UI-visible event so components / toasts can react.
     // Fire-and-forget callers (setStored / setGlobal) listen for this event
     // to show a non-blocking warning; awaiting callers get the thrown error.
@@ -8689,9 +8816,26 @@ export function getAccounts(): Account[] {
 }
 
 function _saveAccounts(accounts: Account[]): void {
+  // ── Merge-guard ───────────────────────────────────────────────────────────
+  // Re-read the freshest in-memory cache and union in any accounts the caller
+  // doesn't know about.  This protects against two concurrent paths that each
+  // computed their `accounts` list from an earlier snapshot — e.g. createAccount
+  // A and createAccount B both reading getAccounts() before either save lands.
+  // Without this, the second call would write its own list and silently drop
+  // A.  "Ours wins" for shared ids reflects the caller's intent for the
+  // accounts they actually touched.
+  //
+  // Ordering of the resulting server writes is enforced separately by the
+  // per-key chain inside _apiWrite, so we no longer need a manual defer.
   const sk = tenantKey(COA_KEY);
-  _lsCache(sk, accounts);
-  _apiWrite(sk, accounts).catch(() => { /* handled via onesoft:write-error event */ });
+  const fresh: Account[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as Account[] : []; } catch { return []; }
+  })();
+  const ourIds = new Set(accounts.map(a => a.id));
+  const concurrent = fresh.filter(a => !ourIds.has(a.id));
+  const merged = concurrent.length > 0 ? [...accounts, ...concurrent] : accounts;
+  _lsCache(sk, merged);
+  _apiWrite(sk, merged).catch(() => { /* handled via onesoft:write-error event */ });
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -10927,6 +11071,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
         // deleted tenants to reappear, new tenants to vanish, and changed
         // passwords to be rejected on the next login.
         if ((_lastWriteCompletedAt.get(key) ?? 0) > globalGetStartedAt) continue;
+        // Guard 3 — failed write: the cache for this key holds data that was
+        // never persisted.  Overwriting it with the server's stale value
+        // would silently lose the user's change ("Owner 2 vanishes").  Skip
+        // until the user retries (or auto-retry succeeds and clears the flag).
+        if (_failedWrites.has(key)) continue;
         _lsCache(key, value);
       }
     } else {
@@ -10968,6 +11117,8 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
             if (_pendingWrites.has(fullKey)) continue;
             // Guard 2 — recently completed write (same ABA-race fix as above).
             if ((_lastWriteCompletedAt.get(fullKey) ?? 0) > tenantGetStartedAt) continue;
+            // Guard 3 — failed write: cache holds unsaved data; don't overwrite.
+            if (_failedWrites.has(fullKey)) continue;
             _lsCache(fullKey, value);
           }
         }

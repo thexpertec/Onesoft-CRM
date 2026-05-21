@@ -1,7 +1,8 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { useEffect, Component, lazy, Suspense } from "react";
 import type { ComponentType, LazyExoticComponent, ErrorInfo, ReactNode } from "react";
-import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs } from "@/lib/store";
+import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs, retryFailedWrites, hasFailedWrites } from "@/lib/store";
+import { ToastAction } from "@/components/ui/toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -237,18 +238,63 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const handler = (e: Event) => {
+    const errHandler = (e: Event) => {
       const detail = (e as CustomEvent<{ key: string; message: string }>).detail;
       toast({
-        title: "Save failed — please refresh",
-        description: `Could not save to server (${detail?.key ?? "unknown"}). Your recent change may be lost after refresh. Check your connection.`,
+        title: "Save failed — your change is held in memory",
+        description: `Could not save to server (${detail?.key ?? "unknown"}). The dashboard will not overwrite this unsaved data on refresh. Click Retry once your connection is back.`,
         variant: "destructive",
-        duration: 8000,
+        duration: 12000,
+        action: (
+          <ToastAction
+            altText="Retry save"
+            onClick={async () => {
+              const { success, failed } = await retryFailedWrites();
+              if (failed === 0 && success > 0) {
+                toast({ title: "Saved", description: `Recovered ${success} unsaved change(s).` });
+              } else if (failed > 0) {
+                toast({
+                  title: "Retry failed",
+                  description: `${success} succeeded, ${failed} still failing. Check API server.`,
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            Retry
+          </ToastAction>
+        ),
       });
     };
-    window.addEventListener("onesoft:write-error", handler);
-    return () => window.removeEventListener("onesoft:write-error", handler);
+    const recHandler = (e: Event) => {
+      const detail = (e as CustomEvent<{ key: string }>).detail;
+      if (!hasFailedWrites()) {
+        toast({
+          title: "Connection recovered",
+          description: `Server save succeeded (${detail?.key ?? "all changes"}). Your data is safe.`,
+          duration: 4000,
+        });
+      }
+    };
+    window.addEventListener("onesoft:write-error", errHandler);
+    window.addEventListener("onesoft:write-recovered", recHandler);
+    return () => {
+      window.removeEventListener("onesoft:write-error", errHandler);
+      window.removeEventListener("onesoft:write-recovered", recHandler);
+    };
   }, [toast]);
+
+  // Auto-retry failed writes every 15 s so transient outages self-heal
+  // without the user having to click Retry manually.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const id = window.setInterval(() => {
+      if (hasFailedWrites()) {
+        void retryFailedWrites();
+      }
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) return null;
   return <>{children}</>;
