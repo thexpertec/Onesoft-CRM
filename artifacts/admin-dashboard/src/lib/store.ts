@@ -292,6 +292,54 @@ export async function retryFailedWrites(): Promise<{ success: number; failed: nu
   return { success, failed };
 }
 
+/**
+ * Hard preconditions for any healer/backfill that rewrites existing data
+ * (relinks JE lines, recreates contact ledgers, posts back-dated JEs, …).
+ *
+ * Returns false when running the healer would risk one of the three things
+ * the user explicitly does not want:
+ *   • DATA LOSS    — writing a healed payload while a prior write is still
+ *                    failed would replace the unsaved cache on the next sync.
+ *   • MIXING       — running off an empty/partial cache (sync didn't finish)
+ *                    can attach a contact's new ledger under the wrong parent
+ *                    or remap a JE line to an unrelated account.
+ *   • UNKNOWN LEDGER — creating a child ledger when its system parent is
+ *                      missing from the COA produces a dangling reference
+ *                      that subsequent JEs would then point at.
+ *
+ * The required-parents list is the set of COA group accounts that healers
+ * actually attach NEW LEDGERS UNDER.  If any one is missing the local COA
+ * is provably incomplete and no healer may run.
+ *
+ * Defined BEFORE _apiWrite so callers can use it; the SYS_ACCS / getAccounts
+ * symbols it depends on are hoisted (const + function declarations).
+ */
+function _isSafeToHeal(): boolean {
+  // Block 1 — any failed write means _memRaw holds unsaved data.  Healers
+  // read-then-write, so they would re-serialize the unsaved data into a new
+  // write that is itself liable to fail or to be overwritten by sync.
+  if (hasFailedWrites()) return false;
+  // Block 2 — required system parents must exist.  These IDs come from
+  // SYSTEM_ACCOUNTS and are seeded unconditionally at the top of
+  // seedDefaultCoaAccounts; seeing them missing here means sync did not bring
+  // the COA down (network failure, cold start, partial response).
+  const accs = getAccounts();
+  if (accs.length < 10) return false;
+  const ids = new Set(accs.map(a => a.id));
+  const requiredParents = [
+    SYS_ACCS.AR_GROUP,          // sub-ledger parent for customers
+    SYS_ACCS.AP_TRADE,          // sub-ledger parent for suppliers
+    SYS_ACCS.CB_GROUP,          // sub-ledger parent for payment accounts
+    SYS_ACCS.SALARY_GROUP,      // sub-ledger parent for staff
+    SYS_ACCS.OWNERS_CAPITAL,    // sub-ledger parent for shareholders
+    SYS_ACCS.OPENING_BAL_EQUITY,// contra account for opening-balance JEs
+  ];
+  for (const id of requiredParents) {
+    if (!ids.has(id)) return false;
+  }
+  return true;
+}
+
 /** Classifies an error as transient (retryable) or permanent. */
 function _isRetryableWriteError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -3064,7 +3112,11 @@ export function generateProductSku(name: string): string {
  * to any product (or variant) that has an empty / missing SKU.
  * Safe to call multiple times — only writes if changes were actually needed.
  */
-export function backfillMissingSKUs(): void {
+export function backfillMissingSKUs(): boolean {
+  if (!_isSafeToHeal()) {
+    console.warn("[backfillMissingSKUs] Skipped — cache unsafe (failed writes or partial COA load).");
+    return false;
+  }
   // ── Step 1: ensure every product (and variant) has a SKU ─────────────────
   const products = getProducts();
   let prodChanged = false;
@@ -3108,6 +3160,7 @@ export function backfillMissingSKUs(): void {
     }
   }
   if (stockChanged) setStored(STOCK_KEY, stocks);
+  return true;
 }
 
 /**
@@ -3116,7 +3169,11 @@ export function backfillMissingSKUs(): void {
  * post the opening-balance JE automatically.
  * Safe to call multiple times — skips any customer whose OB JE already exists.
  */
-export function backfillOpeningBalanceJEs(): void {
+export function backfillOpeningBalanceJEs(): boolean {
+  if (!_isSafeToHeal()) {
+    console.warn("[backfillOpeningBalanceJEs] Skipped — cache unsafe (failed writes or partial COA load).");
+    return false;
+  }
   const customers = getCustomers();
   const allJEs    = getJournalEntries();
   for (const c of customers) {
@@ -3133,6 +3190,7 @@ export function backfillOpeningBalanceJEs(): void {
     const obDate = c.customerSince ?? c.createdAt.slice(0, 10);
     _upsertOpeningBalanceJE(c.ledgerAccountId, isSupplier, c.openingBalance, obDate, displayName);
   }
+  return true;
 }
 
 /**
@@ -3208,7 +3266,11 @@ export function deduplicateOpeningBalanceJEs(): void {
  * instead of the customer's AR sub-ledger.  Re-routes the debit to AR.
  * Safe to call multiple times — skips sales whose JE already debits an AR account.
  */
-export function backfillPOSCreditSaleJEs(): void {
+export function backfillPOSCreditSaleJEs(): boolean {
+  if (!_isSafeToHeal()) {
+    console.warn("[backfillPOSCreditSaleJEs] Skipped — cache unsafe (failed writes or partial COA load).");
+    return false;
+  }
   const customers = getCustomers();
   const allProducts = getProducts();
 
@@ -3318,6 +3380,7 @@ export function backfillPOSCreditSaleJEs(): void {
     updatedLines[debitLineIdx] = { ...debitLine, ledgerId: arLedgerId };
     updateJournalEntry(je.id, { lines: updatedLines });
   }
+  return true;
 }
 
 /**
@@ -7328,6 +7391,43 @@ export function seedDefaultCoaAccounts(): void {
 
   let workingAccounts = [...existing, ...toAdd];
   let staticChanged = toAdd.length > 0;
+
+  // ── Commit the newly-seeded system accounts to cache IMMEDIATELY ─────────────
+  // Subsequent healers call getAccounts() to check whether their required system
+  // parents exist (_isSafeToHeal). If we don't flush the seed step here, the
+  // safety gate would see the pre-seed cache and refuse to heal on a brand-new
+  // tenant — even though we just seeded the parents it's checking for.
+  if (staticChanged) {
+    _lsCache(tenantKey(COA_KEY), workingAccounts);
+  }
+
+  // ── MASTER SAFETY GATE for every block below this line ───────────────────────
+  // Everything from here on (paymentType fix, m02–m14 structural migrations,
+  // dynamic category/contact/PA/staff ledger syncs, orphan-JE healers, …)
+  // mutates EXISTING data. They must NEVER run when the local cache cannot
+  // be trusted, otherwise they will:
+  //   • overwrite unsaved records when a prior write is still failed
+  //   • create duplicate contact ledgers because the COA looks empty
+  //   • remap JE lines to the wrong account because the lookup table is partial
+  //   • leave dangling "unknown ledger" references in posted JEs
+  //
+  // When unsafe: persist just the seed-step additions (idempotent — only adds
+  // missing system accounts, never modifies existing ones) and return. The
+  // healers will get their chance on the next login, once the cache is safe.
+  if (!_isSafeToHeal()) {
+    if (staticChanged) {
+      const sk = tenantKey(COA_KEY);
+      _lsSet(sk, workingAccounts);
+      _apiWrite(sk, workingAccounts).catch(() => { /* handled via onesoft:write-error event */ });
+    }
+    if (migrationsChanged) _saveCoaMigrations(done);
+    console.warn(
+      "[COA] Skipping healers/migrations — cache is unsafe " +
+      `(failedWrites=${hasFailedWrites()}, accounts=${getAccounts().length}). ` +
+      "Will retry on next login.",
+    );
+    return;
+  }
 
   // ── Always: fix paymentType for system liability ledgers stored as null ───────
   // Older versions created SALARY_PAYABLE and AP_GENERAL with paymentType: null,

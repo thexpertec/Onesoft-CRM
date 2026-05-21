@@ -1,5 +1,5 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { useEffect, Component, lazy, Suspense } from "react";
+import { useEffect, useRef, Component, lazy, Suspense } from "react";
 import type { ComponentType, LazyExoticComponent, ErrorInfo, ReactNode } from "react";
 import { backfillMissingSKUs, backfillOpeningBalanceJEs, backfillPOSCreditSaleJEs, retryFailedWrites, hasFailedWrites } from "@/lib/store";
 import { ToastAction } from "@/components/ui/toast";
@@ -219,7 +219,7 @@ function PurchasesRedirect() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, currentTenantId } = useAuth();
   const [location, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -229,13 +229,32 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated]);
 
+  // Run one-time backfills on login. Each backfill self-skips when the cache is
+  // unsafe (failed writes or partial COA load) — see _isSafeToHeal() in store.ts.
+  // _backfillsDoneRef ensures we don't loop them once they have completed.
+  const _backfillsDoneRef = useRef(false);
+  const runBackfillsIfSafe = () => {
+    if (_backfillsDoneRef.current) return;
+    // Each backfill returns true only if its _isSafeToHeal() guard passed AND
+    // it executed (or no-op'd because data was already clean).  It returns
+    // false when skipped due to unsafe cache (failed writes OR partial COA).
+    const r1 = backfillMissingSKUs();
+    const r2 = backfillOpeningBalanceJEs();
+    const r3 = backfillPOSCreditSaleJEs();
+    // Mark done ONLY when all three backfills actually ran AND no new failed
+    // writes were generated during the run.  If any was skipped-unsafe, we
+    // leave the ref false so the recovered/interval triggers will retry.
+    if (r1 && r2 && r3 && !hasFailedWrites()) _backfillsDoneRef.current = true;
+  };
   useEffect(() => {
     if (isAuthenticated) {
-      backfillMissingSKUs();
-      backfillOpeningBalanceJEs();
-      backfillPOSCreditSaleJEs();
+      // Reset on login AND on tenant context change (superadmin "switch to"
+      // tenant view, exit-impersonation, etc.). Each tenant has its own
+      // KV namespace, so backfills must be re-evaluated per tenant.
+      _backfillsDoneRef.current = false;
+      runBackfillsIfSafe();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentTenantId]);
 
   useEffect(() => {
     const errHandler = (e: Event) => {
@@ -274,6 +293,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
           description: `Server save succeeded (${detail?.key ?? "all changes"}). Your data is safe.`,
           duration: 4000,
         });
+        // Now that the cache is safe again, retry any one-time backfills that
+        // were skipped earlier by their _isSafeToHeal() guard.
+        runBackfillsIfSafe();
       }
     };
     window.addEventListener("onesoft:write-error", errHandler);
@@ -291,6 +313,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     const id = window.setInterval(() => {
       if (hasFailedWrites()) {
         void retryFailedWrites();
+      } else {
+        // Cache is currently safe — opportunistically retry any backfills that
+        // were skipped on an earlier unsafe pass.
+        runBackfillsIfSafe();
       }
     }, 15_000);
     return () => window.clearInterval(id);
