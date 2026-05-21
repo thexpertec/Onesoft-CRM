@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty, generateEan13 } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
 import BarcodeScanner from "@/components/barcode-scanner";
+import { SelectCombobox } from "@/components/select-combobox";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Package, Plus, Search, X, Save, Trash2, Link as LinkIcon, Camera, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, ChevronDown, RefreshCw, FileDown, Eye, ShoppingCart, ReceiptText, Boxes, TrendingUp, TrendingDown, Minus, GripVertical, Columns3, ScanLine, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, BadgeAlert, Wallet, BarChart2, Tag, PackageX, PackageCheck, Pencil, Printer, MoreHorizontal } from "lucide-react";
@@ -1565,68 +1566,56 @@ export default function ProductsPage() {
         {(allCategories.length > 0 || allBrands.length > 0 || allConditions.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
             {allCategories.length > 0 && (
-              <div className="relative">
-                <select
-                  value={filterCategory}
-                  onChange={e => { setFilterCategory(e.target.value); setFilterSubcategory(""); }}
-                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
-                    ${filterCategory
-                      ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
-                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
-                >
-                  <option value="">All Categories</option>
-                  {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-              </div>
+              <SelectCombobox
+                value={filterCategory}
+                onChange={v => { setFilterCategory(v); setFilterSubcategory(""); }}
+                options={[{ value: "", label: "All Categories" }, ...allCategories.map(c => ({ value: c, label: c }))]}
+                placeholder="All Categories"
+                className="w-44"
+                inputClassName={`h-8 w-full px-2.5 rounded-lg border text-[12px] font-medium outline-none transition-all
+                  ${filterCategory
+                    ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
+                    : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+              />
             )}
             {allSubcategories.length > 0 && (
-              <div className="relative">
-                <select
-                  value={filterSubcategory}
-                  onChange={e => setFilterSubcategory(e.target.value)}
-                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
-                    ${filterSubcategory
-                      ? "border-violet-400 dark:border-violet-500 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300"
-                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
-                >
-                  <option value="">All Subcategories</option>
-                  {allSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-              </div>
+              <SelectCombobox
+                value={filterSubcategory}
+                onChange={setFilterSubcategory}
+                options={[{ value: "", label: "All Subcategories" }, ...allSubcategories.map(s => ({ value: s, label: s }))]}
+                placeholder="All Subcategories"
+                className="w-44"
+                inputClassName={`h-8 w-full px-2.5 rounded-lg border text-[12px] font-medium outline-none transition-all
+                  ${filterSubcategory
+                    ? "border-violet-400 dark:border-violet-500 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300"
+                    : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+              />
             )}
             {allBrands.length > 0 && (
-              <div className="relative">
-                <select
-                  value={filterBrand}
-                  onChange={e => setFilterBrand(e.target.value)}
-                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
-                    ${filterBrand
-                      ? "border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300"
-                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
-                >
-                  <option value="">All Brands</option>
-                  {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-              </div>
+              <SelectCombobox
+                value={filterBrand}
+                onChange={setFilterBrand}
+                options={[{ value: "", label: "All Brands" }, ...allBrands.map(b => ({ value: b, label: b }))]}
+                placeholder="All Brands"
+                className="w-44"
+                inputClassName={`h-8 w-full px-2.5 rounded-lg border text-[12px] font-medium outline-none transition-all
+                  ${filterBrand
+                    ? "border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300"
+                    : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+              />
             )}
             {allConditions.length > 0 && (
-              <div className="relative">
-                <select
-                  value={filterCondition}
-                  onChange={e => setFilterCondition(e.target.value)}
-                  className={`h-8 pl-2.5 pr-7 rounded-lg border text-[12px] font-medium appearance-none cursor-pointer transition-all outline-none
-                    ${filterCondition
-                      ? "border-teal-400 dark:border-teal-500 bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300"
-                      : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
-                >
-                  <option value="">All Conditions</option>
-                  {allConditions.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-              </div>
+              <SelectCombobox
+                value={filterCondition}
+                onChange={setFilterCondition}
+                options={[{ value: "", label: "All Conditions" }, ...allConditions.map(c => ({ value: c, label: c }))]}
+                placeholder="All Conditions"
+                className="w-40"
+                inputClassName={`h-8 w-full px-2.5 rounded-lg border text-[12px] font-medium outline-none transition-all
+                  ${filterCondition
+                    ? "border-teal-400 dark:border-teal-500 bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300"
+                    : "border-gray-200 dark:border-border bg-white dark:bg-card text-muted-foreground hover:border-gray-300 dark:hover:border-muted-foreground/40"}`}
+              />
             )}
             {(filterCategory || filterSubcategory || filterBrand || filterCondition) && (
               <button

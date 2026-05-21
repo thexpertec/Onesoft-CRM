@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SelectCombobox } from "@/components/select-combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -1323,16 +1324,17 @@ function PayDialog({
             {paymentAccounts.length === 0 ? (
               <p className="text-[12px] text-destructive">No payment accounts configured. Add one in Payment Accounts.</p>
             ) : (
-              <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {paymentAccounts.map(a => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.accountTitle} ({a.paymentMethod})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectCombobox
+                value={accountId}
+                onChange={setAccountId}
+                options={paymentAccounts.map(a => ({
+                  value: a.id,
+                  label: `${a.accountTitle} (${a.paymentMethod})`,
+                  sub: a.paymentMethod,
+                }))}
+                placeholder="Select account…"
+                inputClassName="h-9 w-full px-3 text-[13px] rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             )}
           </div>
 
@@ -1469,17 +1471,17 @@ function GenerateForStaffDialog({
                 All active staff already have slips for {periodLabel(period)}.
               </p>
             ) : (
-              <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-                <SelectTrigger className="h-8 text-[13px]"><SelectValue placeholder="Select staff…" /></SelectTrigger>
-                <SelectContent>
-                  {activeStaffWithoutSlip.map(s => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                      {s.designation && <span className="text-muted-foreground ml-1.5 text-[11px]">({s.designation})</span>}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectCombobox
+                value={selectedStaffId}
+                onChange={setSelectedStaffId}
+                options={activeStaffWithoutSlip.map(s => ({
+                  value: s.id,
+                  label: s.name,
+                  sub: s.designation || undefined,
+                }))}
+                placeholder="Select staff…"
+                inputClassName="h-8 w-full px-3 text-[13px] rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             )}
             {matchingTemplate && (
               <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">

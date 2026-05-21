@@ -27,6 +27,7 @@ import {
 } from "@/lib/store";
 import { getSettingsCurrencySymbol, getSettingsDecimalPlaces } from "@/lib/currencies";
 import { Combobox, ComboOption } from "@/components/combobox";
+import { SelectCombobox } from "@/components/select-combobox";
 import RichTextEditor from "@/components/RichTextEditor";
 import { printFullInvoice } from "@/lib/print-invoice-full";
 import { useToast } from "@/hooks/use-toast";
@@ -1161,13 +1162,19 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                   return (
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Sales Agent</label>
-                      <select value={form.agentId || ""} onChange={e => {
-                        const agent = agents.find(a => a.id === e.target.value);
-                        setF("agentId", agent?.id || ""); setF("agentName", agent?.name || "");
-                      }} className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="">— None —</option>
-                        {agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.agentCode})</option>)}
-                      </select>
+                      <SelectCombobox
+                        value={form.agentId || ""}
+                        onChange={v => {
+                          const agent = agents.find(a => a.id === v);
+                          setF("agentId", agent?.id || ""); setF("agentName", agent?.name || "");
+                        }}
+                        options={[
+                          { value: "", label: "— None —" },
+                          ...agents.map(a => ({ value: a.id, label: `${a.name} (${a.agentCode})`, sub: a.agentCode })),
+                        ]}
+                        placeholder="Search agent…"
+                        inputClassName="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
                     </div>
                   );
                 })()}

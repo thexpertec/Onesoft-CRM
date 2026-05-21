@@ -33,6 +33,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EditableCell, ExcelGridShell, ColDef, CELL_H, NEW_ROW_ID, NEW_ROW_BG } from "@/components/editable-cell";
 import { Combobox, ComboOption } from "@/components/combobox";
+import { SelectCombobox } from "@/components/select-combobox";
 import { getSettingsCurrencySymbol, fmtMoney, getSettingsDecimalPlaces } from "@/lib/currencies";
 
 const dp = getSettingsDecimalPlaces();
@@ -3561,11 +3562,13 @@ export default function SalesPage() {
               <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <MapPin size={10} className="text-violet-500" /> Area (Agent)
               </label>
-              <select value={filterArea} onChange={e => setFilterArea(e.target.value)}
-                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                <option value="">All Areas</option>
-                {agentAreaOpts.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <SelectCombobox
+                value={filterArea}
+                onChange={setFilterArea}
+                options={[{ value: "", label: "All Areas" }, ...agentAreaOpts.map(a => ({ value: a, label: a }))]}
+                placeholder="All Areas"
+                inputClassName="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
             </div>
 
             {/* Customer */}
@@ -3573,11 +3576,13 @@ export default function SalesPage() {
               <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <UserCheck size={10} className="text-emerald-500" /> Customer
               </label>
-              <select value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)}
-                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                <option value="">All Customers</option>
-                {customerOpts.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <SelectCombobox
+                value={filterCustomer}
+                onChange={setFilterCustomer}
+                options={[{ value: "", label: "All Customers" }, ...customerOpts.map(c => ({ value: c, label: c }))]}
+                placeholder="All Customers"
+                inputClassName="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
             </div>
 
             {/* Sales Agent */}
@@ -3585,11 +3590,16 @@ export default function SalesPage() {
               <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <Users2 size={10} className="text-blue-500" /> Sales Agent
               </label>
-              <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)}
-                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                <option value="">All Agents</option>
-                {agentOpts.map(a => <option key={a.id} value={a.name}>{a.name} ({a.code})</option>)}
-              </select>
+              <SelectCombobox
+                value={filterAgent}
+                onChange={setFilterAgent}
+                options={[
+                  { value: "", label: "All Agents" },
+                  ...agentOpts.map(a => ({ value: a.name, label: `${a.name} (${a.code})`, sub: a.code })),
+                ]}
+                placeholder="All Agents"
+                inputClassName="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
             </div>
 
             {/* Payment Mode */}
@@ -3597,16 +3607,21 @@ export default function SalesPage() {
               <label className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                 <Wallet size={10} className="text-amber-500" /> Payment Mode
               </label>
-              <select value={filterPayMode} onChange={e => setFilterPayMode(e.target.value)}
-                className="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                <option value="">All Modes</option>
-                {(() => {
-                  // Combine COA Cash & Bank ledger names with any payment methods already on existing sales
-                  const coaNames = getCashBankLedgers().map(a => a.name);
-                  const inData   = [...new Set(rows.map(s => s.paymentMethod).filter(Boolean))];
-                  return [...new Set([...coaNames, ...inData])].map(p => <option key={p} value={p}>{p}</option>);
-                })()}
-              </select>
+              {(() => {
+                // Combine COA Cash & Bank ledger names with any payment methods already on existing sales
+                const coaNames = getCashBankLedgers().map(a => a.name);
+                const inData   = [...new Set(rows.map(s => s.paymentMethod).filter(Boolean))];
+                const modes    = [...new Set([...coaNames, ...inData])];
+                return (
+                  <SelectCombobox
+                    value={filterPayMode}
+                    onChange={setFilterPayMode}
+                    options={[{ value: "", label: "All Modes" }, ...modes.map(p => ({ value: p, label: p }))]}
+                    placeholder="All Modes"
+                    inputClassName="w-full h-8 text-[12px] px-2.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                );
+              })()}
             </div>
 
             {/* Payment Status */}

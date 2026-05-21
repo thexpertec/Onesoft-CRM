@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SelectCombobox } from "@/components/select-combobox";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -1232,20 +1233,20 @@ export default function ManufacturingPage() {
                           <tr key={inp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/20" : ""}`}>
                             <td className="px-3 py-2">
                               {rms.length > 0 ? (
-                                <Select value={inp.rmId || ""} onValueChange={v => {
-                                  const r = rms.find(x => x.id === v);
-                                  if (r) updInput(inp.id, { rmId: r.id, rmName: r.name, unit: r.unit });
-                                }}>
-                                  <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select material…" /></SelectTrigger>
-                                  <SelectContent>
-                                    {rms.map(r => (
-                                      <SelectItem key={r.id} value={r.id}>
-                                        <span className="font-medium">{r.name}</span>
-                                        <span className="text-muted-foreground ml-2 text-[11px]">{r.rmCode} · Stock: {r.currentStock} {r.unit}</span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <SelectCombobox
+                                  value={inp.rmId || ""}
+                                  onChange={v => {
+                                    const r = rms.find(x => x.id === v);
+                                    if (r) updInput(inp.id, { rmId: r.id, rmName: r.name, unit: r.unit });
+                                  }}
+                                  options={rms.map(r => ({
+                                    value: r.id,
+                                    label: r.name,
+                                    sub: `${r.rmCode} · Stock: ${r.currentStock} ${r.unit}`,
+                                  }))}
+                                  placeholder="Select material…"
+                                  inputClassName="h-10 w-full px-3 text-[13px] rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
                               ) : (
                                 // No raw materials defined — free-text rows can't deduct from stock
                                 // and break cost tracking on completion, so the field is locked.
@@ -1402,21 +1403,21 @@ export default function ManufacturingPage() {
                     {/* Product selector */}
                     <div className="px-3 py-2">
                       {products.length > 0 ? (
-                        <Select value={form.mainOutput.productId || ""} onValueChange={v => {
-                          const p = products.find(x => x.id === v);
-                          if (p) updMainOutput({ productId: p.id, productName: p.name, unit: p.unit });
-                          else   updMainOutput({ productId: v });
-                        }}>
-                          <SelectTrigger className="h-10 text-[13px] border-0 shadow-none focus:ring-0 px-0"><SelectValue placeholder="Select main product…" /></SelectTrigger>
-                          <SelectContent>
-                            {products.map(p => (
-                              <SelectItem key={p.id} value={p.id}>
-                                <span className="font-medium">{p.name}</span>
-                                <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SelectCombobox
+                          value={form.mainOutput.productId || ""}
+                          onChange={v => {
+                            const p = products.find(x => x.id === v);
+                            if (p) updMainOutput({ productId: p.id, productName: p.name, unit: p.unit });
+                            else   updMainOutput({ productId: v });
+                          }}
+                          options={products.map(p => ({
+                            value: p.id,
+                            label: p.name,
+                            sub: p.sku,
+                          }))}
+                          placeholder="Select main product…"
+                          inputClassName="h-10 w-full px-0 text-[13px] bg-transparent border-0 shadow-none focus:outline-none focus:ring-0"
+                        />
                       ) : (
                         <Input value={form.mainOutput.productName} onChange={e => updMainOutput({ productName: e.target.value })}
                           placeholder="Product name" className="h-10 text-[13px]" />
@@ -1503,21 +1504,21 @@ export default function ManufacturingPage() {
                             <tr key={bp.id} className={`border-b last:border-0 ${idx % 2 !== 0 ? "bg-muted/10" : ""}`}>
                               <td className="px-3 py-1.5">
                                 {products.length > 0 ? (
-                                  <Select value={bp.productId || ""} onValueChange={v => {
-                                    const p = products.find(x => x.id === v);
-                                    if (p) updByProduct(bp.id, { productId: p.id, productName: p.name, unit: p.unit });
-                                    else   updByProduct(bp.id, { productId: v });
-                                  }}>
-                                    <SelectTrigger className="h-9 text-[12px]"><SelectValue placeholder="Select product…" /></SelectTrigger>
-                                    <SelectContent>
-                                      {products.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>
-                                          <span className="font-medium">{p.name}</span>
-                                          <span className="text-muted-foreground ml-2 text-[11px]">{p.sku}</span>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                  <SelectCombobox
+                                    value={bp.productId || ""}
+                                    onChange={v => {
+                                      const p = products.find(x => x.id === v);
+                                      if (p) updByProduct(bp.id, { productId: p.id, productName: p.name, unit: p.unit });
+                                      else   updByProduct(bp.id, { productId: v });
+                                    }}
+                                    options={products.map(p => ({
+                                      value: p.id,
+                                      label: p.name,
+                                      sub: p.sku,
+                                    }))}
+                                    placeholder="Select product…"
+                                    inputClassName="h-9 w-full px-3 text-[12px] rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                  />
                                 ) : (
                                   <Input value={bp.productName} onChange={e => updByProduct(bp.id, { productName: e.target.value })}
                                     placeholder="Product name" className="h-9 text-[12px]" />
