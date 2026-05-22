@@ -5441,13 +5441,14 @@ const LEDGER_KEY = "admin-stock-ledger";
  * the design rationale; stock-ledger rows are immutable so the diff is
  * id-set only (no field comparison).
  *
- * Caveat: `_flushLedger` runs in a microtask after `batchLedger` queues.
- * If tenant switches in that window, `tenantKey(LEDGER_KEY)` resolves to
- * the NEW tenant — both the `setStored` write and the REST POST would
- * land under the wrong scope. This is a pre-existing race in the ledger
- * coalescer (independent of the migration); fixing it requires tagging
- * pending entries with originTenant and partitioning the flush. Tracked
- * separately — out of scope for Batch 4b's "mirror every write" goal.
+ * Tenant-switch safety: the upstream `_flushLedger` coalescer pins the
+ * origin tenant at the first `batchLedger` queue of each tick and aborts
+ * the flush (with a warning) if `_activeTenantId` differs at drain time.
+ * That guard makes the chokepoint here safe — by the time `_saveStockLedger`
+ * runs from the coalescer, `_activeTenantId` is guaranteed to match the
+ * tenant that produced the entries. Direct callers of `_saveStockLedger`
+ * (sed-replaced `setStored(LEDGER_KEY,…)` sites) execute synchronously
+ * within the same tenant context, so the same invariant holds.
  */
 function _saveStockLedger(entries: StockLedgerEntry[]): void {
   const sk = tenantKey(LEDGER_KEY);
@@ -5664,12 +5665,34 @@ export function deduplicateSaleEntries(): { removedEntries: number; fixedItems: 
 // (so the rest of the codebase keeps its read-after-write guarantee).
 let _pendingLedger: StockLedgerEntry[] = [];
 let _ledgerFlushScheduled = false;
+// Tenant captured synchronously at the first `batchLedger` call of the tick.
+// Used by `_flushLedger` to abort if `_activeTenantId` has switched between
+// queue and flush — otherwise the drained entries (which logically belong to
+// the original tenant) would be written under the NEW tenant's KV scope and
+// REST relational rows. See `_saveStockLedger` for the related guard at the
+// chokepoint level.
+let _pendingLedgerOriginTenant: string | null = null;
 
 function _flushLedger() {
   _ledgerFlushScheduled = false;
   if (_pendingLedger.length === 0) return;
+  const origin = _pendingLedgerOriginTenant;
+  if (origin !== _activeTenantId) {
+    // Tenant switched mid-tick. Discarding rather than misattributing — the
+    // logical operation that queued these entries (a sale finalisation, a
+    // PO receipt, etc.) ran against the old tenant context but cannot be
+    // safely persisted now. In practice users do not switch tenants in the
+    // middle of a transactional flow; this guard is defence-in-depth.
+    console.warn(
+      `[stock-ledger] dropping ${_pendingLedger.length} pending entries — tenant switched from ${origin ?? "none"} to ${_activeTenantId ?? "none"} between queue and flush`,
+    );
+    _pendingLedger = [];
+    _pendingLedgerOriginTenant = null;
+    return;
+  }
   const drained = _pendingLedger;
   _pendingLedger = [];
+  _pendingLedgerOriginTenant = null;
   // Re-read latest at write time so cross-tab appends are not overwritten.
   const latest = getStored<StockLedgerEntry>(LEDGER_KEY);
   _saveStockLedger([...latest, ...drained]);
@@ -5679,6 +5702,10 @@ function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
   if (entries.length === 0) return;
   const now = new Date().toISOString();
   const full: StockLedgerEntry[] = entries.map(e => ({ ...e, id: crypto.randomUUID(), createdAt: now }));
+  if (_pendingLedger.length === 0) {
+    // First entry of this tick — pin the origin tenant.
+    _pendingLedgerOriginTenant = _activeTenantId;
+  }
   _pendingLedger.push(...full);
   if (!_ledgerFlushScheduled) {
     _ledgerFlushScheduled = true;
