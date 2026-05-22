@@ -101,6 +101,7 @@ export interface MigrateResult {
   saleReturns:       MigrateSection;
   purchaseReturns:   MigrateSection;
   rpVouchers:        MigrateSection;
+  staff:             MigrateSection;
 }
 
 interface FrontendProduct {
@@ -216,6 +217,7 @@ export async function migrateTenant(
     saleReturns:       { found: 0, inserted: 0, skipped: 0, errors: [] },
     purchaseReturns:   { found: 0, inserted: 0, skipped: 0, errors: [] },
     rpVouchers:        { found: 0, inserted: 0, skipped: 0, errors: [] },
+    staff:             { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1686,6 +1688,140 @@ export async function migrateTenant(
     } catch (err) {
       result.rpVouchers.errors.push(
         `RP Voucher ${v.id} (${v.voucherNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 15. Staff ──────────────────────────────────────────────────────────────
+  // Mirrors the live staff table (drift-corrected). KV key `admin-hrm-staff`.
+  // ledger_account_id / staff_payable_ledger_id FK into accounts(id, tenant_id)?
+  // — the live table uses a single-column FK to accounts(id), so we follow that
+  // convention here. Missing ledger refs are stored as NULL and the FK is
+  // SET NULL on delete.
+  type IncomingStaff = {
+    id: string; name: string;
+    fatherName?: string;
+    department?: string; designation?: string; role?: string;
+    status?: string; email?: string; phone?: string;
+    joinDate?: string; leavingDate?: string; notes?: string;
+    openingBalance?: unknown;
+    salaryType?: string;
+    basicSalary?: unknown; allowances?: unknown; deductions?: unknown;
+    bankName?: string; accountNumber?: string;
+    username?: string; passwordHash?: string; loginEnabled?: boolean;
+    ledgerAccountId?: string; staffPayableLedgerId?: string;
+    createdAt?: string; updatedAt?: string;
+  };
+
+  const rawStaff = await readKv(tenantId, "admin-hrm-staff");
+  const staffList: IncomingStaff[] = Array.isArray(rawStaff) ? (rawStaff as IncomingStaff[]) : [];
+  result.staff.found = staffList.length;
+
+  const toNumOrNull = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v));
+    return isFinite(n) ? n : null;
+  };
+  const toNumOrZero = (v: unknown): number => toNumOrNull(v) ?? 0;
+  const toDateOrNull = (v: unknown): string | null => {
+    if (typeof v !== "string" || !v) return null;
+    // Accept either YYYY-MM-DD or full ISO; return YYYY-MM-DD slice.
+    return v.length >= 10 ? v.slice(0, 10) : null;
+  };
+
+  for (const s of staffList) {
+    try {
+      if (!s.id || !s.name) {
+        result.staff.errors.push(
+          `Staff ${s.id ?? "(no id)"}: missing required field (id or name) — skipped`,
+        );
+        result.staff.skipped++;
+        continue;
+      }
+      const joinDate = toDateOrNull(s.joinDate);
+      if (!joinDate) {
+        result.staff.errors.push(
+          `Staff ${s.id} (${s.name}): joinDate is required (got "${s.joinDate ?? ""}") — skipped`,
+        );
+        result.staff.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM staff WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [s.id, tenantId],
+      );
+      if (existing.length > 0) { result.staff.skipped++; continue; }
+      if (dryRun) { result.staff.inserted++; continue; }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const ins = await client.query(
+          `INSERT INTO staff
+            (id, tenant_id, name, father_name, department, designation, role, status,
+             email, phone, join_date, leaving_date, notes,
+             opening_balance, salary_type, basic_salary, allowances, deductions,
+             bank_name, account_number, username, password_hash, login_enabled,
+             ledger_account_id, staff_payable_ledger_id,
+             created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+           ON CONFLICT (id) DO NOTHING
+           RETURNING id`,
+          [
+            s.id, tenantId, s.name,
+            s.fatherName ?? null,
+            s.department ?? "", s.designation ?? "", s.role ?? "",
+            s.status ?? "active",
+            s.email ?? "", s.phone ?? "",
+            joinDate, toDateOrNull(s.leavingDate),
+            s.notes ?? "",
+            toNumOrZero(s.openingBalance),
+            s.salaryType ?? null,
+            toNumOrNull(s.basicSalary), toNumOrNull(s.allowances), toNumOrNull(s.deductions),
+            s.bankName ?? null, s.accountNumber ?? null,
+            s.username ?? null, s.passwordHash ?? null,
+            Boolean(s.loginEnabled),
+            s.ledgerAccountId ?? null, s.staffPayableLedgerId ?? null,
+            s.createdAt ? new Date(s.createdAt) : new Date(),
+            s.updatedAt ? new Date(s.updatedAt) : new Date(),
+          ],
+        );
+        // Cross-tenant id collision: the pre-check is scoped by (id, tenant_id)
+        // but staff.id is globally unique (single-column PK), so a different
+        // tenant may already own this id. ON CONFLICT swallows it silently —
+        // count + audit only when we actually inserted (rowCount > 0).
+        if ((ins.rowCount ?? 0) > 0) {
+          await client.query(
+            `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+             VALUES ($1,$2,'migrate','staff',$3,'create',NULL,$4)`,
+            [
+              randomUUID(), tenantId, s.id,
+              JSON.stringify({
+                name: s.name, designation: s.designation ?? "",
+                role: s.role ?? "", status: s.status ?? "active",
+                ledgerAccountId: s.ledgerAccountId ?? null,
+                staffPayableLedgerId: s.staffPayableLedgerId ?? null,
+              }),
+            ],
+          );
+          await client.query("COMMIT");
+          result.staff.inserted++;
+        } else {
+          await client.query("ROLLBACK");
+          result.staff.skipped++;
+          result.staff.errors.push(
+            `Staff ${s.id} (${s.name}): id already exists in another tenant — skipped (staff.id is globally unique)`,
+          );
+        }
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.staff.errors.push(
+        `Staff ${s.id} (${s.name}): ${(err as Error).message}`,
       );
     }
   }

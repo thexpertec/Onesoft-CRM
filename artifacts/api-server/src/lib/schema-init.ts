@@ -53,6 +53,12 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS accounts_tenant_idx ON accounts (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS accounts_code_idx   ON accounts (tenant_id, code)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS accounts_code_uniq ON accounts (tenant_id, code)`,
+  // accounts.id is globally unique across tenants (UUIDs / sys-* literals) —
+  // required so single-column FKs (e.g. staff.ledger_account_id → accounts(id))
+  // have a valid FK target. The composite PK guarantees per-tenant uniqueness;
+  // this index extends that to global uniqueness on `id` alone (matches the
+  // live production schema where `accounts_pkey` is on `id`).
+  `CREATE UNIQUE INDEX IF NOT EXISTS accounts_id_uniq ON accounts (id)`,
 
   // ── Journal entries ──────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS journal_entries (
@@ -106,19 +112,47 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS customers_tenant_idx ON customers (tenant_id)`,
 
   // ── Staff ────────────────────────────────────────────────────────────────────
+  // NOTE: This table is the source of truth for HRM staff. It predates the
+  // composite-PK convention used by later tables (sales/invoices/returns/RP
+  // vouchers); kept on a single-column PK because staff records carry
+  // outgoing FKs into `accounts` (per-staff salary & payable ledgers), and
+  // also act as a parent for future relations (attendance, salary slips).
+  // Columns mirror the live production table exactly — prior versions of
+  // this DDL drifted, so the canonical column set is enumerated below.
   `CREATE TABLE IF NOT EXISTS staff (
-    id          TEXT        NOT NULL,
-    tenant_id   TEXT        NOT NULL,
-    name        TEXT        NOT NULL,
-    email       TEXT,
-    phone       TEXT,
-    role        TEXT,
-    status      TEXT        NOT NULL DEFAULT 'active',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (id, tenant_id)
+    id                       TEXT        NOT NULL PRIMARY KEY,
+    tenant_id                TEXT        NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+    name                     TEXT        NOT NULL,
+    father_name              TEXT,
+    department               TEXT        NOT NULL DEFAULT '',
+    designation              TEXT        NOT NULL DEFAULT '',
+    role                     TEXT        NOT NULL DEFAULT '',
+    status                   TEXT        NOT NULL DEFAULT 'active',
+    email                    TEXT        NOT NULL DEFAULT '',
+    phone                    TEXT        NOT NULL DEFAULT '',
+    join_date                DATE        NOT NULL,
+    leaving_date             DATE,
+    notes                    TEXT        NOT NULL DEFAULT '',
+    opening_balance          NUMERIC(20,6) NOT NULL DEFAULT 0,
+    salary_type              TEXT,
+    basic_salary             NUMERIC(20,6),
+    allowances               NUMERIC(20,6),
+    deductions               NUMERIC(20,6),
+    bank_name                TEXT,
+    account_number           TEXT,
+    username                 TEXT,
+    password_hash            TEXT,
+    login_enabled            BOOLEAN     NOT NULL DEFAULT FALSE,
+    ledger_account_id        TEXT        REFERENCES accounts(id) ON DELETE SET NULL,
+    staff_payable_ledger_id  TEXT        REFERENCES accounts(id) ON DELETE SET NULL,
+    archived_at              TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
-  `CREATE INDEX IF NOT EXISTS staff_tenant_idx ON staff (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS staff_tenant_idx          ON staff (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS staff_tenant_ledger_idx   ON staff (tenant_id, ledger_account_id)`,
+  `CREATE INDEX IF NOT EXISTS staff_tenant_payable_idx  ON staff (tenant_id, staff_payable_ledger_id)`,
+  `CREATE INDEX IF NOT EXISTS staff_tenant_status_idx   ON staff (tenant_id, status, archived_at)`,
 
   // ── Products ─────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS products (

@@ -21,6 +21,7 @@ export interface MigrationCounts {
   saleReturns: number;
   purchaseReturns: number;
   rpVouchers: number;
+  staff: number;
 }
 
 export interface MigrationStatus {
@@ -61,6 +62,7 @@ export interface MigrationResult {
   saleReturns:       MigrationSection;
   purchaseReturns:   MigrationSection;
   rpVouchers:        MigrationSection;
+  staff:             MigrationSection;
 }
 
 const BASE = "/api/migrate";
