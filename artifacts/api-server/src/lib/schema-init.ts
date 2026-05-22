@@ -627,6 +627,114 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS invoice_payments_tenant_idx  ON invoice_payments (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS invoice_payments_je_idx      ON invoice_payments (tenant_id, je_ref) WHERE je_ref IS NOT NULL`,
 
+  // ── Sale Returns + Items ─────────────────────────────────────────────────────
+  // Reversal of a POS Sale. Numeric totals (subtotal/tax/grand) are stored as
+  // TEXT to preserve string-of-decimal precision the same way sales/invoices
+  // do (the FE types them as number but pg-numerics also come back as strings,
+  // so callers parse on read either way).
+  //
+  // Only blocker on DELETE is a linked JE — mirrors `deleteSaleReturn` in
+  // store.ts. Partial je_id index supports the JE-reverse-cascade query.
+  `CREATE TABLE IF NOT EXISTS sale_returns (
+    id                   TEXT        NOT NULL,
+    tenant_id            TEXT        NOT NULL,
+    return_number        TEXT        NOT NULL,
+    original_sale_number TEXT        NOT NULL DEFAULT '',
+    original_sale_id     TEXT        NOT NULL DEFAULT '',
+    return_date          TEXT        NOT NULL DEFAULT '',
+    customer             TEXT        NOT NULL DEFAULT '',
+    refund_method        TEXT        NOT NULL DEFAULT 'Cash',
+    subtotal             TEXT        NOT NULL DEFAULT '0',
+    tax_amount           TEXT        NOT NULL DEFAULT '0',
+    grand_total          TEXT        NOT NULL DEFAULT '0',
+    reason               TEXT        NOT NULL DEFAULT '',
+    notes                TEXT        NOT NULL DEFAULT '',
+    status               TEXT        NOT NULL DEFAULT 'draft',
+    je_id                TEXT,
+    archived_at          TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_idx        ON sale_returns (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_number_idx ON sale_returns (tenant_id, return_number)`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_sale_idx   ON sale_returns (tenant_id, original_sale_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_status_idx ON sale_returns (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_date_idx   ON sale_returns (tenant_id, return_date)`,
+  `CREATE INDEX IF NOT EXISTS sale_returns_tenant_je_idx     ON sale_returns (tenant_id, je_id) WHERE je_id IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS sale_return_items (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    return_id     TEXT NOT NULL,
+    product_name  TEXT NOT NULL DEFAULT '',
+    sku           TEXT NOT NULL DEFAULT '',
+    unit          TEXT NOT NULL DEFAULT '',
+    qty           TEXT NOT NULL DEFAULT '0',
+    unit_price    TEXT NOT NULL DEFAULT '0',
+    discount      TEXT NOT NULL DEFAULT '0',
+    cost_price    TEXT,
+    line_order    INT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (return_id, tenant_id) REFERENCES sale_returns (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS sale_return_items_return_idx ON sale_return_items (tenant_id, return_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_return_items_tenant_idx ON sale_return_items (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_return_items_sku_idx    ON sale_return_items (tenant_id, sku)`,
+
+  // ── Purchase Returns + Items ─────────────────────────────────────────────────
+  // Mirror shape of sale_returns but for purchase invoices. PR items carry an
+  // extra `category` column that's locked at invoice-selection time so the
+  // reversal JE hits the same inventory sub-ledger as the original PO JE even
+  // if the product's category is edited later.
+  `CREATE TABLE IF NOT EXISTS purchase_returns (
+    id                      TEXT        NOT NULL,
+    tenant_id               TEXT        NOT NULL,
+    return_number           TEXT        NOT NULL,
+    original_invoice_number TEXT        NOT NULL DEFAULT '',
+    original_invoice_id     TEXT        NOT NULL DEFAULT '',
+    return_date             TEXT        NOT NULL DEFAULT '',
+    supplier                TEXT        NOT NULL DEFAULT '',
+    refund_method           TEXT        NOT NULL DEFAULT 'Cash',
+    subtotal                TEXT        NOT NULL DEFAULT '0',
+    tax_amount              TEXT        NOT NULL DEFAULT '0',
+    grand_total             TEXT        NOT NULL DEFAULT '0',
+    reason                  TEXT        NOT NULL DEFAULT '',
+    notes                   TEXT        NOT NULL DEFAULT '',
+    status                  TEXT        NOT NULL DEFAULT 'draft',
+    je_id                   TEXT,
+    archived_at             TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_idx          ON purchase_returns (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_number_idx   ON purchase_returns (tenant_id, return_number)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_invoice_idx  ON purchase_returns (tenant_id, original_invoice_id)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_status_idx   ON purchase_returns (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_date_idx     ON purchase_returns (tenant_id, return_date)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_supplier_idx ON purchase_returns (tenant_id, supplier)`,
+  `CREATE INDEX IF NOT EXISTS purchase_returns_tenant_je_idx       ON purchase_returns (tenant_id, je_id) WHERE je_id IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS purchase_return_items (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    return_id     TEXT NOT NULL,
+    product_name  TEXT NOT NULL DEFAULT '',
+    sku           TEXT NOT NULL DEFAULT '',
+    unit          TEXT NOT NULL DEFAULT '',
+    qty           TEXT NOT NULL DEFAULT '0',
+    unit_price    TEXT NOT NULL DEFAULT '0',
+    discount      TEXT NOT NULL DEFAULT '0',
+    category      TEXT,
+    line_order    INT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (return_id, tenant_id) REFERENCES purchase_returns (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS purchase_return_items_return_idx ON purchase_return_items (tenant_id, return_id)`,
+  `CREATE INDEX IF NOT EXISTS purchase_return_items_tenant_idx ON purchase_return_items (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS purchase_return_items_sku_idx    ON purchase_return_items (tenant_id, sku)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

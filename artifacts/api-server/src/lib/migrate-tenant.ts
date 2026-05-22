@@ -98,6 +98,8 @@ export interface MigrateResult {
   purchaseOrders:    MigrateSection;
   sales:             MigrateSection;
   invoices:          MigrateSection;
+  saleReturns:       MigrateSection;
+  purchaseReturns:   MigrateSection;
 }
 
 interface FrontendProduct {
@@ -210,6 +212,8 @@ export async function migrateTenant(
     purchaseOrders:    { found: 0, inserted: 0, skipped: 0, errors: [] },
     sales:             { found: 0, inserted: 0, skipped: 0, errors: [] },
     invoices:          { found: 0, inserted: 0, skipped: 0, errors: [] },
+    saleReturns:       { found: 0, inserted: 0, skipped: 0, errors: [] },
+    purchaseReturns:   { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1339,6 +1343,220 @@ export async function migrateTenant(
     } catch (err) {
       result.invoices.errors.push(
         `Invoice ${inv.id} (${inv.invoiceNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 12. Sale Returns + Items ───────────────────────────────────────────────
+  type IncomingSaleReturnItem = {
+    id?: string; productName?: string; sku?: string; unit?: string;
+    qty?: unknown; unitPrice?: unknown; discount?: unknown; costPrice?: unknown;
+  };
+  type IncomingSaleReturn = {
+    id: string; returnNumber: string;
+    originalSaleNumber?: string; originalSaleId?: string;
+    date?: string; customer?: string; refundMethod?: string;
+    items?: IncomingSaleReturnItem[];
+    subtotal?: unknown; taxAmount?: unknown; grandTotal?: unknown;
+    reason?: string; notes?: string;
+    status?: "draft" | "posted";
+    jeId?: string;
+    createdAt?: string; updatedAt?: string;
+  };
+
+  const rawSaleReturns = await readKv(tenantId, "admin-sale-returns");
+  const saleReturns: IncomingSaleReturn[] = Array.isArray(rawSaleReturns) ? (rawSaleReturns as IncomingSaleReturn[]) : [];
+  result.saleReturns.found = saleReturns.length;
+
+  for (const sr of saleReturns) {
+    try {
+      if (!sr.id || !sr.returnNumber) {
+        result.saleReturns.errors.push(
+          `Sale Return ${sr.id ?? "(no id)"}: missing required field (id or returnNumber) — skipped`,
+        );
+        result.saleReturns.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM sale_returns WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [sr.id, tenantId],
+      );
+      if (existing.length > 0) { result.saleReturns.skipped++; continue; }
+      if (dryRun) { result.saleReturns.inserted++; continue; }
+
+      const items = Array.isArray(sr.items) ? sr.items : [];
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO sale_returns
+            (id, tenant_id, return_number, original_sale_number, original_sale_id,
+             return_date, customer, refund_method,
+             subtotal, tax_amount, grand_total,
+             reason, notes, status, je_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            sr.id, tenantId, sr.returnNumber,
+            sr.originalSaleNumber ?? "", sr.originalSaleId ?? "",
+            sr.date ?? "", sr.customer ?? "",
+            sr.refundMethod ?? "Cash",
+            toStrOrEmpty(sr.subtotal, "0"),
+            toStrOrEmpty(sr.taxAmount, "0"),
+            toStrOrEmpty(sr.grandTotal, "0"),
+            sr.reason ?? "", sr.notes ?? "",
+            sr.status ?? "draft",
+            sr.jeId ?? null,
+            sr.createdAt ? new Date(sr.createdAt) : new Date(),
+            sr.updatedAt ? new Date(sr.updatedAt) : new Date(),
+          ],
+        );
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await client.query(
+            `INSERT INTO sale_return_items
+              (id, tenant_id, return_id, product_name, sku, unit, qty, unit_price, discount, cost_price, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              it.id ?? randomUUID(), tenantId, sr.id,
+              it.productName ?? "", it.sku ?? "", it.unit ?? "",
+              toStrOrEmpty(it.qty, "0"), toStrOrEmpty(it.unitPrice, "0"),
+              toStrOrEmpty(it.discount, "0"), toStrOrNull(it.costPrice), i,
+            ],
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','sale_return',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, sr.id,
+            JSON.stringify({
+              returnNumber: sr.returnNumber,
+              originalSaleNumber: sr.originalSaleNumber ?? "",
+              itemCount: items.length,
+              grandTotal: toStrOrEmpty(sr.grandTotal, "0"),
+            }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.saleReturns.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.saleReturns.errors.push(
+        `Sale Return ${sr.id} (${sr.returnNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 13. Purchase Returns + Items ───────────────────────────────────────────
+  type IncomingPurchaseReturnItem = {
+    id?: string; productName?: string; sku?: string; unit?: string;
+    qty?: unknown; unitPrice?: unknown; discount?: unknown; category?: string;
+  };
+  type IncomingPurchaseReturn = {
+    id: string; returnNumber: string;
+    originalInvoiceNumber?: string; originalInvoiceId?: string;
+    date?: string; supplier?: string; refundMethod?: string;
+    items?: IncomingPurchaseReturnItem[];
+    subtotal?: unknown; taxAmount?: unknown; grandTotal?: unknown;
+    reason?: string; notes?: string;
+    status?: "draft" | "posted";
+    jeId?: string;
+    createdAt?: string; updatedAt?: string;
+  };
+
+  const rawPurchaseReturns = await readKv(tenantId, "admin-purchase-returns");
+  const purchaseReturns: IncomingPurchaseReturn[] = Array.isArray(rawPurchaseReturns) ? (rawPurchaseReturns as IncomingPurchaseReturn[]) : [];
+  result.purchaseReturns.found = purchaseReturns.length;
+
+  for (const pr of purchaseReturns) {
+    try {
+      if (!pr.id || !pr.returnNumber) {
+        result.purchaseReturns.errors.push(
+          `Purchase Return ${pr.id ?? "(no id)"}: missing required field (id or returnNumber) — skipped`,
+        );
+        result.purchaseReturns.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM purchase_returns WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [pr.id, tenantId],
+      );
+      if (existing.length > 0) { result.purchaseReturns.skipped++; continue; }
+      if (dryRun) { result.purchaseReturns.inserted++; continue; }
+
+      const items = Array.isArray(pr.items) ? pr.items : [];
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO purchase_returns
+            (id, tenant_id, return_number, original_invoice_number, original_invoice_id,
+             return_date, supplier, refund_method,
+             subtotal, tax_amount, grand_total,
+             reason, notes, status, je_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            pr.id, tenantId, pr.returnNumber,
+            pr.originalInvoiceNumber ?? "", pr.originalInvoiceId ?? "",
+            pr.date ?? "", pr.supplier ?? "",
+            pr.refundMethod ?? "Cash",
+            toStrOrEmpty(pr.subtotal, "0"),
+            toStrOrEmpty(pr.taxAmount, "0"),
+            toStrOrEmpty(pr.grandTotal, "0"),
+            pr.reason ?? "", pr.notes ?? "",
+            pr.status ?? "draft",
+            pr.jeId ?? null,
+            pr.createdAt ? new Date(pr.createdAt) : new Date(),
+            pr.updatedAt ? new Date(pr.updatedAt) : new Date(),
+          ],
+        );
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await client.query(
+            `INSERT INTO purchase_return_items
+              (id, tenant_id, return_id, product_name, sku, unit, qty, unit_price, discount, category, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              it.id ?? randomUUID(), tenantId, pr.id,
+              it.productName ?? "", it.sku ?? "", it.unit ?? "",
+              toStrOrEmpty(it.qty, "0"), toStrOrEmpty(it.unitPrice, "0"),
+              toStrOrEmpty(it.discount, "0"), it.category ?? null, i,
+            ],
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','purchase_return',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, pr.id,
+            JSON.stringify({
+              returnNumber: pr.returnNumber,
+              originalInvoiceNumber: pr.originalInvoiceNumber ?? "",
+              itemCount: items.length,
+              grandTotal: toStrOrEmpty(pr.grandTotal, "0"),
+            }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.purchaseReturns.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.purchaseReturns.errors.push(
+        `Purchase Return ${pr.id} (${pr.returnNumber}): ${(err as Error).message}`,
       );
     }
   }
