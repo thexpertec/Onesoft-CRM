@@ -1,7 +1,7 @@
 export interface MigrationStatus {
   tenantId: string;
-  db: { accounts: number; journalEntries: number; customers: number };
-  kv: { accounts: number; journalEntries: number; customers: number };
+  db: { accounts: number; journalEntries: number; customers: number; products: number };
+  kv: { accounts: number; journalEntries: number; customers: number; products: number };
 }
 
 export interface MigrationResult {
@@ -10,6 +10,7 @@ export interface MigrationResult {
   accounts:       { found: number; inserted: number; skipped: number; errors: string[] };
   journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
   customers:      { found: number; inserted: number; skipped: number; errors: string[] };
+  products:       { found: number; inserted: number; skipped: number; errors: string[] };
 }
 
 const BASE = "/api/migrate";

@@ -5,6 +5,7 @@ import publicRouter from "./public.js";
 import authRouter from "./auth.js";
 import accountsRouter from "./accounts.js";
 import customersRouter from "./customers.js";
+import productsRouter from "./products.js";
 import staffRouter from "./staff.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
@@ -20,6 +21,7 @@ router.use("/auth", authRouter);
 // the dashboard will migrate one surface at a time in Phases 1–3.
 router.use("/accounts", accountsRouter);
 router.use("/customers", customersRouter);
+router.use("/products", productsRouter);
 router.use("/staff", staffRouter);
 router.use("/journal-entries", journalEntriesRouter);
 

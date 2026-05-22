@@ -62,6 +62,45 @@ export interface MigrateResult {
   accounts: { found: number; inserted: number; skipped: number; errors: string[] };
   journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
   customers: { found: number; inserted: number; skipped: number; errors: string[] };
+  products: { found: number; inserted: number; skipped: number; errors: string[] };
+}
+
+interface FrontendProduct {
+  id: string;
+  name: string;
+  localName?: string;
+  model?: string;
+  sku?: string;
+  barcode?: string;
+  brand?: string;
+  category?: string;
+  subcategory?: string;
+  subSubcategory?: string;
+  department?: string;
+  unit?: string;
+  purchasePrice?: string;
+  costPrice?: string;
+  price?: string;
+  wholesalePrice?: string;
+  commissionPct?: string;
+  openingStock?: string;
+  stockAlertValue?: string;
+  description?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  status?: string;
+  condition?: string;
+  thumbnail?: string;
+  images?: unknown;
+  showOnWeb?: boolean;
+  websitePrice?: string;
+  websitePriceWas?: string;
+  clubcardPrice?: string;
+  clubcardBogo?: boolean;
+  productAttributes?: unknown;
+  variants?: unknown;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface FrontendCustomer {
@@ -120,6 +159,7 @@ export async function migrateTenant(
     accounts: { found: 0, inserted: 0, skipped: 0, errors: [] },
     journalEntries: { found: 0, inserted: 0, skipped: 0, errors: [] },
     customers: { found: 0, inserted: 0, skipped: 0, errors: [] },
+    products: { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -497,6 +537,139 @@ export async function migrateTenant(
       }
     } catch (err) {
       result.customers.errors.push(`Customer ${cust.id} (${cust.name}): ${(err as Error).message}`);
+    }
+  }
+
+  // ── 4. Products ────────────────────────────────────────────────────────────
+  const rawProducts = await readKv(tenantId, "admin-products");
+  const products: FrontendProduct[] = Array.isArray(rawProducts)
+    ? (rawProducts as FrontendProduct[])
+    : [];
+  result.products.found = products.length;
+
+  for (const prod of products) {
+    try {
+      if (!prod?.id || !prod.name) {
+        result.products.errors.push(
+          `Product ${prod?.id ?? "?"}: missing required fields (id, name) — skipped`,
+        );
+        result.products.skipped++;
+        continue;
+      }
+
+      // products PK is (id) globally — same pattern as customers.
+      const existing = await query<{ tenant_id: string }>(
+        `SELECT tenant_id FROM products WHERE id = $1 LIMIT 1`,
+        [prod.id],
+      );
+      if (existing.length > 0) {
+        if (existing[0].tenant_id === tenantId) {
+          result.products.skipped++;
+        } else {
+          result.products.errors.push(
+            `Product ${prod.id} (${prod.name}): id already exists under another tenant (${existing[0].tenant_id}) — skipped`,
+          );
+          result.products.skipped++;
+        }
+        continue;
+      }
+
+      if (dryRun) {
+        result.products.inserted++;
+        continue;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const insertRes = await client.query(
+          `INSERT INTO products (
+             id, tenant_id, name, local_name, model, sku, barcode,
+             brand, category, subcategory, sub_subcategory, department,
+             unit, purchase_price, cost_price, price, wholesale_price,
+             commission_pct, opening_stock, stock_alert_value,
+             description, meta_title, meta_description,
+             status, condition, thumbnail, images,
+             show_on_web, website_price, website_price_was,
+             clubcard_price, clubcard_bogo,
+             product_attributes, variants,
+             created_at, updated_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,
+             $8,$9,$10,$11,$12,
+             $13,$14,$15,$16,$17,
+             $18,$19,$20,
+             $21,$22,$23,
+             $24,$25,$26,$27,
+             $28,$29,$30,
+             $31,$32,
+             $33,$34,
+             $35,$36
+           )
+           ON CONFLICT (id) DO NOTHING
+           RETURNING id`,
+          [
+            prod.id,
+            tenantId,
+            prod.name,
+            prod.localName ?? null,
+            prod.model ?? null,
+            prod.sku ?? "",
+            prod.barcode ?? null,
+            prod.brand ?? "",
+            prod.category ?? "",
+            prod.subcategory ?? null,
+            prod.subSubcategory ?? null,
+            prod.department ?? null,
+            prod.unit ?? "",
+            prod.purchasePrice ?? null,
+            prod.costPrice ?? null,
+            String(prod.price ?? "0"),
+            prod.wholesalePrice ?? null,
+            prod.commissionPct ?? null,
+            prod.openingStock ?? null,
+            prod.stockAlertValue ?? null,
+            prod.description ?? "",
+            prod.metaTitle ?? null,
+            prod.metaDescription ?? null,
+            prod.status ?? "Active",
+            prod.condition ?? null,
+            prod.thumbnail ?? null,
+            JSON.stringify(coerceArray(prod.images)),
+            prod.showOnWeb === true,
+            prod.websitePrice ?? null,
+            prod.websitePriceWas ?? null,
+            prod.clubcardPrice ?? null,
+            prod.clubcardBogo === true,
+            JSON.stringify(coerceArray(prod.productAttributes)),
+            JSON.stringify(coerceArray(prod.variants)),
+            prod.createdAt ? new Date(prod.createdAt) : new Date(),
+            prod.updatedAt ? new Date(prod.updatedAt) : new Date(),
+          ],
+        );
+        if (insertRes.rowCount && insertRes.rowCount > 0) {
+          await client.query(
+            `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+             VALUES ($1,$2,'migrate','product',$3,'create',NULL,$4)`,
+            [randomUUID(), tenantId, prod.id, JSON.stringify({ name: prod.name, sku: prod.sku ?? "" })],
+          );
+          await client.query("COMMIT");
+          result.products.inserted++;
+        } else {
+          await client.query("ROLLBACK");
+          result.products.errors.push(
+            `Product ${prod.id} (${prod.name}): id collision detected during insert — skipped`,
+          );
+          result.products.skipped++;
+        }
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.products.errors.push(`Product ${prod.id} (${prod.name}): ${(err as Error).message}`);
     }
   }
 
