@@ -248,6 +248,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // surface the wrong tenant's data.
     sessionStorage.removeItem("onesoft_tab_tenant");
 
+    // ── Step 0: Platform-user check (superadmin + platform staff) ─────────────
+    // Always check platform users FIRST so that the reserved superadmin
+    // credentials (e.g. `admin` / `Onesoft@2024`) cannot be hijacked by a
+    // tenant that was created with the same adminUsername/adminPassword.
+    // We sync the `global` namespace (only 3 keys: admin-tenants,
+    // admin-users, admin-module-groups — cheap) so the in-memory cache
+    // reflects the latest DB state. If sync fails, the memory-seeded
+    // default superadmin (`ensureDefaultSuperadmin` in store.ts) still
+    // guarantees `admin/Onesoft@2024` matches.
+    setIsSyncing(true);
+    try {
+      await syncAllFromServer(null);
+    } catch {
+      // Swallow: fall back to whatever the in-memory cache holds.
+    } finally {
+      setIsSyncing(false);
+    }
+
+    {
+      const platformUsers = getAdminUsers();
+      const platformHit   = platformUsers.find(
+        u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+      );
+      if (platformHit) {
+        setActiveTenant(null);
+        setActivityUser(platformHit.fullName || platformHit.username);
+        try { addActivity({ action: "login", entity: "Auth", entityName: platformHit.username, module: "Authentication" }); } catch { /* non-fatal */ }
+        _ss.setItem(AUTH_KEY,     "true");
+        _ss.setItem(AUTH_USER_ID, platformHit.id);
+        _ss.setItem(TENANT_KEY,   "");
+        setCurrentUser(platformHit);
+        setCurrentTenantId(null);
+        return true;
+      }
+    }
+
     // ── Step 1: Server-side tenant credential check (primary path) ────────────
     // Ask the API server to verify credentials directly against the database.
     // This bypasses the entire KV-sync pipeline — no large fetches, no caches,
@@ -287,43 +323,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Still continue so platform users (superadmin/staff/agent) can log in.
     }
 
-    // ── Step 2: Sync global data for platform-user checks ─────────────────────
-    // We only reach here when the server check failed the network request
-    // (serverCheck === null) or the credentials didn't match a tenant.
-    // Sync so platform users (superadmin, staff, agents) can be checked locally.
-    setIsSyncing(true);
-    try {
-      await syncAllFromServer(null);
-    } catch {
-      // Swallow: fall back to in-memory cache.
-    } finally {
-      setIsSyncing(false);
-    }
-
-    // Targeted tenant-list refresh as an extra safety net.
+    // ── Step 2: Local fallbacks (platform users were already checked in Step 0;
+    // tenant credentials were already checked server-side in Step 1). The
+    // remaining flows handle: local tenant fallback, HRM staff, and sales
+    // agents. We refresh the tenant list as a safety net but do not re-sync
+    // the global namespace since Step 0 already did that.
     await syncTenantsFromServer();
 
     // Wrap ALL credential checks so no unexpected runtime error surfaces as
     // the scary "Sign in failed — please check your connection" message.
     try {
-      // 1. Check platform users first (superadmin + any platform staff)
-      const users  = getAdminUsers();
-      const user   = users.find(
-        u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
-      );
-      if (user) {
-        setActiveTenant(null);
-        setActivityUser(user.fullName || user.username);
-        try { addActivity({ action: "login", entity: "Auth", entityName: user.username, module: "Authentication" }); } catch { /* non-fatal */ }
-        _ss.setItem(AUTH_KEY,     "true");
-        _ss.setItem(AUTH_USER_ID, user.id);
-        _ss.setItem(TENANT_KEY,   "");
-        setCurrentUser(user);
-        setCurrentTenantId(null);
-        return true;
-      }
-
-      // 2. Tenant registry — local fallback (server check above is primary)
+      // 1. Tenant registry — local fallback (server check above is primary)
       const tenant = getTenantByCredentials(username, password);
       if (tenant) {
         if (tenant.status === "suspended") return false;
