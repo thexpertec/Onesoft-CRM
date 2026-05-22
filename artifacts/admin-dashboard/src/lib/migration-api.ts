@@ -16,6 +16,7 @@ export interface MigrationCounts {
   stockItems: number;
   stockLedger: number;
   purchaseOrders: number;
+  sales: number;
 }
 
 export interface MigrationStatus {
@@ -51,6 +52,7 @@ export interface MigrationResult {
   stockItems:        MigrationSection;
   stockLedger:       MigrationSection;
   purchaseOrders:    MigrationSection;
+  sales:             MigrationSection;
 }
 
 const BASE = "/api/migrate";

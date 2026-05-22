@@ -96,6 +96,7 @@ export interface MigrateResult {
   stockItems:        MigrateSection;
   stockLedger:       MigrateSection;
   purchaseOrders:    MigrateSection;
+  sales:             MigrateSection;
 }
 
 interface FrontendProduct {
@@ -206,6 +207,7 @@ export async function migrateTenant(
     stockItems:        { found: 0, inserted: 0, skipped: 0, errors: [] },
     stockLedger:       { found: 0, inserted: 0, skipped: 0, errors: [] },
     purchaseOrders:    { found: 0, inserted: 0, skipped: 0, errors: [] },
+    sales:             { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1011,6 +1013,145 @@ export async function migrateTenant(
     } catch (err) {
       result.purchaseOrders.errors.push(
         `PO ${po.id} (${po.poNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 10. Sales + Sale Items ─────────────────────────────────────────────────
+  // Same parent+items shape as PO. Payment-tracking fields (amount_paid,
+  // paid_at, payment_method) and je_id are persisted as-is — financial
+  // blocker / reverse-cascade logic stays in the frontend store layer.
+  // String-typed numerics preserve the frontend's "string-of-decimal"
+  // contract exactly (see schema-init.ts comment on the sales table).
+  type IncomingSaleItem = {
+    id?: string; productName?: string; localName?: string; sku?: string;
+    qty?: unknown; unit?: string; unitPrice?: unknown;
+    discount?: unknown; discountType?: string;
+    notes?: string; itemStatus?: string;
+    bogoApplied?: boolean; variantLabel?: string;
+    costPrice?: unknown; purchaseUnit?: string; conversionFactor?: unknown;
+  };
+  type IncomingSale = {
+    id: string; saleNumber: string;
+    saleDate?: string; customer?: string;
+    status?: string; paymentMethod?: string; notes?: string;
+    taxRate?: unknown; amountPaid?: unknown; paidAt?: string;
+    stockDeducted?: boolean;
+    jeId?: string; agentId?: string; agentName?: string;
+    saleMode?: string; deliveryStatus?: string;
+    deliveryCharges?: unknown; invoiceDiscount?: unknown; invoiceDiscountType?: string;
+    orderType?: string; onlineCustomer?: string;
+    items?: IncomingSaleItem[];
+    createdAt?: string; updatedAt?: string;
+  };
+
+  // Local string-coercer: defensive against numbers/null in legacy KV blobs.
+  const toStrOrEmpty = (v: unknown, dflt = ""): string => {
+    if (v === null || v === undefined) return dflt;
+    if (typeof v === "number") return isFinite(v) ? String(v) : dflt;
+    return String(v);
+  };
+  const toStrOrNull = (v: unknown): string | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number") return isFinite(v) ? String(v) : null;
+    const s = String(v);
+    return s === "" ? null : s;
+  };
+
+  const rawSales = await readKv(tenantId, "admin-sales");
+  const sales: IncomingSale[] = Array.isArray(rawSales) ? (rawSales as IncomingSale[]) : [];
+  result.sales.found = sales.length;
+
+  for (const sale of sales) {
+    try {
+      if (!sale.id || !sale.saleNumber) {
+        result.sales.errors.push(
+          `Sale ${sale.id ?? "(no id)"}: missing required field (id or saleNumber) — skipped`,
+        );
+        result.sales.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM sales WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [sale.id, tenantId],
+      );
+      if (existing.length > 0) {
+        result.sales.skipped++;
+        continue;
+      }
+      if (dryRun) {
+        result.sales.inserted++;
+        continue;
+      }
+
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO sales
+            (id, tenant_id, sale_number, sale_date, customer, status,
+             payment_method, notes, tax_rate, amount_paid, paid_at,
+             stock_deducted, je_id, agent_id, agent_name, sale_mode,
+             delivery_status, delivery_charges, invoice_discount,
+             invoice_discount_type, order_type, online_customer,
+             created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            sale.id, tenantId, sale.saleNumber,
+            sale.saleDate ?? "", sale.customer ?? "",
+            sale.status ?? "Pending", sale.paymentMethod ?? "", sale.notes ?? "",
+            toStrOrEmpty(sale.taxRate, "0"), toStrOrEmpty(sale.amountPaid, "0"), sale.paidAt ?? "",
+            sale.stockDeducted === true,
+            sale.jeId ?? null, sale.agentId ?? null, sale.agentName ?? null,
+            sale.saleMode ?? null, sale.deliveryStatus ?? null,
+            toStrOrNull(sale.deliveryCharges), toStrOrNull(sale.invoiceDiscount),
+            sale.invoiceDiscountType ?? null, sale.orderType ?? null, sale.onlineCustomer ?? null,
+            sale.createdAt ? new Date(sale.createdAt) : new Date(),
+            sale.updatedAt ? new Date(sale.updatedAt) : new Date(),
+          ],
+        );
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await client.query(
+            `INSERT INTO sale_items
+              (id, tenant_id, sale_id, product_name, local_name, sku, qty, unit,
+               unit_price, discount, discount_type, notes, item_status, bogo_applied,
+               variant_label, cost_price, purchase_unit, conversion_factor, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              it.id ?? randomUUID(), tenantId, sale.id,
+              it.productName ?? "", it.localName ?? null, it.sku ?? "",
+              toStrOrEmpty(it.qty, "0"), it.unit ?? "", toStrOrEmpty(it.unitPrice, "0"),
+              toStrOrEmpty(it.discount, "0"), it.discountType ?? null,
+              it.notes ?? "", it.itemStatus ?? "Pending",
+              it.bogoApplied === true, it.variantLabel ?? null,
+              toStrOrNull(it.costPrice), it.purchaseUnit ?? null,
+              toStrOrNull(it.conversionFactor), i,
+            ],
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','sale',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, sale.id,
+            JSON.stringify({ saleNumber: sale.saleNumber, customer: sale.customer ?? "", itemCount: items.length, amountPaid: toStrOrEmpty(sale.amountPaid, "0") }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.sales.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.sales.errors.push(
+        `Sale ${sale.id} (${sale.saleNumber}): ${(err as Error).message}`,
       );
     }
   }

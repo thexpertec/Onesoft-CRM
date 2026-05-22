@@ -437,6 +437,85 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS poi_po_idx     ON purchase_order_items (tenant_id, po_id)`,
   `CREATE INDEX IF NOT EXISTS poi_tenant_idx ON purchase_order_items (tenant_id)`,
 
+  // ── Sales ────────────────────────────────────────────────────────────────────
+  // Parent + child line items, mirroring the purchase_orders pattern.
+  // Sale has substantially more fields than PO: payment tracking (amount_paid,
+  // paid_at, payment_method), JE linkage (je_id, soft reference like PO), POS
+  // mode/delivery/discount fields, and the stock_deducted boolean.
+  //
+  // Numeric fields kept as TEXT (not NUMERIC) to preserve the frontend's
+  // string-of-decimal contract exactly — the store layer relies on `parseFloat`
+  // and writes back as `String(n)`, and any silent coercion to NUMERIC would
+  // round-trip "20" ↔ "20.0000" and break equality checks in tests. PO used
+  // NUMERIC because its consumers (reports) want SQL aggregation; sale items
+  // are exclusively consumed via the frontend's own per-line totals helpers.
+  `CREATE TABLE IF NOT EXISTS sales (
+    id                    TEXT        NOT NULL,
+    tenant_id             TEXT        NOT NULL,
+    sale_number           TEXT        NOT NULL,
+    sale_date             TEXT        NOT NULL DEFAULT '',
+    customer              TEXT        NOT NULL DEFAULT '',
+    status                TEXT        NOT NULL DEFAULT 'Pending',
+    payment_method        TEXT        NOT NULL DEFAULT '',
+    notes                 TEXT        NOT NULL DEFAULT '',
+    tax_rate              TEXT        NOT NULL DEFAULT '0',
+    amount_paid           TEXT        NOT NULL DEFAULT '0',
+    paid_at               TEXT        NOT NULL DEFAULT '',
+    stock_deducted        BOOLEAN     NOT NULL DEFAULT FALSE,
+    je_id                 TEXT,
+    agent_id              TEXT,
+    agent_name            TEXT,
+    sale_mode             TEXT,
+    delivery_status       TEXT,
+    delivery_charges      TEXT,
+    invoice_discount      TEXT,
+    invoice_discount_type TEXT,
+    order_type            TEXT,
+    online_customer       TEXT,
+    archived_at           TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_idx        ON sales (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_number_idx ON sales (tenant_id, sale_number)`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_status_idx ON sales (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_date_idx   ON sales (tenant_id, sale_date)`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_customer_idx ON sales (tenant_id, customer)`,
+  `CREATE INDEX IF NOT EXISTS sales_tenant_agent_idx  ON sales (tenant_id, agent_id)`,
+  // Partial index for "show source sale for this JE" lookups (most sales have
+  // no JE yet, so the partial WHERE keeps the index small).
+  `CREATE INDEX IF NOT EXISTS sales_tenant_je_idx     ON sales (tenant_id, je_id) WHERE je_id IS NOT NULL`,
+
+  // ── Sale Items ───────────────────────────────────────────────────────────────
+  // Composite FK with ON DELETE CASCADE matching the PO/JE pattern.
+  `CREATE TABLE IF NOT EXISTS sale_items (
+    id                TEXT    NOT NULL,
+    tenant_id         TEXT    NOT NULL,
+    sale_id           TEXT    NOT NULL,
+    product_name      TEXT    NOT NULL DEFAULT '',
+    local_name        TEXT,
+    sku               TEXT    NOT NULL DEFAULT '',
+    qty               TEXT    NOT NULL DEFAULT '0',
+    unit              TEXT    NOT NULL DEFAULT '',
+    unit_price        TEXT    NOT NULL DEFAULT '0',
+    discount          TEXT    NOT NULL DEFAULT '0',
+    discount_type     TEXT,
+    notes             TEXT    NOT NULL DEFAULT '',
+    item_status       TEXT    NOT NULL DEFAULT 'Pending',
+    bogo_applied      BOOLEAN NOT NULL DEFAULT FALSE,
+    variant_label     TEXT,
+    cost_price        TEXT,
+    purchase_unit     TEXT,
+    conversion_factor TEXT,
+    line_order        INT     NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (sale_id, tenant_id) REFERENCES sales (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS sale_items_sale_idx   ON sale_items (tenant_id, sale_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_items_tenant_idx ON sale_items (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS sale_items_sku_idx    ON sale_items (tenant_id, sku)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

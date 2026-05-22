@@ -81,6 +81,10 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT COUNT(*)::text AS count FROM purchase_orders WHERE tenant_id = $1 AND archived_at IS NULL`,
       [tenantId],
     );
+    const [salesRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM sales WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
     const [kvAccRow] = await query<{ value: unknown }>(
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-chart-of-accounts' LIMIT 1`,
       [`t:${tenantId}`],
@@ -149,6 +153,10 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-purchase-orders' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [kvSalesRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-sales' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
@@ -176,6 +184,7 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         stockItems:        parseInt(stockRow?.count   ?? "0", 10),
         stockLedger:       parseInt(ledgerRow?.count  ?? "0", 10),
         purchaseOrders:    parseInt(poRow?.count      ?? "0", 10),
+        sales:             parseInt(salesRow?.count   ?? "0", 10),
       },
       kv: {
         accounts:          parseCount(kvAccRow?.value),
@@ -195,6 +204,7 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         stockItems:        parseCount(kvStockRow?.value),
         stockLedger:       parseCount(kvLedgerRow?.value),
         purchaseOrders:    parseCount(kvPoRow?.value),
+        sales:             parseCount(kvSalesRow?.value),
       },
     });
   } catch (err) {
