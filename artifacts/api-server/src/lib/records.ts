@@ -48,6 +48,22 @@ export interface TableSpec {
    */
   lockedFlagColumn?: string;
   protectedColumnsWhenLocked?: readonly string[];
+  /**
+   * Optional financial-integrity hook. Runs inside the DELETE transaction
+   * after the FOR UPDATE row lock and before any soft/hard delete. Should
+   * return a list of human-readable blocker descriptions, or `[]` if the
+   * row is safe to remove. Hook receives:
+   *   - `client`: the same pg client as the surrounding BEGIN/COMMIT
+   *   - `tenantId`: the resolved tenant id
+   *   - `before`: the snake_case DB row being deleted
+   * On any non-empty result the handler ROLLBACKs and responds with HTTP 409
+   * and a descriptive message. Hooks should use parameterized SQL only.
+   */
+  deleteBlockers?: (
+    client: import("pg").PoolClient,
+    tenantId: string,
+    before: Record<string, unknown>,
+  ) => Promise<string[]>;
 }
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -287,6 +303,17 @@ export function mountRecordRoutes(router: Router, spec: TableSpec): void {
         return res.status(404).json({ error: "Not found" });
       }
       const before = beforeRes.rows[0] as Record<string, unknown>;
+
+      if (spec.deleteBlockers) {
+        const blockers = await spec.deleteBlockers(client, tenantId, before);
+        if (blockers.length > 0) {
+          await client.query("ROLLBACK");
+          const label = (before.name as string | undefined) || (before.code as string | undefined) || req.params.id;
+          return res.status(409).json({
+            error: `Cannot delete ${spec.entityType} ${label}: ${blockers.join(", ")}. Remove the underlying records first.`,
+          });
+        }
+      }
 
       if (hard) {
         await client.query(`DELETE FROM ${tbl} WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
