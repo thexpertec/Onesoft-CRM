@@ -26,6 +26,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
+  getMigrationStatus, runMigration,
+  type MigrationStatus, type MigrationResult,
+} from "@/lib/migration-api";
+import {
   AppSettings, LegalDocument, BankAccount, getSettings, saveSettings,
   clearAccountingLedger, clearAllStoredModules,
   getStoredModuleSnapshot, restoreStoredModuleSnapshot,
@@ -729,10 +733,28 @@ export default function SettingsPage() {
   const [nukeTfaOpen,      setNukeTfaOpen]      = useState(false);
   const [ledgerConfirmOpen, setLedgerConfirmOpen] = useState(false);
 
+  // ── Database migration state ─────────────────────────────────────────────
+  const [migrationStatus,  setMigrationStatus]  = useState<MigrationStatus | null>(null);
+  const [migrationRunning, setMigrationRunning] = useState(false);
+  const [migrationResult,  setMigrationResult]  = useState<MigrationResult | null>(null);
+  const [migrationError,   setMigrationError]   = useState<string | null>(null);
+
   // Re-read settings on mount so any backfill that ran after the lazy initializer is applied
   useEffect(() => {
     setForm(getSettings());
   }, []);
+
+  // Load migration status whenever the Data Management tab opens (tenant-only)
+  useEffect(() => {
+    if (tab !== "data" || !currentTenant?.id) return;
+    setMigrationStatus(null);
+    setMigrationResult(null);
+    setMigrationError(null);
+    getMigrationStatus(currentTenant.id)
+      .then(setMigrationStatus)
+      .catch(() => { /* non-fatal — panel just won't show counts */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, currentTenant?.id]);
 
   const set = useCallback(<K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
     setForm(f => ({ ...f, [key]: val }));
@@ -2318,6 +2340,123 @@ export default function SettingsPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+
+                {/* ── Database Migration ───────────────────────────────── */}
+                {currentTenant?.id && (
+                  <div>
+                    <SectionHeader
+                      title="Database Migration"
+                      desc="Copy your Chart of Accounts and Journal Entries from the legacy key-value store into the new relational database. Safe to run multiple times — already-migrated records are skipped."
+                    />
+
+                    {/* Status counts */}
+                    {migrationStatus && (
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {([
+                          { label: "Chart of Accounts", kv: migrationStatus.kv.accounts,      db: migrationStatus.db.accounts },
+                          { label: "Journal Entries",   kv: migrationStatus.kv.journalEntries, db: migrationStatus.db.journalEntries },
+                        ] as const).map(({ label, kv, db }) => {
+                          const synced = db >= kv;
+                          return (
+                            <div
+                              key={label}
+                              className={`rounded-lg border px-4 py-3 flex flex-col gap-1 ${
+                                synced
+                                  ? "border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/10"
+                                  : "border-amber-200 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/10"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                                {synced
+                                  ? <Check size={13} className="text-emerald-600 dark:text-emerald-400" />
+                                  : <AlertTriangle size={13} className="text-amber-500" />
+                                }
+                              </div>
+                              <div className="flex gap-4 text-[11px] text-muted-foreground">
+                                <span>KV: <strong className="text-foreground">{kv}</strong></span>
+                                <span>DB: <strong className={synced ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{db}</strong></span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Run button */}
+                    <Button
+                      onClick={async () => {
+                        if (!currentTenant?.id) return;
+                        setMigrationRunning(true);
+                        setMigrationResult(null);
+                        setMigrationError(null);
+                        try {
+                          const result = await runMigration(currentTenant.id);
+                          setMigrationResult(result);
+                          const inserted =
+                            result.accounts.inserted + result.journalEntries.inserted;
+                          toast({
+                            title: inserted > 0 ? `Migration complete — ${inserted} record${inserted !== 1 ? "s" : ""} added` : "Migration complete — nothing to do",
+                            description: inserted === 0 ? "All records were already in the database." : undefined,
+                          });
+                          // Refresh status counts
+                          getMigrationStatus(currentTenant.id).then(setMigrationStatus).catch(() => {});
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : String(e);
+                          setMigrationError(msg);
+                          toast({ variant: "destructive", title: "Migration failed", description: msg });
+                        } finally {
+                          setMigrationRunning(false);
+                        }
+                      }}
+                      disabled={migrationRunning}
+                      className="gap-2 h-9 text-[13px] bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <RefreshCw size={14} className={migrationRunning ? "animate-spin" : ""} />
+                      {migrationRunning ? "Migrating…" : "Run Migration"}
+                    </Button>
+
+                    {/* Result detail */}
+                    {migrationResult && (
+                      <div className="mt-4 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50 p-4 space-y-2">
+                        <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">Result</p>
+                        {(["accounts", "journalEntries"] as const).map(key => {
+                          const r = migrationResult[key];
+                          const label = key === "accounts" ? "Accounts" : "Journal Entries";
+                          return (
+                            <div key={key} className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
+                              <span className="font-medium text-foreground w-28">{label}</span>
+                              <span>Found: <strong>{r.found}</strong></span>
+                              <span className="text-emerald-600 dark:text-emerald-400">Inserted: <strong>{r.inserted}</strong></span>
+                              <span>Skipped: <strong>{r.skipped}</strong></span>
+                              {r.errors.length > 0 && (
+                                <span className="text-red-600 dark:text-red-400">Errors: <strong>{r.errors.length}</strong></span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length) > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-[11px] text-red-600 dark:text-red-400 cursor-pointer">Show errors</summary>
+                            <ul className="mt-1 space-y-0.5 pl-3">
+                              {[...migrationResult.accounts.errors, ...migrationResult.journalEntries.errors].map((e, i) => (
+                                <li key={i} className="text-[10px] text-red-600 dark:text-red-400">{e}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Error banner */}
+                    {migrationError && (
+                      <div className="mt-3 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg px-3 py-2.5">
+                        <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
+                        <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">{migrationError}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Accounting Ledger Reset */}
                 {isSuperAdmin && (

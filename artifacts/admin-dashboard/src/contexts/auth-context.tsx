@@ -24,6 +24,7 @@ import {
   Tenant,
 } from "@/lib/store";
 import { verifyTenantCredentials } from "@/lib/api";
+import { runMigration } from "@/lib/migration-api";
 
 // All auth/session state is stored in sessionStorage — no localStorage anywhere.
 // sessionStorage persists across F5/hard-refreshes within the same browser tab
@@ -307,6 +308,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
           setIsSyncing(false);
         }
+        // Fire-and-forget: copy any KV-blob COA/JE data into relational tables.
+        // Idempotent — skips rows that already exist. Silent on failure.
+        runMigration(tenantFromServer.id).catch(e =>
+          console.warn("[migrate] auto-migrate failed:", e),
+        );
 
         const tenantUser = tenantToAdminUser(tenantFromServer);
         setActivityUser(tenantUser.fullName || tenantUser.username);
@@ -348,6 +354,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
           setIsSyncing(false);
         }
+        // Fire-and-forget: copy any KV-blob COA/JE data into relational tables.
+        runMigration(tenant.id).catch(e =>
+          console.warn("[migrate] auto-migrate failed:", e),
+        );
 
         const tenantUser = tenantToAdminUser(tenant);
         setActivityUser(tenantUser.fullName || tenantUser.username);

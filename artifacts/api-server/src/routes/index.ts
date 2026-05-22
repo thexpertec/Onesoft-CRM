@@ -7,6 +7,7 @@ import accountsRouter from "./accounts.js";
 import customersRouter from "./customers.js";
 import staffRouter from "./staff.js";
 import journalEntriesRouter from "./journal-entries.js";
+import migrateRouter from "./migrate.js";
 
 const router: IRouter = Router();
 
@@ -21,5 +22,8 @@ router.use("/accounts", accountsRouter);
 router.use("/customers", customersRouter);
 router.use("/staff", staffRouter);
 router.use("/journal-entries", journalEntriesRouter);
+
+// Phase 2 — KV→relational migration endpoint.
+router.use("/migrate", migrateRouter);
 
 export default router;
