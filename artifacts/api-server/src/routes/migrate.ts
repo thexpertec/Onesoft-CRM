@@ -29,6 +29,22 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT COUNT(*)::text AS count FROM products WHERE tenant_id = $1 AND archived_at IS NULL`,
       [tenantId],
     );
+    const [brandRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM brands WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [pcRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM product_categories WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [unitRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM units WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [attrRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM attributes WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
     const [kvAccRow] = await query<{ value: unknown }>(
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-chart-of-accounts' LIMIT 1`,
       [`t:${tenantId}`],
@@ -45,6 +61,22 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-products' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [kvBrandRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-brands' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvPcRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-product-categories' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvUnitRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-units' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvAttrRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-attributes' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
@@ -55,16 +87,24 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
     res.json({
       tenantId,
       db: {
-        accounts:       parseInt(accRow?.count  ?? "0", 10),
-        journalEntries: parseInt(jeRow?.count   ?? "0", 10),
-        customers:      parseInt(custRow?.count ?? "0", 10),
-        products:       parseInt(prodRow?.count ?? "0", 10),
+        accounts:          parseInt(accRow?.count   ?? "0", 10),
+        journalEntries:    parseInt(jeRow?.count    ?? "0", 10),
+        customers:         parseInt(custRow?.count  ?? "0", 10),
+        products:          parseInt(prodRow?.count  ?? "0", 10),
+        brands:            parseInt(brandRow?.count ?? "0", 10),
+        productCategories: parseInt(pcRow?.count    ?? "0", 10),
+        units:             parseInt(unitRow?.count  ?? "0", 10),
+        attributes:        parseInt(attrRow?.count  ?? "0", 10),
       },
       kv: {
-        accounts:       parseCount(kvAccRow?.value),
-        journalEntries: parseCount(kvJeRow?.value),
-        customers:      parseCount(kvCustRow?.value),
-        products:       parseCount(kvProdRow?.value),
+        accounts:          parseCount(kvAccRow?.value),
+        journalEntries:    parseCount(kvJeRow?.value),
+        customers:         parseCount(kvCustRow?.value),
+        products:          parseCount(kvProdRow?.value),
+        brands:            parseCount(kvBrandRow?.value),
+        productCategories: parseCount(kvPcRow?.value),
+        units:             parseCount(kvUnitRow?.value),
+        attributes:        parseCount(kvAttrRow?.value),
       },
     });
   } catch (err) {

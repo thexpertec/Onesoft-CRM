@@ -1,16 +1,38 @@
+export interface MigrationCounts {
+  accounts: number;
+  journalEntries: number;
+  customers: number;
+  products: number;
+  brands: number;
+  productCategories: number;
+  units: number;
+  attributes: number;
+}
+
 export interface MigrationStatus {
   tenantId: string;
-  db: { accounts: number; journalEntries: number; customers: number; products: number };
-  kv: { accounts: number; journalEntries: number; customers: number; products: number };
+  db: MigrationCounts;
+  kv: MigrationCounts;
+}
+
+export interface MigrationSection {
+  found: number;
+  inserted: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface MigrationResult {
   tenantId: string;
   dryRun: boolean;
-  accounts:       { found: number; inserted: number; skipped: number; errors: string[] };
-  journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
-  customers:      { found: number; inserted: number; skipped: number; errors: string[] };
-  products:       { found: number; inserted: number; skipped: number; errors: string[] };
+  accounts:          MigrationSection;
+  journalEntries:    MigrationSection;
+  customers:         MigrationSection;
+  products:          MigrationSection;
+  brands:            MigrationSection;
+  productCategories: MigrationSection;
+  units:             MigrationSection;
+  attributes:        MigrationSection;
 }
 
 const BASE = "/api/migrate";

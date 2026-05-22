@@ -13,6 +13,7 @@
  */
 
 import { pool, query } from "./db.js";
+import { assertIdent } from "./records.js";
 import { randomUUID } from "node:crypto";
 
 interface FrontendAccount {
@@ -56,13 +57,21 @@ interface FrontendJE {
   updatedAt?: string;
 }
 
+export interface MigrateSection {
+  found: number; inserted: number; skipped: number; errors: string[];
+}
+
 export interface MigrateResult {
   tenantId: string;
   dryRun: boolean;
-  accounts: { found: number; inserted: number; skipped: number; errors: string[] };
-  journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
-  customers: { found: number; inserted: number; skipped: number; errors: string[] };
-  products: { found: number; inserted: number; skipped: number; errors: string[] };
+  accounts:          MigrateSection;
+  journalEntries:    MigrateSection;
+  customers:         MigrateSection;
+  products:          MigrateSection;
+  brands:            MigrateSection;
+  productCategories: MigrateSection;
+  units:             MigrateSection;
+  attributes:        MigrateSection;
 }
 
 interface FrontendProduct {
@@ -156,10 +165,14 @@ export async function migrateTenant(
   const result: MigrateResult = {
     tenantId,
     dryRun,
-    accounts: { found: 0, inserted: 0, skipped: 0, errors: [] },
-    journalEntries: { found: 0, inserted: 0, skipped: 0, errors: [] },
-    customers: { found: 0, inserted: 0, skipped: 0, errors: [] },
-    products: { found: 0, inserted: 0, skipped: 0, errors: [] },
+    accounts:          { found: 0, inserted: 0, skipped: 0, errors: [] },
+    journalEntries:    { found: 0, inserted: 0, skipped: 0, errors: [] },
+    customers:         { found: 0, inserted: 0, skipped: 0, errors: [] },
+    products:          { found: 0, inserted: 0, skipped: 0, errors: [] },
+    brands:            { found: 0, inserted: 0, skipped: 0, errors: [] },
+    productCategories: { found: 0, inserted: 0, skipped: 0, errors: [] },
+    units:             { found: 0, inserted: 0, skipped: 0, errors: [] },
+    attributes:        { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -673,7 +686,130 @@ export async function migrateTenant(
     }
   }
 
+  // ── 5. Masters (brands, product_categories, units, attributes) ─────────────
+  await migrateMaster<{ id: string; name: string; color?: string; website?: string; description?: string; status?: string; createdAt?: string; updatedAt?: string }>({
+    tenantId, dryRun, result, section: "brands",
+    kvKey: "admin-brands", table: "brands", entityType: "brand",
+    columns: ["name", "color", "website", "description", "status"],
+    extractValues: (b) => [b.name, b.color ?? "", b.website ?? "", b.description ?? "", b.status ?? "Active"],
+    auditSummary: (b) => ({ name: b.name }),
+  });
+  await migrateMaster<{ id: string; name: string; description?: string; color?: string; parentId?: string | null; createdAt?: string; updatedAt?: string }>({
+    tenantId, dryRun, result, section: "productCategories",
+    kvKey: "admin-product-categories", table: "product_categories", entityType: "product_category",
+    columns: ["name", "description", "color", "parent_id"],
+    extractValues: (c) => [c.name, c.description ?? "", c.color ?? "", c.parentId ?? null],
+    auditSummary: (c) => ({ name: c.name }),
+  });
+  await migrateMaster<{ id: string; name: string; symbol?: string; description?: string; createdAt?: string; updatedAt?: string }>({
+    tenantId, dryRun, result, section: "units",
+    kvKey: "admin-units", table: "units", entityType: "unit",
+    columns: ["name", "symbol", "description"],
+    extractValues: (u) => [u.name, u.symbol ?? "", u.description ?? ""],
+    auditSummary: (u) => ({ name: u.name }),
+  });
+  await migrateMaster<{ id: string; name: string; type?: string; values?: string; description?: string; active?: boolean; createdAt?: string; updatedAt?: string }>({
+    tenantId, dryRun, result, section: "attributes",
+    kvKey: "admin-attributes", table: "attributes", entityType: "attribute",
+    columns: ["name", "type", "values", "description", "active"],
+    extractValues: (a) => [a.name, a.type ?? "text", a.values ?? "", a.description ?? "", a.active !== false],
+    auditSummary: (a) => ({ name: a.name }),
+  });
+
   return result;
+}
+
+/**
+ * Generic master/lookup migrator. Handles tiny tables with a global-PK `id`,
+ * `tenant_id`, simple scalar columns, `created_at`/`updated_at`, and no nested
+ * JSON. Mirrors the customers/products pattern: cross-tenant collision is an
+ * error, ON CONFLICT...RETURNING id guards real inserts, audit row per insert.
+ */
+async function migrateMaster<T extends { id: string; name?: string; createdAt?: string; updatedAt?: string }>(opts: {
+  tenantId: string;
+  dryRun: boolean;
+  result: MigrateResult;
+  section: keyof MigrateResult & ("brands" | "productCategories" | "units" | "attributes");
+  kvKey: string;
+  table: string;
+  entityType: string;
+  columns: string[];
+  extractValues: (row: T) => unknown[];
+  auditSummary: (row: T) => Record<string, unknown>;
+}): Promise<void> {
+  const { tenantId, dryRun, result, section, kvKey, table, entityType, columns, extractValues, auditSummary } = opts;
+  assertIdent(table);
+  for (const c of columns) assertIdent(c);
+  const bucket = result[section] as MigrateSection;
+
+  const raw = await readKv(tenantId, kvKey);
+  const rows: T[] = Array.isArray(raw) ? (raw as T[]) : [];
+  bucket.found = rows.length;
+
+  for (const row of rows) {
+    try {
+      if (!row?.id || !row.name) {
+        bucket.errors.push(`${entityType} ${row?.id ?? "?"}: missing required fields (id, name) — skipped`);
+        bucket.skipped++;
+        continue;
+      }
+
+      const existing = await query<{ tenant_id: string }>(
+        `SELECT tenant_id FROM ${table} WHERE id = $1 LIMIT 1`,
+        [row.id],
+      );
+      if (existing.length > 0) {
+        if (existing[0].tenant_id !== tenantId) {
+          bucket.errors.push(
+            `${entityType} ${row.id} (${row.name}): id already exists under another tenant (${existing[0].tenant_id}) — skipped`,
+          );
+        }
+        bucket.skipped++;
+        continue;
+      }
+
+      if (dryRun) { bucket.inserted++; continue; }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const allCols = ["id", "tenant_id", ...columns, "created_at", "updated_at"];
+        const placeholders = allCols.map((_, i) => `$${i + 1}`).join(",");
+        const values = [
+          row.id,
+          tenantId,
+          ...extractValues(row),
+          row.createdAt ? new Date(row.createdAt) : new Date(),
+          row.updatedAt ? new Date(row.updatedAt) : new Date(),
+        ];
+        const ins = await client.query(
+          `INSERT INTO ${table} (${allCols.join(",")}) VALUES (${placeholders})
+           ON CONFLICT (id) DO NOTHING RETURNING id`,
+          values,
+        );
+        if (ins.rowCount && ins.rowCount > 0) {
+          await client.query(
+            `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+             VALUES ($1,$2,'migrate',$3,$4,'create',NULL,$5)`,
+            [randomUUID(), tenantId, entityType, row.id, JSON.stringify(auditSummary(row))],
+          );
+          await client.query("COMMIT");
+          bucket.inserted++;
+        } else {
+          await client.query("ROLLBACK");
+          bucket.errors.push(`${entityType} ${row.id} (${row.name}): id collision detected during insert — skipped`);
+          bucket.skipped++;
+        }
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      bucket.errors.push(`${entityType} ${row.id} (${row.name ?? "?"}): ${(err as Error).message}`);
+    }
+  }
 }
 
 /** Run migrations for multiple tenants and print a summary. */

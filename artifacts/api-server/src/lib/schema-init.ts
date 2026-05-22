@@ -164,6 +164,64 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS products_tenant_sku_idx ON products (tenant_id, sku)`,
   `CREATE INDEX IF NOT EXISTS products_tenant_cat_idx ON products (tenant_id, category)`,
 
+  // ── Brands ───────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS brands (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    color       TEXT        NOT NULL DEFAULT '',
+    website     TEXT        NOT NULL DEFAULT '',
+    description TEXT        NOT NULL DEFAULT '',
+    status      TEXT        NOT NULL DEFAULT 'Active',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS brands_tenant_idx ON brands (tenant_id)`,
+
+  // ── Product Categories ───────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS product_categories (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    description TEXT        NOT NULL DEFAULT '',
+    color       TEXT        NOT NULL DEFAULT '',
+    parent_id   TEXT,
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS product_categories_tenant_idx ON product_categories (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS product_categories_parent_idx ON product_categories (tenant_id, parent_id)`,
+
+  // ── Units ────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS units (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    symbol      TEXT        NOT NULL DEFAULT '',
+    description TEXT        NOT NULL DEFAULT '',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS units_tenant_idx ON units (tenant_id)`,
+
+  // ── Attributes ───────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS attributes (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    type        TEXT        NOT NULL DEFAULT 'text',
+    values      TEXT        NOT NULL DEFAULT '',
+    description TEXT        NOT NULL DEFAULT '',
+    active      BOOLEAN     NOT NULL DEFAULT TRUE,
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS attributes_tenant_idx ON attributes (tenant_id)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

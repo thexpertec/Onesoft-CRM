@@ -51,7 +51,7 @@ export interface TableSpec {
 }
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
-const assertIdent = (s: string) => {
+export const assertIdent = (s: string) => {
   if (!SAFE_IDENT.test(s)) throw new Error(`Unsafe identifier: ${s}`);
   return s;
 };
