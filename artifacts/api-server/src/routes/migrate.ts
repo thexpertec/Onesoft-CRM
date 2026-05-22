@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { migrateTenant } from "../lib/migrate-tenant.js";
+import { migratePlatform, getPlatformStatus } from "../lib/migrate-platform.js";
 import { query } from "../lib/db.js";
 
 const router = Router();
@@ -197,11 +198,26 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-hrm-staff' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [settingsRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM admin_settings WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    const [kvSettingsRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-settings' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
       const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
       return Array.isArray(arr) ? arr.length : 0;
+    };
+    // Settings is a single JSON object (not array): 1 if present and non-null,
+    // 0 otherwise. Matches `result.settings.found` semantics in migrate-tenant.
+    const parseSettingsBlob = (raw: unknown): number => {
+      if (raw == null) return 0;
+      const v = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return v && typeof v === "object" && !Array.isArray(v) ? 1 : 0;
     };
 
     res.json({
@@ -230,6 +246,7 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         purchaseReturns:   parseInt(purchaseReturnsRow?.count ?? "0", 10),
         rpVouchers:        parseInt(rpVouchersRow?.count ?? "0", 10),
         staff:             parseInt(staffRow?.count ?? "0", 10),
+        settings:          parseInt(settingsRow?.count ?? "0", 10),
       },
       kv: {
         accounts:          parseCount(kvAccRow?.value),
@@ -255,6 +272,7 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         purchaseReturns:   parseCount(kvPurchaseReturnsRow?.value),
         rpVouchers:        parseCount(kvRpVouchersRow?.value),
         staff:             parseCount(kvStaffRow?.value),
+        settings:          parseSettingsBlob(kvSettingsRow?.value),
       },
     });
   } catch (err) {
@@ -283,6 +301,41 @@ router.post("/tenant/:tenantId", async (req, res, next) => {
   try {
     const result = await migrateTenant(req.params.tenantId, false);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/migrate/platform/status
+ * Counts platform-global rows (admin_users, tenants, module_groups) vs the
+ * matching KV blobs in the `global` namespace.
+ */
+router.get("/platform/status", async (_req, res, next) => {
+  try {
+    res.json(await getPlatformStatus());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/migrate/platform/dry-run — counts only, no writes. */
+router.post("/platform/dry-run", async (_req, res, next) => {
+  try {
+    res.json(await migratePlatform(true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/migrate/platform
+ * Idempotent platform-globals migration. Users + module groups are insert-only;
+ * tenants UPSERT to absorb superadmin edits made through the KV path.
+ */
+router.post("/platform", async (_req, res, next) => {
+  try {
+    res.json(await migratePlatform(false));
   } catch (err) {
     next(err);
   }

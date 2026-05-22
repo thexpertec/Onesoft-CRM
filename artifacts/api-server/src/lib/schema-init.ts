@@ -17,14 +17,98 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS kv_store_ns_idx ON kv_store (namespace)`,
 
   // ── Tenants ─────────────────────────────────────────────────────────────────
+  // Mirrors live production schema. Drift-tolerant: CREATE TABLE IF NOT EXISTS
+  // is a no-op when the table already exists, so the ALTER TABLE statements
+  // below bring any pre-drift instances up to current shape.
   `CREATE TABLE IF NOT EXISTS tenants (
-    id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    admin_username  TEXT NOT NULL,
-    admin_password  TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'active',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    slug                TEXT NOT NULL,
+    admin_username      TEXT NOT NULL,
+    admin_password_hash TEXT NOT NULL,
+    contact_email       TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'active',
+    plan                TEXT NOT NULL DEFAULT 'free',
+    module_group_id     TEXT,
+    is_demo             BOOLEAN NOT NULL DEFAULT FALSE,
+    demo_reset_interval INTEGER,
+    demo_last_reset     TIMESTAMPTZ,
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  // Drift catch-up: legacy tenants tables seeded from the old 7-column DDL
+  // are missing the columns below. ADD COLUMN IF NOT EXISTS is a no-op on the
+  // already-updated live DB and a real upgrade on any fresh-from-old instance.
+  // Legacy `admin_password` column is also renamed to `admin_password_hash`
+  // (live already uses the new name; rename is a no-op there).
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug                TEXT`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contact_email       TEXT`,
+  // Drift convergence: legacy rows pre-rename may have NULL slug/contact_email.
+  // Backfill deterministically from id/admin_username so we can enforce NOT NULL
+  // to match the declared CREATE TABLE shape. Idempotent — no-ops when values
+  // are already present.
+  `UPDATE tenants SET slug          = id              WHERE slug          IS NULL`,
+  `UPDATE tenants SET contact_email = ''              WHERE contact_email IS NULL`,
+  `UPDATE tenants SET admin_password_hash = ''        WHERE admin_password_hash IS NULL`,
+  `ALTER TABLE tenants ALTER COLUMN slug                SET NOT NULL`,
+  `ALTER TABLE tenants ALTER COLUMN contact_email       SET NOT NULL`,
+  `ALTER TABLE tenants ALTER COLUMN admin_password_hash SET NOT NULL`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan                TEXT NOT NULL DEFAULT 'free'`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS module_group_id     TEXT`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_demo             BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS demo_reset_interval INTEGER`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS demo_last_reset     TIMESTAMPTZ`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived_at         TIMESTAMPTZ`,
+  `DO $$ BEGIN
+     IF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name='tenants' AND column_name='admin_password')
+        AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name='tenants' AND column_name='admin_password_hash') THEN
+       ALTER TABLE tenants RENAME COLUMN admin_password TO admin_password_hash;
+     END IF;
+   END $$`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS tenants_slug_uq           ON tenants (slug) WHERE slug IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS tenants_admin_username_uq ON tenants (admin_username)`,
+  `CREATE        INDEX IF NOT EXISTS tenants_status_idx        ON tenants (status)`,
+
+  // ── Platform users (superadmin + tenant managers; always global namespace) ──
+  `CREATE TABLE IF NOT EXISTS admin_users (
+    id                TEXT PRIMARY KEY,
+    username          TEXT NOT NULL,
+    full_name         TEXT NOT NULL DEFAULT '',
+    email             TEXT NOT NULL DEFAULT '',
+    role              TEXT NOT NULL,
+    password          TEXT NOT NULL,
+    assigned_tenants  TEXT[] NOT NULL DEFAULT '{}'::text[],
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS admin_users_username_uq ON admin_users (LOWER(username))`,
+  `CREATE        INDEX IF NOT EXISTS admin_users_role_idx    ON admin_users (role)`,
+
+  // ── Module groups (platform RBAC; always global namespace) ──────────────────
+  `CREATE TABLE IF NOT EXISTS module_groups (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    description  TEXT NOT NULL DEFAULT '',
+    modules      TEXT[] NOT NULL DEFAULT '{}'::text[],
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS module_groups_name_uq ON module_groups (LOWER(name))`,
+
+  // ── App settings (one JSON blob per tenant) ─────────────────────────────────
+  // Single-row-per-tenant table. The payload is stored verbatim as JSONB so
+  // the 80+ fields on AppSettings (font sizes, invoice labels, COA mappings,
+  // print options, quick-actions, etc.) don't require a column-per-field DDL.
+  // FK to tenants(id) keeps orphaned settings rows from surviving a tenant
+  // delete; ON DELETE CASCADE matches the "everything tenant-scoped goes
+  // when the tenant goes" rule.
+  `CREATE TABLE IF NOT EXISTS admin_settings (
+    tenant_id  TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    payload    JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
 
   // ── Chart of accounts ────────────────────────────────────────────────────────

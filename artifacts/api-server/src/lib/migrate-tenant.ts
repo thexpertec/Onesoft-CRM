@@ -102,6 +102,7 @@ export interface MigrateResult {
   purchaseReturns:   MigrateSection;
   rpVouchers:        MigrateSection;
   staff:             MigrateSection;
+  settings:          MigrateSection;
 }
 
 interface FrontendProduct {
@@ -218,6 +219,7 @@ export async function migrateTenant(
     purchaseReturns:   { found: 0, inserted: 0, skipped: 0, errors: [] },
     rpVouchers:        { found: 0, inserted: 0, skipped: 0, errors: [] },
     staff:             { found: 0, inserted: 0, skipped: 0, errors: [] },
+    settings:          { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1824,6 +1826,76 @@ export async function migrateTenant(
         `Staff ${s.id} (${s.name}): ${(err as Error).message}`,
       );
     }
+  }
+
+  // ── 16. App Settings (single blob per tenant) ──────────────────────────────
+  // AppSettings is one JSON object (not an array) keyed `admin-settings` in
+  // the tenant namespace. It carries 80+ fields (font sizes, invoice labels,
+  // COA mappings, print options, etc.) so we store it verbatim as JSONB in
+  // admin_settings(tenant_id PK, payload, updated_at). Idempotency: presence
+  // of the row counts as "skipped". UPDATE is intentionally NOT done here —
+  // settings overwrite would silently clobber later UI edits on re-run; if a
+  // re-sync is wanted, the row must be deleted first (or the dedicated
+  // settings PUT route used). Found/inserted/skipped semantics:
+  //   found    = 1 if blob present and is a non-null object (else 0)
+  //   inserted = 1 if a new row was written (dry-run: 1 if would write)
+  //   skipped  = 1 if a row already exists for this tenant
+  try {
+    const rawSettings = await readKv(tenantId, "admin-settings");
+    const isObjBlob = rawSettings !== null
+      && typeof rawSettings === "object"
+      && !Array.isArray(rawSettings);
+    result.settings.found = isObjBlob ? 1 : 0;
+
+    if (isObjBlob) {
+      const existing = await query(
+        `SELECT tenant_id FROM admin_settings WHERE tenant_id = $1 LIMIT 1`,
+        [tenantId],
+      );
+      if (existing.length > 0) {
+        result.settings.skipped = 1;
+      } else if (dryRun) {
+        result.settings.inserted = 1;
+      } else {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const ins = await client.query(
+            `INSERT INTO admin_settings (tenant_id, payload, updated_at)
+             VALUES ($1, $2::jsonb, NOW())
+             ON CONFLICT (tenant_id) DO NOTHING
+             RETURNING tenant_id`,
+            [tenantId, JSON.stringify(rawSettings)],
+          );
+          if ((ins.rowCount ?? 0) > 0) {
+            await client.query(
+              `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+               VALUES ($1,$2,'migrate','app_settings',$2,'create',NULL,$3)`,
+              [
+                randomUUID(),
+                tenantId,
+                JSON.stringify({
+                  fields: Object.keys(rawSettings as Record<string, unknown>).length,
+                  companyName: (rawSettings as { companyName?: string }).companyName ?? null,
+                }),
+              ],
+            );
+            await client.query("COMMIT");
+            result.settings.inserted = 1;
+          } else {
+            await client.query("ROLLBACK");
+            result.settings.skipped = 1;
+          }
+        } catch (err) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+    }
+  } catch (err) {
+    result.settings.errors.push(`Settings: ${(err as Error).message}`);
   }
 
   return result;

@@ -27,7 +27,9 @@ import { useAuth } from "@/contexts/auth-context";
 import { useAccounts } from "@/hooks/use-data";
 import {
   getMigrationStatus, runMigration,
+  getPlatformStatus, runPlatformMigration,
   type MigrationStatus, type MigrationResult,
+  type PlatformMigrationStatus, type PlatformMigrationResult,
 } from "@/lib/migration-api";
 import {
   AppSettings, LegalDocument, BankAccount, getSettings, saveSettings,
@@ -739,6 +741,12 @@ export default function SettingsPage() {
   const [migrationResult,  setMigrationResult]  = useState<MigrationResult | null>(null);
   const [migrationError,   setMigrationError]   = useState<string | null>(null);
 
+  // ── Platform-globals migration state (superadmin only) ───────────────────
+  const [platformStatus,  setPlatformStatus]  = useState<PlatformMigrationStatus | null>(null);
+  const [platformRunning, setPlatformRunning] = useState(false);
+  const [platformResult,  setPlatformResult]  = useState<PlatformMigrationResult | null>(null);
+  const [platformError,   setPlatformError]   = useState<string | null>(null);
+
   // Re-read settings on mount so any backfill that ran after the lazy initializer is applied
   useEffect(() => {
     setForm(getSettings());
@@ -755,6 +763,20 @@ export default function SettingsPage() {
       .catch(() => { /* non-fatal — panel just won't show counts */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, currentTenant?.id]);
+
+  // Load platform-globals status whenever the Data tab opens for a superadmin.
+  // Independent of tenant — runs even when no tenant is selected so the
+  // superadmin can sync platform globals before any per-tenant work.
+  useEffect(() => {
+    if (tab !== "data" || !isSuperAdmin) return;
+    setPlatformStatus(null);
+    setPlatformResult(null);
+    setPlatformError(null);
+    getPlatformStatus()
+      .then(setPlatformStatus)
+      .catch(() => { /* non-fatal */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, isSuperAdmin]);
 
   const set = useCallback(<K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
     setForm(f => ({ ...f, [key]: val }));
@@ -2376,6 +2398,7 @@ export default function SettingsPage() {
                           { label: "Purchase Returns",  kv: migrationStatus.kv.purchaseReturns,   db: migrationStatus.db.purchaseReturns },
                           { label: "R/P Vouchers",      kv: migrationStatus.kv.rpVouchers,        db: migrationStatus.db.rpVouchers },
                           { label: "Staff",             kv: migrationStatus.kv.staff,             db: migrationStatus.db.staff },
+                          { label: "App Settings",      kv: migrationStatus.kv.settings,          db: migrationStatus.db.settings },
                         ] as const).map(({ label, kv, db }) => {
                           const synced = db >= kv;
                           return (
@@ -2420,7 +2443,7 @@ export default function SettingsPage() {
                             result.leads.inserted + result.departments.inserted + result.designations.inserted +
                             result.cities.inserted + result.areas.inserted + result.requirementDocs.inserted +
                             result.stockItems.inserted + result.stockLedger.inserted + result.purchaseOrders.inserted + result.sales.inserted + result.invoices.inserted +
-                            result.saleReturns.inserted + result.purchaseReturns.inserted + result.rpVouchers.inserted + result.staff.inserted;
+                            result.saleReturns.inserted + result.purchaseReturns.inserted + result.rpVouchers.inserted + result.staff.inserted + result.settings.inserted;
                           toast({
                             title: inserted > 0 ? `Migration complete — ${inserted} record${inserted !== 1 ? "s" : ""} added` : "Migration complete — nothing to do",
                             description: inserted === 0 ? "All records were already in the database." : undefined,
@@ -2446,7 +2469,7 @@ export default function SettingsPage() {
                     {migrationResult && (
                       <div className="mt-4 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50 p-4 space-y-2">
                         <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">Result</p>
-                        {(["accounts", "journalEntries", "customers", "products", "brands", "productCategories", "units", "attributes", "leads", "departments", "designations", "cities", "areas", "requirementDocs", "stockItems", "stockLedger", "purchaseOrders", "sales", "invoices", "saleReturns", "purchaseReturns", "rpVouchers", "staff"] as const).map(key => {
+                        {(["accounts", "journalEntries", "customers", "products", "brands", "productCategories", "units", "attributes", "leads", "departments", "designations", "cities", "areas", "requirementDocs", "stockItems", "stockLedger", "purchaseOrders", "sales", "invoices", "saleReturns", "purchaseReturns", "rpVouchers", "staff", "settings"] as const).map(key => {
                           const r = migrationResult[key];
                           const label =
                             key === "accounts" ? "Accounts" :
@@ -2471,7 +2494,8 @@ export default function SettingsPage() {
                             key === "saleReturns" ? "Sale Returns" :
                             key === "purchaseReturns" ? "Purchase Returns" :
                             key === "rpVouchers" ? "R/P Vouchers" :
-                            "Staff";
+                            key === "staff" ? "Staff" :
+                            "App Settings";
                           return (
                             <div key={key} className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
                               <span className="font-medium text-foreground w-28">{label}</span>
@@ -2484,7 +2508,7 @@ export default function SettingsPage() {
                             </div>
                           );
                         })}
-                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length + migrationResult.customers.errors.length + migrationResult.products.errors.length + migrationResult.brands.errors.length + migrationResult.productCategories.errors.length + migrationResult.units.errors.length + migrationResult.attributes.errors.length + migrationResult.leads.errors.length + migrationResult.departments.errors.length + migrationResult.designations.errors.length + migrationResult.cities.errors.length + migrationResult.areas.errors.length + migrationResult.requirementDocs.errors.length + migrationResult.stockItems.errors.length + migrationResult.stockLedger.errors.length + migrationResult.purchaseOrders.errors.length + migrationResult.sales.errors.length + migrationResult.invoices.errors.length + migrationResult.saleReturns.errors.length + migrationResult.purchaseReturns.errors.length + migrationResult.rpVouchers.errors.length + migrationResult.staff.errors.length) > 0 && (
+                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length + migrationResult.customers.errors.length + migrationResult.products.errors.length + migrationResult.brands.errors.length + migrationResult.productCategories.errors.length + migrationResult.units.errors.length + migrationResult.attributes.errors.length + migrationResult.leads.errors.length + migrationResult.departments.errors.length + migrationResult.designations.errors.length + migrationResult.cities.errors.length + migrationResult.areas.errors.length + migrationResult.requirementDocs.errors.length + migrationResult.stockItems.errors.length + migrationResult.stockLedger.errors.length + migrationResult.purchaseOrders.errors.length + migrationResult.sales.errors.length + migrationResult.invoices.errors.length + migrationResult.saleReturns.errors.length + migrationResult.purchaseReturns.errors.length + migrationResult.rpVouchers.errors.length + migrationResult.staff.errors.length + migrationResult.settings.errors.length) > 0 && (
                           <details className="mt-2">
                             <summary className="text-[11px] text-red-600 dark:text-red-400 cursor-pointer">Show errors</summary>
                             <ul className="mt-1 space-y-0.5 pl-3">
@@ -2512,6 +2536,7 @@ export default function SettingsPage() {
                                 ...migrationResult.purchaseReturns.errors,
                                 ...migrationResult.rpVouchers.errors,
                                 ...migrationResult.staff.errors,
+                                ...migrationResult.settings.errors,
                               ].map((e, i) => (
                                 <li key={i} className="text-[10px] text-red-600 dark:text-red-400">{e}</li>
                               ))}
@@ -2526,6 +2551,123 @@ export default function SettingsPage() {
                       <div className="mt-3 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg px-3 py-2.5">
                         <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
                         <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">{migrationError}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Platform Globals Migration (superadmin only) */}
+                {isSuperAdmin && (
+                  <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50/40 dark:bg-indigo-950/10 p-5">
+                    <SectionHeader
+                      title="Platform Globals Migration"
+                      desc="Sync platform-wide KV blobs (admin users, tenants, module groups) into their dedicated relational tables. Insert-only for users and module groups; tenants UPSERT so re-runs absorb later edits."
+                    />
+
+                    {platformStatus && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                        {([
+                          ["Admin Users",   platformStatus.kv.adminUsers,   platformStatus.db.adminUsers],
+                          ["Tenants",       platformStatus.kv.tenants,      platformStatus.db.tenants],
+                          ["Module Groups", platformStatus.kv.moduleGroups, platformStatus.db.moduleGroups],
+                        ] as const).map(([label, kv, db]) => {
+                          const synced = db >= kv;
+                          return (
+                            <div
+                              key={label}
+                              className={`rounded-lg border px-4 py-3 flex flex-col gap-1 ${
+                                synced
+                                  ? "border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/10"
+                                  : "border-amber-200 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/10"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                                {synced
+                                  ? <Check size={13} className="text-emerald-600 dark:text-emerald-400" />
+                                  : <AlertTriangle size={13} className="text-amber-500" />
+                                }
+                              </div>
+                              <div className="flex gap-4 text-[11px] text-muted-foreground">
+                                <span>KV: <strong className="text-foreground">{kv}</strong></span>
+                                <span>DB: <strong className={synced ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{db}</strong></span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={async () => {
+                        setPlatformRunning(true);
+                        setPlatformResult(null);
+                        setPlatformError(null);
+                        try {
+                          const r = await runPlatformMigration();
+                          setPlatformResult(r);
+                          const total = r.adminUsers.inserted + r.tenants.inserted + r.tenants.updated + r.moduleGroups.inserted;
+                          toast({
+                            title: total > 0
+                              ? `Platform sync complete — ${total} change${total !== 1 ? "s" : ""}`
+                              : "Platform sync complete — nothing to do",
+                          });
+                          getPlatformStatus().then(setPlatformStatus).catch(() => {});
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : String(e);
+                          setPlatformError(msg);
+                          toast({ variant: "destructive", title: "Platform migration failed", description: msg });
+                        } finally {
+                          setPlatformRunning(false);
+                        }
+                      }}
+                      disabled={platformRunning}
+                      className="mt-4 gap-2 h-9 text-[13px] bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <RefreshCw size={14} className={platformRunning ? "animate-spin" : ""} />
+                      {platformRunning ? "Syncing…" : "Run Platform Sync"}
+                    </Button>
+
+                    {platformResult && (
+                      <div className="mt-4 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50 p-4 space-y-2">
+                        <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">Result</p>
+                        {(["adminUsers", "tenants", "moduleGroups"] as const).map(key => {
+                          const r = platformResult[key];
+                          const label = key === "adminUsers" ? "Admin Users" : key === "tenants" ? "Tenants" : "Module Groups";
+                          return (
+                            <div key={key} className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
+                              <span className="font-medium text-foreground w-28">{label}</span>
+                              <span>Found: <strong>{r.found}</strong></span>
+                              <span className="text-emerald-600 dark:text-emerald-400">Inserted: <strong>{r.inserted}</strong></span>
+                              {r.updated > 0 && <span className="text-blue-600 dark:text-blue-400">Updated: <strong>{r.updated}</strong></span>}
+                              <span>Skipped: <strong>{r.skipped}</strong></span>
+                              {r.errors.length > 0 && (
+                                <span className="text-red-600 dark:text-red-400">Errors: <strong>{r.errors.length}</strong></span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {(platformResult.adminUsers.errors.length + platformResult.tenants.errors.length + platformResult.moduleGroups.errors.length) > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-[11px] text-red-600 dark:text-red-400 cursor-pointer">Show errors</summary>
+                            <ul className="mt-1 space-y-0.5 pl-3">
+                              {[
+                                ...platformResult.adminUsers.errors,
+                                ...platformResult.tenants.errors,
+                                ...platformResult.moduleGroups.errors,
+                              ].map((e, i) => (
+                                <li key={i} className="text-[10px] text-red-600 dark:text-red-400">{e}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </div>
+                    )}
+
+                    {platformError && (
+                      <div className="mt-3 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg px-3 py-2.5">
+                        <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
+                        <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">{platformError}</p>
                       </div>
                     )}
                   </div>

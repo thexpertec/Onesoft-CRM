@@ -22,12 +22,40 @@ export interface MigrationCounts {
   purchaseReturns: number;
   rpVouchers: number;
   staff: number;
+  /** Single AppSettings blob per tenant: 1 = present, 0 = missing. */
+  settings: number;
 }
 
 export interface MigrationStatus {
   tenantId: string;
   db: MigrationCounts;
   kv: MigrationCounts;
+}
+
+export interface PlatformCounts {
+  adminUsers:   number;
+  tenants:      number;
+  moduleGroups: number;
+}
+
+export interface PlatformMigrationStatus {
+  db: PlatformCounts;
+  kv: PlatformCounts;
+}
+
+export interface PlatformMigrationSection {
+  found:    number;
+  inserted: number;
+  updated:  number;
+  skipped:  number;
+  errors:   string[];
+}
+
+export interface PlatformMigrationResult {
+  dryRun:       boolean;
+  adminUsers:   PlatformMigrationSection;
+  tenants:      PlatformMigrationSection;
+  moduleGroups: PlatformMigrationSection;
 }
 
 export interface MigrationSection {
@@ -63,6 +91,7 @@ export interface MigrationResult {
   purchaseReturns:   MigrationSection;
   rpVouchers:        MigrationSection;
   staff:             MigrationSection;
+  settings:          MigrationSection;
 }
 
 const BASE = "/api/migrate";
@@ -80,4 +109,17 @@ export async function runMigration(tenantId: string, dryRun = false): Promise<Mi
   const res = await fetch(url, { method: "POST" });
   if (!res.ok) throw new Error(`Migration failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<MigrationResult>;
+}
+
+export async function getPlatformStatus(): Promise<PlatformMigrationStatus> {
+  const res = await fetch(`${BASE}/platform/status`);
+  if (!res.ok) throw new Error(`Platform status check failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<PlatformMigrationStatus>;
+}
+
+export async function runPlatformMigration(dryRun = false): Promise<PlatformMigrationResult> {
+  const url = dryRun ? `${BASE}/platform/dry-run` : `${BASE}/platform`;
+  const res = await fetch(url, { method: "POST" });
+  if (!res.ok) throw new Error(`Platform migration failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<PlatformMigrationResult>;
 }
