@@ -23,6 +23,7 @@ import salesRouter from "./sales.js";
 import invoicesRouter from "./invoices.js";
 import saleReturnsRouter from "./sale-returns.js";
 import purchaseReturnsRouter from "./purchase-returns.js";
+import rpVouchersRouter from "./rp-vouchers.js";
 import staffRouter from "./staff.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
@@ -56,6 +57,7 @@ router.use("/sales", salesRouter);
 router.use("/invoices", invoicesRouter);
 router.use("/sale-returns", saleReturnsRouter);
 router.use("/purchase-returns", purchaseReturnsRouter);
+router.use("/rp-vouchers", rpVouchersRouter);
 router.use("/staff", staffRouter);
 router.use("/journal-entries", journalEntriesRouter);
 

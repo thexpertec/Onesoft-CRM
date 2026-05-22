@@ -100,6 +100,7 @@ export interface MigrateResult {
   invoices:          MigrateSection;
   saleReturns:       MigrateSection;
   purchaseReturns:   MigrateSection;
+  rpVouchers:        MigrateSection;
 }
 
 interface FrontendProduct {
@@ -214,6 +215,7 @@ export async function migrateTenant(
     invoices:          { found: 0, inserted: 0, skipped: 0, errors: [] },
     saleReturns:       { found: 0, inserted: 0, skipped: 0, errors: [] },
     purchaseReturns:   { found: 0, inserted: 0, skipped: 0, errors: [] },
+    rpVouchers:        { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1557,6 +1559,133 @@ export async function migrateTenant(
     } catch (err) {
       result.purchaseReturns.errors.push(
         `Purchase Return ${pr.id} (${pr.returnNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 14. Receipt/Payment Vouchers + Lines ───────────────────────────────────
+  type IncomingRpLine = {
+    id?: string; accountId?: string; accountName?: string;
+    description?: string; amount?: unknown; invoiceId?: string;
+  };
+  type IncomingRpVoucher = {
+    id: string; voucherNumber: string;
+    voucherType?: "receipt" | "payment";
+    date?: string;
+    partyName?: string;
+    cashBankAccountId?: string; cashBankAccountName?: string;
+    reference?: string;
+    lines?: IncomingRpLine[]; bankLines?: IncomingRpLine[];
+    totalAmount?: unknown;
+    narration?: string;
+    status?: "draft" | "posted";
+    journalEntryId?: string;
+    linkedInvoiceId?: string;
+    linkedInvoiceIds?: string[];
+    createdAt?: string; updatedAt?: string;
+  };
+
+  const rawRpVouchers = await readKv(tenantId, "admin-rp-vouchers");
+  const rpVouchers: IncomingRpVoucher[] = Array.isArray(rawRpVouchers) ? (rawRpVouchers as IncomingRpVoucher[]) : [];
+  result.rpVouchers.found = rpVouchers.length;
+
+  for (const v of rpVouchers) {
+    try {
+      if (!v.id || !v.voucherNumber) {
+        result.rpVouchers.errors.push(
+          `RP Voucher ${v.id ?? "(no id)"}: missing required field (id or voucherNumber) — skipped`,
+        );
+        result.rpVouchers.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM rp_vouchers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [v.id, tenantId],
+      );
+      if (existing.length > 0) { result.rpVouchers.skipped++; continue; }
+      if (dryRun) { result.rpVouchers.inserted++; continue; }
+
+      const lines = Array.isArray(v.lines) ? v.lines : [];
+      const bankLines = Array.isArray(v.bankLines) ? v.bankLines : [];
+      const linkedIds = Array.isArray(v.linkedInvoiceIds)
+        ? v.linkedInvoiceIds.filter(x => typeof x === "string")
+        : null;
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO rp_vouchers
+            (id, tenant_id, voucher_number, voucher_type, voucher_date,
+             party_name, cash_bank_account_id, cash_bank_account_name, reference,
+             total_amount, narration, status,
+             journal_entry_id, linked_invoice_id, linked_invoice_ids,
+             created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            v.id, tenantId, v.voucherNumber,
+            v.voucherType ?? "receipt", v.date ?? "",
+            v.partyName ?? "",
+            v.cashBankAccountId ?? "", v.cashBankAccountName ?? "",
+            v.reference ?? "",
+            toStrOrEmpty(v.totalAmount, "0"),
+            v.narration ?? "",
+            v.status ?? "draft",
+            v.journalEntryId ?? null,
+            v.linkedInvoiceId ?? null,
+            linkedIds,
+            v.createdAt ? new Date(v.createdAt) : new Date(),
+            v.updatedAt ? new Date(v.updatedAt) : new Date(),
+          ],
+        );
+        const insertLine = async (kind: "line" | "bank", arr: IncomingRpLine[]) => {
+          for (let i = 0; i < arr.length; i++) {
+            const l = arr[i];
+            await client.query(
+              `INSERT INTO rp_voucher_lines
+                (id, tenant_id, voucher_id, line_kind, account_id, account_name,
+                 description, amount, invoice_id, line_order)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               ON CONFLICT (id, tenant_id) DO NOTHING`,
+              [
+                l.id ?? randomUUID(), tenantId, v.id, kind,
+                l.accountId ?? "", l.accountName ?? "",
+                l.description ?? "",
+                toStrOrEmpty(l.amount, "0"),
+                l.invoiceId ?? null, i,
+              ],
+            );
+          }
+        };
+        await insertLine("line", lines);
+        await insertLine("bank", bankLines);
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','rp_voucher',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, v.id,
+            JSON.stringify({
+              voucherNumber: v.voucherNumber,
+              voucherType: v.voucherType ?? "receipt",
+              partyName: v.partyName ?? "",
+              lineCount: lines.length,
+              bankLineCount: bankLines.length,
+              totalAmount: toStrOrEmpty(v.totalAmount, "0"),
+              status: v.status ?? "draft",
+            }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.rpVouchers.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.rpVouchers.errors.push(
+        `RP Voucher ${v.id} (${v.voucherNumber}): ${(err as Error).message}`,
       );
     }
   }

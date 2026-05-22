@@ -735,6 +735,67 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS purchase_return_items_tenant_idx ON purchase_return_items (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS purchase_return_items_sku_idx    ON purchase_return_items (tenant_id, sku)`,
 
+  // ── Receipt & Payment Vouchers + Lines ───────────────────────────────────────
+  // RPVoucher carries TWO arrays: `lines` (per-invoice/AR/AP/expense legs) and
+  // optional `bankLines` (multi-bank cash side). We collapse both into a single
+  // `rp_voucher_lines` table with a `line_kind` discriminator (`'line' | 'bank'`)
+  // so the child shape is uniform; routes split them back out on read.
+  //
+  // `linked_invoice_ids` (TEXT[]) is a small denormalised list used for fast
+  // reverse-lookup ("which voucher cleared invoice X?"); no FK to invoices
+  // since it's a snapshot/historical reference.
+  //
+  // DELETE blocker: backend refuses when status='posted' (mirrors store.ts
+  // `deleteRPVoucher`). Drafts are freely deletable.
+  `CREATE TABLE IF NOT EXISTS rp_vouchers (
+    id                       TEXT        NOT NULL,
+    tenant_id                TEXT        NOT NULL,
+    voucher_number           TEXT        NOT NULL,
+    voucher_type             TEXT        NOT NULL DEFAULT 'receipt',
+    voucher_date             TEXT        NOT NULL DEFAULT '',
+    party_name               TEXT        NOT NULL DEFAULT '',
+    cash_bank_account_id     TEXT        NOT NULL DEFAULT '',
+    cash_bank_account_name   TEXT        NOT NULL DEFAULT '',
+    reference                TEXT        NOT NULL DEFAULT '',
+    total_amount             TEXT        NOT NULL DEFAULT '0',
+    narration                TEXT        NOT NULL DEFAULT '',
+    status                   TEXT        NOT NULL DEFAULT 'draft',
+    journal_entry_id         TEXT,
+    linked_invoice_id        TEXT,
+    linked_invoice_ids       TEXT[],
+    archived_at              TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_idx          ON rp_vouchers (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_number_idx   ON rp_vouchers (tenant_id, voucher_number)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_type_idx     ON rp_vouchers (tenant_id, voucher_type)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_status_idx   ON rp_vouchers (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_date_idx     ON rp_vouchers (tenant_id, voucher_date)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_party_idx    ON rp_vouchers (tenant_id, party_name)`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_je_idx       ON rp_vouchers (tenant_id, journal_entry_id) WHERE journal_entry_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS rp_vouchers_tenant_linked_inv_idx ON rp_vouchers (tenant_id, linked_invoice_id) WHERE linked_invoice_id IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS rp_voucher_lines (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    voucher_id    TEXT NOT NULL,
+    line_kind     TEXT NOT NULL DEFAULT 'line',
+    account_id    TEXT NOT NULL DEFAULT '',
+    account_name  TEXT NOT NULL DEFAULT '',
+    description   TEXT NOT NULL DEFAULT '',
+    amount        TEXT NOT NULL DEFAULT '0',
+    invoice_id    TEXT,
+    line_order    INT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (voucher_id, tenant_id) REFERENCES rp_vouchers (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS rp_voucher_lines_voucher_idx  ON rp_voucher_lines (tenant_id, voucher_id, line_kind, line_order)`,
+  `CREATE INDEX IF NOT EXISTS rp_voucher_lines_tenant_idx   ON rp_voucher_lines (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS rp_voucher_lines_account_idx  ON rp_voucher_lines (tenant_id, account_id)`,
+  `CREATE INDEX IF NOT EXISTS rp_voucher_lines_invoice_idx  ON rp_voucher_lines (tenant_id, invoice_id) WHERE invoice_id IS NOT NULL`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (
