@@ -41,6 +41,39 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   // updateCustomer/deleteCustomer in store.ts, including the m10 walk-in
   // seed and the COA contact-ledger heal at line ~8097).
   "admin-customers":          "customers",
+  // Batch 4a — accounts + journal-entries foundation. The hooks `useAccounts`
+  // / `useJournalEntries` call the REST API directly; the 13+ internal
+  // callers of legacy `createAccount`/`updateAccount`/`deleteAccount` and
+  // the 21+ internal callers of `createJournalEntry`/`updateJournalEntry`/
+  // `deleteJournalEntry` dual-write via `_persistAccountRest` /
+  // `_persistJERest` in store.ts. Adding these keys to the registry makes
+  // the bridge ignore `kv_store` for `admin-chart-of-accounts` /
+  // `admin-journal-entries`, so every account or JE writer MUST persist
+  // through to the relational table.
+  "admin-chart-of-accounts":  "accounts",
+  "admin-journal-entries":    "journal_entries",
+  // Batch 4b — stock items + stock ledger. The legacy CRUDs
+  // createStockItem/updateStockItem/deleteStockItem AND the central
+  // _saveStock / _saveStockLedger chokepoints in store.ts dual-write to
+  // these tables via stockItemsApi / stockLedgerApi. Every setStored to
+  // STOCK_KEY / LEDGER_KEY now funnels through those chokepoints, so the
+  // 9+ callers of batchLedger (PO-receive, sale fulfillment, returns,
+  // m11/m14 rebuilds) all persist through to the relational table.
+  "admin-stock":              "stock_items",
+  "admin-stock-ledger":       "stock_ledger",
+  // Batch 4c — transactional outer cluster. Every writer funnels through
+  // `_saveSales` / `_saveInvoices` / `_savePOs` / `_saveSaleReturns` /
+  // `_savePurchaseReturns` / `_saveRPVouchers` in store.ts, which dual-write
+  // via the {sales,invoices,purchaseOrders,saleReturns,purchaseReturns,
+  // rpVouchers}Api clients. Reverse-cascade write-backs from
+  // `deleteJournalEntry` go through the same chokepoints so JE removal also
+  // persists the resulting amountPaid/status/jeId resets.
+  "admin-sales":              "sales",
+  "admin-invoices":           "invoices",
+  "admin-purchase-orders":    "purchase_orders",
+  "admin-sale-returns":       "sale_returns",
+  "admin-purchase-returns":   "purchase_returns",
+  "admin-rp-vouchers":        "rp_vouchers",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;

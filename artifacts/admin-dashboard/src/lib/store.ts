@@ -1,5 +1,13 @@
 import { kvPut, kvGetAll, kvGet, kvDelete, kvDeleteNamespace } from "./api";
-import { customersApi, brandsApi, unitsApi, productCategoriesApi } from "./record-api";
+import {
+  customersApi, brandsApi, unitsApi, productCategoriesApi,
+  apiCreateAccount, apiUpdateAccount, apiDeleteAccount,
+  apiCreateJE, apiUpdateJE, apiDeleteJE,
+  type ApiJELine,
+  stockItemsApi, stockLedgerApi,
+  salesApi, invoicesApi, purchaseOrdersApi,
+  saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
+} from "./record-api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -187,6 +195,367 @@ function _persistMigratedCreate(
     const msg = err instanceof Error ? err.message : String(err);
     if (/HTTP 409/i.test(msg)) return;
     console.warn(`[${label} create] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+/**
+ * Sub-batch 4a — accounts dual-write.
+ *
+ * Fire-and-forget REST persistence for the `accounts` per-record table. Wired
+ * into the legacy sync `createAccount`/`updateAccount`/`deleteAccount`, which
+ * are called from 13+ internal sites (COA seed, m11/m14 migrations, payment-
+ * account ledger creation, staff ledger creation, sale-JE customer write-back,
+ * subsidiary-ledger backfills, ensureCustomerAdvanceLedger, contact heal at
+ * ~8097). Once `admin-chart-of-accounts` is in MIGRATED_KEY_TO_TABLE, every
+ * one of those writes MUST persist to the relational `accounts` table or it
+ * vanishes on refresh.
+ *
+ * Unlike the customer Batch 3 pattern, there is NO suppression flag here:
+ * `useAccounts` calls `apiCreateAccount` directly and never touches the legacy
+ * sync function, so the legacy path is reached only from internal callers and
+ * there is no double-POST race to guard against.
+ *
+ * 409 on CREATE is tolerated (idempotent COA re-seed on every login).
+ * `deleteAccount` may soft-delete via `updateAccount` — that hits the UPDATE
+ * branch naturally; only the physical-removal branch reaches the DELETE one.
+ */
+function _persistAccountRest(
+  op: "create" | "update" | "delete",
+  account: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = apiCreateAccount(tid, account as unknown as Parameters<typeof apiCreateAccount>[1]);
+  } else if (op === "update") {
+    // Strip read-only fields and pass everything else. `updatedAt` is server-managed.
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = account as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = apiUpdateAccount(tid, account.id, rest as Parameters<typeof apiUpdateAccount>[2]);
+  } else {
+    fn = apiDeleteAccount(tid, account.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[accounts ${op}] REST persistence failed for ${account.id}:`, msg);
+  });
+}
+
+/**
+ * Diff the final account list against the prior on-disk snapshot and fire
+ * per-row REST writes. This lives at the `_saveAccounts` layer (not at the
+ * 3 legacy CRUD entrypoints) because 6+ bulk callers — m11/m14 COA
+ * migrations, `seedDefaultCoaAccounts` batch insert at line 883, the
+ * `_saveAccounts([...getAccounts(), ...accountsToAdd])` flush near 11426 —
+ * bypass createAccount/updateAccount/deleteAccount entirely. Without diffing
+ * at this layer, those bulk paths would write only to `kv_store` and vanish
+ * on next refresh once the bridge ignores `kv_store` for `admin-chart-of-accounts`.
+ *
+ * Equality compares a stable JSON of the row with `updatedAt` (and the
+ * caller-managed `createdAt`) stripped — saves that only touch `updatedAt`
+ * (e.g. central re-stamping passes) don't fire redundant PUTs.
+ */
+function _stableAccountJson(a: Account): string {
+  // `createdAt`/`updatedAt` excluded to avoid spurious "update" diffs caused
+  // by re-stamping; `tenantId` is server-managed so also excluded.
+  const { createdAt: _c, updatedAt: _u, ...rest } = a as Account & { tenantId?: string };
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _dualWriteAccountsDiff(prev: Account[], next: Account[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(a => [a.id, a]));
+  const nextById = new Map(next.map(a => [a.id, a]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistAccountRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    } else if (_stableAccountJson(p) !== _stableAccountJson(n)) {
+      _persistAccountRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistAccountRest("delete", { id }, tid);
+  }
+}
+
+/**
+ * Sub-batch 4a — journal-entries dual-write.
+ *
+ * Mirrors `_persistAccountRest` but for JEs. Wired into the legacy sync
+ * `createJournalEntry`/`updateJournalEntry`/`deleteJournalEntry`, which are
+ * called from 21+ internal sites: auto-posting for sales/POs/sale-returns/
+ * purchase-returns/RP vouchers, m11/m14 migrations, opening-balance JEs,
+ * salary accrual + payment JEs, etc.
+ *
+ * Line mapping: the FE `JournalEntry.lines[]` uses `ledgerId`, but the API
+ * expects `ApiJELine` with `ledgerAccountId` + `accountCode`. We look up the
+ * account by `ledgerId` via `getAccounts()` (sync, in-memory) to populate
+ * `accountCode` — same logic as `useJournalEntries` in `use-data.ts`.
+ *
+ * Called AFTER the legacy save so the JE row already exists in `_memRaw` —
+ * any post-merge guard or idempotency short-circuit has already run, and we
+ * persist the final merged entry, not the caller's partial.
+ */
+/**
+ * Mirror of `_dualWriteAccountsDiff` for JEs. Lives at the
+ * `_doSaveJournalEntries` layer to cover the 11+ bulk callers
+ * (`_saveJournalEntries(...)` flushes from m11/m14/COA-heal/the orphan
+ * healer/payment-account reset/etc.) in addition to the 3 legacy CRUD
+ * entrypoints.
+ *
+ * Equality strips `updatedAt`/`createdAt` (central narration re-stamping
+ * during `_doSaveJournalEntries` mutates every entry on most saves; without
+ * stripping, every flush would PUT every JE).
+ */
+function _stableJEJson(e: JournalEntry): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = e as JournalEntry & { tenantId?: string };
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+/**
+ * Sub-batch 4b — stock-items + stock-ledger dual-write.
+ *
+ * Lives at the `_saveStock` / `_saveStockLedger` chokepoints (not the 3
+ * legacy CRUD funcs) because 16+ sites call `_saveStock(...)`
+ * directly (PO-receive bulk update, sale fulfilment, m11/m14 rebuilds,
+ * CSV-import delete pass, manufacturing output) and 5+ sites call
+ * `_saveStockLedger(...)` directly (microtask flush, clearEntityLedger,
+ * deleteStockLedgerEntry, dedup passes). Diffing at the chokepoint covers
+ * every writer in one place.
+ *
+ * StockLedger entries are immutable — once written, the FE never edits a
+ * row. The diff therefore reduces to "added ids → CREATE, removed ids →
+ * DELETE", skipping field comparison entirely. This keeps even the m11/m14
+ * full-rebuild paths efficient (one CREATE per new entry, no spurious PUTs).
+ */
+function _stableStockItemJson(s: StockItem): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = s as StockItem & { tenantId?: string };
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistStockItemRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = stockItemsApi.create(tid, item as unknown as Omit<StockItem, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = stockItemsApi.update(tid, item.id, rest as Partial<Omit<StockItem, "id" | "createdAt">>);
+  } else {
+    fn = stockItemsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[stock-items ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteStockItemsDiff(prev: StockItem[], next: StockItem[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(s => [s.id, s]));
+  const nextById = new Map(next.map(s => [s.id, s]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistStockItemRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    } else if (_stableStockItemJson(p) !== _stableStockItemJson(n)) {
+      _persistStockItemRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistStockItemRest("delete", { id }, tid);
+  }
+}
+
+function _persistStockLedgerRest(
+  op: "create" | "delete",
+  entry: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const fn: Promise<unknown> = op === "create"
+    ? stockLedgerApi.create(tid, entry as unknown as Omit<StockLedgerEntry, "id" | "createdAt" | "updatedAt">)
+    : stockLedgerApi.delete(tid, entry.id);
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[stock-ledger ${op}] REST persistence failed for ${entry.id}:`, msg);
+  });
+}
+
+function _dualWriteStockLedgerDiff(prev: StockLedgerEntry[], next: StockLedgerEntry[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevIds = new Set(prev.map(e => e.id));
+  const nextById = new Map(next.map(e => [e.id, e]));
+  // Stock-ledger rows are immutable; only id-set membership matters.
+  for (const [id, n] of nextById) {
+    if (!prevIds.has(id)) {
+      _persistStockLedgerRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevIds) {
+    if (!nextById.has(id)) _persistStockLedgerRest("delete", { id }, tid);
+  }
+}
+
+/**
+ * Sub-batch 4c — transactional cluster dual-write factory.
+ *
+ * Generic chokepoint helper for sales / invoices / POs / sale-returns /
+ * purchase-returns / RP-vouchers. Each entity has a parent + child arrays
+ * (items / payments / lines / bankLines). The factory:
+ *
+ *   1. Strips `createdAt`/`updatedAt` for stable JSON equality so spurious
+ *      timestamp churn doesn't trigger PUTs.
+ *   2. Diffs prev vs next at the `_save*` chokepoint level (covers every
+ *      writer — CRUD entrypoints, reverse-cascade in deleteJE, m11/m14
+ *      reseeds, page-level bulk imports).
+ *   3. Threads `tenantIdOverride` so tenant-switch race cannot misdirect
+ *      writes (matches the 4a/4b pattern).
+ *   4. Fire-and-forget — POST/PUT/DELETE errors are logged (with 409 on
+ *      create and 404 on delete tolerated as idempotent retries).
+ *
+ * Equality check is deep JSON comparison including child arrays. If any
+ * child item differs the parent record is PUT in full — the backend routes
+ * replace children wholesale (matches FE `updateSale`/`updateInvoice`/etc.
+ * semantics). For new ids the parent is POSTed. For removed ids DELETE.
+ */
+interface TxApi<T> {
+  create(tenantId: string, record: T): Promise<unknown>;
+  update(tenantId: string, id: string, record: T): Promise<unknown>;
+  delete(tenantId: string, id: string): Promise<void>;
+}
+
+function _makeTxDualWrite<T extends { id: string; createdAt?: string; updatedAt?: string }>(
+  label: string,
+  api: TxApi<T>,
+) {
+  function stableJson(rec: T): string {
+    const r = rec as T & Record<string, unknown>;
+    const { createdAt: _c, updatedAt: _u, ...rest } = r;
+    void _c; void _u;
+    return JSON.stringify(rest);
+  }
+  function persist(op: "create" | "update" | "delete", record: T, tenantIdOverride?: string): void {
+    const tid = tenantIdOverride ?? _activeTenantId;
+    if (!tid) return;
+    let fn: Promise<unknown>;
+    if (op === "create") fn = api.create(tid, record);
+    else if (op === "update") fn = api.update(tid, record.id, record);
+    else fn = api.delete(tid, record.id);
+    fn.catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (op === "create" && /HTTP 409/i.test(msg)) return;
+      if (op === "delete" && /HTTP 404/i.test(msg)) return;
+      console.warn(`[${label} ${op}] REST persistence failed for ${record.id}:`, msg);
+    });
+  }
+  function diff(prev: T[], next: T[], tenantIdOverride?: string): void {
+    const tid = tenantIdOverride ?? _activeTenantId;
+    if (!tid) return;
+    const prevById = new Map(prev.map(r => [r.id, r]));
+    const nextById = new Map(next.map(r => [r.id, r]));
+    for (const [id, n] of nextById) {
+      const p = prevById.get(id);
+      if (!p) persist("create", n, tid);
+      else if (stableJson(p) !== stableJson(n)) persist("update", n, tid);
+    }
+    for (const [id, p] of prevById) {
+      if (!nextById.has(id)) persist("delete", p, tid);
+    }
+  }
+  return { persist, diff };
+}
+
+function _dualWriteJEsDiff(prev: JournalEntry[], next: JournalEntry[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(e => [e.id, e]));
+  const nextById = new Map(next.map(e => [e.id, e]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistJERest("create", n as unknown as { id: string; lines?: JournalEntryLine[] } & Record<string, unknown>, tid);
+    } else if (_stableJEJson(p) !== _stableJEJson(n)) {
+      _persistJERest("update", n as unknown as { id: string; lines?: JournalEntryLine[] } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistJERest("delete", { id }, tid);
+  }
+}
+
+function _persistJERest(
+  op: "create" | "update" | "delete",
+  je: { id: string; lines?: JournalEntryLine[] } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+
+  const mapLines = (): ApiJELine[] => {
+    const accts = getAccounts();
+    return (je.lines ?? []).map((l, i) => {
+      const acc = accts.find(a => a.id === l.ledgerId);
+      return {
+        id: l.id,
+        ledgerAccountId: l.ledgerId,
+        accountCode: acc?.code ?? "",
+        narration: l.narration,
+        debit: l.debit,
+        credit: l.credit,
+        staffId: l.staffId ?? null,
+        lineOrder: i,
+      };
+    });
+  };
+
+  let fn: Promise<unknown>;
+  if (op === "delete") {
+    fn = apiDeleteJE(tid, je.id);
+  } else {
+    const payload = {
+      id: je.id,
+      reference: je["reference"] as string,
+      description: je["description"] as string | undefined,
+      date: je["date"] as string,
+      status: je["status"] as "draft" | "posted" | undefined,
+      reversesJeId: (je["reversesJeId"] as string | undefined) ?? null,
+    };
+    fn = op === "create"
+      ? apiCreateJE(tid, payload, mapLines())
+      : apiUpdateJE(tid, je.id, payload, mapLines());
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[journal-entries ${op}] REST persistence failed for ${je.id}:`, msg);
   });
 }
 
@@ -3246,7 +3615,7 @@ export function backfillMissingSKUs(): boolean {
       }
     }
   }
-  if (stockChanged) setStored(STOCK_KEY, stocks);
+  if (stockChanged) _saveStock(stocks);
   return true;
 }
 
@@ -3640,7 +4009,7 @@ export const deleteProduct = (id: string): void => {
     item.variants?.forEach(v => { if (v.sku?.trim()) skus.add(v.sku.trim().toLowerCase()); });
     if (skus.size > 0) {
       // Drop the live stock balances for this product's SKUs.
-      setStored(STOCK_KEY, getStock().filter(s => !skus.has(s.sku?.trim().toLowerCase())));
+      _saveStock(getStock().filter(s => !skus.has(s.sku?.trim().toLowerCase())));
       // DO NOT touch the stock ledger. Ledger rows are the permanent audit
       // trail of every purchase, sale, return, and mfg movement that ever
       // happened for these SKUs. `entityName` is denormalised onto each row
@@ -4011,6 +4380,17 @@ export type PurchaseOrder = {
 
 const PURCHASE_ORDERS_KEY = "admin-purchase-orders";
 
+const _posDualWrite = _makeTxDualWrite<PurchaseOrder>("purchase-orders", purchaseOrdersApi);
+function _savePOs(items: PurchaseOrder[]): void {
+  const sk = tenantKey(PURCHASE_ORDERS_KEY);
+  const prior: PurchaseOrder[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as PurchaseOrder[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(PURCHASE_ORDERS_KEY, items);
+  _posDualWrite.diff(prior, items, tid ?? undefined);
+}
+
 export const getPurchaseOrders = (): PurchaseOrder[] => getStored<PurchaseOrder>(PURCHASE_ORDERS_KEY);
 
 function generatePoNumber(): string {
@@ -4031,7 +4411,7 @@ export const createPurchaseOrder = (
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(PURCHASE_ORDERS_KEY, [...getPurchaseOrders(), item]);
+  _savePOs([...getPurchaseOrders(), item]);
   addActivity({ action: "created", entity: "Purchase Order", entityName: item.poNumber, detail: item.supplier || undefined });
   return item;
 };
@@ -4044,7 +4424,7 @@ export const updatePurchaseOrder = (
   const i = items.findIndex(p => p.id === id);
   if (i === -1) throw new Error("Purchase order not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(PURCHASE_ORDERS_KEY, items);
+  _savePOs(items);
   const detail = (updates as Record<string, unknown>).status ? `Status → ${(updates as Record<string, unknown>).status}` : undefined;
   addActivity({ action: detail ? "status_changed" : "updated", entity: "Purchase Order", entityName: items[i].poNumber, detail });
   return items[i];
@@ -4126,12 +4506,12 @@ export const deletePurchaseOrder = (id: string): void => {
         }
       }
 
-      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (stocksDirty) _saveStock(stocks);
       if (rmsDirty)    setStored(RM_KEY, rms);
       if (reversal.length > 0) batchLedger(reversal);
     }
   }
-  setStored(PURCHASE_ORDERS_KEY, getPurchaseOrders().filter(p => p.id !== id));
+  _savePOs(getPurchaseOrders().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Order", entityName: item?.poNumber || id });
 };
 
@@ -4218,7 +4598,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
         const prev = parseFloat(allStocks[si].quantity) || 0;
         const next = prev + qty;
         allStocks[si] = { ...allStocks[si], quantity: String(next), notes: `Last received via ${order.poNumber}`, updatedAt: new Date().toISOString() };
-        setStored(STOCK_KEY, allStocks);
+        _saveStock(allStocks);
         stockId = allStocks[si].id;
         ledger.push({
           entityType: "product", entityId: stockId, entityName: allStocks[si].productName,
@@ -4323,7 +4703,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
     pos[i] = { ...pos[i], status: "Received", updatedAt: new Date().toISOString() };
   }
 
-  setStored(PURCHASE_ORDERS_KEY, pos);
+  _savePOs(pos);
   addActivity({ action: "status_changed", entity: "Purchase Order", entityName: order.poNumber, detail: "Received — stock & accounts updated" });
   return pos[i];
 };
@@ -4389,6 +4769,17 @@ export type Sale = {
 
 const SALES_KEY = "admin-sales";
 
+const _salesDualWrite = _makeTxDualWrite<Sale>("sales", salesApi);
+function _saveSales(items: Sale[]): void {
+  const sk = tenantKey(SALES_KEY);
+  const prior: Sale[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as Sale[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALES_KEY, items);
+  _salesDualWrite.diff(prior, items, tid ?? undefined);
+}
+
 const nextSaleNumber = (): string => {
   const existing = getStored<Sale>(SALES_KEY);
   const settings = getSettings();
@@ -4408,7 +4799,7 @@ export const getSales = (): Sale[] => getStored<Sale>(SALES_KEY);
 
 export const createSale = (data: Omit<Sale, "id" | "saleNumber" | "createdAt" | "updatedAt">): Sale => {
   const sale: Sale = { ...data, id: crypto.randomUUID(), saleNumber: nextSaleNumber(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(SALES_KEY, [...getSales(), sale]);
+  _saveSales([...getSales(), sale]);
   addActivity({ action: "created", entity: "Sale", entityName: sale.saleNumber, detail: sale.customer ? `Customer: ${sale.customer}` : undefined });
   return sale;
 };
@@ -4418,7 +4809,7 @@ export const updateSale = (id: string, updates: Partial<Omit<Sale, "id" | "saleN
   const i = all.findIndex(s => s.id === id);
   if (i === -1) throw new Error("Sale not found");
   all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SALES_KEY, all);
+  _saveSales(all);
   const detail = updates.status
     ? updates.status === "Completed"
       ? `Completed · ${updates.paymentMethod || all[i].paymentMethod}`
@@ -4492,11 +4883,11 @@ export const deleteSale = (id: string): void => {
         });
       }
 
-      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (stocksDirty) _saveStock(stocks);
       if (reversal.length > 0) batchLedger(reversal);
     }
   }
-  setStored(SALES_KEY, getSales().filter(s => s.id !== id));
+  _saveSales(getSales().filter(s => s.id !== id));
   addActivity({ action: "deleted", entity: "Sale", entityName: sale?.saleNumber || id });
 };
 
@@ -4525,13 +4916,24 @@ export async function importOnlineSalesFromKv(ns: string): Promise<number> {
     const existingIds = new Set(existing.map(s => s.id));
     const newOnes = (raw as Sale[]).filter(o => o && o.id && !existingIds.has(o.id));
     if (!newOnes.length) return 0;
-    setStored(SALES_KEY, [...existing, ...newOnes]);
+    _saveSales([...existing, ...newOnes]);
     return newOnes.length;
   } catch { return 0; }
 }
 
 // ─── Sale Returns ─────────────────────────────────────────────────────────────
 export const SR_KEY = "admin-sale-returns";
+
+const _srDualWrite = _makeTxDualWrite<SaleReturn>("sale-returns", saleReturnsApi);
+function _saveSaleReturns(items: SaleReturn[]): void {
+  const sk = tenantKey(SR_KEY);
+  const prior: SaleReturn[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SaleReturn[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SR_KEY, items);
+  _srDualWrite.diff(prior, items, tid ?? undefined);
+}
 
 export type SaleReturnItem = {
   id:          string;
@@ -4587,7 +4989,7 @@ export const createSaleReturn = (data: Omit<SaleReturn, "id" | "returnNumber" | 
     createdAt:    new Date().toISOString(),
     updatedAt:    new Date().toISOString(),
   };
-  setStored(SR_KEY, [...getSaleReturns(), sr]);
+  _saveSaleReturns([...getSaleReturns(), sr]);
   addActivity({ action: "created", entity: "Sale Return", entityName: sr.returnNumber });
   return sr;
 };
@@ -4597,7 +4999,7 @@ export const updateSaleReturn = (id: string, updates: Partial<Omit<SaleReturn, "
   const i = all.findIndex(r => r.id === id);
   if (i === -1) throw new Error("Sale Return not found");
   all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SR_KEY, all);
+  _saveSaleReturns(all);
   return all[i];
 };
 
@@ -4612,7 +5014,7 @@ export const deleteSaleReturn = (id: string): void => {
     }
     if (blockers.length) throw new Error(_formatBlockerError("sale return", sr.returnNumber, blockers));
   }
-  setStored(SR_KEY, getSaleReturns().filter(r => r.id !== id));
+  _saveSaleReturns(getSaleReturns().filter(r => r.id !== id));
   addActivity({ action: "deleted", entity: "Sale Return", entityName: sr?.returnNumber || id });
 };
 
@@ -4656,6 +5058,17 @@ export type PurchaseReturn = {
 
 const PR_KEY = "admin-purchase-returns";
 
+const _prDualWrite = _makeTxDualWrite<PurchaseReturn>("purchase-returns", purchaseReturnsApi);
+function _savePurchaseReturns(items: PurchaseReturn[]): void {
+  const sk = tenantKey(PR_KEY);
+  const prior: PurchaseReturn[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as PurchaseReturn[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(PR_KEY, items);
+  _prDualWrite.diff(prior, items, tid ?? undefined);
+}
+
 const nextPurchaseReturnNumber = (): string => {
   const existing = getStored<PurchaseReturn>(PR_KEY);
   const d = new Date();
@@ -4680,7 +5093,7 @@ export const createPurchaseReturn = (
     createdAt:    new Date().toISOString(),
     updatedAt:    new Date().toISOString(),
   };
-  setStored(PR_KEY, [...getPurchaseReturns(), pr]);
+  _savePurchaseReturns([...getPurchaseReturns(), pr]);
   addActivity({ action: "created", entity: "Purchase Return", entityName: pr.returnNumber });
   return pr;
 };
@@ -4693,7 +5106,7 @@ export const updatePurchaseReturn = (
   const i = all.findIndex(r => r.id === id);
   if (i === -1) throw new Error("Purchase Return not found");
   all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(PR_KEY, all);
+  _savePurchaseReturns(all);
   return all[i];
 };
 
@@ -4708,7 +5121,7 @@ export const deletePurchaseReturn = (id: string): void => {
     }
     if (blockers.length) throw new Error(_formatBlockerError("purchase return", pr.returnNumber, blockers));
   }
-  setStored(PR_KEY, getPurchaseReturns().filter(r => r.id !== id));
+  _savePurchaseReturns(getPurchaseReturns().filter(r => r.id !== id));
   addActivity({ action: "deleted", entity: "Purchase Return", entityName: pr?.returnNumber || id });
 };
 
@@ -4870,6 +5283,28 @@ export type StockItem = {
 
 const STOCK_KEY = "admin-stock";
 
+/**
+ * Batch 4b chokepoint — every writer that previously called
+ * `_saveStock(items)` now goes through this function so the
+ * relational `stock_items` table stays in lockstep with KV. Diffing
+ * against the prior on-disk snapshot captures CREATE / UPDATE / DELETE
+ * per-row regardless of whether the caller was a CRUD entrypoint or a
+ * bulk path (PO-receive, sale fulfilment, m11/m14 rebuilds).
+ *
+ * Tenant capture: `_activeTenantId` is read synchronously here and
+ * threaded into the fire-and-forget REST calls, so a tenant switch
+ * during the in-flight POST cannot redirect writes to the wrong scope.
+ */
+function _saveStock(items: StockItem[]): void {
+  const sk = tenantKey(STOCK_KEY);
+  const prior: StockItem[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as StockItem[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(STOCK_KEY, items);
+  _dualWriteStockItemsDiff(prior, items, tid ?? undefined);
+}
+
 export const getStock = (): StockItem[] => getStored<StockItem>(STOCK_KEY);
 
 /**
@@ -4903,7 +5338,7 @@ export function getProductStockQty(prod: Product, all?: StockItem[]): number | n
 
 export const createStockItem = (data: Omit<StockItem, "id" | "createdAt" | "updatedAt">): StockItem => {
   const item: StockItem = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(STOCK_KEY, [...getStock(), item]);
+  _saveStock([...getStock(), item]);
   // Record opening-balance ledger entry if initial qty > 0
   const initQty = parseFloat(item.quantity) || 0;
   if (initQty > 0) {
@@ -4926,7 +5361,7 @@ export const updateStockItem = (id: string, updates: Partial<Omit<StockItem, "id
   if (i === -1) throw new Error("Stock item not found");
   const prev = items[i];
   items[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
-  setStored(STOCK_KEY, items);
+  _saveStock(items);
   // Record a manual-adjustment ledger entry whenever quantity changes
   if ("quantity" in updates && updates.quantity !== undefined) {
     const before = parseFloat(prev.quantity) || 0;
@@ -4953,7 +5388,7 @@ export const deleteStockItem = (id: string): void => {
     const blockers = _stockItemFinancialBlockers(item);
     if (blockers.length) throw new Error(_formatBlockerError("stock balance", `${item.productName} @ ${item.store}`, blockers));
   }
-  setStored(STOCK_KEY, getStock().filter(s => s.id !== id));
+  _saveStock(getStock().filter(s => s.id !== id));
 };
 
 // ─── Stock Ledger ─────────────────────────────────────────────────────────────
@@ -5001,6 +5436,29 @@ export type StockLedgerEntry = {
 
 const LEDGER_KEY = "admin-stock-ledger";
 
+/**
+ * Batch 4b chokepoint for stock-ledger writes. See `_saveStock` doc for
+ * the design rationale; stock-ledger rows are immutable so the diff is
+ * id-set only (no field comparison).
+ *
+ * Caveat: `_flushLedger` runs in a microtask after `batchLedger` queues.
+ * If tenant switches in that window, `tenantKey(LEDGER_KEY)` resolves to
+ * the NEW tenant — both the `setStored` write and the REST POST would
+ * land under the wrong scope. This is a pre-existing race in the ledger
+ * coalescer (independent of the migration); fixing it requires tagging
+ * pending entries with originTenant and partitioning the flush. Tracked
+ * separately — out of scope for Batch 4b's "mirror every write" goal.
+ */
+function _saveStockLedger(entries: StockLedgerEntry[]): void {
+  const sk = tenantKey(LEDGER_KEY);
+  const prior: StockLedgerEntry[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as StockLedgerEntry[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(LEDGER_KEY, entries);
+  _dualWriteStockLedgerDiff(prior, entries, tid ?? undefined);
+}
+
 export const getStockLedger        = (): StockLedgerEntry[] => {
   // Merge in queued-but-unflushed appends so callers reading right after a
   // `batchLedger(...)` in the same tick see their own writes. Without this,
@@ -5019,11 +5477,11 @@ export const getEntityLedger       = (entityId: string) => getStockLedger().filt
 // guarantees the write reflects exactly what flushed + the user's filter.
 export const clearEntityLedger     = (entityId: string) => {
   if (_pendingLedger.length > 0) _flushLedger();
-  setStored(LEDGER_KEY, getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.entityId !== entityId));
+  _saveStockLedger(getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.entityId !== entityId));
 };
 export const deleteStockLedgerEntry = (entryId: string) => {
   if (_pendingLedger.length > 0) _flushLedger();
-  setStored(LEDGER_KEY, getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.id !== entryId));
+  _saveStockLedger(getStored<StockLedgerEntry>(LEDGER_KEY).filter(e => e.id !== entryId));
 };
 
 /**
@@ -5088,7 +5546,7 @@ export function deduplicatePurchaseReceipts(): { removedEntries: number; fixedIt
     ...[...rebuiltMap.values()].flat(),
   ];
 
-  setStored(LEDGER_KEY, finalEntries);
+  _saveStockLedger(finalEntries);
 
   // Correct actual stock quantities to match the deduplicated ledger
   const stocks = getStock();
@@ -5104,7 +5562,7 @@ export function deduplicatePurchaseReceipts(): { removedEntries: number; fixedIt
     fixedItems++;
   }
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
 
   return { removedEntries: removedCount, fixedItems };
 }
@@ -5171,7 +5629,7 @@ export function deduplicateSaleEntries(): { removedEntries: number; fixedItems: 
     ...[...rebuiltMap.values()].flat(),
   ];
 
-  setStored(LEDGER_KEY, finalEntries);
+  _saveStockLedger(finalEntries);
 
   // Correct actual stock quantities to match the deduplicated ledger
   const stocks = getStock();
@@ -5187,7 +5645,7 @@ export function deduplicateSaleEntries(): { removedEntries: number; fixedItems: 
     fixedItems++;
   }
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
 
   return { removedEntries: removedCount, fixedItems };
 }
@@ -5214,7 +5672,7 @@ function _flushLedger() {
   _pendingLedger = [];
   // Re-read latest at write time so cross-tab appends are not overwritten.
   const latest = getStored<StockLedgerEntry>(LEDGER_KEY);
-  setStored(LEDGER_KEY, [...latest, ...drained]);
+  _saveStockLedger([...latest, ...drained]);
 }
 
 function batchLedger(entries: Omit<StockLedgerEntry, "id" | "createdAt">[]) {
@@ -5411,7 +5869,7 @@ export const deductStockForSale = (saleItems: SaleItem[], reference = "", source
     // backfillMissingSKUs() runs on login. SKU-only matching is authoritative.)
   });
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
   batchLedger(ledger);
 };
 
@@ -5459,7 +5917,7 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
     // backfillMissingSKUs() runs on login. SKU-only matching is authoritative.)
   });
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
   batchLedger(ledger);
 };
 
@@ -5589,7 +6047,7 @@ export const receiveStockForPurchase = (items: SaleItem[], reference = "", sourc
     }
   });
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
   if (rmsDirty) setStored(RM_KEY, rms);
   batchLedger(ledger);
 };
@@ -5633,7 +6091,7 @@ export const reverseStockForPurchase = (items: SaleItem[], reference = ""): void
     });
   });
 
-  setStored(STOCK_KEY, stocks);
+  _saveStock(stocks);
   batchLedger(ledger);
 };
 
@@ -5709,6 +6167,17 @@ export type Invoice = {
 
 const INVOICES_KEY = "admin-invoices";
 
+const _invoicesDualWrite = _makeTxDualWrite<Invoice>("invoices", invoicesApi);
+function _saveInvoices(items: Invoice[]): void {
+  const sk = tenantKey(INVOICES_KEY);
+  const prior: Invoice[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as Invoice[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(INVOICES_KEY, items);
+  _invoicesDualWrite.diff(prior, items, tid ?? undefined);
+}
+
 const nextInvoiceNumber = (type: "sale" | "purchase" = "sale"): string => {
   const existing = getStored<Invoice>(INVOICES_KEY);
   const settings = getSettings();
@@ -5763,7 +6232,7 @@ export const createInvoice = (data: Omit<Invoice, "id" | "invoiceNumber" | "crea
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(INVOICES_KEY, [...getInvoices(), inv]);
+  _saveInvoices([...getInvoices(), inv]);
   return inv;
 };
 
@@ -5772,7 +6241,7 @@ export const updateInvoice = (id: string, updates: Partial<Omit<Invoice, "id" | 
   const i = all.findIndex(inv => inv.id === id);
   if (i === -1) throw new Error("Invoice not found");
   all[i] = { ...all[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(INVOICES_KEY, all);
+  _saveInvoices(all);
   return all[i];
 };
 
@@ -5785,7 +6254,7 @@ export const deleteInvoice = (id: string): void => {
       throw new Error(_formatBlockerError(label, inv.invoiceNumber, blockers));
     }
   }
-  setStored(INVOICES_KEY, getInvoices().filter(i => i.id !== id));
+  _saveInvoices(getInvoices().filter(i => i.id !== id));
   addActivity({ action: "deleted", entity: "Invoice", entityName: inv?.invoiceNumber || id });
 };
 
@@ -6149,7 +6618,7 @@ export const deleteManufacturingOrder = (id: string): void => {
       }
 
       if (rmsDirty)    setStored(RM_KEY, rms);
-      if (stocksDirty) setStored(STOCK_KEY, stocks);
+      if (stocksDirty) _saveStock(stocks);
       if (compensations.length > 0) batchLedger(compensations);
     }
   }
@@ -6353,7 +6822,7 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
       const ni = fresh.findIndex(s => s.id === newStock.id);
       if (ni >= 0) {
         fresh[ni] = { ...fresh[ni], quantity: String(qty), updatedAt: new Date().toISOString() };
-        setStored(STOCK_KEY, fresh);
+        _saveStock(fresh);
         // Sync our in-memory array to avoid stale references
         allStocks.splice(0, allStocks.length, ...fresh);
       }
@@ -6371,7 +6840,7 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
     });
   });
 
-  if (stocksDirty) setStored(STOCK_KEY, allStocks);
+  if (stocksDirty) _saveStock(allStocks);
   setStored(PRODUCTS_KEY, allProducts);
   batchLedger(ledger);
 
@@ -9075,6 +9544,13 @@ function _saveAccounts(accounts: Account[]): void {
   const merged = concurrent.length > 0 ? [...accounts, ...concurrent] : accounts;
   _lsCache(sk, merged);
   _apiWrite(sk, merged).catch(() => { /* handled via onesoft:write-error event */ });
+  // Sub-batch 4a: dual-write per-row deltas to the relational `accounts` table.
+  // See `_dualWriteAccountsDiff` for why this lives here (covers bulk callers).
+  // _saveAccounts has no deferred path, so capturing _activeTenantId here is
+  // equivalent to the call site — the explicit pass mirrors _saveJournalEntries
+  // for consistency and locks the tenant into the closure even if the
+  // fire-and-forget promise's `.catch` re-entrancy were ever changed.
+  _dualWriteAccountsDiff(fresh, merged, _activeTenantId ?? undefined);
 }
 
 export function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Account {
@@ -9126,6 +9602,9 @@ export function deleteAccount(id: string): void {
   }
 
   // No references anywhere → safe to physically remove.
+  // The dual-write to the relational `accounts` table happens inside
+  // `_saveAccounts` via `_dualWriteAccountsDiff` (diffs by id), so the
+  // physical removal here automatically fires a REST DELETE.
   _saveAccounts(all.filter(a => a.id !== id));
 }
 
@@ -9292,6 +9771,21 @@ export function getJournalEntries(): JournalEntry[] {
 }
 
 function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
+  // Capture the originating tenant + prior on-disk snapshot SYNCHRONOUSLY
+  // (before any optimistic _lsCache or deferred .then). Without this:
+  //   - Deferred path's `_lsCache(JE_KEY, entries)` would corrupt the diff
+  //     baseline — `_doSaveJournalEntries` would later re-read `_lsGet` and
+  //     find `entries` already there, so `_dualWriteJEsDiff(prev, next)`
+  //     would emit zero REST calls → JE vanishes on refresh.
+  //   - Tenant switch during the COA-wait window would cause REST persistence
+  //     (and the `setStored(JE_KEY,...)` write) to target the new tenant's
+  //     scope, leaking data across tenants.
+  const originTenantId = _activeTenantId;
+  const sk = tenantKey(JE_KEY);
+  const priorForDiff: JournalEntry[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as JournalEntry[] : []; } catch { return []; }
+  })();
+
   // ── Sequencing guard: if a COA write is still in flight, the server-side
   // JE validator (api-server/routes/kv.ts) could 422-reject this JE because
   // the new ledger isn't yet visible in the DB. Await the pending COA write
@@ -9301,18 +9795,31 @@ function _saveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
   const pendingCoa = _pendingWrites.get(coaSk);
   if (pendingCoa) {
     pendingCoa.catch(() => { /* already surfaced via event */ }).then(() => {
-      _doSaveJournalEntries(entries, _isDelete);
+      _doSaveJournalEntries(entries, _isDelete, originTenantId, priorForDiff);
     });
     // Still update the in-memory cache immediately so the UI doesn't lag —
     // _doSaveJournalEntries also writes _memRaw, but doing it here too keeps
     // synchronous reads consistent with the rest of setStored/_lsCache pattern.
-    _lsCache(tenantKey(JE_KEY), entries);
+    _lsCache(sk, entries);
     return;
   }
-  _doSaveJournalEntries(entries, _isDelete);
+  _doSaveJournalEntries(entries, _isDelete, originTenantId, priorForDiff);
 }
 
-function _doSaveJournalEntries(entries: JournalEntry[], _isDelete = false): void {
+function _doSaveJournalEntries(
+  entries: JournalEntry[],
+  _isDelete = false,
+  originTenantId: string | null = _activeTenantId,
+  priorForDiff: JournalEntry[] | null = null,
+): void {
+  // Tenant-switch race guard: if the user switched tenants while a deferred
+  // COA write was completing, abort entirely. Continuing would write the old
+  // tenant's JE payload into the new tenant's KV store (via setStored, which
+  // uses the CURRENT _activeTenantId for tenantKey) AND into the new tenant's
+  // relational journal_entries table — a cross-tenant data leak.
+  if (_activeTenantId !== originTenantId) {
+    return;
+  }
   // ── Central stamping chokepoint ───────────────────────────────────────────
   // Every path that persists JEs — createJournalEntry, updateJournalEntry, the
   // orphan healer, COA migrations, and the backfill — funnels through here.
@@ -9365,6 +9872,15 @@ function _doSaveJournalEntries(entries: JournalEntry[], _isDelete = false): void
     }
   }
   setStored(JE_KEY, entries);
+  // Sub-batch 4a: dual-write per-row deltas to the relational `journal_entries` table.
+  // Use the snapshot captured synchronously at the top of _saveJournalEntries
+  // (not a re-read here) so the deferred-COA path still sees the real
+  // pre-write baseline. Falls back to a re-read for legacy direct callers
+  // that haven't been updated to pass priorForDiff (none today).
+  const baseline = priorForDiff ?? (() => {
+    try { const r = _lsGet(tenantKey(JE_KEY)); return r ? JSON.parse(r) as JournalEntry[] : []; } catch { return []; }
+  })();
+  _dualWriteJEsDiff(baseline, entries, originTenantId ?? undefined);
 }
 
 /**
@@ -9446,7 +9962,8 @@ export function createJournalEntry(data: Omit<JournalEntry, "id" | "createdAt" |
     }
   }
   const entry: JournalEntry = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  // Re-read fresh immediately before appending to pick up concurrent additions
+  // Re-read fresh immediately before appending to pick up concurrent additions.
+  // Dual-write to relational `journal_entries` happens inside _doSaveJournalEntries.
   _saveJournalEntries([...getJournalEntries(), entry]);
   return entry;
 }
@@ -9582,7 +10099,7 @@ export function deleteJournalEntry(id: string): void {
       detail: "JE removed → marked Unpaid",
     });
   }
-  if (salesChanged) setStored(SALES_KEY, sales);
+  if (salesChanged) _saveSales(sales);
 
   // Invoices — Paid/Partial revert to Sent; payment + history cleared.
   const invoices = getInvoices();
@@ -9608,7 +10125,7 @@ export function deleteJournalEntry(id: string): void {
       detail: "JE removed → marked Unpaid",
     });
   }
-  if (invoicesChanged) setStored(INVOICES_KEY, invoices);
+  if (invoicesChanged) _saveInvoices(invoices);
 
   // Purchase Orders — clear the JE link only (stock stays received).
   const pos = getPurchaseOrders();
@@ -9622,7 +10139,7 @@ export function deleteJournalEntry(id: string): void {
       detail: "JE removed",
     });
   }
-  if (posChanged) setStored(PURCHASE_ORDERS_KEY, pos);
+  if (posChanged) _savePOs(pos);
 
   // Sale Returns — posted → draft, JE cleared.
   const srs = getSaleReturns();
@@ -9636,7 +10153,7 @@ export function deleteJournalEntry(id: string): void {
       detail: "JE removed → reverted to draft",
     });
   }
-  if (srsChanged) setStored(SR_KEY, srs);
+  if (srsChanged) _saveSaleReturns(srs);
 
   // Purchase Returns — posted → draft, JE cleared.
   const prs = getPurchaseReturns();
@@ -9650,7 +10167,7 @@ export function deleteJournalEntry(id: string): void {
       detail: "JE removed → reverted to draft",
     });
   }
-  if (prsChanged) setStored(PR_KEY, prs);
+  if (prsChanged) _savePurchaseReturns(prs);
 
   // Salary Slips — auto-revert status when their linked JE is deleted.
   //
@@ -9705,6 +10222,8 @@ export function deleteJournalEntry(id: string): void {
   }
   if (slipsChanged) setStored(SALARY_SLIPS_KEY, slips);
 
+  // Dual-write DELETE to relational `journal_entries` happens inside
+  // _doSaveJournalEntries via _dualWriteJEsDiff (diffs by id).
   _saveJournalEntries(getJournalEntries().filter(e => e.id !== id), true);
 }
 
@@ -10746,10 +11265,17 @@ export function getRPVouchers(): RPVoucher[] {
   return getStored<RPVoucher>(RPV_KEY);
 }
 
+const _rpvDualWrite = _makeTxDualWrite<RPVoucher>("rp-vouchers", rpVouchersApi);
 function _saveRPVouchers(data: RPVoucher[]): void {
   const sk = tenantKey(RPV_KEY);
+  // Capture prior for diff BEFORE _lsCache overwrites in-memory state.
+  const prior: RPVoucher[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as RPVoucher[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
   _lsCache(sk, data);
   _apiWrite(sk, data).catch(() => { /* handled via onesoft:write-error event */ });
+  _rpvDualWrite.diff(prior, data, tid ?? undefined);
 }
 
 function nextRPVoucherNumber(type: "receipt" | "payment"): string {

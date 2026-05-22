@@ -12,6 +12,9 @@ import type {
   Brand, Unit, Attribute, City, Area,
   Department, Designation, ProductCategory,
   Lead, RequirementDoc, Customer,
+  StockItem, StockLedgerEntry,
+  Sale, Invoice, PurchaseOrder,
+  SaleReturn, PurchaseReturn, RPVoucher,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -227,6 +230,107 @@ export const productCategoriesApi  = makeRecordApi<ProductCategory>("product-cat
 // ─── CRM REST clients (Batch 2) ───────────────────────────────────────────────
 export const leadsApi              = makeRecordApi<Lead>("leads");
 export const requirementDocsApi    = makeRecordApi<RequirementDoc>("requirement-docs");
+
+// ─── Stock REST clients (Batch 4b) ────────────────────────────────────────────
+// `stockItemsApi` covers full CRUD on the `stock_items` table. `stockLedgerApi`
+// is append-only-plus-delete in practice (entries are immutable — the only
+// writes the FE does are CREATE via batchLedger and DELETE via
+// clearEntityLedger / deleteStockLedgerEntry / dedup passes). The `.update`
+// surface is exposed by makeRecordApi but never called.
+export const stockItemsApi         = makeRecordApi<StockItem>("stock-items");
+export const stockLedgerApi        = makeRecordApi<StockLedgerEntry>("stock-ledger");
+
+// ─── Transactional REST clients (Batch 4c) ────────────────────────────────────
+// Each route uses a custom POST/PUT body shape — parent record + child arrays
+// (items / payments / lines / bankLines). The factory here splits the FE
+// record into the route-specific envelope and returns the persisted parent.
+// The frontend cache keeps its own copy via `_saveXxx` chokepoints; the REST
+// roundtrip is fire-and-forget dual-write, so the .then is intentionally
+// unused at call sites.
+
+interface TxRecordApi<T> {
+  create(tenantId: string, record: T): Promise<unknown>;
+  update(tenantId: string, id: string, record: T): Promise<unknown>;
+  delete(tenantId: string, id: string): Promise<void>;
+}
+
+/** Build a per-tx REST client from a splitter that converts a FE record into the
+ *  `{ tenantId, ...envelope }` POST/PUT body the route expects. */
+function makeTxRecordApi<T extends { id: string }>(
+  path: string,
+  toBody: (record: T) => Record<string, unknown>,
+): TxRecordApi<T> {
+  return {
+    create: (tenantId, record) =>
+      rFetch(`${BASE}/${path}`, {
+        method: "POST",
+        body: JSON.stringify({ tenantId, ...toBody(record) }),
+      }),
+    update: (tenantId, id, record) =>
+      rFetch(`${BASE}/${path}/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ tenantId, ...toBody(record) }),
+      }),
+    delete: async (tenantId, id) => {
+      await rFetch(
+        `${BASE}/${path}/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`,
+        { method: "DELETE" },
+      );
+    },
+  };
+}
+
+/**
+ * Convert top-level `undefined` keys to explicit `null` before serialization.
+ *
+ * Why: the reverse-cascade in `deleteJournalEntry` clears fields like
+ * `jeId`, `journalEntryId`, `jeUsesAR` by setting them to `undefined`.
+ * `JSON.stringify` drops `undefined` keys outright, which on the server's
+ * PUT routes is indistinguishable from "field not provided — keep existing"
+ * (the routes use either `COALESCE($N, col)` or `field ?? before.field`
+ * semantics). Without this normalization the relational table would retain
+ * the stale `je_id` even after the JE row was deleted, and the kv.ts
+ * read-back bridge would surface those stale links on next page reload.
+ *
+ * Top-level only — child arrays (items, payments, lines, bankLines) flow
+ * straight through; their per-row undefined→null handling happens in the
+ * route's value helpers (e.g. `saleValues`, `payValues`).
+ */
+function nullifyUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(obj)) out[k] = obj[k] === undefined ? null : obj[k];
+  return out as T;
+}
+
+export const salesApi = makeTxRecordApi<Sale>("sales", (s) => {
+  const { items, ...sale } = s;
+  return { sale: nullifyUndefined(sale), items: items ?? [] };
+});
+
+export const invoicesApi = makeTxRecordApi<Invoice>("invoices", (i) => {
+  const { items, paymentHistory, ...invoice } = i;
+  return { invoice: nullifyUndefined(invoice), items: items ?? [], payments: paymentHistory ?? [] };
+});
+
+export const purchaseOrdersApi = makeTxRecordApi<PurchaseOrder>("purchase-orders", (p) => {
+  const { items, ...po } = p;
+  return { po: nullifyUndefined(po), items: items ?? [] };
+});
+
+export const saleReturnsApi = makeTxRecordApi<SaleReturn>("sale-returns", (r) => {
+  const { items, ...saleReturn } = r;
+  return { saleReturn: nullifyUndefined(saleReturn), items: items ?? [] };
+});
+
+export const purchaseReturnsApi = makeTxRecordApi<PurchaseReturn>("purchase-returns", (r) => {
+  const { items, ...purchaseReturn } = r;
+  return { purchaseReturn: nullifyUndefined(purchaseReturn), items: items ?? [] };
+});
+
+export const rpVouchersApi = makeTxRecordApi<RPVoucher>("rp-vouchers", (v) => {
+  const { lines, bankLines, ...voucher } = v;
+  return { voucher: nullifyUndefined(voucher), lines: lines ?? [], bankLines: bankLines ?? [] };
+});
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired
