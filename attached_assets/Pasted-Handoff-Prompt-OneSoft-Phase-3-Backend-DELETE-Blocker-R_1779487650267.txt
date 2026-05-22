@@ -1,0 +1,64 @@
+Handoff Prompt — OneSoft Phase 3 Backend DELETE-Blocker Rollout
+You are continuing a multi-session task on a pnpm monorepo (OneSoft multi-tenant ERP/CRM). Read replit.md first for project conventions, then this prompt.
+
+Project state
+Phase 3 = KV → relational migration. Currently in the backend DELETE financial-integrity defence-in-depth sub-phase. The frontend (artifacts/admin-dashboard/src/lib/store.ts) has long had _xxxFinancialBlockers functions that throw on delete* if dependents exist. We're now mirroring those blockers in the API server so non-UI clients (scripts, integrations, the upcoming customer portal writes) get the same protection — returning HTTP 409 with a descriptive message.
+
+How the hook works
+artifacts/api-server/src/lib/records.ts exposes a generic mountRecordRoutes(router, spec) helper used by ~16 routes. It now supports an optional async hook on TableSpec:
+
+deleteBlockers?: (
+  client: import("pg").PoolClient,
+  tenantId: string,
+  before: Record<string, unknown>,
+) => Promise<string[]>;
+
+The hook runs inside the DELETE transaction, after SELECT … FOR UPDATE, before the soft/hard delete branch. Non-empty result → ROLLBACK + 409 with Cannot delete <entityType> <name|code|id>: <blockers.join(", ")>. Remove the underlying records first. Applies to both soft and ?hard=1 paths.
+
+Routes for sales, invoices, sale-returns, purchase-returns, rp-vouchers, purchase-orders use explicit guard blocks (not the generic helper) — already wired in earlier steps.
+
+Already wired with deleteBlockers
+Route file	Blockers mirrored from FE
+routes/customers.ts	_customerFinancialBlockers — sales by name / invoices by name OR customer_id / POs by supplier when role=Supplier / vouchers by party_name / JE lines by ledger_account_id
+routes/products.ts	_productFinancialBlockers — 5 line-item tables (sale_items, invoice_items, purchase_order_items, sale_return_items, purchase_return_items) using COUNT(DISTINCT parent_id) matched by SKU set (product.sku ∪ variants[*].sku) OR lower(product_name); plus stock_ledger by entity_name. Manufacturing/recipes intentionally skipped — tables don't exist yet.
+routes/stock-items.ts	_stockItemFinancialBlockers — stock_ledger by entity_id
+routes/product-categories.ts	_categoryFinancialBlockers — products by raw category=name (FE uses strict ===, no trim — important for whitespace parity) + JE lines on auto-derived sr-cat-{slug} / pur-cat-{slug} / inv-cat-{slug} ledger ids via COUNT(DISTINCT journal_entry_id). Slug = `name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-
+Deliberately NOT wired (FE deletes unconditionally)
+Confirmed by reading delete* fns in store.ts: deleteBrand, deleteUnit, deleteAttribute, deleteLead, deleteArea, deleteCity, deleteDepartment, deleteDesignation, deleteRequirementDoc, deleteStockLedgerEntry. Adding backend blockers here would diverge from FE intent — leave alone.
+
+Remaining work
+~2 batches left to finish defence-in-depth, then pivot to FE cutover.
+
+Batch A — accounts (next)
+FE fn: deleteAccount at ~line 9144 of artifacts/admin-dashboard/src/lib/store.ts. Read the full function — it has a lock-flag interaction (isSystemAccount returns true for protected ids like sys-walkin-ar; route already enforces lockedFlagColumn/protectedColumnsWhenLocked via the TableSpec).
+Likely blockers: JE lines referencing the account, child accounts (parent_id), customer/supplier records pointing at it via ledger_account_id / advance_ledger_account_id, payment-account references.
+Schema: accounts table has code, name, parent_id, is_active, head, account_type, party_type, party_id, is_system (protected column when locked).
+Wire in artifacts/api-server/src/routes/accounts.ts. The existing spec already has lockedFlagColumn: "is_system".
+Batch B — staff
+FE fn: _staffFinancialBlockers at ~line 1741 of store.ts. Checks salary_slips, advance_salaries, attendance_records, and possibly leaves.
+Check first: those tables may not exist in PostgreSQL yet. Use psql "$DATABASE_URL" -c "\dt" to verify. Skip any check whose table doesn't exist (mirror the products → manufacturing_orders skip pattern, documented in a comment).
+Pre-existing harmless issues to ignore
+TS7030 in artifacts/api-server/src/routes/kv.ts — pre-existing, unrelated.
+Workflow artifacts/api-server: API Server fails because it's a duplicate fighting Start application for port 8080. Don't restart it. Use Start application only.
+Per-batch workflow (proven across steps 15-17)
+Read the FE _xxxFinancialBlockers function and the route file.
+Verify relevant tables/columns: psql "$DATABASE_URL" -c "\d <table>".
+Edit the route — add deleteBlockers hook with parameterized, tenant-scoped queries. Use COUNT(DISTINCT parent_id) when counting documents through their line-items so the message reflects document count, not raw line count.
+restart_workflow "Start application" then sleep 5.
+Smoke test: seed a tenant + N entities each with one blocker class + one clean, curl -s -X DELETE "http://localhost:8080/api/<route>/<id>?tenantId=<tid>", expect 409 for blocked / 204 for clean. Verify with psql that blocked rows aren't archived. Cleanup at the end.
+Architect review: call the code_review skill via architect({task, relevantFiles, includeGitDiff: true}). Apply any FAIL findings, re-verify, then close the step.
+Update progress; await user's "next".
+Conventions worth preserving
+All queries parameterized — never interpolate user input. Dynamic table/column identifiers must come from compile-time literals (see the ITEM_CHECKS const map in products.ts for the pattern).
+_memRaw cache, KV API, and FE blockers all remain authoritative for now — the backend hooks are additive defence-in-depth, not a replacement.
+Don't touch FE store.ts in this sub-phase. FE cutover is a later, larger conversation.
+Don't delete the duplicate artifacts/api-server: API Server workflow even though it fails.
+After both batches
+Stop and tell the user: "Defence-in-depth backend DELETE blockers are complete. Next major step is FE read/write cutover (use-data.ts + store.ts still write through /api/kv — switch to the new REST endpoints). Want to scope that, or hold here?" — don't start cutover work without explicit go-ahead.
+
+Helpful pointers
+Last commit: af10ee5e "Add delete restrictions for product categories to prevent data loss"
+Key files: artifacts/api-server/src/lib/records.ts (hook impl ~lines 54-69, 308-319), recently-wired routes listed above.
+DB: PostgreSQL via DATABASE_URL. JE lines table is journal_entry_lines (NOT je_lines).
+Start app workflow: Start application (do not restart the standalone API-server workflow).
+Begin with Batch A (accounts) when ready.
