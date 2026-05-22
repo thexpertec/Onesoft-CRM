@@ -130,6 +130,7 @@ The admin-dashboard is moving from KV-array writes (`/api/kv/{ns}/{key}` writing
 | 2 | Shipped | leads, requirement-docs |
 | Read-back bridge | Shipped (foundational fix) | See section below — was silently regressing Batches 1+2 across page refreshes. |
 | 3 | Shipped | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Used dual-write + hook-side suppression flag — see "Batch 3 — customers" below. |
+| Cleanup sweep | Shipped (May 2026) | Deleted 27 unused legacy CRUDs from store.ts (lead/doc/city/area/attribute/department/designation × all 3 ops; brand/unit/product-category × update+delete). Inlined the 18 `Parameters<typeof legacyFn>[N]` type-refs in `use-data.ts`. Kept `createBrand` / `createUnit` / `createProductCategory` because `products.tsx` CSV-import auto-create still calls them — added `_persistMigratedCreate` generic dual-write helper so those creates persist through to the relational table (otherwise the read-back bridge silently drops them on refresh). Customer CRUD untouched — still needed by m10/m11/COA heal/m14/PO-receive/sale-JE/findSubLedgerForParty/convertLeadToCustomer/ensureCustomerAdvanceLedger. |
 | 4 (planned) | Pending | stock-items + sales + invoices + purchase-orders + returns + stock-ledger — the transactional cluster. Stock-items can't be migrated alone because it's called from PO-receive and sale-fulfillment flows still on KV. |
 
 **Pattern** (consistent across batches):

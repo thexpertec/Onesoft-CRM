@@ -1,25 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  getLeads, getDocs, createLead, updateLead, deleteLead, createDoc, updateDoc, deleteDoc,
+  getLeads, getDocs,
   AdvanceSalary, getAdvanceSalaries, createAdvanceSalary, updateAdvanceSalary, deleteAdvanceSalary,
-  getCities, createCity, updateCity, deleteCity,
-  getAreas, createArea, updateArea, deleteArea,
+  getCities,
+  getAreas,
   getPaymentAccounts, createPaymentAccount, updatePaymentAccount, deletePaymentAccount,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
-  getProductCategories, createProductCategory, updateProductCategory, deleteProductCategory,
+  getProductCategories, createProductCategory,
   getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup,
   getShareholders, createShareholder, updateShareholder, deleteShareholder,
   getInvestmentPlans, createInvestmentPlan, updateInvestmentPlan, deleteInvestmentPlan,
   getProducts, createProduct, updateProduct, deleteProduct, reorderProducts,
-  getBrands, createBrand, updateBrand, deleteBrand,
+  getBrands, createBrand,
   getProductDepartments, createProductDepartment, updateProductDepartment, deleteProductDepartment,
-  getAttributes, createAttribute, updateAttribute, deleteAttribute,
-  getUnits, createUnit, updateUnit, deleteUnit,
+  getAttributes,
+  getUnits, createUnit,
   getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
   getStaff, createStaff, updateStaff, deleteStaff,
   getStaffRoles, createStaffRole, updateStaffRole, deleteStaffRole,
-  getDepartments, createDepartment, updateDepartment, deleteDepartment,
-  getDesignations, createDesignation, updateDesignation, deleteDesignation,
+  getDepartments,
+  getDesignations,
   getStock, createStockItem, updateStockItem, deleteStockItem,
   getSales, createSale, updateSale, deleteSale,
   getSaleReturns, SaleReturn,
@@ -133,7 +133,7 @@ export function useLeads() {
   // until it gets its own migration session. Each `addActivity` call is
   // guarded by an active-tenant check so a stale completion from tenant A
   // can't log activity into tenant B after a mid-flight tenant switch.
-  const addLead = async (lead: Parameters<typeof createLead>[0]): Promise<Lead> => {
+  const addLead = async (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">): Promise<Lead> => {
     const tid = requireTenantId();
     const payload = { isRelevant: true, callLogs: [], ...lead };
     const row = await leadsApi.create(tid, payload);
@@ -145,10 +145,10 @@ export function useLeads() {
     return row;
   };
 
-  const editLead = async (id: string, updates: Parameters<typeof updateLead>[1]): Promise<Lead> => {
+  const editLead = async (id: string, updates: Partial<Omit<Lead, "id" | "createdAt" | "updatedAt">>): Promise<Lead> => {
     const tid = requireTenantId();
     const payload = normalizeLeadUpdates(updates as Record<string, unknown>);
-    const row = await leadsApi.update(tid, id, payload as Parameters<typeof updateLead>[1]);
+    const row = await leadsApi.update(tid, id, payload as Partial<Omit<Lead, "id" | "createdAt" | "updatedAt">>);
     patchLeadInCache(tid, row);
     if (getActiveTenantId() === tid) {
       const detail = updates.status ? `Status → ${updates.status}` : undefined;
@@ -179,13 +179,13 @@ export function useDocs() {
 
   // REST-backed (Batch 2). Requirement-docs has no activity log or
   // dependent records, so the migration is a straight pass-through.
-  const addDoc = async (doc: Parameters<typeof createDoc>[0]): Promise<RequirementDoc> => {
+  const addDoc = async (doc: Omit<RequirementDoc, "id" | "createdAt" | "updatedAt">): Promise<RequirementDoc> => {
     const tid = requireTenantId();
     const row = await requirementDocsApi.create(tid, doc);
     patchDocInCache(tid, row); fetchDocs(); return row;
   };
 
-  const editDoc = async (id: string, updates: Parameters<typeof updateDoc>[1]): Promise<RequirementDoc> => {
+  const editDoc = async (id: string, updates: Partial<Omit<RequirementDoc, "id" | "createdAt" | "updatedAt">>): Promise<RequirementDoc> => {
     const tid = requireTenantId();
     const row = await requirementDocsApi.update(tid, id, updates);
     patchDocInCache(tid, row); fetchDocs(); return row;
@@ -294,7 +294,7 @@ export function useProductCategories() {
     return row;
   };
 
-  const editCategory = async (id: string, updates: Parameters<typeof updateProductCategory>[1]): Promise<ProductCategory> => {
+  const editCategory = async (id: string, updates: Partial<Omit<ProductCategory, "id" | "createdAt">>): Promise<ProductCategory> => {
     const tid = requireTenantId();
     const row = await productCategoriesApi.update(tid, id, updates);
     patchProductCategoryInCache(tid, row);
@@ -356,7 +356,7 @@ export function useBrands() {
     const row = await brandsApi.create(tid, data);
     patchBrandInCache(tid, row); fetchBrands(); return row;
   };
-  const editBrand = async (id: string, updates: Parameters<typeof updateBrand>[1]): Promise<Brand> => {
+  const editBrand = async (id: string, updates: Partial<Omit<Brand, "id" | "createdAt">>): Promise<Brand> => {
     const tid = requireTenantId();
     const row = await brandsApi.update(tid, id, updates);
     patchBrandInCache(tid, row); fetchBrands(); return row;
@@ -375,12 +375,12 @@ export function useAttributes() {
   const fetchAttributes = useCallback(() => setAttributes(getAttributes()), []);
   useStoreEffect(fetchAttributes);
 
-  const addAttribute = async (data: Parameters<typeof createAttribute>[0]): Promise<Attribute> => {
+  const addAttribute = async (data: Omit<Attribute, "id" | "createdAt" | "updatedAt" | "active"> & { active?: boolean }): Promise<Attribute> => {
     const tid = requireTenantId();
     const row = await attributesApi.create(tid, data as Omit<Attribute, "id" | "createdAt" | "updatedAt">);
     patchAttributeInCache(tid, row); fetchAttributes(); return row;
   };
-  const editAttribute = async (id: string, updates: Parameters<typeof updateAttribute>[1]): Promise<Attribute> => {
+  const editAttribute = async (id: string, updates: Partial<Omit<Attribute, "id" | "createdAt">>): Promise<Attribute> => {
     const tid = requireTenantId();
     const row = await attributesApi.update(tid, id, updates);
     patchAttributeInCache(tid, row); fetchAttributes(); return row;
@@ -404,7 +404,7 @@ export function useUnits() {
     const row = await unitsApi.create(tid, data);
     patchUnitInCache(tid, row); fetchUnits(); return row;
   };
-  const editUnit = async (id: string, updates: Parameters<typeof updateUnit>[1]): Promise<Unit> => {
+  const editUnit = async (id: string, updates: Partial<Omit<Unit, "id" | "createdAt">>): Promise<Unit> => {
     const tid = requireTenantId();
     const row = await unitsApi.update(tid, id, updates);
     patchUnitInCache(tid, row); fetchUnits(); return row;
@@ -547,12 +547,12 @@ export function useDepartments() {
   const [departments, setDepartments] = useState<Department[]>(() => getDepartments());
   const fetch = useCallback(() => setDepartments(getDepartments()), []);
   useStoreEffect(fetch);
-  const addDepartment = async (d: Parameters<typeof createDepartment>[0]): Promise<Department> => {
+  const addDepartment = async (d: Omit<Department, "id" | "createdAt" | "updatedAt">): Promise<Department> => {
     const tid = requireTenantId();
     const r = await departmentsApi.create(tid, d);
     patchDepartmentInCache(tid, r); fetch(); return r;
   };
-  const editDepartment = async (id: string, u: Parameters<typeof updateDepartment>[1]): Promise<Department> => {
+  const editDepartment = async (id: string, u: Partial<Omit<Department, "id" | "createdAt">>): Promise<Department> => {
     const tid = requireTenantId();
     const r = await departmentsApi.update(tid, id, u);
     patchDepartmentInCache(tid, r); fetch(); return r;
@@ -569,12 +569,12 @@ export function useDesignations() {
   const [designations, setDesignations] = useState<Designation[]>(() => getDesignations());
   const fetch = useCallback(() => setDesignations(getDesignations()), []);
   useStoreEffect(fetch);
-  const addDesignation = async (d: Parameters<typeof createDesignation>[0]): Promise<Designation> => {
+  const addDesignation = async (d: Omit<Designation, "id" | "createdAt" | "updatedAt">): Promise<Designation> => {
     const tid = requireTenantId();
     const r = await designationsApi.create(tid, d);
     patchDesignationInCache(tid, r); fetch(); return r;
   };
-  const editDesignation = async (id: string, u: Parameters<typeof updateDesignation>[1]): Promise<Designation> => {
+  const editDesignation = async (id: string, u: Partial<Omit<Designation, "id" | "createdAt">>): Promise<Designation> => {
     const tid = requireTenantId();
     const r = await designationsApi.update(tid, id, u);
     patchDesignationInCache(tid, r); fetch(); return r;
@@ -747,12 +747,12 @@ export function useCities() {
   const [cities, setCities] = useState<City[]>(() => getCities());
   const fetch = useCallback(() => setCities(getCities()), []);
   useStoreEffect(fetch);
-  const add = async (d: Parameters<typeof createCity>[0]): Promise<City> => {
+  const add = async (d: Omit<City, "id" | "createdAt" | "updatedAt">): Promise<City> => {
     const tid = requireTenantId();
     const c = await citiesApi.create(tid, d);
     patchCityInCache(tid, c); fetch(); return c;
   };
-  const edit = async (id: string, u: Parameters<typeof updateCity>[1]): Promise<City> => {
+  const edit = async (id: string, u: Partial<Omit<City, "id" | "createdAt">>): Promise<City> => {
     const tid = requireTenantId();
     const c = await citiesApi.update(tid, id, u);
     patchCityInCache(tid, c); fetch(); return c;
@@ -780,12 +780,12 @@ export function useAreas() {
   const [areas, setAreas] = useState<Area[]>(() => getAreas());
   const fetch = useCallback(() => setAreas(getAreas()), []);
   useStoreEffect(fetch);
-  const add = async (d: Parameters<typeof createArea>[0]): Promise<Area> => {
+  const add = async (d: Omit<Area, "id" | "createdAt" | "updatedAt">): Promise<Area> => {
     const tid = requireTenantId();
     const a = await areasApi.create(tid, d);
     patchAreaInCache(tid, a); fetch(); return a;
   };
-  const edit = async (id: string, u: Parameters<typeof updateArea>[1]): Promise<Area> => {
+  const edit = async (id: string, u: Partial<Omit<Area, "id" | "createdAt">>): Promise<Area> => {
     const tid = requireTenantId();
     const a = await areasApi.update(tid, id, u);
     patchAreaInCache(tid, a); fetch(); return a;

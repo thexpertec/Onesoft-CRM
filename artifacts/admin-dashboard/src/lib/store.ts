@@ -1,5 +1,5 @@
 import { kvPut, kvGetAll, kvGet, kvDelete, kvDeleteNamespace } from "./api";
-import { customersApi } from "./record-api";
+import { customersApi, brandsApi, unitsApi, productCategoriesApi } from "./record-api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -159,6 +159,34 @@ function _persistCustomerRest(
     const msg = err instanceof Error ? err.message : String(err);
     if (op === "create" && /HTTP 409/i.test(msg)) return;
     console.warn(`[customers ${op}] REST persistence failed for ${customer.id}:`, msg);
+  });
+}
+
+/**
+ * Fire-and-forget REST CREATE for a Batch-1 migrated entity that still has
+ * a legacy in-store create function (currently brand / unit / product-category,
+ * all three called by the products.tsx CSV-import auto-create path).
+ *
+ * Without this dual-write, those legacy creates would persist only to
+ * `kv_store` — which the read-back bridge ignores for migrated keys — so
+ * the imported brand/unit/category would vanish on next refresh. The hook
+ * paths (`useBrands`/`useUnits`/`useProductCategories`) call their REST API
+ * directly and DO NOT go through these legacy functions, so there is no
+ * suppression-flag concern here.
+ *
+ * 409 on CREATE is tolerated (idempotent re-seed paths).
+ */
+function _persistMigratedCreate(
+  api: { create: (tid: string, body: never) => Promise<unknown> },
+  label: string,
+  item: { id: string } & Record<string, unknown>,
+): void {
+  const tid = _activeTenantId;
+  if (!tid) return;
+  api.create(tid, item as never).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/HTTP 409/i.test(msg)) return;
+    console.warn(`[${label} create] REST persistence failed for ${item.id}:`, msg);
   });
 }
 
@@ -653,64 +681,13 @@ async function setGlobalAsync<T>(key: string, data: T[]): Promise<void> {
   }
 }
 
-// ─── Leads API ────────────────────────────────────────────────────────────────
+// ─── Leads API (Batch 2 — REST-only; legacy CRUD removed in cleanup sweep) ───
 export const getLeads = (): Lead[] => getStored<Lead>(LEADS_KEY);
 export const getLead = (id: string): Lead | undefined => getLeads().find(l => l.id === id);
-export const createLead = (lead: Omit<Lead, "id" | "createdAt" | "updatedAt">): Lead => {
-  const newLead: Lead = {
-    isRelevant: true,
-    callLogs: [],
-    ...lead,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(LEADS_KEY, [...getLeads(), newLead]);
-  addActivity({ action: "created", entity: "Lead", entityName: newLead.name, detail: newLead.company || undefined });
-  return newLead;
-};
-export const updateLead = (id: string, updates: Partial<Omit<Lead, "id" | "createdAt" | "updatedAt">>): Lead => {
-  const leads = getLeads();
-  const index = leads.findIndex(l => l.id === id);
-  if (index === -1) throw new Error("Lead not found");
-  const updatedLead = { ...leads[index], ...updates, updatedAt: new Date().toISOString() };
-  leads[index] = updatedLead;
-  setStored(LEADS_KEY, leads);
-  const detail = updates.status ? `Status → ${updates.status}` : undefined;
-  addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Lead", entityName: updatedLead.name, detail });
-  return updatedLead;
-};
-export const deleteLead = (id: string): void => {
-  const lead = getLeads().find(l => l.id === id);
-  setStored(LEADS_KEY, getLeads().filter(l => l.id !== id));
-  addActivity({ action: "deleted", entity: "Lead", entityName: lead?.name || id });
-};
 
-// ─── Docs API ─────────────────────────────────────────────────────────────────
+// ─── Docs API (Batch 2 — REST-only; legacy CRUD removed in cleanup sweep) ────
 export const getDocs = (): RequirementDoc[] => getStored<RequirementDoc>(DOCS_KEY);
 export const getDoc = (id: string): RequirementDoc | undefined => getDocs().find(d => d.id === id);
-export const createDoc = (doc: Omit<RequirementDoc, "id" | "createdAt" | "updatedAt">): RequirementDoc => {
-  const newDoc: RequirementDoc = {
-    ...doc,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(DOCS_KEY, [...getDocs(), newDoc]);
-  return newDoc;
-};
-export const updateDoc = (id: string, updates: Partial<Omit<RequirementDoc, "id" | "createdAt" | "updatedAt">>): RequirementDoc => {
-  const docs = getDocs();
-  const index = docs.findIndex(d => d.id === id);
-  if (index === -1) throw new Error("Document not found");
-  const updatedDoc = { ...docs[index], ...updates, updatedAt: new Date().toISOString() };
-  docs[index] = updatedDoc;
-  setStored(DOCS_KEY, docs);
-  return updatedDoc;
-};
-export const deleteDoc = (id: string): void => {
-  setStored(DOCS_KEY, getDocs().filter(d => d.id !== id));
-};
 /** Force-push in-memory docs to the API server (manual repair / recovery tool). */
 export const syncDocsToApi = (): void => {
   const docs = getDocs();
@@ -729,32 +706,9 @@ export type City = {
 
 const CITIES_KEY = "admin-cities";
 
+// Batch 1 — REST-only; legacy CRUD removed in cleanup sweep.
+// `useCities`/`useAreas` hooks cascade the city→areas delete themselves.
 export const getCities = (): City[] => getStored<City>(CITIES_KEY);
-
-export const createCity = (data: Omit<City, "id" | "createdAt" | "updatedAt">): City => {
-  const item: City = {
-    ...data,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(CITIES_KEY, [...getCities(), item]);
-  return item;
-};
-
-export const updateCity = (id: string, updates: Partial<Omit<City, "id" | "createdAt">>): City => {
-  const items = getCities();
-  const i = items.findIndex(c => c.id === id);
-  if (i === -1) throw new Error("City not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(CITIES_KEY, items);
-  return items[i];
-};
-
-export const deleteCity = (id: string): void => {
-  setStored(CITIES_KEY, getCities().filter(c => c.id !== id));
-  setStored(AREAS_KEY, getAreas().filter(a => a.cityId !== id));
-};
 
 export type Area = {
   id: string;
@@ -767,31 +721,8 @@ export type Area = {
 
 const AREAS_KEY = "admin-areas";
 
+// Batch 1 — REST-only; legacy CRUD removed in cleanup sweep.
 export const getAreas = (): Area[] => getStored<Area>(AREAS_KEY);
-
-export const createArea = (data: Omit<Area, "id" | "createdAt" | "updatedAt">): Area => {
-  const item: Area = {
-    ...data,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(AREAS_KEY, [...getAreas(), item]);
-  return item;
-};
-
-export const updateArea = (id: string, updates: Partial<Omit<Area, "id" | "createdAt">>): Area => {
-  const items = getAreas();
-  const i = items.findIndex(a => a.id === id);
-  if (i === -1) throw new Error("Area not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(AREAS_KEY, items);
-  return items[i];
-};
-
-export const deleteArea = (id: string): void => {
-  setStored(AREAS_KEY, getAreas().filter(a => a.id !== id));
-};
 
 // ─── Payment Accounts ─────────────────────────────────────────────────────────
 export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Wallet"] as const;
@@ -2093,6 +2024,12 @@ const PRODUCT_CATEGORIES_KEY = "admin-product-categories";
 
 export const getProductCategories = (): ProductCategory[] => getStored<ProductCategory>(PRODUCT_CATEGORIES_KEY);
 
+/**
+ * Legacy create still called by the products.tsx CSV-import auto-create flow.
+ * Dual-writes to the REST `product-categories` table so the new row is visible
+ * after page refresh (the read-back bridge ignores `kv_store` for this key).
+ * Update/delete CRUD has been removed — those paths go through `useProductCategories`.
+ */
 export const createProductCategory = (data: Omit<ProductCategory, "id" | "createdAt" | "updatedAt">): ProductCategory => {
   const item: ProductCategory = {
     ...data,
@@ -2101,35 +2038,8 @@ export const createProductCategory = (data: Omit<ProductCategory, "id" | "create
     updatedAt: new Date().toISOString(),
   };
   setStored(PRODUCT_CATEGORIES_KEY, [...getProductCategories(), item]);
+  _persistMigratedCreate(productCategoriesApi, "product-categories", item as unknown as { id: string } & Record<string, unknown>);
   return item;
-};
-
-export const updateProductCategory = (id: string, updates: Partial<Omit<ProductCategory, "id" | "createdAt">>): ProductCategory => {
-  const items = getProductCategories();
-  const i = items.findIndex(c => c.id === id);
-  if (i === -1) throw new Error("Category not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(PRODUCT_CATEGORIES_KEY, items);
-  return items[i];
-};
-
-export const deleteProductCategory = (id: string): void => {
-  const cat = getProductCategories().find(c => c.id === id);
-  if (cat) {
-    const blockers = _categoryFinancialBlockers(cat);
-    if (blockers.length) throw new Error(_formatBlockerError("product category", cat.name, blockers));
-  }
-  setStored(PRODUCT_CATEGORIES_KEY, getProductCategories().filter(c => c.id !== id));
-  // Clear the deleted category from any products still referencing it,
-  // so products don't silently hold a dangling category ID.
-  if (cat) {
-    const affected = getProducts().filter(p => p.category === cat.name);
-    if (affected.length > 0) {
-      setStored(PRODUCTS_KEY, getProducts().map(p =>
-        p.category === cat.name ? { ...p, category: "", updatedAt: new Date().toISOString() } : p
-      ));
-    }
-  }
 };
 
 // ─── Product Groups / Menus ───────────────────────────────────────────────────
@@ -3964,6 +3874,10 @@ const BRANDS_KEY = "admin-brands";
 
 export const getBrands = (): Brand[] => getStored<Brand>(BRANDS_KEY);
 
+/**
+ * Legacy create still called by the products.tsx CSV-import auto-create flow.
+ * Dual-writes to the REST `brands` table — see `_persistMigratedCreate`.
+ */
 export const createBrand = (data: Omit<Brand, "id" | "createdAt" | "updatedAt">): Brand => {
   const item: Brand = {
     ...data,
@@ -3972,20 +3886,8 @@ export const createBrand = (data: Omit<Brand, "id" | "createdAt" | "updatedAt">)
     updatedAt: new Date().toISOString(),
   };
   setStored(BRANDS_KEY, [...getBrands(), item]);
+  _persistMigratedCreate(brandsApi, "brands", item as unknown as { id: string } & Record<string, unknown>);
   return item;
-};
-
-export const updateBrand = (id: string, updates: Partial<Omit<Brand, "id" | "createdAt">>): Brand => {
-  const items = getBrands();
-  const i = items.findIndex(b => b.id === id);
-  if (i === -1) throw new Error("Brand not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(BRANDS_KEY, items);
-  return items[i];
-};
-
-export const deleteBrand = (id: string): void => {
-  setStored(BRANDS_KEY, getBrands().filter(b => b.id !== id));
 };
 
 // ─── Product Departments API ──────────────────────────────────────────────────
@@ -4045,32 +3947,8 @@ export type Attribute = {
 
 const ATTRIBUTES_KEY = "admin-attributes";
 
+// Batch 1 — REST-only; legacy CRUD removed in cleanup sweep.
 export const getAttributes = (): Attribute[] => getStored<Attribute>(ATTRIBUTES_KEY);
-
-export const createAttribute = (data: Omit<Attribute, "id" | "createdAt" | "updatedAt" | "active"> & { active?: boolean }): Attribute => {
-  const item: Attribute = {
-    active: true,
-    ...data,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  setStored(ATTRIBUTES_KEY, [...getAttributes(), item]);
-  return item;
-};
-
-export const updateAttribute = (id: string, updates: Partial<Omit<Attribute, "id" | "createdAt">>): Attribute => {
-  const items = getAttributes();
-  const i = items.findIndex(a => a.id === id);
-  if (i === -1) throw new Error("Attribute not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(ATTRIBUTES_KEY, items);
-  return items[i];
-};
-
-export const deleteAttribute = (id: string): void => {
-  setStored(ATTRIBUTES_KEY, getAttributes().filter(a => a.id !== id));
-};
 
 // ─── Units API ────────────────────────────────────────────────────────────────
 export type Unit = {
@@ -4086,6 +3964,10 @@ const UNITS_KEY = "admin-units";
 
 export const getUnits = (): Unit[] => getStored<Unit>(UNITS_KEY);
 
+/**
+ * Legacy create still called by the products.tsx CSV-import auto-create flow.
+ * Dual-writes to the REST `units` table — see `_persistMigratedCreate`.
+ */
 export const createUnit = (data: Omit<Unit, "id" | "createdAt" | "updatedAt">): Unit => {
   const item: Unit = {
     ...data,
@@ -4094,20 +3976,8 @@ export const createUnit = (data: Omit<Unit, "id" | "createdAt" | "updatedAt">): 
     updatedAt: new Date().toISOString(),
   };
   setStored(UNITS_KEY, [...getUnits(), item]);
+  _persistMigratedCreate(unitsApi, "units", item as unknown as { id: string } & Record<string, unknown>);
   return item;
-};
-
-export const updateUnit = (id: string, updates: Partial<Omit<Unit, "id" | "createdAt">>): Unit => {
-  const items = getUnits();
-  const i = items.findIndex(u => u.id === id);
-  if (i === -1) throw new Error("Unit not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(UNITS_KEY, items);
-  return items[i];
-};
-
-export const deleteUnit = (id: string): void => {
-  setStored(UNITS_KEY, getUnits().filter(u => u.id !== id));
 };
 
 // ─── Purchase Orders API ──────────────────────────────────────────────────────
@@ -6726,26 +6596,8 @@ export type Department = {
 
 const HRM_DEPT_KEY = "admin-hrm-departments";
 
+// Batch 1 — REST-only; legacy CRUD removed in cleanup sweep.
 export const getDepartments = (): Department[] => getStored<Department>(HRM_DEPT_KEY);
-
-export const createDepartment = (data: Omit<Department, "id" | "createdAt" | "updatedAt">): Department => {
-  const item: Department = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(HRM_DEPT_KEY, [...getDepartments(), item]);
-  return item;
-};
-
-export const updateDepartment = (id: string, updates: Partial<Omit<Department, "id" | "createdAt">>): Department => {
-  const items = getDepartments();
-  const i = items.findIndex(r => r.id === id);
-  if (i === -1) throw new Error("Department not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(HRM_DEPT_KEY, items);
-  return items[i];
-};
-
-export const deleteDepartment = (id: string): void => {
-  setStored(HRM_DEPT_KEY, getDepartments().filter(r => r.id !== id));
-};
 
 // ─── HRM — Designations ───────────────────────────────────────────────────────
 export type Designation = {
@@ -6760,26 +6612,8 @@ export type Designation = {
 
 const HRM_DESIG_KEY = "admin-hrm-designations";
 
+// Batch 1 — REST-only; legacy CRUD removed in cleanup sweep.
 export const getDesignations = (): Designation[] => getStored<Designation>(HRM_DESIG_KEY);
-
-export const createDesignation = (data: Omit<Designation, "id" | "createdAt" | "updatedAt">): Designation => {
-  const item: Designation = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(HRM_DESIG_KEY, [...getDesignations(), item]);
-  return item;
-};
-
-export const updateDesignation = (id: string, updates: Partial<Omit<Designation, "id" | "createdAt">>): Designation => {
-  const items = getDesignations();
-  const i = items.findIndex(r => r.id === id);
-  if (i === -1) throw new Error("Designation not found");
-  items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(HRM_DESIG_KEY, items);
-  return items[i];
-};
-
-export const deleteDesignation = (id: string): void => {
-  setStored(HRM_DESIG_KEY, getDesignations().filter(r => r.id !== id));
-};
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export const SETTINGS_KEY = "admin-settings";
