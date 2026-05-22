@@ -388,6 +388,55 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS stock_ledger_tenant_entity_idx ON stock_ledger (tenant_id, entity_id, date)`,
   `CREATE INDEX IF NOT EXISTS stock_ledger_tenant_ref_idx    ON stock_ledger (tenant_id, reference)`,
 
+  // ── Purchase Orders ──────────────────────────────────────────────────────────
+  // Parent + child line items, mirroring the journal_entries / journal_entry_lines
+  // pattern (composite PK on (id, tenant_id); je_id is a soft reference — no FK,
+  // mirrors how brands/parent_id is handled — because legacy POs may point at
+  // JEs that haven't been migrated yet, and deleting a JE is allowed to leave
+  // the PO with a stale jeId per the reverse-cascade documented in replit.md).
+  `CREATE TABLE IF NOT EXISTS purchase_orders (
+    id            TEXT        NOT NULL,
+    tenant_id     TEXT        NOT NULL,
+    po_number     TEXT        NOT NULL,
+    supplier      TEXT        NOT NULL DEFAULT '',
+    order_date    TEXT        NOT NULL DEFAULT '',
+    delivery_date TEXT        NOT NULL DEFAULT '',
+    status        TEXT        NOT NULL DEFAULT 'Draft',
+    notes         TEXT        NOT NULL DEFAULT '',
+    je_id         TEXT,
+    archived_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS po_tenant_idx        ON purchase_orders (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS po_tenant_number_idx ON purchase_orders (tenant_id, po_number)`,
+  `CREATE INDEX IF NOT EXISTS po_tenant_status_idx ON purchase_orders (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS po_tenant_date_idx   ON purchase_orders (tenant_id, order_date)`,
+
+  // ── Purchase Order Items ─────────────────────────────────────────────────────
+  // Composite FK ON DELETE CASCADE so a PO delete sweeps its lines (the store
+  // layer still refuses the parent delete when financial blockers exist; this
+  // FK only protects against orphaned lines if a PO is removed via SQL).
+  `CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id           TEXT          NOT NULL,
+    tenant_id    TEXT          NOT NULL,
+    po_id        TEXT          NOT NULL,
+    item_type    TEXT          NOT NULL DEFAULT 'product',
+    rm_id        TEXT,
+    product_name TEXT          NOT NULL DEFAULT '',
+    sku          TEXT          NOT NULL DEFAULT '',
+    qty          NUMERIC(18,4) NOT NULL DEFAULT 0,
+    unit         TEXT          NOT NULL DEFAULT '',
+    unit_price   NUMERIC(18,4) NOT NULL DEFAULT 0,
+    notes        TEXT          NOT NULL DEFAULT '',
+    line_order   INT           NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (po_id, tenant_id) REFERENCES purchase_orders (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS poi_po_idx     ON purchase_order_items (tenant_id, po_id)`,
+  `CREATE INDEX IF NOT EXISTS poi_tenant_idx ON purchase_order_items (tenant_id)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

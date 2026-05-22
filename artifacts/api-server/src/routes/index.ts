@@ -18,6 +18,7 @@ import areasRouter from "./areas.js";
 import requirementDocsRouter from "./requirement-docs.js";
 import stockItemsRouter from "./stock-items.js";
 import stockLedgerRouter from "./stock-ledger.js";
+import purchaseOrdersRouter from "./purchase-orders.js";
 import staffRouter from "./staff.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
@@ -46,6 +47,7 @@ router.use("/areas", areasRouter);
 router.use("/requirement-docs", requirementDocsRouter);
 router.use("/stock-items", stockItemsRouter);
 router.use("/stock-ledger", stockLedgerRouter);
+router.use("/purchase-orders", purchaseOrdersRouter);
 router.use("/staff", staffRouter);
 router.use("/journal-entries", journalEntriesRouter);
 

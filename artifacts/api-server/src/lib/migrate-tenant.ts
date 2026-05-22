@@ -95,6 +95,7 @@ export interface MigrateResult {
   requirementDocs:   MigrateSection;
   stockItems:        MigrateSection;
   stockLedger:       MigrateSection;
+  purchaseOrders:    MigrateSection;
 }
 
 interface FrontendProduct {
@@ -204,6 +205,7 @@ export async function migrateTenant(
     requirementDocs:   { found: 0, inserted: 0, skipped: 0, errors: [] },
     stockItems:        { found: 0, inserted: 0, skipped: 0, errors: [] },
     stockLedger:       { found: 0, inserted: 0, skipped: 0, errors: [] },
+    purchaseOrders:    { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -910,6 +912,108 @@ export async function migrateTenant(
     // Ledger rows have no `name` field; use a composite label for error messages.
     getDisplayName: (l) => `${l.txType} ${l.reference ?? ""}`.trim() || l.entityId,
   });
+
+  // ── 9. Purchase Orders + Items (first transactional entity) ────────────────
+  // Parent + child line items. Doesn't fit `migrateMaster` shape — needs
+  // dedicated per-row transaction that writes the PO header and all its
+  // items atomically (mirrors the JE migrator above).
+  type IncomingPoItem = {
+    id?: string; itemType?: string; rmId?: string;
+    productName?: string; sku?: string;
+    qty?: unknown; unit?: string; unitPrice?: unknown; notes?: string;
+  };
+  type IncomingPo = {
+    id: string; poNumber: string;
+    supplier?: string; orderDate?: string; deliveryDate?: string;
+    status?: string; notes?: string;
+    jeId?: string;
+    items?: IncomingPoItem[];
+    createdAt?: string; updatedAt?: string;
+  };
+
+  const rawPos = await readKv(tenantId, "admin-purchase-orders");
+  const pos: IncomingPo[] = Array.isArray(rawPos) ? (rawPos as IncomingPo[]) : [];
+  result.purchaseOrders.found = pos.length;
+
+  for (const po of pos) {
+    try {
+      if (!po.id || !po.poNumber) {
+        result.purchaseOrders.errors.push(
+          `PO ${po.id ?? "(no id)"}: missing required field (id or poNumber) — skipped`,
+        );
+        result.purchaseOrders.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM purchase_orders WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [po.id, tenantId],
+      );
+      if (existing.length > 0) {
+        result.purchaseOrders.skipped++;
+        continue;
+      }
+      if (dryRun) {
+        result.purchaseOrders.inserted++;
+        continue;
+      }
+
+      const items = Array.isArray(po.items) ? po.items : [];
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO purchase_orders
+            (id, tenant_id, po_number, supplier, order_date, delivery_date,
+             status, notes, je_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            po.id, tenantId, po.poNumber,
+            po.supplier ?? "", po.orderDate ?? "", po.deliveryDate ?? "",
+            po.status ?? "Draft", po.notes ?? "", po.jeId ?? null,
+            po.createdAt ? new Date(po.createdAt) : new Date(),
+            po.updatedAt ? new Date(po.updatedAt) : new Date(),
+          ],
+        );
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await client.query(
+            `INSERT INTO purchase_order_items
+              (id, tenant_id, po_id, item_type, rm_id, product_name, sku,
+               qty, unit, unit_price, notes, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              it.id ?? randomUUID(), tenantId, po.id,
+              it.itemType ?? "product", it.rmId ?? null,
+              it.productName ?? "", it.sku ?? "",
+              toNum(it.qty), it.unit ?? "", toNum(it.unitPrice),
+              it.notes ?? "", i,
+            ],
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','purchase_order',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, po.id,
+            JSON.stringify({ poNumber: po.poNumber, supplier: po.supplier ?? "", itemCount: items.length }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.purchaseOrders.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.purchaseOrders.errors.push(
+        `PO ${po.id} (${po.poNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
 
   return result;
 }
