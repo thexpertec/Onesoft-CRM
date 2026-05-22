@@ -9297,6 +9297,12 @@ export const removeDesignationFromCache     = (tid: string, id: string)         
 export const patchProductCategoryInCache    = (tid: string, c: ProductCategory)  => _patchRecordInCache(tid, PRODUCT_CATEGORIES_KEY, c);
 export const removeProductCategoryFromCache = (tid: string, id: string)          => _removeRecordFromCache<ProductCategory>(tid, PRODUCT_CATEGORIES_KEY, id);
 
+// Batch 2 — CRM master records
+export const patchLeadInCache               = (tid: string, l: Lead)             => _patchRecordInCache(tid, LEADS_KEY, l);
+export const removeLeadFromCache            = (tid: string, id: string)          => _removeRecordFromCache<Lead>(tid, LEADS_KEY, id);
+export const patchDocInCache                = (tid: string, d: RequirementDoc)   => _patchRecordInCache(tid, DOCS_KEY, d);
+export const removeDocFromCache             = (tid: string, id: string)          => _removeRecordFromCache<RequirementDoc>(tid, DOCS_KEY, id);
+
 // ─── Journal Entry ────────────────────────────────────────────────────────────
 
 export type JournalEntryLine = {

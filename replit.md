@@ -120,6 +120,27 @@ When `deleteJournalEntry(id)` runs, the store now scans every record that points
 
 This complements the deletion blockers above: blockers prevent users from deleting the *source* record while a JE still exists; the reverse-cascade lets users delete the *JE* and have the source automatically return to its pre-payment state. Stock movements are not touched — those are handled separately via stock adjustments.
 
+### Per-record REST migration (incremental cutover from KV)
+
+The admin-dashboard is moving from KV-array writes (`/api/kv/{ns}/{key}` writing the entire `Brand[]`/`Lead[]`/etc array per mutation) to per-record relational endpoints (`/api/{entity}` returning the persisted row). The cutover is intentionally incremental:
+
+| Batch | Status | Entities |
+|---|---|---|
+| 1 | Shipped | brands, units, attributes, cities, areas, departments, designations, product-categories |
+| 2 | Shipped | leads, requirement-docs |
+| 3 (planned) | Pending | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Dedicated session because `createCustomer`/`updateCustomer`/`deleteCustomer` orchestrate COA ledger creation, opening-balance JE writes, role-change re-parenting, and safe-deactivation. |
+| 4 (planned) | Pending | stock-items + sales + invoices + purchase-orders + returns + stock-ledger — the transactional cluster. Stock-items can't be migrated alone because it's called from PO-receive and sale-fulfillment flows still on KV. |
+
+**Pattern** (consistent across batches):
+- Typed REST client in `src/lib/record-api.ts` via the `makeRecordApi<T>(path)` factory.
+- Tenant-aware cache helpers in `store.ts`: `patchXInCache(tenantId, row)` / `removeXFromCache(tenantId, id)`. Both **no-op if `_activeTenantId` changed mid-flight** — this is the load-bearing tenant-switch race guard.
+- Hook in `src/hooks/use-data.ts`: `requireTenantId()` → `apiX.create/update/delete()` → `patchXInCache(tid, row)` → `fetch()` re-render. Returns the **server's persisted row**, never an optimistic local mutation.
+- Side effects (activity log, etc.) called from the hook are guarded by `if (getActiveTenantId() === tid)` so a stale completion from tenant A cannot write into tenant B after a switch.
+
+**`useLeads` field-clear normalization** (Batch 2): the leads UI clears nullable timestamp/numeric fields (`nextReminder`, `dealValue`, `nextFollowUp`, etc.) by passing `undefined` or `""`. `JSON.stringify` drops `undefined` keys and the backend's `TIMESTAMPTZ` columns reject `""` outright. The `normalizeLeadUpdates` helper in `use-data.ts` converts `undefined` → `null` universally and `""` → `null` for the known-nullable column set, so caller intent ("key present" = "set, possibly to null") survives the wire.
+
+Legacy `createLead`/`updateLead`/`deleteLead`/`createDoc`/`updateDoc`/`deleteDoc` (and the analogous Batch 1 functions) remain exported from `store.ts` but are no longer called by hooks. They will be removed in a follow-up sweep after every batch ships, to keep churn low while the migration is in flight.
+
 ### Sale-return visibility on the sales list
 
 `sales.tsx` consumes the new `useSaleReturns()` hook and builds a `Map<saleId → {count, qty}>`. When a sale has any returns, a small rose-coloured "↩ Returned" pill is rendered next to its Status badge with a tooltip showing return count and total returned quantity. The hook follows the same `useStoreEffect` pattern as all other data hooks: the badge re-evaluates on mount and on `storage` / `onesoft:data-synced` events. In practice it appears when the user navigates back to the Sales list after creating a Sale Return (re-mount), which matches the rest of the app's data-flow conventions — there is no in-page live update channel for `setStored` writes.

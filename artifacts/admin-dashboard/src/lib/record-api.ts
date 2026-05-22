@@ -11,6 +11,7 @@ import type {
   Account, JournalEntry, JournalEntryLine,
   Brand, Unit, Attribute, City, Area,
   Department, Designation, ProductCategory,
+  Lead, RequirementDoc,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -222,3 +223,10 @@ export const areasApi              = makeRecordApi<Area>("areas");
 export const departmentsApi        = makeRecordApi<Department>("departments");
 export const designationsApi       = makeRecordApi<Designation>("designations");
 export const productCategoriesApi  = makeRecordApi<ProductCategory>("product-categories");
+
+// ─── CRM REST clients (Batch 2) ───────────────────────────────────────────────
+// Customers intentionally NOT migrated here — `createCustomer`/`updateCustomer`/
+// `deleteCustomer` orchestrate COA ledger creation, opening-balance JE writes,
+// and safe-deactivation logic that needs its own dedicated cutover session.
+export const leadsApi              = makeRecordApi<Lead>("leads");
+export const requirementDocsApi    = makeRecordApi<RequirementDoc>("requirement-docs");

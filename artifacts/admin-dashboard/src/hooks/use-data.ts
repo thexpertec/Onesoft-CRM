@@ -51,12 +51,16 @@ import {
   patchDepartmentInCache, removeDepartmentFromCache,
   patchDesignationInCache, removeDesignationFromCache,
   patchProductCategoryInCache, removeProductCategoryFromCache,
+  patchLeadInCache, removeLeadFromCache,
+  patchDocInCache, removeDocFromCache,
+  addActivity,
 } from "@/lib/store";
 import {
   apiCreateAccount, apiUpdateAccount, apiDeleteAccount,
   apiCreateJE, apiUpdateJE, apiDeleteJE,
   brandsApi, unitsApi, attributesApi, citiesApi, areasApi,
   departmentsApi, designationsApi, productCategoriesApi,
+  leadsApi, requirementDocsApi,
   type ApiJELine,
 } from "@/lib/record-api";
 
@@ -86,29 +90,80 @@ function useStoreEffect(cb: () => void) {
   }, []);
 }
 
+// Lead columns that are nullable TIMESTAMPTZ/NUMERIC — UI clears them by
+// passing `undefined` (or `""` from a date input). `JSON.stringify` drops
+// undefined keys before they reach the server, so without this normalization
+// the clear silently no-ops. Empty strings also fail TIMESTAMPTZ parsing.
+const LEAD_NULLABLE_COLUMNS = new Set<string>([
+  "nextReminder", "reminderNote", "dealValue", "assignedTo",
+  "temperature", "nextFollowUp", "country", "website",
+]);
+
+function normalizeLeadUpdates(
+  updates: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (v === undefined) {
+      // Caller included the key — intent is "clear". Send null so JSON.stringify
+      // preserves it and the server SET writes NULL.
+      out[k] = null;
+    } else if (v === "" && LEAD_NULLABLE_COLUMNS.has(k)) {
+      // Empty string into a nullable timestamp/numeric column is "clear",
+      // not a literal empty value — TIMESTAMPTZ would reject "" outright.
+      out[k] = null;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 export function useLeads() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-
-  const fetchLeads = useCallback(() => {
-    setLeads(getLeads());
-  }, []);
-
+  const [leads, setLeads] = useState<Lead[]>(() => getLeads());
+  const fetchLeads = useCallback(() => setLeads(getLeads()), []);
   useStoreEffect(fetchLeads);
 
-  const addLead = (lead: Parameters<typeof createLead>[0]) => {
-    const newLead = createLead(lead);
+  // REST-backed (Batch 2). The legacy `createLead` defaulted
+  // `isRelevant: true` and `callLogs: []`; we mirror that here so the
+  // hook is bug-compatible with the KV-era behaviour. `addActivity` is
+  // still called locally — the activity log remains a KV-side artefact
+  // until it gets its own migration session. Each `addActivity` call is
+  // guarded by an active-tenant check so a stale completion from tenant A
+  // can't log activity into tenant B after a mid-flight tenant switch.
+  const addLead = async (lead: Parameters<typeof createLead>[0]): Promise<Lead> => {
+    const tid = requireTenantId();
+    const payload = { isRelevant: true, callLogs: [], ...lead };
+    const row = await leadsApi.create(tid, payload);
+    patchLeadInCache(tid, row);
+    if (getActiveTenantId() === tid) {
+      addActivity({ action: "created", entity: "Lead", entityName: row.name, detail: row.company || undefined });
+    }
     fetchLeads();
-    return newLead;
+    return row;
   };
 
-  const editLead = (id: string, updates: Parameters<typeof updateLead>[1]) => {
-    const updated = updateLead(id, updates);
+  const editLead = async (id: string, updates: Parameters<typeof updateLead>[1]): Promise<Lead> => {
+    const tid = requireTenantId();
+    const payload = normalizeLeadUpdates(updates as Record<string, unknown>);
+    const row = await leadsApi.update(tid, id, payload as Parameters<typeof updateLead>[1]);
+    patchLeadInCache(tid, row);
+    if (getActiveTenantId() === tid) {
+      const detail = updates.status ? `Status → ${updates.status}` : undefined;
+      addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Lead", entityName: row.name, detail });
+    }
     fetchLeads();
-    return updated;
+    return row;
   };
 
-  const removeLead = (id: string) => {
-    deleteLead(id);
+  const removeLead = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    const lead = getLeads().find(l => l.id === id);
+    await leadsApi.delete(tid, id);
+    removeLeadFromCache(tid, id);
+    if (getActiveTenantId() === tid) {
+      addActivity({ action: "deleted", entity: "Lead", entityName: lead?.name || id });
+    }
     fetchLeads();
   };
 
@@ -116,29 +171,28 @@ export function useLeads() {
 }
 
 export function useDocs() {
-  const [docs, setDocs] = useState<RequirementDoc[]>([]);
-
-  const fetchDocs = useCallback(() => {
-    setDocs(getDocs());
-  }, []);
-
+  const [docs, setDocs] = useState<RequirementDoc[]>(() => getDocs());
+  const fetchDocs = useCallback(() => setDocs(getDocs()), []);
   useStoreEffect(fetchDocs);
 
-  const addDoc = (doc: Parameters<typeof createDoc>[0]) => {
-    const newDoc = createDoc(doc);
-    fetchDocs();
-    return newDoc;
+  // REST-backed (Batch 2). Requirement-docs has no activity log or
+  // dependent records, so the migration is a straight pass-through.
+  const addDoc = async (doc: Parameters<typeof createDoc>[0]): Promise<RequirementDoc> => {
+    const tid = requireTenantId();
+    const row = await requirementDocsApi.create(tid, doc);
+    patchDocInCache(tid, row); fetchDocs(); return row;
   };
 
-  const editDoc = (id: string, updates: Parameters<typeof updateDoc>[1]) => {
-    const updated = updateDoc(id, updates);
-    fetchDocs();
-    return updated;
+  const editDoc = async (id: string, updates: Parameters<typeof updateDoc>[1]): Promise<RequirementDoc> => {
+    const tid = requireTenantId();
+    const row = await requirementDocsApi.update(tid, id, updates);
+    patchDocInCache(tid, row); fetchDocs(); return row;
   };
 
-  const removeDoc = (id: string) => {
-    deleteDoc(id);
-    fetchDocs();
+  const removeDoc = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await requirementDocsApi.delete(tid, id);
+    removeDocFromCache(tid, id); fetchDocs();
   };
 
   return { docs, addDoc, editDoc, removeDoc, refresh: fetchDocs };
