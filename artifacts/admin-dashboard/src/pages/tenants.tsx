@@ -15,7 +15,7 @@ import {
   createTenantAsync, updateTenantAsync, deleteTenantAsync,
   cleanTenantTransactions, cleanTenantMasterData, checkTenantTransactionBlocks,
   exportTenantBackup,
-  getTenantStats, seedTenantCOA, getChartOfAccountsForTenant,
+  getTenantStats, seedTenantCOAAsync, getChartOfAccountsForTenant,
   ModuleGroup, getModuleGroups, getModuleGroupById,
   MODULE_DEFINITIONS,
   syncAllFromServer,
@@ -699,10 +699,21 @@ export default function TenantsPage() {
     toast({ title: `Opening ${tenant.name} in a new tab…` });
   }
 
-  function handleSeedCOA(tenant: Tenant) {
+  async function handleSeedCOA(tenant: Tenant) {
     try {
-      seedTenantCOA(tenant.id);
+      // Server-checked seed: aborts (and refreshes local cache) if the tenant
+      // already has a COA on the server. Prevents accidentally wiping live
+      // shareholder / customer / supplier sub-ledgers and delinking every JE
+      // line that references them.
+      const seeded = await seedTenantCOAAsync(tenant.id);
       const coaCount = getChartOfAccountsForTenant(tenant.id).length;
+      if (!seeded) {
+        toast({
+          title: `COA already exists for ${tenant.name}`,
+          description: `${coaCount} accounts found on the server — seed skipped to protect existing sub-ledgers.`,
+        });
+        return;
+      }
       toast({
         title: `COA seeded for ${tenant.name}`,
         description: coaCount > 0 ? `${coaCount} accounts copied from system template` : "COA structure applied",

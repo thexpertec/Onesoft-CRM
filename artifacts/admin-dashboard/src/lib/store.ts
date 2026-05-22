@@ -370,6 +370,16 @@ async function _awaitAccountsWrite(): Promise<void> {
   }
 }
 
+/**
+ * Public wrapper: callers that create a new ledger account and immediately
+ * post a Journal Entry referencing it must await this before saving the JE.
+ * Prevents the "Unknown ledger" race where the JE write reaches the server
+ * before the COA write does (or the COA write fails outright).
+ */
+export async function awaitAccountsWrite(): Promise<void> {
+  return _awaitAccountsWrite();
+}
+
 /** Write to in-memory cache only. Server persistence is handled by _apiWrite. */
 function _lsSet(storageKey: string, data: unknown): void {
   _memRaw.set(storageKey, JSON.stringify(data));
@@ -8226,23 +8236,51 @@ export function seedDefaultCoaAccounts(): void {
   }
 
   // Shareholders → Owner's Capital Group
-  const shareholders = getStored<{ id: string; name: string; ledgerAccountId?: string }>(SHAREHOLDERS_KEY);
-  let shareholdersUpdated = false;
-  const shareholdersPatched = shareholders.map(sh => {
-    if (sh.ledgerAccountId) return sh;
-    const lid = createSubsidiaryLedger({
-      parentId:    SYS_ACCS.OWNERS_CAPITAL,
-      parentCode:  "5100",
-      name:        sh.name,
-      head:        "Equity",
-      subType:     "Capital",
-      description: `Capital account for ${sh.name}`,
+  // Mirrors the contact-backfill pattern above: when a shareholder's ledger
+  // is missing OR points to a deleted account, mint a new sub-ledger AND patch
+  // any historical JE lines that still reference the dead UUID. Without the
+  // remap, JE lines posted before a server-sync that wiped the old UUID would
+  // remain orphaned as "Unknown ledger" even after this loop runs.
+  {
+    const shareholders = getStored<{ id: string; name: string; ledgerAccountId?: string }>(SHAREHOLDERS_KEY);
+    const liveAccountIds = new Set(getAccounts().map(a => a.id));
+    let shareholdersUpdated = false;
+    const shLedgerRemap = new Map<string, string>(); // oldLedgerId → newLid
+    const shareholdersPatched = shareholders.map(sh => {
+      // Skip only when the ledger is set AND the COA account actually exists
+      if (sh.ledgerAccountId && liveAccountIds.has(sh.ledgerAccountId)) return sh;
+      const oldLedgerId = sh.ledgerAccountId;
+      const lid = createSubsidiaryLedger({
+        parentId:    SYS_ACCS.OWNERS_CAPITAL,
+        parentCode:  "5100",
+        name:        sh.name,
+        head:        "Equity",
+        subType:     "Capital",
+        description: `Capital account for ${sh.name}`,
+      });
+      if (oldLedgerId && oldLedgerId !== lid) shLedgerRemap.set(oldLedgerId, lid);
+      liveAccountIds.add(lid);
+      shareholdersUpdated = true;
+      return { ...sh, ledgerAccountId: lid };
     });
-    shareholdersUpdated = true;
-    return { ...sh, ledgerAccountId: lid };
-  });
-  if (shareholdersUpdated) {
-    setStored(SHAREHOLDERS_KEY, shareholdersPatched);
+    if (shareholdersUpdated) {
+      setStored(SHAREHOLDERS_KEY, shareholdersPatched);
+    }
+    // Re-link JE lines whose ledgerId points to a now-replaced shareholder ledger
+    if (shLedgerRemap.size > 0) {
+      const allJEs = getJournalEntries();
+      const needsPatch = allJEs.some(je => je.lines.some(l => shLedgerRemap.has(l.ledgerId)));
+      if (needsPatch) {
+        const patchedJEs = allJEs.map(je => ({
+          ...je,
+          lines: je.lines.map(l =>
+            shLedgerRemap.has(l.ledgerId) ? { ...l, ledgerId: shLedgerRemap.get(l.ledgerId)! } : l,
+          ),
+        }));
+        _saveJournalEntries(patchedJEs);
+        console.info(`[COA] Re-linked JE lines for ${shLedgerRemap.size} replaced shareholder ledger(s)`);
+      }
+    }
   }
 
   // NOTE: Automatic "opening-balance" backfill was removed.
@@ -8376,6 +8414,35 @@ export function seedDefaultCoaAccounts(): void {
       const allSalJEsUpdated = allSalJEs.map(je => salHealedMap.get(je.id) ?? je);
       _saveJournalEntries(allSalJEsUpdated);
       console.info(`[COA] Healed ${salHealedMap.size} salary JE(s) with orphaned/stale ledger line(s)`);
+    }
+  }
+
+  // ── Auto-heal: resurrect any remaining "Unknown ledger" JE lines ───────────
+  // Last line of defence after every targeted backfill above. Any JE line whose
+  // ledgerId is still missing from the COA at this point is either:
+  //   • an OWNERS_CAPITAL sub-ledger for a manually-created Investment JE whose
+  //     COA write reached the server late or failed (the race we are closing),
+  //   • or a ledger from a parent that has no dedicated backfill (rare).
+  // `repairOrphanedJournalEntryLedgers` is idempotent: parses the `⟦code · id ·
+  // name⟧` stamp from line narration and either repoints to a live sub-ledger
+  // or resurrects the missing account with the original UUID so historical JEs
+  // resolve immediately on next render. Without this call, the user had to
+  // press "Repair Unknown Ledgers" by hand on the journal-entry page.
+  {
+    const validIdsHeal = new Set(getAccounts().map(a => a.id));
+    const hasUnknown   = getJournalEntries().some(je => je.lines.some(l => !validIdsHeal.has(l.ledgerId)));
+    if (hasUnknown) {
+      try {
+        const rep = repairOrphanedJournalEntryLedgers();
+        if (rep.orphanLedgerIds > 0) {
+          console.info(
+            `[COA] Auto-healed ${rep.orphanLedgerIds} orphan ledger(s): ` +
+            `${rep.repointedLines} line(s) repointed, ${rep.resurrectedAccounts} account(s) resurrected.`,
+          );
+        }
+      } catch (err) {
+        console.warn("[COA] Auto-heal pass failed (will surface on next login):", err);
+      }
     }
   }
 
@@ -8807,7 +8874,13 @@ export function reconcileAccountingData(): {
 export function seedTenantCOA(tenantId: string): void {
   const tenantCoaKey = `t:${tenantId}:${COA_KEY}`;
 
-  // Guard: don't overwrite if the tenant already has accounts
+  // Guard: don't overwrite if the tenant already has accounts in the local cache.
+  // NOTE: This guard is cache-only. In superadmin context the tenant's COA is
+  // usually NOT cached, so the cache will look empty even when the server holds
+  // a live COA with party sub-ledgers (shareholders, customers, suppliers).
+  // For safety from the superadmin UI, prefer `seedTenantCOAAsync` which also
+  // consults the server. This sync entry point is retained for the
+  // tenant-creation path where the namespace is guaranteed to be brand new.
   try {
     const existing = _lsGet(tenantCoaKey);
     if (existing) {
@@ -8855,6 +8928,35 @@ export function seedTenantCOA(tenantId: string): void {
 
   _lsSet(tenantCoaKey, tenantAccounts);
   _apiWrite(tenantCoaKey, tenantAccounts).catch(() => { /* handled via onesoft:write-error event */ });
+}
+
+/**
+ * Server-checked variant of `seedTenantCOA`. Consults the live KV store for
+ * `t:{tenantId}/admin-chart-of-accounts` BEFORE seeding so an existing COA on
+ * the server is never overwritten — even when the local cache is empty
+ * (the typical superadmin context). Returns `true` if a seed was written,
+ * `false` if the tenant already had a COA on the server.
+ *
+ * Why this exists: the sync `seedTenantCOA` strips OWNERS_CAPITAL / AR / AP
+ * party sub-ledgers from the superadmin template before copying. If invoked
+ * against a tenant that already has real shareholder / customer / supplier
+ * sub-ledgers on the server, the cache-only guard can false-negative and the
+ * write would replace those live sub-ledgers, instantly delinking every JE
+ * line that pointed at them ("Unknown ledger" everywhere). This path closes
+ * that hole by reading server truth first.
+ */
+export async function seedTenantCOAAsync(tenantId: string): Promise<boolean> {
+  const ns = `t:${tenantId}`;
+  // 1. Read server truth — if a real COA already exists, abort.
+  const serverCoa = await kvGet(ns, COA_KEY).catch(() => null);
+  if (Array.isArray(serverCoa) && (serverCoa as unknown[]).length > 0) {
+    // Refresh local cache so the rest of the app sees the live COA.
+    _lsSet(`t:${tenantId}:${COA_KEY}`, serverCoa);
+    return false;
+  }
+  // 2. Safe to seed — defer to the sync path (cache is either empty or also empty).
+  seedTenantCOA(tenantId);
+  return true;
 }
 
 /**

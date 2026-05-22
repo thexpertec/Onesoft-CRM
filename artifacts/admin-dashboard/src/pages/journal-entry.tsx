@@ -8,7 +8,7 @@ import {
 import { useAccounts, useStaff } from "@/hooks/use-data";
 import { useJournalEntries } from "@/hooks/use-data";
 import { useToast } from "@/hooks/use-toast";
-import { Account, JournalEntry, purgeOrphanedVoucherJEs, repairOrphanedJournalEntryLedgers } from "@/lib/store";
+import { Account, JournalEntry, purgeOrphanedVoucherJEs, repairOrphanedJournalEntryLedgers, awaitAccountsWrite } from "@/lib/store";
 import { getSettingsDecimalPlaces } from "@/lib/currencies";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -321,7 +321,7 @@ export default function JournalEntryPage() {
   const hasLines  = rows.some(r => r.ledgerId && (parseFloat(r.debit) || parseFloat(r.credit)));
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const handleSave = useCallback((status: "draft" | "posted") => {
+  const handleSave = useCallback(async (status: "draft" | "posted") => {
     const validLines = rows.filter(r => r.ledgerId && (parseFloat(r.debit) > 0 || parseFloat(r.credit) > 0));
     if (validLines.length < 2) {
       toast({ title: "At least 2 ledger entries required", variant: "destructive" }); return;
@@ -336,6 +336,12 @@ export default function JournalEntryPage() {
       debit:  parseFloat(r.debit)  || 0,
       credit: parseFloat(r.credit) || 0,
     }));
+    // Wait for any in-flight COA write to land on the server before posting.
+    // Closes the race where a newly-created sub-ledger (e.g. a shareholder's
+    // capital account) is referenced by this JE but its COA write hasn't yet
+    // reached the server — without this guard, the next login could find the
+    // JE on the server but the ledger missing, surfacing as "Unknown ledger".
+    try { await awaitAccountsWrite(); } catch { /* error already surfaced via event */ }
     const payload = { date, reference, description, lines, status, totalDebit: totalDr, totalCredit: totalCr, isBalanced: balanced };
     if (editingEntryId) {
       editEntry(editingEntryId, payload);
