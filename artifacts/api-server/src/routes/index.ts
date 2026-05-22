@@ -20,6 +20,7 @@ import stockItemsRouter from "./stock-items.js";
 import stockLedgerRouter from "./stock-ledger.js";
 import purchaseOrdersRouter from "./purchase-orders.js";
 import salesRouter from "./sales.js";
+import invoicesRouter from "./invoices.js";
 import staffRouter from "./staff.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
@@ -50,6 +51,7 @@ router.use("/stock-items", stockItemsRouter);
 router.use("/stock-ledger", stockLedgerRouter);
 router.use("/purchase-orders", purchaseOrdersRouter);
 router.use("/sales", salesRouter);
+router.use("/invoices", invoicesRouter);
 router.use("/staff", staffRouter);
 router.use("/journal-entries", journalEntriesRouter);
 

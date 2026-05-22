@@ -516,6 +516,117 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS sale_items_tenant_idx ON sale_items (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS sale_items_sku_idx    ON sale_items (tenant_id, sku)`,
 
+  // ── Invoices (standalone, separate from POS Sales) ───────────────────────────
+  // Sale invoices AND purchase invoices share this table (distinguished by
+  // invoice_type). Items shape mirrors sale_items (SaleItem reused on the
+  // frontend). paymentHistory[] is split into the invoice_payments child table
+  // so each PaymentRecord is independently queryable / JE-linkable.
+  //
+  // String-typed numerics preserve the frontend's "string-of-decimal" contract
+  // exactly (same rationale as sales). bank_account_ids is a small string array
+  // → native TEXT[] keeps it queryable without adding a join table. invoice_docs
+  // is JSONB because it's a free-form ordered list of named markdown blocks.
+  `CREATE TABLE IF NOT EXISTS invoices (
+    id                    TEXT        NOT NULL,
+    tenant_id             TEXT        NOT NULL,
+    invoice_number        TEXT        NOT NULL,
+    invoice_title         TEXT        NOT NULL DEFAULT 'Invoice',
+    invoice_type          TEXT        NOT NULL DEFAULT 'sale',
+    invoice_date          TEXT        NOT NULL DEFAULT '',
+    due_date              TEXT        NOT NULL DEFAULT '',
+    customer              TEXT        NOT NULL DEFAULT '',
+    customer_id           TEXT        NOT NULL DEFAULT '',
+    buyer_address         TEXT        NOT NULL DEFAULT '',
+    buyer_town            TEXT        NOT NULL DEFAULT '',
+    buyer_phone           TEXT        NOT NULL DEFAULT '',
+    buyer_email           TEXT        NOT NULL DEFAULT '',
+    sales_officer         TEXT        NOT NULL DEFAULT '',
+    status                TEXT        NOT NULL DEFAULT 'Draft',
+    sale_status           TEXT,
+    stock_received        BOOLEAN,
+    payment_method        TEXT        NOT NULL DEFAULT '',
+    payment_terms         TEXT        NOT NULL DEFAULT '',
+    bank_details          TEXT        NOT NULL DEFAULT '',
+    bank_account_ids      TEXT[],
+    amount_paid           TEXT        NOT NULL DEFAULT '0',
+    paid_at               TEXT        NOT NULL DEFAULT '',
+    tax_rate              TEXT        NOT NULL DEFAULT '0',
+    pricing_mode          TEXT,
+    shipping_fee          TEXT        NOT NULL DEFAULT '0',
+    handling_fee          TEXT        NOT NULL DEFAULT '0',
+    shipping_method       TEXT        NOT NULL DEFAULT '',
+    agent_id              TEXT,
+    agent_name            TEXT,
+    notes                 TEXT        NOT NULL DEFAULT '',
+    agreement             TEXT        NOT NULL DEFAULT '',
+    invoice_footer        TEXT        NOT NULL DEFAULT '',
+    invoice_docs          JSONB,
+    stock_deducted        BOOLEAN     NOT NULL DEFAULT FALSE,
+    je_id                 TEXT,
+    je_uses_ar            BOOLEAN,
+    archived_at           TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, tenant_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_idx          ON invoices (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_number_idx   ON invoices (tenant_id, invoice_number)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_status_idx   ON invoices (tenant_id, status)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_date_idx     ON invoices (tenant_id, invoice_date)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_customer_idx ON invoices (tenant_id, customer)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_type_idx     ON invoices (tenant_id, invoice_type)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_agent_idx    ON invoices (tenant_id, agent_id)`,
+  `CREATE INDEX IF NOT EXISTS invoices_tenant_je_idx       ON invoices (tenant_id, je_id) WHERE je_id IS NOT NULL`,
+
+  // ── Invoice Items ────────────────────────────────────────────────────────────
+  // Mirrors sale_items column-for-column (frontend reuses the SaleItem type).
+  `CREATE TABLE IF NOT EXISTS invoice_items (
+    id                TEXT    NOT NULL,
+    tenant_id         TEXT    NOT NULL,
+    invoice_id        TEXT    NOT NULL,
+    product_name      TEXT    NOT NULL DEFAULT '',
+    local_name        TEXT,
+    sku               TEXT    NOT NULL DEFAULT '',
+    qty               TEXT    NOT NULL DEFAULT '0',
+    unit              TEXT    NOT NULL DEFAULT '',
+    unit_price        TEXT    NOT NULL DEFAULT '0',
+    discount          TEXT    NOT NULL DEFAULT '0',
+    discount_type     TEXT,
+    notes             TEXT    NOT NULL DEFAULT '',
+    item_status       TEXT    NOT NULL DEFAULT 'Pending',
+    bogo_applied      BOOLEAN NOT NULL DEFAULT FALSE,
+    variant_label     TEXT,
+    cost_price        TEXT,
+    purchase_unit     TEXT,
+    conversion_factor TEXT,
+    line_order        INT     NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (invoice_id, tenant_id) REFERENCES invoices (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS invoice_items_invoice_idx ON invoice_items (tenant_id, invoice_id)`,
+  `CREATE INDEX IF NOT EXISTS invoice_items_tenant_idx  ON invoice_items (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS invoice_items_sku_idx     ON invoice_items (tenant_id, sku)`,
+
+  // ── Invoice Payments (PaymentRecord history) ─────────────────────────────────
+  // Each payment is a separate row so JE refs / methods can be reasoned about
+  // individually. line_order preserves the original frontend array order.
+  `CREATE TABLE IF NOT EXISTS invoice_payments (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    invoice_id    TEXT NOT NULL,
+    payment_date  TEXT NOT NULL DEFAULT '',
+    amount        TEXT NOT NULL DEFAULT '0',
+    method        TEXT NOT NULL DEFAULT '',
+    note          TEXT NOT NULL DEFAULT '',
+    je_ref        TEXT,
+    line_order    INT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (id, tenant_id),
+    FOREIGN KEY (invoice_id, tenant_id) REFERENCES invoices (id, tenant_id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS invoice_payments_invoice_idx ON invoice_payments (tenant_id, invoice_id)`,
+  `CREATE INDEX IF NOT EXISTS invoice_payments_tenant_idx  ON invoice_payments (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS invoice_payments_je_idx      ON invoice_payments (tenant_id, je_ref) WHERE je_ref IS NOT NULL`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

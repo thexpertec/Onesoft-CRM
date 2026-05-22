@@ -2371,6 +2371,7 @@ export default function SettingsPage() {
                           { label: "Stock Ledger",      kv: migrationStatus.kv.stockLedger,       db: migrationStatus.db.stockLedger },
                           { label: "Purchase Orders",   kv: migrationStatus.kv.purchaseOrders,    db: migrationStatus.db.purchaseOrders },
                           { label: "Sales",             kv: migrationStatus.kv.sales,             db: migrationStatus.db.sales },
+                          { label: "Invoices",          kv: migrationStatus.kv.invoices,          db: migrationStatus.db.invoices },
                         ] as const).map(({ label, kv, db }) => {
                           const synced = db >= kv;
                           return (
@@ -2414,7 +2415,7 @@ export default function SettingsPage() {
                             result.brands.inserted + result.productCategories.inserted + result.units.inserted + result.attributes.inserted +
                             result.leads.inserted + result.departments.inserted + result.designations.inserted +
                             result.cities.inserted + result.areas.inserted + result.requirementDocs.inserted +
-                            result.stockItems.inserted + result.stockLedger.inserted + result.purchaseOrders.inserted + result.sales.inserted;
+                            result.stockItems.inserted + result.stockLedger.inserted + result.purchaseOrders.inserted + result.sales.inserted + result.invoices.inserted;
                           toast({
                             title: inserted > 0 ? `Migration complete — ${inserted} record${inserted !== 1 ? "s" : ""} added` : "Migration complete — nothing to do",
                             description: inserted === 0 ? "All records were already in the database." : undefined,
@@ -2440,7 +2441,7 @@ export default function SettingsPage() {
                     {migrationResult && (
                       <div className="mt-4 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50 p-4 space-y-2">
                         <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">Result</p>
-                        {(["accounts", "journalEntries", "customers", "products", "brands", "productCategories", "units", "attributes", "leads", "departments", "designations", "cities", "areas", "requirementDocs", "stockItems", "stockLedger", "purchaseOrders", "sales"] as const).map(key => {
+                        {(["accounts", "journalEntries", "customers", "products", "brands", "productCategories", "units", "attributes", "leads", "departments", "designations", "cities", "areas", "requirementDocs", "stockItems", "stockLedger", "purchaseOrders", "sales", "invoices"] as const).map(key => {
                           const r = migrationResult[key];
                           const label =
                             key === "accounts" ? "Accounts" :
@@ -2460,7 +2461,8 @@ export default function SettingsPage() {
                             key === "stockItems" ? "Stock Items" :
                             key === "stockLedger" ? "Stock Ledger" :
                             key === "purchaseOrders" ? "Purchase Orders" :
-                            "Sales";
+                            key === "sales" ? "Sales" :
+                            "Invoices";
                           return (
                             <div key={key} className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
                               <span className="font-medium text-foreground w-28">{label}</span>
@@ -2473,7 +2475,7 @@ export default function SettingsPage() {
                             </div>
                           );
                         })}
-                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length + migrationResult.customers.errors.length + migrationResult.products.errors.length + migrationResult.brands.errors.length + migrationResult.productCategories.errors.length + migrationResult.units.errors.length + migrationResult.attributes.errors.length + migrationResult.leads.errors.length + migrationResult.departments.errors.length + migrationResult.designations.errors.length + migrationResult.cities.errors.length + migrationResult.areas.errors.length + migrationResult.requirementDocs.errors.length + migrationResult.stockItems.errors.length + migrationResult.stockLedger.errors.length + migrationResult.purchaseOrders.errors.length + migrationResult.sales.errors.length) > 0 && (
+                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length + migrationResult.customers.errors.length + migrationResult.products.errors.length + migrationResult.brands.errors.length + migrationResult.productCategories.errors.length + migrationResult.units.errors.length + migrationResult.attributes.errors.length + migrationResult.leads.errors.length + migrationResult.departments.errors.length + migrationResult.designations.errors.length + migrationResult.cities.errors.length + migrationResult.areas.errors.length + migrationResult.requirementDocs.errors.length + migrationResult.stockItems.errors.length + migrationResult.stockLedger.errors.length + migrationResult.purchaseOrders.errors.length + migrationResult.sales.errors.length + migrationResult.invoices.errors.length) > 0 && (
                           <details className="mt-2">
                             <summary className="text-[11px] text-red-600 dark:text-red-400 cursor-pointer">Show errors</summary>
                             <ul className="mt-1 space-y-0.5 pl-3">
@@ -2496,6 +2498,7 @@ export default function SettingsPage() {
                                 ...migrationResult.stockLedger.errors,
                                 ...migrationResult.purchaseOrders.errors,
                                 ...migrationResult.sales.errors,
+                                ...migrationResult.invoices.errors,
                               ].map((e, i) => (
                                 <li key={i} className="text-[10px] text-red-600 dark:text-red-400">{e}</li>
                               ))}

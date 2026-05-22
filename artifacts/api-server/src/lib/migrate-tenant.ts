@@ -97,6 +97,7 @@ export interface MigrateResult {
   stockLedger:       MigrateSection;
   purchaseOrders:    MigrateSection;
   sales:             MigrateSection;
+  invoices:          MigrateSection;
 }
 
 interface FrontendProduct {
@@ -208,6 +209,7 @@ export async function migrateTenant(
     stockLedger:       { found: 0, inserted: 0, skipped: 0, errors: [] },
     purchaseOrders:    { found: 0, inserted: 0, skipped: 0, errors: [] },
     sales:             { found: 0, inserted: 0, skipped: 0, errors: [] },
+    invoices:          { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -1152,6 +1154,191 @@ export async function migrateTenant(
     } catch (err) {
       result.sales.errors.push(
         `Sale ${sale.id} (${sale.saleNumber}): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── 11. Invoices + Items + Payments ────────────────────────────────────────
+  // Same parent+items shape as Sales/PO, plus a second child table for the
+  // PaymentRecord history. Sale and purchase invoices share the table — they
+  // are distinguished by invoice_type. paymentHistory[] is exploded into the
+  // invoice_payments child so each payment is independently queryable.
+  type IncomingInvoiceItem = {
+    id?: string; productName?: string; localName?: string; sku?: string;
+    qty?: unknown; unit?: string; unitPrice?: unknown;
+    discount?: unknown; discountType?: string;
+    notes?: string; itemStatus?: string;
+    bogoApplied?: boolean; variantLabel?: string;
+    costPrice?: unknown; purchaseUnit?: string; conversionFactor?: unknown;
+  };
+  type IncomingPaymentRecord = {
+    id?: string; date?: string; amount?: unknown;
+    method?: string; note?: string; jeRef?: string;
+  };
+  type IncomingInvoiceDoc = { id: string; title: string; content: string };
+  type IncomingInvoice = {
+    id: string; invoiceNumber: string; invoiceTitle?: string;
+    invoiceType?: "sale" | "purchase";
+    invoiceDate?: string; dueDate?: string;
+    customer?: string; customerId?: string;
+    buyerAddress?: string; buyerTown?: string; buyerPhone?: string; buyerEmail?: string;
+    salesOfficer?: string;
+    status?: string; saleStatus?: string; stockReceived?: boolean;
+    paymentMethod?: string; paymentTerms?: string;
+    bankDetails?: string; bankAccountIds?: string[];
+    amountPaid?: unknown; paidAt?: string;
+    paymentHistory?: IncomingPaymentRecord[];
+    items?: IncomingInvoiceItem[];
+    taxRate?: unknown; pricingMode?: "wholesale" | "retail";
+    shippingFee?: unknown; handlingFee?: unknown; shippingMethod?: string;
+    agentId?: string; agentName?: string;
+    notes?: string; agreement?: string; invoiceFooter?: string;
+    invoiceDocs?: IncomingInvoiceDoc[];
+    stockDeducted?: boolean; jeId?: string; jeUsesAr?: boolean; jeUsesAR?: boolean;
+    createdAt?: string; updatedAt?: string;
+  };
+
+  // Reuse the toStrOrEmpty / toStrOrNull helpers defined in the Sales section
+  // above — they're in scope here.
+  const rawInvoices = await readKv(tenantId, "admin-invoices");
+  const invoices: IncomingInvoice[] = Array.isArray(rawInvoices) ? (rawInvoices as IncomingInvoice[]) : [];
+  result.invoices.found = invoices.length;
+
+  for (const inv of invoices) {
+    try {
+      if (!inv.id || !inv.invoiceNumber) {
+        result.invoices.errors.push(
+          `Invoice ${inv.id ?? "(no id)"}: missing required field (id or invoiceNumber) — skipped`,
+        );
+        result.invoices.skipped++;
+        continue;
+      }
+      const existing = await query(
+        `SELECT id FROM invoices WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [inv.id, tenantId],
+      );
+      if (existing.length > 0) {
+        result.invoices.skipped++;
+        continue;
+      }
+      if (dryRun) {
+        result.invoices.inserted++;
+        continue;
+      }
+
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const payments = Array.isArray(inv.paymentHistory) ? inv.paymentHistory : [];
+      const bankAccountIds = Array.isArray(inv.bankAccountIds) ? inv.bankAccountIds.filter(x => typeof x === "string") : null;
+      const jeUsesAr = inv.jeUsesAr ?? inv.jeUsesAR ?? null;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO invoices
+            (id, tenant_id, invoice_number, invoice_title, invoice_type,
+             invoice_date, due_date, customer, customer_id,
+             buyer_address, buyer_town, buyer_phone, buyer_email, sales_officer,
+             status, sale_status, stock_received,
+             payment_method, payment_terms, bank_details, bank_account_ids,
+             amount_paid, paid_at, tax_rate, pricing_mode,
+             shipping_fee, handling_fee, shipping_method,
+             agent_id, agent_name,
+             notes, agreement, invoice_footer, invoice_docs,
+             stock_deducted, je_id, je_uses_ar,
+             created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
+           ON CONFLICT (id, tenant_id) DO NOTHING`,
+          [
+            inv.id, tenantId, inv.invoiceNumber,
+            inv.invoiceTitle ?? "Invoice",
+            inv.invoiceType ?? "sale",
+            inv.invoiceDate ?? "", inv.dueDate ?? "",
+            inv.customer ?? "", inv.customerId ?? "",
+            inv.buyerAddress ?? "", inv.buyerTown ?? "",
+            inv.buyerPhone ?? "", inv.buyerEmail ?? "",
+            inv.salesOfficer ?? "",
+            inv.status ?? "Draft",
+            inv.saleStatus ?? null,
+            typeof inv.stockReceived === "boolean" ? inv.stockReceived : null,
+            inv.paymentMethod ?? "", inv.paymentTerms ?? "",
+            inv.bankDetails ?? "", bankAccountIds,
+            toStrOrEmpty(inv.amountPaid, "0"), inv.paidAt ?? "",
+            toStrOrEmpty(inv.taxRate, "0"), inv.pricingMode ?? null,
+            toStrOrEmpty(inv.shippingFee, "0"), toStrOrEmpty(inv.handlingFee, "0"),
+            inv.shippingMethod ?? "",
+            inv.agentId ?? null, inv.agentName ?? null,
+            inv.notes ?? "", inv.agreement ?? "", inv.invoiceFooter ?? "",
+            Array.isArray(inv.invoiceDocs) ? JSON.stringify(inv.invoiceDocs) : null,
+            inv.stockDeducted === true,
+            inv.jeId ?? null,
+            typeof jeUsesAr === "boolean" ? jeUsesAr : null,
+            inv.createdAt ? new Date(inv.createdAt) : new Date(),
+            inv.updatedAt ? new Date(inv.updatedAt) : new Date(),
+          ],
+        );
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await client.query(
+            `INSERT INTO invoice_items
+              (id, tenant_id, invoice_id, product_name, local_name, sku, qty, unit,
+               unit_price, discount, discount_type, notes, item_status, bogo_applied,
+               variant_label, cost_price, purchase_unit, conversion_factor, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              it.id ?? randomUUID(), tenantId, inv.id,
+              it.productName ?? "", it.localName ?? null, it.sku ?? "",
+              toStrOrEmpty(it.qty, "0"), it.unit ?? "", toStrOrEmpty(it.unitPrice, "0"),
+              toStrOrEmpty(it.discount, "0"), it.discountType ?? null,
+              it.notes ?? "", it.itemStatus ?? "Pending",
+              it.bogoApplied === true, it.variantLabel ?? null,
+              toStrOrNull(it.costPrice), it.purchaseUnit ?? null,
+              toStrOrNull(it.conversionFactor), i,
+            ],
+          );
+        }
+        for (let i = 0; i < payments.length; i++) {
+          const pay = payments[i];
+          await client.query(
+            `INSERT INTO invoice_payments
+              (id, tenant_id, invoice_id, payment_date, amount, method, note, je_ref, line_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT (id, tenant_id) DO NOTHING`,
+            [
+              pay.id ?? randomUUID(), tenantId, inv.id,
+              pay.date ?? "", toStrOrEmpty(pay.amount, "0"),
+              pay.method ?? "", pay.note ?? "",
+              pay.jeRef ?? null, i,
+            ],
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+           VALUES ($1,$2,'migrate','invoice',$3,'create',NULL,$4)`,
+          [
+            randomUUID(), tenantId, inv.id,
+            JSON.stringify({
+              invoiceNumber: inv.invoiceNumber,
+              invoiceType: inv.invoiceType ?? "sale",
+              customer: inv.customer ?? "",
+              itemCount: items.length,
+              paymentCount: payments.length,
+              amountPaid: toStrOrEmpty(inv.amountPaid, "0"),
+            }),
+          ],
+        );
+        await client.query("COMMIT");
+        result.invoices.inserted++;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.invoices.errors.push(
+        `Invoice ${inv.id} (${inv.invoiceNumber}): ${(err as Error).message}`,
       );
     }
   }
