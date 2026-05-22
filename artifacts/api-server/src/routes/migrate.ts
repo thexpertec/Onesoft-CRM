@@ -45,6 +45,18 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT COUNT(*)::text AS count FROM attributes WHERE tenant_id = $1 AND archived_at IS NULL`,
       [tenantId],
     );
+    const [leadRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM leads WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [deptRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM departments WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [desigRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM designations WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
     const [kvAccRow] = await query<{ value: unknown }>(
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-chart-of-accounts' LIMIT 1`,
       [`t:${tenantId}`],
@@ -77,6 +89,18 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-attributes' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [kvLeadRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-leads' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvDeptRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-hrm-departments' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvDesigRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-hrm-designations' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
@@ -87,14 +111,17 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
     res.json({
       tenantId,
       db: {
-        accounts:          parseInt(accRow?.count   ?? "0", 10),
-        journalEntries:    parseInt(jeRow?.count    ?? "0", 10),
-        customers:         parseInt(custRow?.count  ?? "0", 10),
-        products:          parseInt(prodRow?.count  ?? "0", 10),
-        brands:            parseInt(brandRow?.count ?? "0", 10),
-        productCategories: parseInt(pcRow?.count    ?? "0", 10),
-        units:             parseInt(unitRow?.count  ?? "0", 10),
-        attributes:        parseInt(attrRow?.count  ?? "0", 10),
+        accounts:          parseInt(accRow?.count    ?? "0", 10),
+        journalEntries:    parseInt(jeRow?.count     ?? "0", 10),
+        customers:         parseInt(custRow?.count   ?? "0", 10),
+        products:          parseInt(prodRow?.count   ?? "0", 10),
+        brands:            parseInt(brandRow?.count  ?? "0", 10),
+        productCategories: parseInt(pcRow?.count     ?? "0", 10),
+        units:             parseInt(unitRow?.count   ?? "0", 10),
+        attributes:        parseInt(attrRow?.count   ?? "0", 10),
+        leads:             parseInt(leadRow?.count   ?? "0", 10),
+        departments:       parseInt(deptRow?.count   ?? "0", 10),
+        designations:      parseInt(desigRow?.count  ?? "0", 10),
       },
       kv: {
         accounts:          parseCount(kvAccRow?.value),
@@ -105,6 +132,9 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         productCategories: parseCount(kvPcRow?.value),
         units:             parseCount(kvUnitRow?.value),
         attributes:        parseCount(kvAttrRow?.value),
+        leads:             parseCount(kvLeadRow?.value),
+        departments:       parseCount(kvDeptRow?.value),
+        designations:      parseCount(kvDesigRow?.value),
       },
     });
   } catch (err) {

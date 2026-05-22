@@ -16,6 +16,21 @@ import { pool, query } from "./db.js";
 import { assertIdent } from "./records.js";
 import { randomUUID } from "node:crypto";
 
+/**
+ * Safely parse an optional timestamp string from legacy KV data. Returns a
+ * Date on success, `null` on missing/invalid input. Critical for migrators:
+ * pg rejects `Invalid Date`, so a naked `new Date(s)` would hard-fail the
+ * whole row if a legacy record contains a non-parseable string in an
+ * *optional* timestamp column.
+ */
+function parseOptionalDate(s: unknown): Date | null {
+  if (s == null || s === "") return null;
+  if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+  if (typeof s !== "string" && typeof s !== "number") return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 interface FrontendAccount {
   id: string;
   code: string;
@@ -72,6 +87,9 @@ export interface MigrateResult {
   productCategories: MigrateSection;
   units:             MigrateSection;
   attributes:        MigrateSection;
+  leads:             MigrateSection;
+  departments:       MigrateSection;
+  designations:      MigrateSection;
 }
 
 interface FrontendProduct {
@@ -173,6 +191,9 @@ export async function migrateTenant(
     productCategories: { found: 0, inserted: 0, skipped: 0, errors: [] },
     units:             { found: 0, inserted: 0, skipped: 0, errors: [] },
     attributes:        { found: 0, inserted: 0, skipped: 0, errors: [] },
+    leads:             { found: 0, inserted: 0, skipped: 0, errors: [] },
+    departments:       { found: 0, inserted: 0, skipped: 0, errors: [] },
+    designations:      { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -716,6 +737,63 @@ export async function migrateTenant(
     auditSummary: (a) => ({ name: a.name }),
   });
 
+  // ── 6. Leads / Departments / Designations ──────────────────────────────────
+  type LeadRow = {
+    id: string; name: string; company?: string; email?: string; phone?: string;
+    industry?: string; city?: string; country?: string; website?: string;
+    status?: string; source?: string; notes?: string;
+    isRelevant?: boolean; nextReminder?: string; reminderNote?: string;
+    dealValue?: number; assignedTo?: string; temperature?: string;
+    nextFollowUp?: string; callLogs?: unknown;
+    createdAt?: string; updatedAt?: string;
+  };
+  await migrateMaster<LeadRow>({
+    tenantId, dryRun, result, section: "leads",
+    kvKey: "admin-leads", table: "leads", entityType: "lead",
+    columns: [
+      "name", "company", "email", "phone", "industry", "city", "country", "website",
+      "status", "source", "notes", "is_relevant",
+      "next_reminder", "reminder_note", "deal_value",
+      "assigned_to", "temperature", "next_follow_up", "call_logs",
+    ],
+    extractValues: (l) => [
+      l.name, l.company ?? "", l.email ?? "", l.phone ?? "",
+      l.industry ?? "", l.city ?? "", l.country ?? null, l.website ?? null,
+      l.status ?? "New", l.source ?? "", l.notes ?? "",
+      typeof l.isRelevant === "boolean" ? l.isRelevant : null,
+      parseOptionalDate(l.nextReminder),
+      l.reminderNote ?? null,
+      typeof l.dealValue === "number" ? l.dealValue : null,
+      l.assignedTo ?? null, l.temperature ?? null,
+      parseOptionalDate(l.nextFollowUp),
+      JSON.stringify(coerceArray(l.callLogs)),
+    ],
+    auditSummary: (l) => ({ name: l.name, company: l.company ?? "" }),
+  });
+
+  await migrateMaster<{
+    id: string; name: string; roleName?: string; description?: string;
+    headOf?: string; isActive?: boolean; createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "departments",
+    kvKey: "admin-hrm-departments", table: "departments", entityType: "department",
+    columns: ["name", "role_name", "description", "head_of", "is_active"],
+    extractValues: (d) => [d.name, d.roleName ?? null, d.description ?? "", d.headOf ?? "", d.isActive !== false],
+    auditSummary: (d) => ({ name: d.name }),
+  });
+
+  await migrateMaster<{
+    id: string; title: string; department?: string; jobDescription?: string;
+    isActive?: boolean; createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "designations",
+    kvKey: "admin-hrm-designations", table: "designations", entityType: "designation",
+    columns: ["title", "department", "job_description", "is_active"],
+    extractValues: (d) => [d.title, d.department ?? "", d.jobDescription ?? "", d.isActive !== false],
+    auditSummary: (d) => ({ title: d.title }),
+    getDisplayName: (d) => d.title,
+  });
+
   return result;
 }
 
@@ -725,22 +803,30 @@ export async function migrateTenant(
  * JSON. Mirrors the customers/products pattern: cross-tenant collision is an
  * error, ON CONFLICT...RETURNING id guards real inserts, audit row per insert.
  */
-async function migrateMaster<T extends { id: string; name?: string; createdAt?: string; updatedAt?: string }>(opts: {
+async function migrateMaster<T extends { id: string; createdAt?: string; updatedAt?: string }>(opts: {
   tenantId: string;
   dryRun: boolean;
   result: MigrateResult;
-  section: keyof MigrateResult & ("brands" | "productCategories" | "units" | "attributes");
+  section: keyof MigrateResult & (
+    "brands" | "productCategories" | "units" | "attributes" |
+    "leads" | "departments" | "designations"
+  );
   kvKey: string;
   table: string;
   entityType: string;
   columns: string[];
   extractValues: (row: T) => unknown[];
   auditSummary: (row: T) => Record<string, unknown>;
+  /** Optional display-name extractor for tables where the natural label is not `name`
+   *  (e.g. designations use `title`). Used for the required-field guard and error messages. */
+  getDisplayName?: (row: T) => string | undefined;
 }): Promise<void> {
-  const { tenantId, dryRun, result, section, kvKey, table, entityType, columns, extractValues, auditSummary } = opts;
+  const { tenantId, dryRun, result, section, kvKey, table, entityType, columns, extractValues, auditSummary, getDisplayName } = opts;
   assertIdent(table);
   for (const c of columns) assertIdent(c);
   const bucket = result[section] as MigrateSection;
+  const nameOf = (row: T): string | undefined =>
+    getDisplayName ? getDisplayName(row) : (row as { name?: string }).name;
 
   const raw = await readKv(tenantId, kvKey);
   const rows: T[] = Array.isArray(raw) ? (raw as T[]) : [];
@@ -748,8 +834,9 @@ async function migrateMaster<T extends { id: string; name?: string; createdAt?: 
 
   for (const row of rows) {
     try {
-      if (!row?.id || !row.name) {
-        bucket.errors.push(`${entityType} ${row?.id ?? "?"}: missing required fields (id, name) — skipped`);
+      const display = nameOf(row);
+      if (!row?.id || !display) {
+        bucket.errors.push(`${entityType} ${row?.id ?? "?"}: missing required fields (id + name/title) — skipped`);
         bucket.skipped++;
         continue;
       }
@@ -761,7 +848,7 @@ async function migrateMaster<T extends { id: string; name?: string; createdAt?: 
       if (existing.length > 0) {
         if (existing[0].tenant_id !== tenantId) {
           bucket.errors.push(
-            `${entityType} ${row.id} (${row.name}): id already exists under another tenant (${existing[0].tenant_id}) — skipped`,
+            `${entityType} ${row.id} (${display}): id already exists under another tenant (${existing[0].tenant_id}) — skipped`,
           );
         }
         bucket.skipped++;
@@ -797,7 +884,7 @@ async function migrateMaster<T extends { id: string; name?: string; createdAt?: 
           bucket.inserted++;
         } else {
           await client.query("ROLLBACK");
-          bucket.errors.push(`${entityType} ${row.id} (${row.name}): id collision detected during insert — skipped`);
+          bucket.errors.push(`${entityType} ${row.id} (${display}): id collision detected during insert — skipped`);
           bucket.skipped++;
         }
       } catch (err) {
@@ -807,7 +894,7 @@ async function migrateMaster<T extends { id: string; name?: string; createdAt?: 
         client.release();
       }
     } catch (err) {
-      bucket.errors.push(`${entityType} ${row.id} (${row.name ?? "?"}): ${(err as Error).message}`);
+      bucket.errors.push(`${entityType} ${row.id} (${nameOf(row) ?? "?"}): ${(err as Error).message}`);
     }
   }
 }

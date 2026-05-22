@@ -222,6 +222,66 @@ const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS attributes_tenant_idx ON attributes (tenant_id)`,
 
+  // ── Leads ────────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS leads (
+    id             TEXT        NOT NULL PRIMARY KEY,
+    tenant_id      TEXT        NOT NULL,
+    name           TEXT        NOT NULL,
+    company        TEXT        NOT NULL DEFAULT '',
+    email          TEXT        NOT NULL DEFAULT '',
+    phone          TEXT        NOT NULL DEFAULT '',
+    industry       TEXT        NOT NULL DEFAULT '',
+    city           TEXT        NOT NULL DEFAULT '',
+    country        TEXT,
+    website        TEXT,
+    status         TEXT        NOT NULL DEFAULT 'New',
+    source         TEXT        NOT NULL DEFAULT '',
+    notes          TEXT        NOT NULL DEFAULT '',
+    is_relevant    BOOLEAN,
+    next_reminder  TIMESTAMPTZ,
+    reminder_note  TEXT,
+    deal_value     NUMERIC(18,2),
+    assigned_to    TEXT,
+    temperature    TEXT,
+    next_follow_up TIMESTAMPTZ,
+    call_logs      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    archived_at    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS leads_tenant_idx        ON leads (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS leads_tenant_status_idx ON leads (tenant_id, status)`,
+
+  // ── Departments (HRM) ────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS departments (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    role_name   TEXT,
+    description TEXT        NOT NULL DEFAULT '',
+    head_of     TEXT        NOT NULL DEFAULT '',
+    is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS departments_tenant_idx ON departments (tenant_id)`,
+
+  // ── Designations (HRM) ───────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS designations (
+    id              TEXT        NOT NULL PRIMARY KEY,
+    tenant_id       TEXT        NOT NULL,
+    title           TEXT        NOT NULL,
+    department      TEXT        NOT NULL DEFAULT '',
+    job_description TEXT        NOT NULL DEFAULT '',
+    is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
+    archived_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS designations_tenant_idx     ON designations (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS designations_tenant_dept_idx ON designations (tenant_id, department)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (
