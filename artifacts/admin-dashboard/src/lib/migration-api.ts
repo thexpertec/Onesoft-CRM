@@ -1,14 +1,15 @@
 export interface MigrationStatus {
   tenantId: string;
-  db: { accounts: number; journalEntries: number };
-  kv: { accounts: number; journalEntries: number };
+  db: { accounts: number; journalEntries: number; customers: number };
+  kv: { accounts: number; journalEntries: number; customers: number };
 }
 
 export interface MigrationResult {
   tenantId: string;
   dryRun: boolean;
-  accounts:      { found: number; inserted: number; skipped: number; errors: string[] };
+  accounts:       { found: number; inserted: number; skipped: number; errors: string[] };
   journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
+  customers:      { found: number; inserted: number; skipped: number; errors: string[] };
 }
 
 const BASE = "/api/migrate";

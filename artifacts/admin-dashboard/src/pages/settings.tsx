@@ -2346,15 +2346,16 @@ export default function SettingsPage() {
                   <div>
                     <SectionHeader
                       title="Database Migration"
-                      desc="Copy your Chart of Accounts and Journal Entries from the legacy key-value store into the new relational database. Safe to run multiple times — already-migrated records are skipped."
+                      desc="Copy your Chart of Accounts, Journal Entries, and Customers from the legacy key-value store into the new relational database. Safe to run multiple times — already-migrated records are skipped."
                     />
 
                     {/* Status counts */}
                     {migrationStatus && (
-                      <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                         {([
-                          { label: "Chart of Accounts", kv: migrationStatus.kv.accounts,      db: migrationStatus.db.accounts },
+                          { label: "Chart of Accounts", kv: migrationStatus.kv.accounts,       db: migrationStatus.db.accounts },
                           { label: "Journal Entries",   kv: migrationStatus.kv.journalEntries, db: migrationStatus.db.journalEntries },
+                          { label: "Customers",         kv: migrationStatus.kv.customers,      db: migrationStatus.db.customers },
                         ] as const).map(({ label, kv, db }) => {
                           const synced = db >= kv;
                           return (
@@ -2394,7 +2395,7 @@ export default function SettingsPage() {
                           const result = await runMigration(currentTenant.id);
                           setMigrationResult(result);
                           const inserted =
-                            result.accounts.inserted + result.journalEntries.inserted;
+                            result.accounts.inserted + result.journalEntries.inserted + result.customers.inserted;
                           toast({
                             title: inserted > 0 ? `Migration complete — ${inserted} record${inserted !== 1 ? "s" : ""} added` : "Migration complete — nothing to do",
                             description: inserted === 0 ? "All records were already in the database." : undefined,
@@ -2420,9 +2421,12 @@ export default function SettingsPage() {
                     {migrationResult && (
                       <div className="mt-4 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-zinc-900/50 p-4 space-y-2">
                         <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">Result</p>
-                        {(["accounts", "journalEntries"] as const).map(key => {
+                        {(["accounts", "journalEntries", "customers"] as const).map(key => {
                           const r = migrationResult[key];
-                          const label = key === "accounts" ? "Accounts" : "Journal Entries";
+                          const label =
+                            key === "accounts" ? "Accounts" :
+                            key === "journalEntries" ? "Journal Entries" :
+                            "Customers";
                           return (
                             <div key={key} className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-0.5">
                               <span className="font-medium text-foreground w-28">{label}</span>
@@ -2435,11 +2439,15 @@ export default function SettingsPage() {
                             </div>
                           );
                         })}
-                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length) > 0 && (
+                        {(migrationResult.accounts.errors.length + migrationResult.journalEntries.errors.length + migrationResult.customers.errors.length) > 0 && (
                           <details className="mt-2">
                             <summary className="text-[11px] text-red-600 dark:text-red-400 cursor-pointer">Show errors</summary>
                             <ul className="mt-1 space-y-0.5 pl-3">
-                              {[...migrationResult.accounts.errors, ...migrationResult.journalEntries.errors].map((e, i) => (
+                              {[
+                                ...migrationResult.accounts.errors,
+                                ...migrationResult.journalEntries.errors,
+                                ...migrationResult.customers.errors,
+                              ].map((e, i) => (
                                 <li key={i} className="text-[10px] text-red-600 dark:text-red-400">{e}</li>
                               ))}
                             </ul>

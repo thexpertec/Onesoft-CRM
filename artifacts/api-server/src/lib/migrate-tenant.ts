@@ -61,6 +61,39 @@ export interface MigrateResult {
   dryRun: boolean;
   accounts: { found: number; inserted: number; skipped: number; errors: string[] };
   journalEntries: { found: number; inserted: number; skipped: number; errors: string[] };
+  customers: { found: number; inserted: number; skipped: number; errors: string[] };
+}
+
+interface FrontendCustomer {
+  id: string;
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  industry?: string;
+  city?: string;
+  area?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  billingAddressDetails?: unknown;
+  shippingAddressDetails?: unknown;
+  status?: string;
+  source?: string;
+  customerType?: string;
+  customerRole?: string;
+  leadId?: string;
+  customerSince?: string;
+  totalValue?: string | number;
+  currency?: string;
+  openingBalance?: number;
+  advanceCredit?: number;
+  notes?: string;
+  tags?: string[];
+  ledgerAccountId?: string;
+  advanceLedgerAccountId?: string;
+  supplierProducts?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** Read a kv_store JSON blob for a given tenant + key. Returns null if missing. */
@@ -86,7 +119,46 @@ export async function migrateTenant(
     dryRun,
     accounts: { found: 0, inserted: 0, skipped: 0, errors: [] },
     journalEntries: { found: 0, inserted: 0, skipped: 0, errors: [] },
+    customers: { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
+
+  // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
+  // The customers / accounts / JE tables FK onto tenants(id). Legacy tenants
+  // whose data lives only in kv_store may have no relational tenant row yet,
+  // so we upsert a minimal placeholder. Real tenant metadata (name, admin
+  // credentials) is filled in by the superadmin UI separately.
+  if (!dryRun) {
+    // Insert a minimal placeholder so FKs on customers/accounts/JEs hold.
+    // If the row already exists by id, do nothing. If a UNIQUE on slug or
+    // admin_username collides (extremely rare), append a short random suffix
+    // and retry — we never want migration to abort just to seed a placeholder.
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM tenants WHERE id = $1 LIMIT 1`,
+      [tenantId],
+    );
+    if (existing.length === 0) {
+      let attempt = 0;
+      // 4 attempts is overkill — uniqueness via random suffix is effectively certain.
+      while (attempt < 4) {
+        const suffix = attempt === 0 ? "" : `-${randomUUID().slice(0, 6)}`;
+        try {
+          await query(
+            `INSERT INTO tenants (id, name, slug, admin_username, admin_password_hash, contact_email, status)
+             VALUES ($1, $1, $2, $2, '', $3, 'active')
+             ON CONFLICT (id) DO NOTHING`,
+            [tenantId, `migrated-${tenantId}${suffix}`, `${tenantId}${suffix}@migrated.local`],
+          );
+          break;
+        } catch (err) {
+          if ((err as { code?: string })?.code === "23505" && attempt < 3) {
+            attempt++;
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+  }
 
   // ── 1. Accounts ────────────────────────────────────────────────────────────
   const rawAccounts = await readKv(tenantId, "admin-chart-of-accounts");
@@ -277,6 +349,154 @@ export async function migrateTenant(
       result.journalEntries.errors.push(
         `JE ${je.id} (${je.reference}): ${(err as Error).message}`,
       );
+    }
+  }
+
+  // ── 3. Customers ───────────────────────────────────────────────────────────
+  const rawCustomers = await readKv(tenantId, "admin-customers");
+  const customers: FrontendCustomer[] = Array.isArray(rawCustomers)
+    ? (rawCustomers as FrontendCustomer[])
+    : [];
+  result.customers.found = customers.length;
+
+  // Defensive coercion: legacy KV blobs occasionally contain JSON-encoded
+  // strings for fields that should be arrays/objects. Normalise here so jsonb
+  // columns always receive a real array/object, not a string-of-an-array.
+  const coerceArray = (v: unknown): unknown[] => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") {
+      try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; }
+    }
+    return [];
+  };
+  const coerceObjectOrNull = (v: unknown): unknown => {
+    if (v == null) return null;
+    if (typeof v === "object") return v;
+    if (typeof v === "string") {
+      try { const p = JSON.parse(v); return p && typeof p === "object" ? p : null; } catch { return null; }
+    }
+    return null;
+  };
+
+  for (const cust of customers) {
+    try {
+      if (!cust?.id || !cust.name) {
+        result.customers.errors.push(
+          `Customer ${cust?.id ?? "?"}: missing required fields (id, name) — skipped`,
+        );
+        result.customers.skipped++;
+        continue;
+      }
+
+      // customers PK is (id) globally — check id without tenant scoping so we
+      // detect cross-tenant collisions and report them rather than silently
+      // skipping. (A cross-tenant collision means two different tenants reused
+      // the same customer ID in KV — surface it loudly.)
+      const existing = await query<{ tenant_id: string }>(
+        `SELECT tenant_id FROM customers WHERE id = $1 LIMIT 1`,
+        [cust.id],
+      );
+      if (existing.length > 0) {
+        if (existing[0].tenant_id === tenantId) {
+          result.customers.skipped++;
+        } else {
+          result.customers.errors.push(
+            `Customer ${cust.id} (${cust.name}): id already exists under another tenant (${existing[0].tenant_id}) — skipped`,
+          );
+          result.customers.skipped++;
+        }
+        continue;
+      }
+
+      if (dryRun) {
+        result.customers.inserted++;
+        continue;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const insertRes = await client.query(
+          `INSERT INTO customers (
+             id, tenant_id, name, company, email, phone, industry, city, area,
+             billing_address, shipping_address,
+             billing_address_details, shipping_address_details,
+             status, source, customer_type, customer_role, lead_id,
+             customer_since, total_value, currency,
+             opening_balance, advance_credit, notes, tags,
+             ledger_account_id, advance_ledger_account_id, supplier_products,
+             created_at, updated_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,
+             $10,$11,$12,$13,
+             $14,$15,$16,$17,$18,
+             $19,$20,$21,
+             $22,$23,$24,$25,
+             $26,$27,$28,
+             $29,$30
+           )
+           ON CONFLICT (id) DO NOTHING
+           RETURNING id`,
+          [
+            cust.id,
+            tenantId,
+            cust.name,
+            cust.company ?? "",
+            cust.email ?? "",
+            cust.phone ?? "",
+            cust.industry ?? "",
+            cust.city ?? "",
+            cust.area ?? null,
+            cust.billingAddress ?? null,
+            cust.shippingAddress ?? null,
+            (() => { const o = coerceObjectOrNull(cust.billingAddressDetails);  return o ? JSON.stringify(o) : null; })(),
+            (() => { const o = coerceObjectOrNull(cust.shippingAddressDetails); return o ? JSON.stringify(o) : null; })(),
+            cust.status ?? "active",
+            cust.source ?? "direct",
+            cust.customerType ?? null,
+            cust.customerRole ?? "Buyer",
+            cust.leadId ?? null,
+            cust.customerSince ?? "",
+            String(cust.totalValue ?? "0"),
+            cust.currency ?? "USD",
+            (cust.openingBalance ?? 0).toString(),
+            (cust.advanceCredit ?? 0).toString(),
+            cust.notes ?? "",
+            JSON.stringify(coerceArray(cust.tags)),
+            cust.ledgerAccountId ?? null,
+            cust.advanceLedgerAccountId ?? null,
+            JSON.stringify(coerceArray(cust.supplierProducts)),
+            cust.createdAt ? new Date(cust.createdAt) : new Date(),
+            cust.updatedAt ? new Date(cust.updatedAt) : new Date(),
+          ],
+        );
+        // Only count + audit if the INSERT actually produced a row.
+        // ON CONFLICT (id) silently no-ops if a row with the same id exists
+        // (e.g. race with another tenant migration) — without this guard we
+        // would falsely report success and write a misleading audit entry.
+        if (insertRes.rowCount && insertRes.rowCount > 0) {
+          await client.query(
+            `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json)
+             VALUES ($1,$2,'migrate','customer',$3,'create',NULL,$4)`,
+            [randomUUID(), tenantId, cust.id, JSON.stringify({ name: cust.name, role: cust.customerRole ?? "Buyer" })],
+          );
+          await client.query("COMMIT");
+          result.customers.inserted++;
+        } else {
+          await client.query("ROLLBACK");
+          result.customers.errors.push(
+            `Customer ${cust.id} (${cust.name}): id collision detected during insert — skipped`,
+          );
+          result.customers.skipped++;
+        }
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      result.customers.errors.push(`Customer ${cust.id} (${cust.name}): ${(err as Error).message}`);
     }
   }
 
