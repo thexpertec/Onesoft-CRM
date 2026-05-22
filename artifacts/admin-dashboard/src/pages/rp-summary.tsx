@@ -70,9 +70,12 @@ export default function RpSummaryPage() {
   }, [accounts]);
 
   // ── Receipt & Payment rows from JEs within date range ─────────────────────
-  // Rows are grouped by the COUNTERPART account name(s), not by JE reference.
-  // For a CB-debit (receipt) line the counterpart is the non-CB credit side.
-  // For a CB-credit (payment) line the counterpart is the non-CB debit side.
+  // One row per COUNTERPART ledger — never combined. For a JE with two
+  // credit lines (e.g. "Owner 1" + "Owner 2") and one CB-debit line, two
+  // receipt rows are produced, each carrying its own line amount. When a JE
+  // touches multiple CB ledgers on the same side, each counterpart line's
+  // amount is split across the CB columns proportionally to each CB line's
+  // share of the total CB movement on that side.
   const { receiptRows, paymentRows } = useMemo(() => {
     const recMap = new Map<string, Record<ColId, number>>();
     const payMap = new Map<string, Record<ColId, number>>();
@@ -84,35 +87,67 @@ export default function RpSummaryPage() {
       return d >= from && d <= to;
     });
 
+    const addRow = (
+      map: Map<string, Record<ColId, number>>,
+      head: string,
+      colId: ColId,
+      amount: number,
+    ) => {
+      if (amount === 0) return;
+      if (!map.has(head)) map.set(head, {});
+      const row = map.get(head)!;
+      row[colId] = (row[colId] ?? 0) + amount;
+    };
+
     posted.forEach(je => {
       const cbLines    = je.lines.filter(l =>  cbIds.has(l.ledgerId));
       const nonCbLines = je.lines.filter(l => !cbIds.has(l.ledgerId));
 
-      // Unique account names on each side of the non-CB lines
-      const counterpartCredits = [...new Set(
-        nonCbLines.filter(l => l.credit > 0)
-          .map(l => acctName.get(l.ledgerId) || l.narration || je.description || je.reference)
-      )].join(" / ");
+      // CB-debit side (cash IN) shares — proportions of each CB ledger
+      const cbDebitLines  = cbLines.filter(l => l.debit  > 0);
+      const cbCreditLines = cbLines.filter(l => l.credit > 0);
+      const totalCbDebit  = cbDebitLines.reduce((s, l)  => s + l.debit,  0);
+      const totalCbCredit = cbCreditLines.reduce((s, l) => s + l.credit, 0);
 
-      const counterpartDebits = [...new Set(
-        nonCbLines.filter(l => l.debit > 0)
-          .map(l => acctName.get(l.ledgerId) || l.narration || je.description || je.reference)
-      )].join(" / ");
+      // Receipts: each non-CB credit line becomes its own row. To keep the
+      // report rows summing exactly to actual CB movement (so totals don't
+      // overshoot when a JE mixes non-CB debits and credits, e.g. bank fees
+      // netted off a customer receipt), each line's share of the total
+      // non-CB credits is scaled to totalCbDebit, then split across the CB
+      // debit ledgers proportionally to each CB line's share.
+      const nonCbCreditLines = nonCbLines.filter(l => l.credit > 0);
+      const sumNonCbCredit   = nonCbCreditLines.reduce((s, l) => s + l.credit, 0);
+      if (totalCbDebit > 0 && sumNonCbCredit > 0) {
+        nonCbCreditLines.forEach(line => {
+          const head = acctName.get(line.ledgerId) || line.narration || je.description || je.reference;
+          const lineCashShare = (line.credit / sumNonCbCredit) * totalCbDebit;
+          cbDebitLines.forEach(cb => {
+            const share = (lineCashShare * cb.debit) / totalCbDebit;
+            addRow(recMap, head, cb.ledgerId, share);
+          });
+        });
+      } else if (totalCbDebit > 0) {
+        // CB-only receipt (no non-CB counterpart) — fall back to JE description
+        const head = je.description || je.reference || "(unspecified)";
+        cbDebitLines.forEach(cb => addRow(recMap, head, cb.ledgerId, cb.debit));
+      }
 
-      cbLines.forEach(l => {
-        if (l.debit > 0) {
-          // Debit to cash/bank = receipt — head is the non-CB credit account(s)
-          const head = counterpartCredits || je.description || je.reference;
-          if (!recMap.has(head)) recMap.set(head, {});
-          recMap.get(head)![l.ledgerId] = (recMap.get(head)![l.ledgerId] ?? 0) + l.debit;
-        }
-        if (l.credit > 0) {
-          // Credit to cash/bank = payment — head is the non-CB debit account(s)
-          const head = counterpartDebits || je.description || je.reference;
-          if (!payMap.has(head)) payMap.set(head, {});
-          payMap.get(head)![l.ledgerId] = (payMap.get(head)![l.ledgerId] ?? 0) + l.credit;
-        }
-      });
+      // Payments: symmetric — scale non-CB debit lines to actual totalCbCredit.
+      const nonCbDebitLines = nonCbLines.filter(l => l.debit > 0);
+      const sumNonCbDebit   = nonCbDebitLines.reduce((s, l) => s + l.debit, 0);
+      if (totalCbCredit > 0 && sumNonCbDebit > 0) {
+        nonCbDebitLines.forEach(line => {
+          const head = acctName.get(line.ledgerId) || line.narration || je.description || je.reference;
+          const lineCashShare = (line.debit / sumNonCbDebit) * totalCbCredit;
+          cbCreditLines.forEach(cb => {
+            const share = (lineCashShare * cb.credit) / totalCbCredit;
+            addRow(payMap, head, cb.ledgerId, share);
+          });
+        });
+      } else if (totalCbCredit > 0) {
+        const head = je.description || je.reference || "(unspecified)";
+        cbCreditLines.forEach(cb => addRow(payMap, head, cb.ledgerId, cb.credit));
+      }
     });
 
     const toRows = (map: Map<string, Record<ColId, number>>): SummaryRow[] =>
@@ -122,14 +157,16 @@ export default function RpSummaryPage() {
   }, [entries, accounts, acctName, cbIds, from, to]);
 
   // ── Totals ─────────────────────────────────────────────────────────────────
-  const recTotals = useMemo(() => {
+  // Sum of receipt rows only (excludes Opening Balance) — used by Balance Check
+  const recMovement = useMemo(() => {
     const t: Record<ColId, number> = {};
     cbCols.forEach(c => { t[c.id] = 0; });
     receiptRows.forEach(r => cbCols.forEach(c => { t[c.id] = (t[c.id] ?? 0) + (r.amounts[c.id] ?? 0); }));
     return t;
   }, [receiptRows, cbCols]);
 
-  const payTotals = useMemo(() => {
+  // Sum of payment rows only (excludes Closing Balance) — used by Balance Check
+  const payMovement = useMemo(() => {
     const t: Record<ColId, number> = {};
     cbCols.forEach(c => { t[c.id] = 0; });
     paymentRows.forEach(r => cbCols.forEach(c => { t[c.id] = (t[c.id] ?? 0) + (r.amounts[c.id] ?? 0); }));
@@ -139,10 +176,26 @@ export default function RpSummaryPage() {
   const closingBalance = useMemo(() => {
     const cb: Record<ColId, number> = {};
     cbCols.forEach(c => {
-      cb[c.id] = (openingBalance[c.id] ?? 0) + (recTotals[c.id] ?? 0) - (payTotals[c.id] ?? 0);
+      cb[c.id] = (openingBalance[c.id] ?? 0) + (recMovement[c.id] ?? 0) - (payMovement[c.id] ?? 0);
     });
     return cb;
-  }, [openingBalance, recTotals, payTotals, cbCols]);
+  }, [openingBalance, recMovement, payMovement, cbCols]);
+
+  // Traditional R&P account: BOTH sides must balance.
+  //   Receipt Total = Opening Balance + Sum of receipts
+  //   Payment Total = Sum of payments + Closing Balance
+  // With these definitions, recTotals[c] === payTotals[c] for every column.
+  const recTotals = useMemo(() => {
+    const t: Record<ColId, number> = {};
+    cbCols.forEach(c => { t[c.id] = (openingBalance[c.id] ?? 0) + (recMovement[c.id] ?? 0); });
+    return t;
+  }, [openingBalance, recMovement, cbCols]);
+
+  const payTotals = useMemo(() => {
+    const t: Record<ColId, number> = {};
+    cbCols.forEach(c => { t[c.id] = (payMovement[c.id] ?? 0) + (closingBalance[c.id] ?? 0); });
+    return t;
+  }, [payMovement, closingBalance, cbCols]);
 
   const recSubTotal = useMemo(() => cbCols.reduce((s, c) => s + (recTotals[c.id] ?? 0), 0), [recTotals, cbCols]);
   const paySubTotal = useMemo(() => cbCols.reduce((s, c) => s + (payTotals[c.id] ?? 0), 0), [payTotals, cbCols]);
@@ -258,8 +311,8 @@ export default function RpSummaryPage() {
     // ── Balance check section ─────────────────────────────────────────────
     const balanceCards = cbCols.map(c => {
       const ob    = openingBalance[c.id] ?? 0;
-      const rec   = recTotals[c.id] ?? 0;
-      const pay   = payTotals[c.id] ?? 0;
+      const rec   = recMovement[c.id] ?? 0;
+      const pay   = payMovement[c.id] ?? 0;
       const close = closingBalance[c.id] ?? 0;
       const fv = (n: number) => Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp});
       return `
@@ -270,7 +323,9 @@ export default function RpSummaryPage() {
         </div>`;
     }).join("");
 
-    const netCashFlow = recSubTotal - paySubTotal;
+    const recMovTot   = cbCols.reduce((s, c) => s + (recMovement[c.id] ?? 0), 0);
+    const payMovTot   = cbCols.reduce((s, c) => s + (payMovement[c.id] ?? 0), 0);
+    const netCashFlow = recMovTot - payMovTot;
     const fv2 = (n: number) => Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp});
     const balanceSectionHtml = `
       <div class="balance-section">
@@ -490,14 +545,13 @@ export default function RpSummaryPage() {
             </thead>
             <tbody>
               {openRow}
-              {rows.length === 0 && !isReceipt && search === "" ? null : null}
               {rows.map((row, i) => (
                 <tr key={row.head} className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${i % 2 === 1 ? "bg-muted/10" : ""}`}>
                   <td className="px-3 py-2 text-center text-muted-foreground">{i + 1}</td>
                   <td className="px-3 py-2 font-medium text-foreground">{row.head}</td>
                   {cbCols.map(c => (
                     <td key={c.id} className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {(row.amounts[c.id] ?? 0) > 0 ? fmt(row.amounts[c.id]) : "0.00"}
+                      {(row.amounts[c.id] ?? 0) > 0 ? fmt(row.amounts[c.id]) : <span className="text-muted-foreground">—</span>}
                     </td>
                   ))}
                 </tr>
@@ -588,8 +642,8 @@ export default function RpSummaryPage() {
         <div className="flex items-center gap-6 flex-wrap">
           {cbCols.map(c => {
             const ob    = openingBalance[c.id] ?? 0;
-            const rec   = recTotals[c.id] ?? 0;
-            const pay   = payTotals[c.id] ?? 0;
+            const rec   = recMovement[c.id] ?? 0;
+            const pay   = payMovement[c.id] ?? 0;
             const close = closingBalance[c.id] ?? 0;
             return (
               <div key={c.id} className="text-center">
@@ -601,12 +655,19 @@ export default function RpSummaryPage() {
               </div>
             );
           })}
-          <div className="text-center border-l border-border pl-6">
-            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Net Cash Flow</p>
-            <p className={`text-[13px] font-bold tabular-nums mt-0.5 ${recSubTotal - paySubTotal >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              {recSubTotal - paySubTotal >= 0 ? "+" : ""}{sym}{fmt(recSubTotal - paySubTotal)}
-            </p>
-          </div>
+          {(() => {
+            const recMovTot = cbCols.reduce((s, c) => s + (recMovement[c.id] ?? 0), 0);
+            const payMovTot = cbCols.reduce((s, c) => s + (payMovement[c.id] ?? 0), 0);
+            const net = recMovTot - payMovTot;
+            return (
+              <div className="text-center border-l border-border pl-6">
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Net Cash Flow</p>
+                <p className={`text-[13px] font-bold tabular-nums mt-0.5 ${net >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {net >= 0 ? "+" : ""}{sym}{fmt(net)}
+                </p>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
