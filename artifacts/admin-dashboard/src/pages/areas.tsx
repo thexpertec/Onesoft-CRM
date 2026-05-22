@@ -111,58 +111,85 @@ export default function AreasPage() {
     .filter(a => !areaSearch || a.name.toLowerCase().includes(areaSearch.toLowerCase()));
 
   // ── City actions ────────────────────────────────────────────────────────
-  const handleAddCity = (name: string, country: string) => {
+  // City/Area mutators are now async (REST-backed). Each handler awaits and
+  // shows a destructive toast on failure so backend 409/5xx errors surface
+  // instead of becoming silent unhandled rejections.
+  const handleAddCity = async (name: string, country: string) => {
     if (!name) { toast({ title: "City name is required", variant: "destructive" }); return; }
     if (cities.some(c => c.name.toLowerCase() === name.toLowerCase())) {
       toast({ title: "City already exists", description: `"${name}" already exists.`, variant: "destructive" }); return;
     }
-    const city = addCity({ name, country, notes: "" });
-    setSelectedCityId(city.id);
-    setAddingCity(false);
-    toast({ title: "City added", description: name });
+    try {
+      const city = await addCity({ name, country, notes: "" });
+      setSelectedCityId(city.id);
+      setAddingCity(false);
+      toast({ title: "City added", description: name });
+    } catch (e) {
+      toast({ title: "Cannot add city", description: (e as Error).message, variant: "destructive" });
+    }
   };
 
-  const handleEditCity = (id: string, name: string, country: string) => {
+  const handleEditCity = async (id: string, name: string, country: string) => {
     if (!name) { toast({ title: "City name is required", variant: "destructive" }); return; }
-    editCity(id, { name, country });
-    setEditingCityId(null);
-    toast({ title: "City updated" });
+    try {
+      await editCity(id, { name, country });
+      setEditingCityId(null);
+      toast({ title: "City updated" });
+    } catch (e) {
+      toast({ title: "Cannot update city", description: (e as Error).message, variant: "destructive" });
+    }
   };
 
-  const handleDeleteCity = () => {
+  const handleDeleteCity = async () => {
     if (!deleteCityId) return;
     const city = cities.find(c => c.id === deleteCityId);
     const areaCount = areas.filter(a => a.cityId === deleteCityId).length;
-    removeCity(deleteCityId);
-    if (selectedCityId === deleteCityId) setSelectedCityId(null);
-    toast({ title: "City deleted", description: areaCount > 0 ? `${areaCount} area${areaCount !== 1 ? "s" : ""} also removed.` : city?.name });
+    try {
+      await removeCity(deleteCityId);
+      if (selectedCityId === deleteCityId) setSelectedCityId(null);
+      toast({ title: "City deleted", description: areaCount > 0 ? `${areaCount} area${areaCount !== 1 ? "s" : ""} also removed.` : city?.name });
+    } catch (e) {
+      toast({ title: "Cannot delete city", description: (e as Error).message, variant: "destructive" });
+    }
     setDeleteCityId(null);
   };
 
   // ── Area actions ────────────────────────────────────────────────────────
-  const handleAddArea = (name: string, notes: string) => {
+  const handleAddArea = async (name: string, notes: string) => {
     if (!name) { toast({ title: "Area name is required", variant: "destructive" }); return; }
     if (!selectedCityId) return;
     if (areas.some(a => a.cityId === selectedCityId && a.name.toLowerCase() === name.toLowerCase())) {
       toast({ title: "Area already exists", description: `"${name}" already exists in ${selectedCity?.name}.`, variant: "destructive" }); return;
     }
-    addArea({ name, cityId: selectedCityId, notes });
-    setAddingArea(false);
-    toast({ title: "Area added", description: `${name} added to ${selectedCity?.name}` });
+    try {
+      await addArea({ name, cityId: selectedCityId, notes });
+      setAddingArea(false);
+      toast({ title: "Area added", description: `${name} added to ${selectedCity?.name}` });
+    } catch (e) {
+      toast({ title: "Cannot add area", description: (e as Error).message, variant: "destructive" });
+    }
   };
 
-  const handleEditArea = (id: string, name: string, notes: string) => {
+  const handleEditArea = async (id: string, name: string, notes: string) => {
     if (!name) { toast({ title: "Area name is required", variant: "destructive" }); return; }
-    editArea(id, { name, notes });
-    setEditingAreaId(null);
-    toast({ title: "Area updated" });
+    try {
+      await editArea(id, { name, notes });
+      setEditingAreaId(null);
+      toast({ title: "Area updated" });
+    } catch (e) {
+      toast({ title: "Cannot update area", description: (e as Error).message, variant: "destructive" });
+    }
   };
 
-  const handleDeleteArea = () => {
+  const handleDeleteArea = async () => {
     if (!deleteAreaId) return;
     const area = areas.find(a => a.id === deleteAreaId);
-    removeArea(deleteAreaId);
-    toast({ title: "Area deleted", description: area?.name });
+    try {
+      await removeArea(deleteAreaId);
+      toast({ title: "Area deleted", description: area?.name });
+    } catch (e) {
+      toast({ title: "Cannot delete area", description: (e as Error).message, variant: "destructive" });
+    }
     setDeleteAreaId(null);
   };
 

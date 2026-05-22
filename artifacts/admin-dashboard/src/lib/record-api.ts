@@ -7,7 +7,11 @@
  *     never from an optimistic local mutation
  */
 
-import type { Account, JournalEntry, JournalEntryLine } from "@/lib/store";
+import type {
+  Account, JournalEntry, JournalEntryLine,
+  Brand, Unit, Attribute, City, Area,
+  Department, Designation, ProductCategory,
+} from "@/lib/store";
 
 const BASE = "/api";
 const TIMEOUT_MS = 15_000;
@@ -172,3 +176,49 @@ export async function apiDeleteJE(
     { method: "DELETE" },
   );
 }
+
+// ─── Generic per-record CRUD factory ──────────────────────────────────────────
+// Used by master-data entities whose backend routes are mounted via the
+// generic `mountRecordRoutes` helper (no custom request/response shaping
+// needed beyond default camelCase ↔ snake_case conversion).
+//
+// The factory returns three async methods matching the established
+// accounts/JEs contract: throws on non-2xx, returns the server's persisted
+// row on success, no optimistic local mutation.
+
+interface RecordApi<T> {
+  create(tenantId: string, data: Omit<T, "id" | "createdAt" | "updatedAt">): Promise<T>;
+  update(tenantId: string, id: string, data: Partial<Omit<T, "id" | "createdAt">>): Promise<T>;
+  delete(tenantId: string, id: string): Promise<void>;
+}
+
+function makeRecordApi<T extends { id: string }>(path: string): RecordApi<T> {
+  return {
+    create: (tenantId, data) =>
+      rFetch(`${BASE}/${path}`, {
+        method: "POST",
+        body: JSON.stringify({ tenantId, ...data }),
+      }) as Promise<T>,
+    update: (tenantId, id, data) =>
+      rFetch(`${BASE}/${path}/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ tenantId, ...data }),
+      }) as Promise<T>,
+    delete: async (tenantId, id) => {
+      await rFetch(
+        `${BASE}/${path}/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`,
+        { method: "DELETE" },
+      );
+    },
+  };
+}
+
+// ─── Master-data REST clients (Batch 1) ───────────────────────────────────────
+export const brandsApi             = makeRecordApi<Brand>("brands");
+export const unitsApi              = makeRecordApi<Unit>("units");
+export const attributesApi         = makeRecordApi<Attribute>("attributes");
+export const citiesApi             = makeRecordApi<City>("cities");
+export const areasApi              = makeRecordApi<Area>("areas");
+export const departmentsApi        = makeRecordApi<Department>("departments");
+export const designationsApi       = makeRecordApi<Designation>("designations");
+export const productCategoriesApi  = makeRecordApi<ProductCategory>("product-categories");

@@ -9251,6 +9251,52 @@ export function removeAccountFromCache(id: string): void {
   _lsCache(sk, getAccounts().filter(a => a.id !== id));
 }
 
+// ─── Generic per-record cache helpers (Batch 1 master-data) ───────────────────
+// Cache-only writes — no `_apiWrite` call. The REST endpoint has already
+// persisted the row to PostgreSQL by the time these run; their only job is
+// to update `_memRaw` so subsequent `getStored`/`getX()` reads see the new
+// state synchronously, mirroring the accounts/JE pattern above.
+//
+// **Tenant-switch safety**: every helper requires the caller to pass the
+// tenantId that owned the in-flight REST request. If the active tenant has
+// changed since the request was issued (user switched tenant / logged out /
+// entered impersonation), the patch is a NO-OP. Without this guard a late
+// response from tenant A could write into tenant B's `_memRaw` cache,
+// violating isolation. Always call as `patchXInCache(tenantId, row)`.
+
+function _patchRecordInCache<T extends { id: string }>(tenantId: string, baseKey: string, record: T): void {
+  if (_activeTenantId !== tenantId) return; // tenant switched mid-flight, drop the stale write
+  const sk = tenantKey(baseKey);
+  const list = getStored<T>(baseKey);
+  const exists = list.some(x => x.id === record.id);
+  _lsCache(sk, exists
+    ? list.map(x => x.id === record.id ? record : x)
+    : [...list, record]);
+}
+
+function _removeRecordFromCache<T extends { id: string }>(tenantId: string, baseKey: string, id: string): void {
+  if (_activeTenantId !== tenantId) return; // tenant switched mid-flight, drop the stale write
+  const sk = tenantKey(baseKey);
+  _lsCache(sk, getStored<T>(baseKey).filter(x => x.id !== id));
+}
+
+export const patchBrandInCache              = (tid: string, b: Brand)            => _patchRecordInCache(tid, BRANDS_KEY, b);
+export const removeBrandFromCache           = (tid: string, id: string)          => _removeRecordFromCache<Brand>(tid, BRANDS_KEY, id);
+export const patchUnitInCache               = (tid: string, u: Unit)             => _patchRecordInCache(tid, UNITS_KEY, u);
+export const removeUnitFromCache            = (tid: string, id: string)          => _removeRecordFromCache<Unit>(tid, UNITS_KEY, id);
+export const patchAttributeInCache          = (tid: string, a: Attribute)        => _patchRecordInCache(tid, ATTRIBUTES_KEY, a);
+export const removeAttributeFromCache       = (tid: string, id: string)          => _removeRecordFromCache<Attribute>(tid, ATTRIBUTES_KEY, id);
+export const patchCityInCache               = (tid: string, c: City)             => _patchRecordInCache(tid, CITIES_KEY, c);
+export const removeCityFromCache            = (tid: string, id: string)          => _removeRecordFromCache<City>(tid, CITIES_KEY, id);
+export const patchAreaInCache               = (tid: string, a: Area)             => _patchRecordInCache(tid, AREAS_KEY, a);
+export const removeAreaFromCache            = (tid: string, id: string)          => _removeRecordFromCache<Area>(tid, AREAS_KEY, id);
+export const patchDepartmentInCache         = (tid: string, d: Department)       => _patchRecordInCache(tid, HRM_DEPT_KEY, d);
+export const removeDepartmentFromCache      = (tid: string, id: string)          => _removeRecordFromCache<Department>(tid, HRM_DEPT_KEY, id);
+export const patchDesignationInCache        = (tid: string, d: Designation)      => _patchRecordInCache(tid, HRM_DESIG_KEY, d);
+export const removeDesignationFromCache     = (tid: string, id: string)          => _removeRecordFromCache<Designation>(tid, HRM_DESIG_KEY, id);
+export const patchProductCategoryInCache    = (tid: string, c: ProductCategory)  => _patchRecordInCache(tid, PRODUCT_CATEGORIES_KEY, c);
+export const removeProductCategoryFromCache = (tid: string, id: string)          => _removeRecordFromCache<ProductCategory>(tid, PRODUCT_CATEGORIES_KEY, id);
+
 // ─── Journal Entry ────────────────────────────────────────────────────────────
 
 export type JournalEntryLine = {

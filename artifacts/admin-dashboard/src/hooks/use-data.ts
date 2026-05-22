@@ -43,12 +43,29 @@ import {
   getActiveTenantId,
   patchAccountInCache, removeAccountFromCache,
   patchJEInCache, removeJEFromCache,
+  patchBrandInCache, removeBrandFromCache,
+  patchUnitInCache, removeUnitFromCache,
+  patchAttributeInCache, removeAttributeFromCache,
+  patchCityInCache, removeCityFromCache,
+  patchAreaInCache, removeAreaFromCache,
+  patchDepartmentInCache, removeDepartmentFromCache,
+  patchDesignationInCache, removeDesignationFromCache,
+  patchProductCategoryInCache, removeProductCategoryFromCache,
 } from "@/lib/store";
 import {
   apiCreateAccount, apiUpdateAccount, apiDeleteAccount,
   apiCreateJE, apiUpdateJE, apiDeleteJE,
+  brandsApi, unitsApi, attributesApi, citiesApi, areasApi,
+  departmentsApi, designationsApi, productCategoriesApi,
   type ApiJELine,
 } from "@/lib/record-api";
+
+/** Pull the active tenant or throw — used by every REST-backed hook. */
+function requireTenantId(): string {
+  const tid = getActiveTenantId();
+  if (!tid) throw new Error("No active tenant");
+  return tid;
+}
 
 /**
  * Subscribes a callback to both "storage" (cross-tab writes via setStored)
@@ -157,28 +174,35 @@ export function useCustomers() {
 }
 
 export function useProductCategories() {
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-
-  const fetchCategories = useCallback(() => {
-    setCategories(getProductCategories());
-  }, []);
-
+  const [categories, setCategories] = useState<ProductCategory[]>(() => getProductCategories());
+  const fetchCategories = useCallback(() => setCategories(getProductCategories()), []);
   useStoreEffect(fetchCategories);
 
-  const addCategory = (data: Parameters<typeof createProductCategory>[0]) => {
-    const c = createProductCategory(data);
+  const addCategory = async (data: Parameters<typeof createProductCategory>[0]): Promise<ProductCategory> => {
+    const tid = requireTenantId();
+    const row = await productCategoriesApi.create(tid, data);
+    patchProductCategoryInCache(tid, row);
     fetchCategories();
-    return c;
+    return row;
   };
 
-  const editCategory = (id: string, updates: Parameters<typeof updateProductCategory>[1]) => {
-    const c = updateProductCategory(id, updates);
+  const editCategory = async (id: string, updates: Parameters<typeof updateProductCategory>[1]): Promise<ProductCategory> => {
+    const tid = requireTenantId();
+    const row = await productCategoriesApi.update(tid, id, updates);
+    patchProductCategoryInCache(tid, row);
     fetchCategories();
-    return c;
+    return row;
   };
 
-  const removeCategory = (id: string) => {
-    deleteProductCategory(id);
+  const removeCategory = async (id: string): Promise<void> => {
+    // Backend `deleteBlockers` mirrors the old FE `_categoryFinancialBlockers`
+    // (products.category === name + sr/pur/inv-cat ledger refs). If anything
+    // references this category the API returns 409 and we surface the error.
+    // The old FE-side products.category="" fixup after delete is dropped:
+    // the blocker prevents this state from ever arising.
+    const tid = requireTenantId();
+    await productCategoriesApi.delete(tid, id);
+    removeProductCategoryFromCache(tid, id);
     fetchCategories();
   };
 
@@ -215,43 +239,73 @@ export function useProductDepartments() {
 }
 
 export function useBrands() {
-  const [brands, setBrands] = useState<Brand[]>([]);
-
-  const fetchBrands = useCallback(() => { setBrands(getBrands()); }, []);
-
+  const [brands, setBrands] = useState<Brand[]>(() => getBrands());
+  const fetchBrands = useCallback(() => setBrands(getBrands()), []);
   useStoreEffect(fetchBrands);
 
-  const addBrand = (data: Parameters<typeof createBrand>[0]) => { const b = createBrand(data); fetchBrands(); return b; };
-  const editBrand = (id: string, updates: Parameters<typeof updateBrand>[1]) => { const b = updateBrand(id, updates); fetchBrands(); return b; };
-  const removeBrand = (id: string) => { deleteBrand(id); fetchBrands(); };
+  const addBrand = async (data: Parameters<typeof createBrand>[0]): Promise<Brand> => {
+    const tid = requireTenantId();
+    const row = await brandsApi.create(tid, data);
+    patchBrandInCache(tid, row); fetchBrands(); return row;
+  };
+  const editBrand = async (id: string, updates: Parameters<typeof updateBrand>[1]): Promise<Brand> => {
+    const tid = requireTenantId();
+    const row = await brandsApi.update(tid, id, updates);
+    patchBrandInCache(tid, row); fetchBrands(); return row;
+  };
+  const removeBrand = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await brandsApi.delete(tid, id);
+    removeBrandFromCache(tid, id); fetchBrands();
+  };
 
   return { brands, addBrand, editBrand, removeBrand, refresh: fetchBrands };
 }
 
 export function useAttributes() {
-  const [attributes, setAttributes] = useState<Attribute[]>([]);
-
-  const fetchAttributes = useCallback(() => { setAttributes(getAttributes()); }, []);
-
+  const [attributes, setAttributes] = useState<Attribute[]>(() => getAttributes());
+  const fetchAttributes = useCallback(() => setAttributes(getAttributes()), []);
   useStoreEffect(fetchAttributes);
 
-  const addAttribute = (data: Parameters<typeof createAttribute>[0]) => { const a = createAttribute(data); fetchAttributes(); return a; };
-  const editAttribute = (id: string, updates: Parameters<typeof updateAttribute>[1]) => { const a = updateAttribute(id, updates); fetchAttributes(); return a; };
-  const removeAttribute = (id: string) => { deleteAttribute(id); fetchAttributes(); };
+  const addAttribute = async (data: Parameters<typeof createAttribute>[0]): Promise<Attribute> => {
+    const tid = requireTenantId();
+    const row = await attributesApi.create(tid, data as Omit<Attribute, "id" | "createdAt" | "updatedAt">);
+    patchAttributeInCache(tid, row); fetchAttributes(); return row;
+  };
+  const editAttribute = async (id: string, updates: Parameters<typeof updateAttribute>[1]): Promise<Attribute> => {
+    const tid = requireTenantId();
+    const row = await attributesApi.update(tid, id, updates);
+    patchAttributeInCache(tid, row); fetchAttributes(); return row;
+  };
+  const removeAttribute = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await attributesApi.delete(tid, id);
+    removeAttributeFromCache(tid, id); fetchAttributes();
+  };
 
   return { attributes, addAttribute, editAttribute, removeAttribute, refresh: fetchAttributes };
 }
 
 export function useUnits() {
-  const [units, setUnits] = useState<Unit[]>([]);
-
-  const fetchUnits = useCallback(() => { setUnits(getUnits()); }, []);
-
+  const [units, setUnits] = useState<Unit[]>(() => getUnits());
+  const fetchUnits = useCallback(() => setUnits(getUnits()), []);
   useStoreEffect(fetchUnits);
 
-  const addUnit = (data: Parameters<typeof createUnit>[0]) => { const u = createUnit(data); fetchUnits(); return u; };
-  const editUnit = (id: string, updates: Parameters<typeof updateUnit>[1]) => { const u = updateUnit(id, updates); fetchUnits(); return u; };
-  const removeUnit = (id: string) => { deleteUnit(id); fetchUnits(); };
+  const addUnit = async (data: Parameters<typeof createUnit>[0]): Promise<Unit> => {
+    const tid = requireTenantId();
+    const row = await unitsApi.create(tid, data);
+    patchUnitInCache(tid, row); fetchUnits(); return row;
+  };
+  const editUnit = async (id: string, updates: Parameters<typeof updateUnit>[1]): Promise<Unit> => {
+    const tid = requireTenantId();
+    const row = await unitsApi.update(tid, id, updates);
+    patchUnitInCache(tid, row); fetchUnits(); return row;
+  };
+  const removeUnit = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await unitsApi.delete(tid, id);
+    removeUnitFromCache(tid, id); fetchUnits();
+  };
 
   return { units, addUnit, editUnit, removeUnit, refresh: fetchUnits };
 }
@@ -382,22 +436,46 @@ export function useStaffRoles() {
 }
 
 export function useDepartments() {
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departments, setDepartments] = useState<Department[]>(() => getDepartments());
   const fetch = useCallback(() => setDepartments(getDepartments()), []);
   useStoreEffect(fetch);
-  const addDepartment    = (d: Parameters<typeof createDepartment>[0])                  => { const r = createDepartment(d);    fetch(); return r; };
-  const editDepartment   = (id: string, u: Parameters<typeof updateDepartment>[1])      => { const r = updateDepartment(id, u); fetch(); return r; };
-  const removeDepartment = (id: string)                                                  => { deleteDepartment(id);              fetch(); };
+  const addDepartment = async (d: Parameters<typeof createDepartment>[0]): Promise<Department> => {
+    const tid = requireTenantId();
+    const r = await departmentsApi.create(tid, d);
+    patchDepartmentInCache(tid, r); fetch(); return r;
+  };
+  const editDepartment = async (id: string, u: Parameters<typeof updateDepartment>[1]): Promise<Department> => {
+    const tid = requireTenantId();
+    const r = await departmentsApi.update(tid, id, u);
+    patchDepartmentInCache(tid, r); fetch(); return r;
+  };
+  const removeDepartment = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await departmentsApi.delete(tid, id);
+    removeDepartmentFromCache(tid, id); fetch();
+  };
   return { departments, addDepartment, editDepartment, removeDepartment, refresh: fetch };
 }
 
 export function useDesignations() {
-  const [designations, setDesignations] = useState<Designation[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>(() => getDesignations());
   const fetch = useCallback(() => setDesignations(getDesignations()), []);
   useStoreEffect(fetch);
-  const addDesignation    = (d: Parameters<typeof createDesignation>[0])                => { const r = createDesignation(d);    fetch(); return r; };
-  const editDesignation   = (id: string, u: Parameters<typeof updateDesignation>[1])    => { const r = updateDesignation(id, u); fetch(); return r; };
-  const removeDesignation = (id: string)                                                 => { deleteDesignation(id);              fetch(); };
+  const addDesignation = async (d: Parameters<typeof createDesignation>[0]): Promise<Designation> => {
+    const tid = requireTenantId();
+    const r = await designationsApi.create(tid, d);
+    patchDesignationInCache(tid, r); fetch(); return r;
+  };
+  const editDesignation = async (id: string, u: Parameters<typeof updateDesignation>[1]): Promise<Designation> => {
+    const tid = requireTenantId();
+    const r = await designationsApi.update(tid, id, u);
+    patchDesignationInCache(tid, r); fetch(); return r;
+  };
+  const removeDesignation = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await designationsApi.delete(tid, id);
+    removeDesignationFromCache(tid, id); fetch();
+  };
   return { designations, addDesignation, editDesignation, removeDesignation, refresh: fetch };
 }
 
@@ -558,22 +636,57 @@ export function useRPVouchers() {
 }
 
 export function useCities() {
-  const [cities, setCities] = useState<City[]>([]);
+  const [cities, setCities] = useState<City[]>(() => getCities());
   const fetch = useCallback(() => setCities(getCities()), []);
   useStoreEffect(fetch);
-  const add    = (d: Parameters<typeof createCity>[0])              => { const c = createCity(d);    fetch(); return c; };
-  const edit   = (id: string, u: Parameters<typeof updateCity>[1]) => { const c = updateCity(id, u); fetch(); return c; };
-  const remove = (id: string)                                        => { deleteCity(id);              fetch(); };
+  const add = async (d: Parameters<typeof createCity>[0]): Promise<City> => {
+    const tid = requireTenantId();
+    const c = await citiesApi.create(tid, d);
+    patchCityInCache(tid, c); fetch(); return c;
+  };
+  const edit = async (id: string, u: Parameters<typeof updateCity>[1]): Promise<City> => {
+    const tid = requireTenantId();
+    const c = await citiesApi.update(tid, id, u);
+    patchCityInCache(tid, c); fetch(); return c;
+  };
+  const remove = async (id: string): Promise<void> => {
+    // Mirrors legacy `deleteCity` cascade: clean up child areas FE-side after
+    // the city REST delete succeeds. The backend has no FK cascade on
+    // `areas.city_id`, so without this any orphaned areas would survive.
+    // Serial (not parallel) so a mid-cascade failure reports cleanly and
+    // doesn't leave the cache wedged with mixed succeeded/failed deletes.
+    const tid = requireTenantId();
+    await citiesApi.delete(tid, id);
+    removeCityFromCache(tid, id);
+    const orphans = getAreas().filter(a => a.cityId === id);
+    for (const a of orphans) {
+      await areasApi.delete(tid, a.id);
+      removeAreaFromCache(tid, a.id);
+    }
+    fetch();
+  };
   return { cities, add, edit, remove, refresh: fetch };
 }
 
 export function useAreas() {
-  const [areas, setAreas] = useState<Area[]>([]);
+  const [areas, setAreas] = useState<Area[]>(() => getAreas());
   const fetch = useCallback(() => setAreas(getAreas()), []);
   useStoreEffect(fetch);
-  const add    = (d: Parameters<typeof createArea>[0])              => { const a = createArea(d);    fetch(); return a; };
-  const edit   = (id: string, u: Parameters<typeof updateArea>[1]) => { const a = updateArea(id, u); fetch(); return a; };
-  const remove = (id: string)                                        => { deleteArea(id);              fetch(); };
+  const add = async (d: Parameters<typeof createArea>[0]): Promise<Area> => {
+    const tid = requireTenantId();
+    const a = await areasApi.create(tid, d);
+    patchAreaInCache(tid, a); fetch(); return a;
+  };
+  const edit = async (id: string, u: Parameters<typeof updateArea>[1]): Promise<Area> => {
+    const tid = requireTenantId();
+    const a = await areasApi.update(tid, id, u);
+    patchAreaInCache(tid, a); fetch(); return a;
+  };
+  const remove = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    await areasApi.delete(tid, id);
+    removeAreaFromCache(tid, id); fetch();
+  };
   return { areas, add, edit, remove, refresh: fetch };
 }
 
