@@ -6394,14 +6394,24 @@ const STAFF_KEY = "admin-hrm-staff";
 export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
 
 export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
+  // Guard: refuse to create a 4200 salary ledger unless a role or designation is set.
+  // Without one, the ledger would silently fall back to the staff member's name and
+  // pollute the Chart of Accounts with per-person rows under Salary & Wages.
+  const ledgerLabel = (data.role || data.designation || "").trim();
+  if (!data.ledgerAccountId && !ledgerLabel) {
+    throw new Error(
+      "Cannot create staff member without a Role or Designation. " +
+      "A Salary & Wages (4200) ledger must be grouped by role/designation, not by personal name."
+    );
+  }
   // Per-staff expense ledger under Salary & Wages (kept for legacy JE healing)
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
     parentId:    SYS_ACCS.SALARY_GROUP,
     parentCode:  "4200",
-    name:        data.designation || data.name,
+    name:        ledgerLabel,
     head:        "Expense",
     subType:     "Payroll",
-    description: `Salary ledger for staff member: ${data.name}`,
+    description: `Salary ledger for role: ${ledgerLabel}`,
   });
   // Per-employee payable account under Staff Payable Accounts (2113) — used in new salary JEs
   const staffPayableLedgerId = data.staffPayableLedgerId || createSubsidiaryLedger({
@@ -8167,19 +8177,24 @@ export function seedDefaultCoaAccounts(): void {
   // stock qty was set but the corresponding ledger entry had not yet been synced to the server.
 
   // ── Always: backfill salary ledgers for staff members missing one ─────────
+  // Guard: only backfill when a role/designation is available. Staff with neither
+  // are skipped so the COA never gets a per-person ledger under 4200; the user
+  // must edit the staff record and add a role/designation to trigger creation.
   {
     const allStaff = getStored<Staff>(STAFF_KEY);
     const liveAccountIds = new Set(getAccounts().map(a => a.id));
     let staffUpdated = false;
     const staffPatched = allStaff.map(s => {
       if (s.ledgerAccountId && liveAccountIds.has(s.ledgerAccountId)) return s;
+      const ledgerLabel = (s.role || s.designation || "").trim();
+      if (!ledgerLabel) return s; // skip — wait until role/designation is set
       const lid = createSubsidiaryLedger({
         parentId:    SYS_ACCS.SALARY_GROUP,
         parentCode:  "4200",
-        name:        s.role || s.designation || s.name,
+        name:        ledgerLabel,
         head:        "Expense",
         subType:     "Payroll",
-        description: `Salary ledger for role: ${s.role || s.designation || s.name}`,
+        description: `Salary ledger for role: ${ledgerLabel}`,
       });
       liveAccountIds.add(lid);
       staffUpdated = true;
@@ -11647,9 +11662,17 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
     if (acc && acc.accountType === "Ledger") return staff.ledgerAccountId;
   }
 
-  // Check if there's already a ledger under 4200 whose name matches the staff designation/name
-  const matchName = staff?.designation || staff?.name || slip.staffName;
-  const existing  = allAccounts.find(
+  // Resolve a grouping label from role/designation only — never the personal name.
+  // This matches the policy enforced in createStaff() and the login backfill:
+  // 4200 Salary & Wages ledgers must be grouped by role/designation, not per person.
+  const matchName = (staff?.role || staff?.designation || slip.role || slip.designation || "").trim();
+  if (!matchName) {
+    throw new Error(
+      `Cannot resolve a Salary & Wages (4200) ledger for "${staff?.name ?? slip.staffName}" — ` +
+      "no role or designation set. Edit the staff record and assign a role/designation first."
+    );
+  }
+  const existing = allAccounts.find(
     a => a.parentId === SYS_ACCS.SALARY_GROUP && a.accountType === "Ledger" &&
          a.name.toLowerCase() === matchName.toLowerCase(),
   );
@@ -11659,14 +11682,14 @@ function _resolveStaffSalaryLedger(slip: SalarySlip): string {
     return existing.id;
   }
 
-  // Create a fresh subsidiary ledger and persist the link on the staff record
+  // Create a fresh subsidiary ledger (role-named) and persist the link on the staff record
   const lid = createSubsidiaryLedger({
     parentId:    SYS_ACCS.SALARY_GROUP,
     parentCode:  "4200",
     name:        matchName,
     head:        "Expense",
     subType:     "Payroll",
-    description: `Salary ledger for ${staff?.name ?? slip.staffName}`,
+    description: `Salary ledger for role: ${matchName}`,
   });
   if (staff) updateStaff(staff.id, { ledgerAccountId: lid });
   return lid;

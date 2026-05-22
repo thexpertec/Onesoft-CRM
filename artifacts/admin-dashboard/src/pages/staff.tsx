@@ -157,9 +157,24 @@ export default function StaffPage() {
 
   const commitNewRow = () => {
     if (!newRow?.name.trim()) { toast({ title: "Full name is required", variant: "destructive" }); setNewRowActive(0); return; }
-    addStaff({ ...newRow, status: newRow.status as StaffStatus });
-    toast({ title: "Staff member added", description: `"${newRow.name}" added.` });
-    setNewRow(null); setNewRowActive(null);
+    if (!newRow.role?.trim() && !newRow.designation?.trim()) {
+      toast({
+        title: "Role or Designation is required",
+        description: "Pick a role or designation so the staff member's salary expense is grouped under Salary & Wages (4200) by role, not by personal name.",
+        variant: "destructive",
+      });
+      // Jump to the Role column so the user can fix it.
+      const roleColIdx = COLS.findIndex(c => c.field === "role");
+      setNewRowActive(roleColIdx >= 0 ? roleColIdx : 0);
+      return;
+    }
+    try {
+      addStaff({ ...newRow, status: newRow.status as StaffStatus });
+      toast({ title: "Staff member added", description: `"${newRow.name}" added.` });
+      setNewRow(null); setNewRowActive(null);
+    } catch (e) {
+      toast({ title: "Cannot add staff member", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const isDefaultDirector = (member: Staff) => member.username === "director";
