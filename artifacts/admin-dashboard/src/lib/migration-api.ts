@@ -13,6 +13,8 @@ export interface MigrationCounts {
   cities: number;
   areas: number;
   requirementDocs: number;
+  stockItems: number;
+  stockLedger: number;
 }
 
 export interface MigrationStatus {
@@ -45,6 +47,8 @@ export interface MigrationResult {
   cities:            MigrationSection;
   areas:             MigrationSection;
   requirementDocs:   MigrationSection;
+  stockItems:        MigrationSection;
+  stockLedger:       MigrationSection;
 }
 
 const BASE = "/api/migrate";

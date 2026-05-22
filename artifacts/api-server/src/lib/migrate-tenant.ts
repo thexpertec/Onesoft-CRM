@@ -93,6 +93,8 @@ export interface MigrateResult {
   cities:            MigrateSection;
   areas:             MigrateSection;
   requirementDocs:   MigrateSection;
+  stockItems:        MigrateSection;
+  stockLedger:       MigrateSection;
 }
 
 interface FrontendProduct {
@@ -200,6 +202,8 @@ export async function migrateTenant(
     cities:            { found: 0, inserted: 0, skipped: 0, errors: [] },
     areas:             { found: 0, inserted: 0, skipped: 0, errors: [] },
     requirementDocs:   { found: 0, inserted: 0, skipped: 0, errors: [] },
+    stockItems:        { found: 0, inserted: 0, skipped: 0, errors: [] },
+    stockLedger:       { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -852,6 +856,61 @@ export async function migrateTenant(
     getDisplayName: (d) => d.title,
   });
 
+  // ── 8. Stock Items + Stock Ledger ──────────────────────────────────────────
+  // Quantities arrive as strings from the frontend grid type — coerce to
+  // number, treating non-numeric values as 0 rather than failing the row.
+  const toNum = (v: unknown): number => {
+    if (typeof v === "number") return isFinite(v) ? v : 0;
+    if (typeof v === "string") { const n = parseFloat(v); return isFinite(n) ? n : 0; }
+    return 0;
+  };
+
+  await migrateMaster<{
+    id: string; productName: string; sku?: string; store?: string;
+    stockType?: string; quantity?: unknown; minLevel?: unknown; unit?: string;
+    holdCustomer?: string; holdReason?: string; notes?: string;
+    createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "stockItems",
+    kvKey: "admin-stock", table: "stock_items", entityType: "stock_item",
+    columns: [
+      "product_name", "sku", "store", "stock_type", "quantity", "min_level",
+      "unit", "hold_customer", "hold_reason", "notes",
+    ],
+    extractValues: (s) => [
+      s.productName, s.sku ?? "", s.store ?? "", s.stockType ?? "For Sale",
+      toNum(s.quantity), toNum(s.minLevel),
+      s.unit ?? "", s.holdCustomer ?? "", s.holdReason ?? "", s.notes ?? "",
+    ],
+    auditSummary: (s) => ({ productName: s.productName, sku: s.sku ?? "", store: s.store ?? "" }),
+    getDisplayName: (s) => s.productName,
+  });
+
+  await migrateMaster<{
+    id: string; entityType?: string; entityId: string; entityName?: string;
+    date?: string; txType: string; sourceType?: string; reference?: string;
+    qtyBefore?: unknown; qtyChange?: unknown; qtyAfter?: unknown;
+    unit?: string; notes?: string;
+    createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "stockLedger",
+    kvKey: "admin-stock-ledger", table: "stock_ledger", entityType: "stock_ledger_entry",
+    columns: [
+      "entity_type", "entity_id", "entity_name", "date", "tx_type",
+      "source_type", "reference", "qty_before", "qty_change", "qty_after",
+      "unit", "notes",
+    ],
+    extractValues: (l) => [
+      l.entityType ?? "product", l.entityId, l.entityName ?? "",
+      l.date ?? "", l.txType, l.sourceType ?? null, l.reference ?? "",
+      toNum(l.qtyBefore), toNum(l.qtyChange), toNum(l.qtyAfter),
+      l.unit ?? "", l.notes ?? "",
+    ],
+    auditSummary: (l) => ({ entityId: l.entityId, txType: l.txType, reference: l.reference ?? "" }),
+    // Ledger rows have no `name` field; use a composite label for error messages.
+    getDisplayName: (l) => `${l.txType} ${l.reference ?? ""}`.trim() || l.entityId,
+  });
+
   return result;
 }
 
@@ -868,7 +927,8 @@ async function migrateMaster<T extends { id: string; createdAt?: string; updated
   section: keyof MigrateResult & (
     "brands" | "productCategories" | "units" | "attributes" |
     "leads" | "departments" | "designations" |
-    "cities" | "areas" | "requirementDocs"
+    "cities" | "areas" | "requirementDocs" |
+    "stockItems" | "stockLedger"
   );
   kvKey: string;
   table: string;

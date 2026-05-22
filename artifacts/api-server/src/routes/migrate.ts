@@ -69,6 +69,14 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT COUNT(*)::text AS count FROM requirement_docs WHERE tenant_id = $1 AND archived_at IS NULL`,
       [tenantId],
     );
+    const [stockRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM stock_items WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [ledgerRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM stock_ledger WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
     const [kvAccRow] = await query<{ value: unknown }>(
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-chart-of-accounts' LIMIT 1`,
       [`t:${tenantId}`],
@@ -125,6 +133,14 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-req-docs' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [kvStockRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-stock' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvLedgerRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-stock-ledger' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
@@ -149,6 +165,8 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         cities:            parseInt(cityRow?.count    ?? "0", 10),
         areas:             parseInt(areaRow?.count    ?? "0", 10),
         requirementDocs:   parseInt(reqDocRow?.count  ?? "0", 10),
+        stockItems:        parseInt(stockRow?.count   ?? "0", 10),
+        stockLedger:       parseInt(ledgerRow?.count  ?? "0", 10),
       },
       kv: {
         accounts:          parseCount(kvAccRow?.value),
@@ -165,6 +183,8 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         cities:            parseCount(kvCityRow?.value),
         areas:             parseCount(kvAreaRow?.value),
         requirementDocs:   parseCount(kvReqDocRow?.value),
+        stockItems:        parseCount(kvStockRow?.value),
+        stockLedger:       parseCount(kvLedgerRow?.value),
       },
     });
   } catch (err) {

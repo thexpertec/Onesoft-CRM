@@ -335,6 +335,59 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS requirement_docs_tenant_idx        ON requirement_docs (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS requirement_docs_tenant_status_idx ON requirement_docs (tenant_id, status)`,
 
+  // ── Stock Items ──────────────────────────────────────────────────────────────
+  // Quantities are stored as the frontend type uses STRINGS to keep grid-edit
+  // compatibility. We coerce to NUMERIC(18,4) on migration so SQL aggregations
+  // (sum-by-product, low-stock alerts) can run server-side without JS parseFloat.
+  `CREATE TABLE IF NOT EXISTS stock_items (
+    id             TEXT        NOT NULL PRIMARY KEY,
+    tenant_id      TEXT        NOT NULL,
+    product_name   TEXT        NOT NULL,
+    sku            TEXT        NOT NULL DEFAULT '',
+    store          TEXT        NOT NULL DEFAULT '',
+    stock_type     TEXT        NOT NULL DEFAULT 'For Sale',
+    quantity       NUMERIC(18,4) NOT NULL DEFAULT 0,
+    min_level      NUMERIC(18,4) NOT NULL DEFAULT 0,
+    unit           TEXT        NOT NULL DEFAULT '',
+    hold_customer  TEXT        NOT NULL DEFAULT '',
+    hold_reason    TEXT        NOT NULL DEFAULT '',
+    notes          TEXT        NOT NULL DEFAULT '',
+    archived_at    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS stock_items_tenant_idx      ON stock_items (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS stock_items_tenant_sku_idx  ON stock_items (tenant_id, lower(sku))`,
+  `CREATE INDEX IF NOT EXISTS stock_items_tenant_type_idx ON stock_items (tenant_id, stock_type)`,
+
+  // ── Stock Ledger ─────────────────────────────────────────────────────────────
+  // Append-only movement journal. entity_id is a SOFT reference (no FK) because
+  // ledger entries can outlive their stock_item row (mirrors brands/parent_id
+  // pattern). High cardinality table — composite (tenant_id, entity_id, date)
+  // index supports per-product timeline queries.
+  `CREATE TABLE IF NOT EXISTS stock_ledger (
+    id           TEXT        NOT NULL PRIMARY KEY,
+    tenant_id    TEXT        NOT NULL,
+    entity_type  TEXT        NOT NULL DEFAULT 'product',
+    entity_id    TEXT        NOT NULL,
+    entity_name  TEXT        NOT NULL DEFAULT '',
+    date         TEXT        NOT NULL DEFAULT '',
+    tx_type      TEXT        NOT NULL,
+    source_type  TEXT,
+    reference    TEXT        NOT NULL DEFAULT '',
+    qty_before   NUMERIC(18,4) NOT NULL DEFAULT 0,
+    qty_change   NUMERIC(18,4) NOT NULL DEFAULT 0,
+    qty_after    NUMERIC(18,4) NOT NULL DEFAULT 0,
+    unit         TEXT        NOT NULL DEFAULT '',
+    notes        TEXT        NOT NULL DEFAULT '',
+    archived_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS stock_ledger_tenant_idx        ON stock_ledger (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS stock_ledger_tenant_entity_idx ON stock_ledger (tenant_id, entity_id, date)`,
+  `CREATE INDEX IF NOT EXISTS stock_ledger_tenant_ref_idx    ON stock_ledger (tenant_id, reference)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (
