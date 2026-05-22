@@ -40,7 +40,15 @@ import {
   SalaryTemplate, getSalaryTemplates, createSalaryTemplate, updateSalaryTemplate, deleteSalaryTemplate,
   SalaryAllowanceCategory, getSalaryAllowanceCategories, createSalaryAllowanceCategory, updateSalaryAllowanceCategory, deleteSalaryAllowanceCategory,
   SalaryDeductionCategory, getSalaryDeductionCategories, createSalaryDeductionCategory, updateSalaryDeductionCategory, deleteSalaryDeductionCategory,
+  getActiveTenantId,
+  patchAccountInCache, removeAccountFromCache,
+  patchJEInCache, removeJEFromCache,
 } from "@/lib/store";
+import {
+  apiCreateAccount, apiUpdateAccount, apiDeleteAccount,
+  apiCreateJE, apiUpdateJE, apiDeleteJE,
+  type ApiJELine,
+} from "@/lib/record-api";
 
 /**
  * Subscribes a callback to both "storage" (cross-tab writes via setStored)
@@ -320,9 +328,36 @@ export function useAccounts() {
   const [accounts, setAccounts] = useState<Account[]>(() => getAccounts());
   const fetch = useCallback(() => setAccounts(getAccounts()), []);
   useStoreEffect(fetch);
-  const addAccount    = (d: Parameters<typeof createAccount>[0])               => { const a = createAccount(d);    fetch(); return a; };
-  const editAccount   = (id: string, u: Parameters<typeof updateAccount>[1])   => { const a = updateAccount(id, u); fetch(); return a; };
-  const removeAccount = (id: string)                                            => { deleteAccount(id);              fetch(); };
+
+  const addAccount = async (d: Parameters<typeof createAccount>[0]): Promise<Account> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    const row = await apiCreateAccount(tenantId, d);
+    patchAccountInCache(row);
+    fetch();
+    return row;
+  };
+
+  const editAccount = async (
+    id: string,
+    u: Parameters<typeof updateAccount>[1],
+  ): Promise<Account> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    const row = await apiUpdateAccount(tenantId, id, u);
+    patchAccountInCache(row);
+    fetch();
+    return row;
+  };
+
+  const removeAccount = async (id: string): Promise<void> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    await apiDeleteAccount(tenantId, id);
+    removeAccountFromCache(id);
+    fetch();
+  };
+
   return { accounts, addAccount, editAccount, removeAccount, refresh: fetch };
 }
 
@@ -390,9 +425,74 @@ export function useJournalEntries() {
   const [entries, setEntries] = useState<JournalEntry[]>(() => getJournalEntries());
   const fetch = useCallback(() => setEntries(getJournalEntries()), []);
   useStoreEffect(fetch);
-  const addEntry    = (d: Parameters<typeof createJournalEntry>[0])                => { const e = createJournalEntry(d);    fetch(); return e; };
-  const editEntry   = (id: string, u: Parameters<typeof updateJournalEntry>[1])    => { const e = updateJournalEntry(id, u); fetch(); return e; };
-  const removeEntry = (id: string)                                                  => { deleteJournalEntry(id);              fetch(); };
+
+  const addEntry = async (d: Parameters<typeof createJournalEntry>[0]): Promise<JournalEntry> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    const accts = getAccounts();
+    const lines: ApiJELine[] = (d.lines ?? []).map((l, i) => {
+      const acc = accts.find(a => a.id === l.ledgerId);
+      return {
+        id: l.id,
+        ledgerAccountId: l.ledgerId,
+        accountCode: acc?.code ?? "",
+        narration: l.narration,
+        debit: l.debit,
+        credit: l.credit,
+        staffId: l.staffId ?? null,
+        lineOrder: i,
+      };
+    });
+    const je = await apiCreateJE(tenantId, {
+      reference: d.reference,
+      description: d.description,
+      date: d.date,
+      status: d.status,
+    }, lines);
+    patchJEInCache(je);
+    fetch();
+    return je;
+  };
+
+  const editEntry = async (
+    id: string,
+    u: Parameters<typeof updateJournalEntry>[1],
+  ): Promise<JournalEntry> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    const accts = getAccounts();
+    const lines: ApiJELine[] = (u.lines ?? []).map((l, i) => {
+      const acc = accts.find(a => a.id === l.ledgerId);
+      return {
+        id: l.id,
+        ledgerAccountId: l.ledgerId,
+        accountCode: acc?.code ?? "",
+        narration: l.narration,
+        debit: l.debit,
+        credit: l.credit,
+        staffId: l.staffId ?? null,
+        lineOrder: i,
+      };
+    });
+    const je = await apiUpdateJE(tenantId, id, {
+      reference: u.reference,
+      description: u.description,
+      date: u.date,
+      status: u.status,
+    }, lines);
+    patchJEInCache(je);
+    fetch();
+    return je;
+  };
+
+  const removeEntry = async (id: string): Promise<void> => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) throw new Error("No active tenant");
+    await apiDeleteJE(tenantId, id);
+    removeJEFromCache(id);
+    fetch();
+  };
+
   return { entries, addEntry, editEntry, removeEntry, refresh: fetch };
 }
 

@@ -320,6 +320,143 @@ router.post("/:id/post", async (req, res) => {
   }
 });
 
+// UPDATE — replace lines of a DRAFT journal entry (posted entries are immutable)
+router.put("/:id", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const tenantId: string = req.body?.tenantId;
+    const je: Partial<IncomingJE> = req.body?.je ?? {};
+    const lines: IncomingLine[] = Array.isArray(req.body?.lines) ? req.body.lines : [];
+    if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+    if (lines.length < 2) {
+      return res.status(400).json({ error: "A journal entry needs at least 2 lines" });
+    }
+
+    let totalDebit = 0;
+    let totalCredit = 0;
+    for (const l of lines) {
+      if (!l.ledgerAccountId || !l.accountCode) {
+        return res.status(400).json({ error: "Every line needs ledgerAccountId and accountCode" });
+      }
+      totalDebit  += num(l.debit);
+      totalCredit += num(l.credit);
+    }
+    const isBalanced = Math.abs(totalDebit - totalCredit) < 0.0001;
+
+    await client.query("BEGIN");
+
+    const beforeRes = await client.query(
+      `SELECT * FROM journal_entries WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [req.params.id, tenantId],
+    );
+    if (beforeRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Not found" });
+    }
+    const before = beforeRes.rows[0] as Record<string, unknown>;
+    if (before.status === "posted") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Posted journal entries cannot be edited. Post a reversing entry instead.",
+      });
+    }
+
+    const updatedStatus = (je.status as string) ?? (before.status as string);
+    if (updatedStatus === "posted" && !isBalanced) {
+      await client.query("ROLLBACK");
+      return res.status(422).json({
+        error: `JE not balanced: debit=${totalDebit} credit=${totalCredit}`,
+      });
+    }
+
+    // Delete existing lines then reinsert
+    await client.query(
+      `DELETE FROM journal_entry_lines WHERE journal_entry_id = $1 AND tenant_id = $2`,
+      [req.params.id, tenantId],
+    );
+
+    const referencedAccountIds = new Set<string>();
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      referencedAccountIds.add(l.ledgerAccountId);
+      await client.query(
+        `INSERT INTO journal_entry_lines
+          (id, tenant_id, journal_entry_id, ledger_account_id, account_code,
+           party_type, party_id, staff_id, narration,
+           debit, credit, line_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          l.id ?? randomUUID(), tenantId, req.params.id, l.ledgerAccountId, l.accountCode,
+          l.partyType ?? null, l.partyId ?? null, l.staffId ?? null, l.narration ?? "",
+          num(l.debit).toString(), num(l.credit).toString(),
+          typeof l.lineOrder === "number" ? l.lineOrder : i,
+        ],
+      );
+    }
+
+    const updated = await client.query(
+      `UPDATE journal_entries
+       SET reference   = COALESCE($1, reference),
+           description = COALESCE($2, description),
+           date        = COALESCE($3, date),
+           status      = $4,
+           total_debit  = $5,
+           total_credit = $6,
+           is_balanced  = $7,
+           posted_at   = CASE WHEN $4 = 'posted' AND posted_at IS NULL THEN NOW() ELSE posted_at END,
+           posted_by   = CASE WHEN $4 = 'posted' AND posted_by IS NULL THEN $8 ELSE posted_by END,
+           updated_at  = NOW()
+       WHERE id = $9 AND tenant_id = $10
+       RETURNING *`,
+      [
+        je.reference   ?? null,
+        je.description ?? null,
+        je.date        ?? null,
+        updatedStatus,
+        totalDebit.toString(),
+        totalCredit.toString(),
+        isBalanced,
+        actorOf(req.headers as Record<string, unknown>),
+        req.params.id,
+        tenantId,
+      ],
+    );
+
+    // Lock accounts when posting
+    if (updatedStatus === "posted" && referencedAccountIds.size > 0) {
+      await client.query(
+        `UPDATE accounts SET is_locked = TRUE, locked_at = COALESCE(locked_at, NOW()), updated_at = NOW()
+         WHERE tenant_id = $1 AND id = ANY($2::text[]) AND is_locked = FALSE`,
+        [tenantId, Array.from(referencedAccountIds)],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO audit_log (id, tenant_id, actor, entity_type, entity_id, operation, before_json, after_json, request_id)
+       VALUES ($1,$2,$3,'journal_entry',$4,'update',$5,$6,$7)`,
+      [
+        randomUUID(), tenantId, actorOf(req.headers as Record<string, unknown>), req.params.id,
+        JSON.stringify(before), JSON.stringify(updated.rows[0]),
+        requestIdOf(req.headers as Record<string, unknown>),
+      ],
+    );
+
+    await client.query("COMMIT");
+
+    const persistedLines = await query<Record<string, unknown>>(
+      `SELECT * FROM journal_entry_lines WHERE journal_entry_id = $1 ORDER BY line_order`,
+      [req.params.id],
+    );
+    return res.json({ ...rowToApi(updated.rows[0]), lines: persistedLines.map(rowToApi) });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("journal-entries UPDATE error", err);
+    return res.status(httpStatusFor(err)).json({ error: (err as Error).message });
+  } finally {
+    client.release();
+  }
+});
+
 // DELETE — refuses if status='posted'; cascades to lines via FK
 router.delete("/:id", async (req, res) => {
   const client = await pool.connect();

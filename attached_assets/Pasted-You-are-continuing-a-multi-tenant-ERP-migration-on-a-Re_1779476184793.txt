@@ -1,0 +1,118 @@
+You are continuing a multi-tenant ERP migration on a Replit pnpm-monorepo
+codebase (Onesoft admin-dashboard). Read replit.md first — it documents the
+app's domain, routes, and KV-store conventions.
+
+## Project goal
+Replace the legacy JSON-array kv_store storage with per-record relational
+tables that have real foreign-key constraints, so that:
+  - "Save failed — held in memory" toasts disappear (writes are synchronous +
+    server-confirmed, no offline queue)
+  - The "Unknown Ledger" class of bug becomes structurally impossible (FK
+    ON DELETE RESTRICT)
+  - COA-wipe bugs cannot happen (no full-array PUTs that can erase data)
+  - All backfill / heal / repair code (~3,000 lines) can be deleted
+
+The user's rule: "save it once, never disappears, no offline feature, no
+checking IDs every time."
+
+## Phase plan (4 phases, ~3-4 weeks, independently shippable)
+  Phase 0 — DONE — Schema + per-record CRUD API + JE transactional endpoint
+  Phase 1 — NEXT — Wire admin-dashboard COA + Journal Entries pages to the
+             new endpoints; keep all other pages on /api/kv for now
+  Phase 2 — Customers, suppliers, staff to per-record API; reverse-cascade
+             on JE delete; delete-blocker enforcement at API layer
+  Phase 3 — Sales, invoices, purchase orders, stock to per-record API
+  Phase 4 — Delete legacy /api/kv routes + the in-memory store + backfill code
+
+## Phase 0 — what already shipped (commit d18c798)
+Database (lives in ONESOFTERP_DB env var; the api-server reads ONESOFTERP_DB,
+not Replit's local NEON_DATABASE_URL):
+  - 7 new tables alongside the existing kv_store (zero destructive changes):
+    tenants, accounts, journal_entries, journal_entry_lines, customers,
+    staff, audit_log
+  - Composite (id, tenant_id) FKs on journal_entry_lines, customers,
+    staff so cross-tenant ledger references are rejected at the DB layer
+  - is_locked + archived_at on accounts; ON DELETE RESTRICT from
+    journal_entry_lines.ledger_account_id
+
+API server (artifacts/api-server/src/):
+  - lib/records.ts — generic CRUD factory: validates tenantId, audit-logs
+    inside the same tx, supports locked-row protection (refuses identity
+    field changes on frozen accounts)
+  - routes/accounts.ts, routes/customers.ts, routes/staff.ts — uses the
+    factory
+  - routes/journal-entries.ts — bespoke transactional create that inserts
+    JE header + N lines + locks referenced accounts + writes audit in one tx
+  - Mounted at /api/accounts, /api/customers, /api/staff, /api/journal-entries
+
+Verified live: balanced JE persists; unbalanced returns 422; bogus
+ledgerAccountId returns 409 (FK); cross-tenant ledger returns 409 (composite
+FK); deleting an account a JE line references returns 409; mutating a
+locked account's code/name returns 409; non-identity fields still editable.
+
+Schema files: lib/db/src/schema/*.ts (drizzle definitions, kept in sync
+with scripts/phase0-schema.sql + phase0-schema-r2.sql for record).
+Drizzle config: lib/db/drizzle.config.ts now reads ONESOFTERP_DB first.
+Note: drizzle-kit push prompts interactively about renames — apply via the
+SQL files using a one-off node script (see scripts/db-ping.mjs pattern) if
+you need to re-apply.
+
+## Phase 1 — start here
+Goal: rewire admin-dashboard's COA (/coa) and Journal Entries (/journal)
+pages so every create/edit/post/delete hits the new REST endpoints
+synchronously, with a spinner and a hard error toast on failure (no
+silent fallback to _memRaw). Other pages keep using /api/kv.
+
+Files you'll touch:
+  - artifacts/admin-dashboard/src/lib/store.ts
+      Add a new `recordStore` module: async create/update/delete that
+      POSTs/PUTs/DELETEs to the per-record endpoints and updates _memRaw
+      from the server's RETURNING row (so _memRaw becomes a read-only
+      cache — never a write target).
+      Stop calling seedDefaultCoaAccounts on every login for tenants
+      already migrated.
+  - artifacts/admin-dashboard/src/hooks/use-data.ts
+      Add a useRecord hook variant that subscribes to the new API.
+  - artifacts/admin-dashboard/src/components/journal-entry-form.tsx (or
+      wherever JEs are created — search for `createJournalEntry`)
+      Replace the "save to _memRaw + _apiWrite to /api/kv" pattern with
+      `await recordStore.createJournalEntry({ tenantId, je, lines })`,
+      show spinner during the await, show destructive toast on rejection.
+  - Same pattern for COA account create/edit (/coa page).
+
+Migration of existing data (per-tenant, one-shot):
+  - Write a server-side migrator at artifacts/api-server/src/lib/migrate-tenant.ts
+    that reads kv keys `t:{tenantId}/admin-accounts` + `admin-journal-entries`
+    and inserts them into the new tables, with a manual dry-run mode.
+  - Run it for the two known-broken tenants first to prove the path works:
+      Awan: 2aeb5b0c-26a7-41cd-b8f5-efd21d89079a
+      AL HASSAN TRADERS: 25bd8691-0740-4dd3-a8c2-9e17bf721be0
+    Both have COA corruption — Awan only has 2 accounts left, AL HASSAN
+    has JE lines referencing deleted accounts.
+
+## Working agreements
+  - Never reintroduce offline writes or _memRaw as a write target.
+  - Every mutation must be a single API call that returns the persisted
+    row; UI updates from that response.
+  - When a write fails, show a destructive toast with the server error
+    message — do not silently retry.
+  - Keep the legacy /api/kv routes running until Phase 4. Don't delete
+    seedDefaultCoaAccounts etc. yet; just skip them for migrated tenants.
+
+## Useful refs
+  - replit.md — domain model, KV namespacing, walk-in customer, delete
+    restrictions
+  - scripts/db-ping.mjs — DB connectivity check pattern (uses
+    ONESOFTERP_DB with SSL)
+  - scripts/phase0-schema.sql + phase0-schema-r2.sql — exact DDL applied
+  - artifacts/api-server/src/lib/records.ts — generic CRUD pattern
+  - artifacts/api-server/src/routes/journal-entries.ts — transactional
+    pattern you'll reuse for sales/invoices in Phase 3
+
+## Start by
+  1. Read replit.md and the three files at
+     artifacts/api-server/src/{lib/records.ts,routes/journal-entries.ts,routes/accounts.ts}
+     so the contract is in your head.
+  2. Open store.ts and grep for `admin-accounts` and `admin-journal-entries`
+     to find every write site.
+  3. Propose a short Phase 1 task list, then implement it.

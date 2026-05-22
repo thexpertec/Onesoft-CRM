@@ -231,6 +231,7 @@ export default function JournalEntryPage() {
   const [listSearch, setListSearch] = useState(() => new URLSearchParams(rawSearch).get("q") || "");
   const [viewEntry, setViewEntry] = useState<string | null>(null);
   const [deleteJeId, setDeleteJeId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [repairReport, setRepairReport] = useState<ReturnType<typeof repairOrphanedJournalEntryLedgers> | null>(null);
 
@@ -343,14 +344,21 @@ export default function JournalEntryPage() {
     // JE on the server but the ledger missing, surfacing as "Unknown ledger".
     try { await awaitAccountsWrite(); } catch { /* error already surfaced via event */ }
     const payload = { date, reference, description, lines, status, totalDebit: totalDr, totalCredit: totalCr, isBalanced: balanced };
-    if (editingEntryId) {
-      editEntry(editingEntryId, payload);
-      toast({ title: status === "posted" ? "Entry updated & posted" : "Draft updated" });
-    } else {
-      addEntry(payload);
-      toast({ title: status === "posted" ? "Journal entry posted" : "Saved as draft" });
+    setSaving(true);
+    try {
+      if (editingEntryId) {
+        await editEntry(editingEntryId, payload);
+        toast({ title: status === "posted" ? "Entry updated & posted" : "Draft updated" });
+      } else {
+        await addEntry(payload);
+        toast({ title: status === "posted" ? "Journal entry posted" : "Saved as draft" });
+      }
+      clearAll();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Save failed", description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSaving(false);
     }
-    clearAll();
   }, [rows, date, reference, description, balanced, totalDr, totalCr, addEntry, editEntry, editingEntryId, toast, diff]);
 
   // ── Ledger lookup ─────────────────────────────────────────────────────────
@@ -906,12 +914,21 @@ export default function JournalEntryPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => {
+              disabled={saving}
+              onClick={async () => {
                 if (!deleteJeId) return;
-                removeEntry(deleteJeId);
-                if (viewEntry === deleteJeId) setViewEntry(null);
-                if (editingEntryId === deleteJeId) clearAll();
-                setDeleteJeId(null);
+                setSaving(true);
+                try {
+                  await removeEntry(deleteJeId);
+                  if (viewEntry === deleteJeId) setViewEntry(null);
+                  if (editingEntryId === deleteJeId) clearAll();
+                  setDeleteJeId(null);
+                } catch (e) {
+                  toast({ variant: "destructive", title: "Cannot delete", description: e instanceof Error ? e.message : String(e) });
+                  setDeleteJeId(null);
+                } finally {
+                  setSaving(false);
+                }
               }}
             >
               Delete

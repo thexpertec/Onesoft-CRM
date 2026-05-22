@@ -408,6 +408,7 @@ export default function ChartOfAccountsPage() {
   const [activeHead,    setActiveHead]    = useState<"All" | AccountHead>("All");
   const [search,        setSearch]        = useState("");
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
+  const [saving,        setSaving]        = useState(false);
   const [nodeCollapsed, setNodeCollapsed] = useState<Record<string, boolean>>({});
   const [headCollapsed, setHeadCollapsed] = useState<Record<string, boolean>>({});
 
@@ -514,16 +515,23 @@ export default function ChartOfAccountsPage() {
   const setEF = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
     setEditForm(f => f ? { ...f, [k]: v } : f);
 
-  const handleEditSave = useCallback(() => {
+  const handleEditSave = useCallback(async () => {
     if (!editForm || !editingId) return;
     if (!editForm.code.trim() || !editForm.name.trim()) {
       toast({ title: "Code and Name are required", variant: "destructive" }); return;
     }
     const dup = accounts.find(a => a.code.trim() === editForm.code.trim() && a.id !== editingId);
     if (dup) { toast({ title: `Code "${editForm.code}" already in use`, variant: "destructive" }); return; }
-    editAccount(editingId, editForm);
-    toast({ title: "Account updated" });
-    closeEdit();
+    setSaving(true);
+    try {
+      await editAccount(editingId, editForm);
+      toast({ title: "Account updated" });
+      closeEdit();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Save failed", description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSaving(false);
+    }
   }, [editForm, editingId, accounts, editAccount, toast]);
 
   // ── Modal helpers ─────────────────────────────────────────────────────────────
@@ -612,7 +620,7 @@ export default function ChartOfAccountsPage() {
       ledgerEntries: m.ledgerEntries.map(e => e._key === key ? { ...e, [field]: value } : e),
     } : m);
 
-  const handleModalSave = useCallback(() => {
+  const handleModalSave = useCallback(async () => {
     if (!modal) return;
     const { parentId, head, accountType } = modal;
 
@@ -627,14 +635,22 @@ export default function ChartOfAccountsPage() {
       if (dupCode) { toast({ title: `Code "${dupCode}" already in use`, variant: "destructive" }); return; }
       const dupWithin = codes.find((c, i) => codes.indexOf(c) !== i);
       if (dupWithin) { toast({ title: `Duplicate code "${dupWithin}" within entries`, variant: "destructive" }); return; }
-      entries.forEach(e => {
-        addAccount({
-          code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
-          description: "", parentId, accountType: "Group", openingBalance: 0, paymentType: null, isActive: true,
-        });
-      });
-      toast({ title: `${entries.length} group${entries.length > 1 ? "s" : ""} created` });
-      if (parentId) setNodeCollapsed(p => ({ ...p, [parentId]: false }));
+      setSaving(true);
+      try {
+        for (const e of entries) {
+          await addAccount({
+            code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
+            description: "", parentId, accountType: "Group", openingBalance: 0, paymentType: null, isActive: true,
+          });
+        }
+        toast({ title: `${entries.length} group${entries.length > 1 ? "s" : ""} created` });
+        if (parentId) setNodeCollapsed(p => ({ ...p, [parentId]: false }));
+        closeModal();
+      } catch (e) {
+        toast({ variant: "destructive", title: "Save failed", description: e instanceof Error ? e.message : String(e) });
+      } finally {
+        setSaving(false);
+      }
     } else {
       // Ledger – can be multiple entries
       const entries = modal.ledgerEntries;
@@ -657,19 +673,26 @@ export default function ChartOfAccountsPage() {
       const dupNameWithin = names.find((n, i) => names.indexOf(n) !== i);
       if (dupNameWithin) { toast({ title: `Duplicate ledger name within entries`, variant: "destructive" }); return; }
 
-      entries.forEach(e => {
-        addAccount({
-          code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
-          description: "", parentId, accountType: "Ledger",
-          openingBalance: parseFloat(e.openingBalance) || 0,
-          paymentType: e.paymentType ?? "Debit",
-          isActive: true,
-        });
-      });
-      toast({ title: `${entries.length} ledger${entries.length > 1 ? "s" : ""} created` });
-      if (parentId) setNodeCollapsed(p => ({ ...p, [parentId]: false }));
+      setSaving(true);
+      try {
+        for (const e of entries) {
+          await addAccount({
+            code: e.code.trim(), name: e.name.trim(), head, subType: e.subType,
+            description: "", parentId, accountType: "Ledger",
+            openingBalance: parseFloat(e.openingBalance) || 0,
+            paymentType: e.paymentType ?? "Debit",
+            isActive: true,
+          });
+        }
+        toast({ title: `${entries.length} ledger${entries.length > 1 ? "s" : ""} created` });
+        if (parentId) setNodeCollapsed(p => ({ ...p, [parentId]: false }));
+        closeModal();
+      } catch (e) {
+        toast({ variant: "destructive", title: "Save failed", description: e instanceof Error ? e.message : String(e) });
+      } finally {
+        setSaving(false);
+      }
     }
-    closeModal();
   }, [modal, accounts, addAccount, toast]);
 
   // ── Import handlers ───────────────────────────────────────────────────────────
@@ -685,29 +708,37 @@ export default function ChartOfAccountsPage() {
     reader.readAsText(file);
   };
 
-  const handleConfirmImport = useCallback(() => {
+  const handleConfirmImport = useCallback(async () => {
     const validRows = importRows.filter(r => r.errors.length === 0);
     if (validRows.length === 0) return;
     const sorted = topoSortImportRows(validRows);
     const codeToId = new Map(accounts.map(a => [a.code, a.id]));
-    sorted.forEach(r => {
-      const parentId = r.parentCode ? (codeToId.get(r.parentCode) ?? null) : null;
-      const created = addAccount({
-        code: r.code, name: r.name,
-        head: r.head as AccountHead,
-        subType: r.subType,
-        description: r.description,
-        parentId,
-        accountType: r.type as AccountKind,
-        openingBalance: r.type === "Ledger" ? (parseFloat(r.openingBalance) || 0) : 0,
-        isActive: true,
-      });
-      codeToId.set(r.code, created.id);
-    });
-    toast({ title: `${sorted.length} account${sorted.length !== 1 ? "s" : ""} imported successfully` });
-    setShowImport(false);
-    setImportRows([]);
-    setImportFileName("");
+    setSaving(true);
+    try {
+      for (const r of sorted) {
+        const parentId = r.parentCode ? (codeToId.get(r.parentCode) ?? null) : null;
+        const created = await addAccount({
+          code: r.code, name: r.name,
+          head: r.head as AccountHead,
+          subType: r.subType,
+          description: r.description,
+          parentId,
+          accountType: r.type as AccountKind,
+          openingBalance: r.type === "Ledger" ? (parseFloat(r.openingBalance) || 0) : 0,
+          paymentType: r.type === "Ledger" ? "Debit" : null,
+          isActive: true,
+        });
+        codeToId.set(r.code, created.id);
+      }
+      toast({ title: `${sorted.length} account${sorted.length !== 1 ? "s" : ""} imported successfully` });
+      setShowImport(false);
+      setImportRows([]);
+      setImportFileName("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "Import failed", description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSaving(false);
+    }
   }, [importRows, accounts, addAccount, toast]);
 
   // ── Delete ────────────────────────────────────────────────────────────────────
@@ -876,7 +907,7 @@ export default function ChartOfAccountsPage() {
         {/* Status */}
         <div className="w-20 flex-shrink-0 flex justify-center">
           <button
-            onClick={e => { e.stopPropagation(); editAccount(acc.id, { isActive: !acc.isActive }); toast({ title: acc.isActive ? "Deactivated" : "Activated" }); }}
+            onClick={async e => { e.stopPropagation(); try { await editAccount(acc.id, { isActive: !acc.isActive }); toast({ title: acc.isActive ? "Deactivated" : "Activated" }); } catch (err) { toast({ variant: "destructive", title: "Update failed", description: err instanceof Error ? err.message : String(err) }); } }}
             className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
               acc.isActive
                 ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 hover:bg-emerald-200"
@@ -1180,7 +1211,7 @@ export default function ChartOfAccountsPage() {
                         })()}
                       </div>
                       <div className="w-20 flex-shrink-0 flex justify-center">
-                        <button onClick={e => { e.stopPropagation(); editAccount(acc.id, { isActive: !acc.isActive }); toast({ title: acc.isActive ? "Deactivated" : "Activated" }); }}
+                        <button onClick={async e => { e.stopPropagation(); try { await editAccount(acc.id, { isActive: !acc.isActive }); toast({ title: acc.isActive ? "Deactivated" : "Activated" }); } catch (err) { toast({ variant: "destructive", title: "Update failed", description: err instanceof Error ? err.message : String(err) }); } }}
                           className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${acc.isActive ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600" : "bg-gray-100 dark:bg-zinc-800 text-gray-400"}`}>
                           {acc.isActive ? <CheckCircle size={10} /> : <XCircle size={10} />}
                           {acc.isActive ? "Active" : "Off"}
@@ -1399,7 +1430,7 @@ export default function ChartOfAccountsPage() {
                 const opts: { id: string; label: string; depth: number }[] = [];
                 function walkOpts(pid: string | null, depth: number) {
                   accounts
-                    .filter(a => a.head === modal.head && (a.parentId ?? null) === pid && (a.accountType ?? "Group") !== "Ledger")
+                    .filter(a => a.head === modal!.head && (a.parentId ?? null) === pid && (a.accountType ?? "Group") !== "Ledger")
                     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
                     .forEach(a => {
                       opts.push({ id: a.id, label: `${a.code} | ${a.name}`, depth });
@@ -1815,15 +1846,19 @@ export default function ChartOfAccountsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={!!deleteBlockReason}
-              onClick={() => {
+              disabled={!!deleteBlockReason || saving}
+              onClick={async () => {
                 if (!deleteId) return;
+                setSaving(true);
                 try {
-                  removeAccount(deleteId);
+                  await removeAccount(deleteId);
                   toast({ title: willSoftDelete ? "Account deactivated" : "Account deleted" });
                   setDeleteId(null);
                 } catch (e: unknown) {
-                  toast({ title: "Cannot delete account", description: (e as Error).message, variant: "destructive" });
+                  toast({ title: "Cannot delete", description: (e as Error).message, variant: "destructive" });
+                  setDeleteId(null);
+                } finally {
+                  setSaving(false);
                 }
               }}
               className={`text-white disabled:opacity-50 disabled:cursor-not-allowed ${willSoftDelete ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}

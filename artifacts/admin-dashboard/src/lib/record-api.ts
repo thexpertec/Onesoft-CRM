@@ -1,0 +1,174 @@
+/**
+ * Async REST client for the per-record relational endpoints (Phase 1+).
+ *
+ * Wraps /api/accounts and /api/journal-entries.  Every function:
+ *   - Throws on any non-2xx response (caller shows destructive toast)
+ *   - Returns the server's persisted row — the UI updates from that response,
+ *     never from an optimistic local mutation
+ */
+
+import type { Account, JournalEntry, JournalEntryLine } from "@/lib/store";
+
+const BASE = "/api";
+const TIMEOUT_MS = 15_000;
+const KV_API_KEY = (import.meta.env.VITE_KV_API_SECRET as string) ?? "";
+
+async function rFetch(url: string, opts: RequestInit): Promise<unknown> {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": KV_API_KEY,
+      ...(opts.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const j = await res.json();
+      detail = (j?.error ?? j?.message ?? "") as string;
+    } catch { /* ignore */ }
+    throw new Error(detail || `Server error (HTTP ${res.status})`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+
+export async function apiCreateAccount(
+  tenantId: string,
+  data: Omit<Account, "id" | "createdAt" | "updatedAt">,
+): Promise<Account> {
+  return rFetch(`${BASE}/accounts`, {
+    method: "POST",
+    body: JSON.stringify({ tenantId, ...data }),
+  }) as Promise<Account>;
+}
+
+export async function apiUpdateAccount(
+  tenantId: string,
+  id: string,
+  data: Partial<Omit<Account, "id" | "createdAt">>,
+): Promise<Account> {
+  return rFetch(`${BASE}/accounts/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ tenantId, ...data }),
+  }) as Promise<Account>;
+}
+
+/** Soft-delete (archive) an account via the REST API.
+ *  If the server returns 409 (FK violation) the caller receives the thrown error. */
+export async function apiDeleteAccount(
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  await rFetch(
+    `${BASE}/accounts/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ─── Journal Entries ──────────────────────────────────────────────────────────
+
+export interface ApiJELine {
+  id?: string;
+  ledgerAccountId: string;
+  accountCode: string;
+  narration?: string;
+  debit?: number | string;
+  credit?: number | string;
+  staffId?: string | null;
+  partyType?: string | null;
+  partyId?: string | null;
+  lineOrder?: number;
+}
+
+export interface ApiJEPayload {
+  id?: string;
+  reference: string;
+  description?: string;
+  date: string;
+  status?: "draft" | "posted";
+  reversesJeId?: string | null;
+}
+
+interface ApiJEResponse extends Record<string, unknown> {
+  id: string;
+  reference: string;
+  description: string;
+  date: string;
+  status: "draft" | "posted";
+  totalDebit: string;
+  totalCredit: string;
+  isBalanced: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lines: Array<Record<string, unknown>>;
+}
+
+/**
+ * Map the API's camelCase JE response (server already ran rowToApi) back to
+ * the frontend JournalEntry shape:
+ *   - `ledgerAccountId` → `ledgerId`
+ *   - numeric strings for debit/credit → numbers
+ */
+export function mapApiJEToFrontend(raw: ApiJEResponse): JournalEntry {
+  const lines: JournalEntryLine[] = (raw.lines ?? []).map((l) => ({
+    id: l.id as string,
+    ledgerId: (l.ledgerAccountId as string) ?? "",
+    narration: (l.narration as string) ?? "",
+    debit: parseFloat((l.debit as string) ?? "0") || 0,
+    credit: parseFloat((l.credit as string) ?? "0") || 0,
+    staffId: (l.staffId as string | undefined) ?? undefined,
+  }));
+  return {
+    id: raw.id,
+    reference: raw.reference,
+    description: raw.description ?? "",
+    date: raw.date,
+    status: raw.status,
+    lines,
+    totalDebit: parseFloat((raw.totalDebit as string) ?? "0") || 0,
+    totalCredit: parseFloat((raw.totalCredit as string) ?? "0") || 0,
+    isBalanced: raw.isBalanced,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+export async function apiCreateJE(
+  tenantId: string,
+  je: ApiJEPayload,
+  lines: ApiJELine[],
+): Promise<JournalEntry> {
+  const raw = await rFetch(`${BASE}/journal-entries`, {
+    method: "POST",
+    body: JSON.stringify({ tenantId, je, lines }),
+  }) as ApiJEResponse;
+  return mapApiJEToFrontend(raw);
+}
+
+export async function apiUpdateJE(
+  tenantId: string,
+  id: string,
+  je: Partial<ApiJEPayload>,
+  lines: ApiJELine[],
+): Promise<JournalEntry> {
+  const raw = await rFetch(`${BASE}/journal-entries/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ tenantId, je, lines }),
+  }) as ApiJEResponse;
+  return mapApiJEToFrontend(raw);
+}
+
+export async function apiDeleteJE(
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  await rFetch(
+    `${BASE}/journal-entries/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`,
+    { method: "DELETE" },
+  );
+}

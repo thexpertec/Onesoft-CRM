@@ -9231,6 +9231,26 @@ function _safeDeactivateLedgerAccount(id: string): void {
   }
 }
 
+// ─── COA cache-patch helpers (used by useAccounts after REST API writes) ──────
+// These update _memRaw WITHOUT firing a KV write, keeping the cache in sync
+// with the authoritative relational DB response from the API.
+
+/** Upsert an account returned by the REST API into the in-memory cache. */
+export function patchAccountInCache(account: Account): void {
+  const sk = tenantKey(COA_KEY);
+  const current = getAccounts();
+  const exists = current.some(a => a.id === account.id);
+  _lsCache(sk, exists
+    ? current.map(a => a.id === account.id ? account : a)
+    : [...current, account]);
+}
+
+/** Remove an account from the in-memory cache (soft or hard delete). */
+export function removeAccountFromCache(id: string): void {
+  const sk = tenantKey(COA_KEY);
+  _lsCache(sk, getAccounts().filter(a => a.id !== id));
+}
+
 // ─── Journal Entry ────────────────────────────────────────────────────────────
 
 export type JournalEntryLine = {
@@ -9484,6 +9504,26 @@ export function backfillJournalEntryNarrationTags(): { stamped: number; total: n
   });
   if (touched) _saveJournalEntries(next);
   return { stamped, total: entries.length };
+}
+
+// ─── JE cache-patch helpers (used by useJournalEntries after REST API writes) ─
+// These update _memRaw WITHOUT firing a KV write, keeping the cache in sync
+// with the authoritative relational DB response from the API.
+
+/** Upsert a journal entry returned by the REST API into the in-memory cache. */
+export function patchJEInCache(je: JournalEntry): void {
+  const sk = tenantKey(JE_KEY);
+  const current = getJournalEntries();
+  const exists = current.some(e => e.id === je.id);
+  _lsCache(sk, exists
+    ? current.map(e => e.id === je.id ? je : e)
+    : [je, ...current]);
+}
+
+/** Remove a journal entry from the in-memory cache. */
+export function removeJEFromCache(id: string): void {
+  const sk = tenantKey(JE_KEY);
+  _lsCache(sk, getJournalEntries().filter(e => e.id !== id));
 }
 
 export function deleteJournalEntry(id: string): void {
