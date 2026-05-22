@@ -120,7 +120,7 @@ export default function CustomerEditPage() {
     );
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
 
     const billingDetails  = isAddressEmpty(billing)  ? undefined : billing;
@@ -129,7 +129,7 @@ export default function CustomerEditPage() {
       : (isAddressEmpty(shipping) ? billingDetails : shipping);
 
     try {
-      editCustomer(customer.id, {
+      await editCustomer(customer.id, {
         name:            form.name.trim(),
         company:         form.company.trim(),
         email:           form.email.trim(),

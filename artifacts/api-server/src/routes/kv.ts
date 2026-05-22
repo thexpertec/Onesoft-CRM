@@ -33,6 +33,14 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   // Batch 2 — CRM
   "admin-leads":              "leads",
   "admin-req-docs":           "requirement_docs",
+  // Batch 3 — CRM customers (and suppliers — they are customer rows with
+  // customerRole='Supplier', not a separate table). Adding this entry makes
+  // the bridge ignore `kv_store` for admin-customers, so every customer
+  // writer in the FE MUST go through customersApi (either the useCustomers
+  // hook, or the dual-write fire-and-forget inside createCustomer/
+  // updateCustomer/deleteCustomer in store.ts, including the m10 walk-in
+  // seed and the COA contact-ledger heal at line ~8097).
+  "admin-customers":          "customers",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -63,7 +71,8 @@ router.use((req, res, next) => {
   if (!KV_API_SECRET) { next(); return; }
   const provided = req.headers["x-api-key"];
   if (provided !== KV_API_SECRET) {
-    return res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
   next();
 });

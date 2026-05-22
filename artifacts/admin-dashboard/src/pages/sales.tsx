@@ -3370,15 +3370,19 @@ export default function SalesPage() {
           onSetStatus={setStatus}
           onComplete={handleComplete}
           onAcceptOrder={handleAcceptOrder}
-          onAddCustomer={(name, phone, city, company) => {
-            addCustomer({
-              name, phone, email: "",
-              company: company || "", industry: "", city: city || "", status: "Active",
-              source: "direct", customerType: "POS Customer",
-              customerSince: new Date().toISOString().slice(0, 10),
-              totalValue: "0", currency: "GBP", notes: "", tags: [],
-            });
-            toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
+          onAddCustomer={async (name, phone, city, company) => {
+            try {
+              await addCustomer({
+                name, phone, email: "",
+                company: company || "", industry: "", city: city || "", status: "Active",
+                source: "direct", customerType: "POS Customer",
+                customerSince: new Date().toISOString().slice(0, 10),
+                totalValue: "0", currency: "GBP", notes: "", tags: [],
+              });
+              toast({ title: "Customer added", description: `"${name}"${company ? ` (${company})` : ""} added to Customers.` });
+            } catch (err) {
+              toast({ title: "Could not add", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+            }
           }}
           tenantId={currentTenantId}
         />

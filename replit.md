@@ -129,7 +129,7 @@ The admin-dashboard is moving from KV-array writes (`/api/kv/{ns}/{key}` writing
 | 1 | Shipped | brands, units, attributes, cities, areas, departments, designations, product-categories |
 | 2 | Shipped | leads, requirement-docs |
 | Read-back bridge | Shipped (foundational fix) | See section below — was silently regressing Batches 1+2 across page refreshes. |
-| 3 (planned) | Pending | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Larger session than initially scoped — see "Batch 3 scope warning" below. |
+| 3 | Shipped | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Used dual-write + hook-side suppression flag — see "Batch 3 — customers" below. |
 | 4 (planned) | Pending | stock-items + sales + invoices + purchase-orders + returns + stock-ledger — the transactional cluster. Stock-items can't be migrated alone because it's called from PO-receive and sale-fulfillment flows still on KV. |
 
 **Pattern** (consistent across batches):
@@ -144,21 +144,23 @@ Legacy `createLead`/`updateLead`/`deleteLead`/`createDoc`/`updateDoc`/`deleteDoc
 
 **Read-back bridge** (`artifacts/api-server/src/routes/kv.ts`): the foundational fix that makes Batches 1+2 actually durable across page refreshes. The frontend's `syncAllFromServer` only calls `kvGetAll` (which reads `kv_store`), and `_lsCache` only writes to `_memRaw` (an in-memory `Map`, lost on reload — NOT localStorage). Without the bridge, every record written through a migrated REST endpoint vanished on the next refresh because the relational table was never read back. The bridge: a `MIGRATED_KEY_TO_TABLE` registry in `kv.ts` (10 entries today, one per migrated entity) — `GET /api/kv/:ns/:key` and `GET /api/kv/:ns` short-circuit for tenant namespaces, returning rows synthesized from the relational table (active rows only, `rowToApi`-ified) instead of reading `kv_store`. The frontend is unchanged. Add a new entry per batch as it lands. The bridge is removable once `kv.ts` is fully retired. **Critical invariant**: once a key is in the registry, EVERY writer for that entity must go through the per-record REST endpoint — any remaining KV writes for that key become invisible (the bridge ignores `kv_store` for migrated keys). This invariant is what makes Batch 3 (customers) more involved than it first appears.
 
-### Batch 3 scope warning — customers has many internal callers
+### Batch 3 — customers (shipped)
 
-Adding `admin-customers` to the read-back bridge is an all-or-nothing cutover because of the invariant above. The customer entity is written from many places besides the `useCustomers` hook in `use-data.ts`:
+Rather than make `createCustomer`/`updateCustomer`/`deleteCustomer` async — which would have rippled through ~16 call sites including transactional flows on the unmigrated stock/sales path (PO-receive, sale-JE write-back, findSubLedgerForParty, ensureCustomerAdvanceLedger, m14 advance clears) — Batch 3 uses a **dual-write + hook suppression** pattern that keeps the legacy CRUD synchronous while still routing every customer mutation through the relational `customers` table.
 
-| Caller | Location | Risk if left on KV |
-|---|---|---|
-| Walk-in seed | `seedDefaultCoaAccounts()` runs on every login | Walk-in customer vanishes from UI after every refresh |
-| `convertLeadToCustomer()` | `store.ts:1808` | Newly-converted customers vanish on refresh |
-| Ledger-link backfills | `store.ts:940` (`createSubsidiaryLedger` → `updateCustomer`), `store.ts:4345, 9861, 10175` (heal/backfill loops) | Ledger linkage silently lost on refresh |
-| Advance-ledger clears | `store.ts:7848, 7880` | Stale `advanceLedgerAccountId` on customer row |
-| Page direct-calls | `pages/sales.tsx:3374`, `pages/dashboard.tsx:550` (quick-add) | Quick-added customers vanish on refresh |
+**Mechanics** (`artifacts/admin-dashboard/src/lib/store.ts`):
+- `_persistCustomerRest(op, customer)` — fire-and-forget helper that POSTs/PUTs/DELETEs to `customersApi`, tolerates HTTP 409 on idempotent re-seed (m10 walk-in on every login), logs other failures non-fatally. Called by `createCustomer`, `updateCustomer`, `deleteCustomer`, the m10 walk-in seed, and the m11/COA contact-ledger heal loop.
+- `_suppressCustomerRestDualWrite` — module-scoped flag exposed via `_runWithSuppressedCustomerRest(fn)`. Set synchronously around the legacy CRUD call from inside the React hook so the hook can own the awaited REST roundtrip and patch the cache with the server's persisted row. Because the legacy CRUD is fully synchronous, the flag is always cleared before any other code can observe it.
 
-All of these must move through the REST path simultaneously with the hook cutover. The cleanest approach is making `createCustomer`/`updateCustomer`/`deleteCustomer` themselves `async` and awaiting at every call site (~10 internal + 6 page-level). The COA ledger creation and opening-balance JE post side effects stay where they are — they already go through the migrated REST routes for accounts/JEs.
+**Hook** (`useCustomers` in `use-data.ts`): now returns Promises from `addCustomer`/`editCustomer`/`removeCustomer`. Each handler runs the legacy sync CRUD under suppression (for COA ledger, OB-JE, activity log, `_memRaw`, blocker preflight), then awaits the per-record REST call, then `patchCustomerInCache(tid, row)` / `removeCustomerFromCache(tid, id)`. 404 on delete is tolerated (already gone).
 
-Recommend Batch 3 be planned as its own session with a clean session_plan that audits every caller before any code is changed.
+**Internal callers left untouched** — they keep calling the sync `createCustomer`/`updateCustomer`/`deleteCustomer`, and the built-in fire-and-forget dual-write inside those functions automatically persists every mutation through to the `customers` table. This includes the walk-in seed (m10), COA contact-ledger heal (~8097), `convertLeadToCustomer`, the createSubsidiaryLedger / sale-JE / PO-receive / findSubLedgerForParty backfills, m14 advance-ledger clears, and `ensureCustomerAdvanceLedger`. Verified by grep that no other write path exists.
+
+**Page callsites** updated to `await`: `customers.tsx` (commitCell, commitNewRow, handleDelete, handleImportCustomers — import loop changed `forEach` → `for…of` to await sequentially), `customer-new.tsx`, `customer-edit.tsx`, `supplier-new.tsx`, `dashboard.tsx` quick-add, `sales.tsx` POS onAddCustomer. Every handler wraps in try/catch and surfaces failures via destructive toast.
+
+**Bridge** (`artifacts/api-server/src/routes/kv.ts`): `"admin-customers": "customers"` added to `MIGRATED_KEY_TO_TABLE` — the cutover invariant is satisfied because every writer (hook OR legacy sync) now hits the REST endpoint.
+
+**Cache helpers** (`store.ts`): `patchCustomerInCache(tid, c)` / `removeCustomerFromCache(tid, id)` exported alongside the existing Batch 1+2 cache helpers, all built on `_patchRecordInCache` / `_removeRecordFromCache` which already no-op on tenant-switch race.
 
 ### Sale-return visibility on the sales list
 

@@ -11,7 +11,7 @@ import type {
   Account, JournalEntry, JournalEntryLine,
   Brand, Unit, Attribute, City, Area,
   Department, Designation, ProductCategory,
-  Lead, RequirementDoc,
+  Lead, RequirementDoc, Customer,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -225,8 +225,17 @@ export const designationsApi       = makeRecordApi<Designation>("designations");
 export const productCategoriesApi  = makeRecordApi<ProductCategory>("product-categories");
 
 // ─── CRM REST clients (Batch 2) ───────────────────────────────────────────────
-// Customers intentionally NOT migrated here — `createCustomer`/`updateCustomer`/
-// `deleteCustomer` orchestrate COA ledger creation, opening-balance JE writes,
-// and safe-deactivation logic that needs its own dedicated cutover session.
 export const leadsApi              = makeRecordApi<Lead>("leads");
 export const requirementDocsApi    = makeRecordApi<RequirementDoc>("requirement-docs");
+
+// ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
+// `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired
+// dual-write style from the legacy sync `createCustomer`/`updateCustomer`/
+// `deleteCustomer` in `store.ts` so that internal callers (m10 walk-in seed,
+// PO-receive supplier write-back, sale-JE write-back, m14 advance clear, COA
+// contact heal, convertLeadToCustomer, ensureCustomerAdvanceLedger) all
+// persist to the relational `customers` table. Without the legacy dual-write,
+// any customer mutation issued outside the React hook would vanish on refresh
+// (the kv.ts read-back bridge ignores `kv_store` once `admin-customers` is in
+// the MIGRATED_KEY_TO_TABLE registry).
+export const customersApi          = makeRecordApi<Customer>("customers");

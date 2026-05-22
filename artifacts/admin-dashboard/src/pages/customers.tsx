@@ -310,12 +310,16 @@ export default function CustomersPage() {
   const existingPhones = useMemo(() => new Set(customers.map(c => c.phone?.replace(/\D/g, "")).filter(p => p && p.length >= 7)), [customers]);
 
   // ── Commit inline buyer row ───────────────────────────────────────────────────
-  const commitCell = useCallback((id: string, field: EditableField, value: string) => {
+  const commitCell = useCallback(async (id: string, field: EditableField, value: string) => {
     const c = customers.find(x => x.id === id);
     if (!c || (c as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
-    editCustomer(id, { [field]: value } as Partial<Customer>);
-    setActiveCell(null);
-    toast({ title: "Saved" });
+    try {
+      await editCustomer(id, { [field]: value } as Partial<Customer>);
+      setActiveCell(null);
+      toast({ title: "Saved" });
+    } catch (err) {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
   }, [customers, editCustomer, toast]);
 
   const activeCols = activeTab === "Suppliers" ? SUPPLIER_COLS : BUYER_COLS;
@@ -350,7 +354,7 @@ export default function CustomersPage() {
     setNewRowActive(nc);
   };
 
-  const commitNewRow = () => {
+  const commitNewRow = async () => {
     if (!newRow?.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); setNewRowActive(0); return; }
     const emailLower = newRow.email?.toLowerCase();
     const normPhone = newRow.phone?.replace(/\D/g, "");
@@ -360,26 +364,30 @@ export default function CustomersPage() {
     if (normPhone && normPhone.length >= 7 && existingPhones.has(normPhone)) {
       toast({ title: "Duplicate", description: `Phone "${newRow.phone}" already exists.`, variant: "destructive" }); return;
     }
-    addCustomer({
-      name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
-      industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
-      billingAddress: newRow.billingAddress || undefined,
-      shippingAddress: newRow.shippingAddress || newRow.billingAddress || undefined,
-      status: newRow.status as CustomerStatus,
-      customerType: (newRow.customerType as "POS Customer" | "Regular Customer") || "Regular Customer",
-      customerRole: "Buyer",
-      customerSince: newRow.customerSince, totalValue: newRow.totalValue, notes: newRow.notes,
-      currency: "GBP", tags: [], source: "direct",
-    });
-    toast({ title: "Customer added", description: `${newRow.name} added.` });
-    setNewRow(null); setNewRowActive(null);
+    try {
+      await addCustomer({
+        name: newRow.name, company: newRow.company, email: newRow.email, phone: newRow.phone,
+        industry: newRow.industry, city: newRow.city, area: newRow.area || undefined,
+        billingAddress: newRow.billingAddress || undefined,
+        shippingAddress: newRow.shippingAddress || newRow.billingAddress || undefined,
+        status: newRow.status as CustomerStatus,
+        customerType: (newRow.customerType as "POS Customer" | "Regular Customer") || "Regular Customer",
+        customerRole: "Buyer",
+        customerSince: newRow.customerSince, totalValue: newRow.totalValue, notes: newRow.notes,
+        currency: "GBP", tags: [], source: "direct",
+      });
+      toast({ title: "Customer added", description: `${newRow.name} added.` });
+      setNewRow(null); setNewRowActive(null);
+    } catch (err) {
+      toast({ title: "Could not add", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
     const c = customers.find(x => x.id === deleteId);
     try {
-      removeCustomer(deleteId);
+      await removeCustomer(deleteId);
     } catch (err) {
       toast({ title: "Cannot delete", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
       setDeleteId(null);
@@ -390,16 +398,16 @@ export default function CustomersPage() {
     setDeleteId(null);
   };
 
-  const handleImportCustomers = useCallback((rows: CustomerCsvRow[]) => {
+  const handleImportCustomers = useCallback(async (rows: CustomerCsvRow[]) => {
     let count = 0; let skipped = 0;
     const snapEmails = new Set(existingEmails);
     const snapPhones = new Set(existingPhones);
-    rows.forEach(r => {
+    for (const r of rows) {
       try {
         const emailLower = r.email?.toLowerCase();
         const normPhone = r.phone?.replace(/\D/g, "");
-        if ((emailLower && snapEmails.has(emailLower)) || (normPhone && normPhone.length >= 7 && snapPhones.has(normPhone))) { skipped++; return; }
-        addCustomer({
+        if ((emailLower && snapEmails.has(emailLower)) || (normPhone && normPhone.length >= 7 && snapPhones.has(normPhone))) { skipped++; continue; }
+        await addCustomer({
           name: r.name.trim(), company: r.company.trim(), email: r.email.trim(), phone: r.phone.trim(),
           industry: r.industry.trim(), city: r.city.trim(),
           status: (CUSTOMER_STATUSES.includes(r.status as CustomerStatus) ? r.status : "Active") as CustomerStatus,
@@ -412,7 +420,7 @@ export default function CustomersPage() {
         if (normPhone && normPhone.length >= 7) snapPhones.add(normPhone);
         count++;
       } catch { /* skip bad rows */ }
-    });
+    }
     const desc = skipped > 0 ? `${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped.` : "Successfully added.";
     toast({ title: `${count} customer${count !== 1 ? "s" : ""} imported`, description: desc });
     refresh?.();

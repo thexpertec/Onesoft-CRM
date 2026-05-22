@@ -56,7 +56,7 @@ export default function CustomerNewPage() {
   const [shipping, setShipping] = useState<Address>({ ...EMPTY_ADDRESS });
   const [sameAddr, setSameAddr] = useState(true);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
     const emailLower = form.email?.toLowerCase();
     const normPhone  = form.phone?.replace(/\D/g, "");
@@ -73,7 +73,7 @@ export default function CustomerNewPage() {
       : (isAddressEmpty(shipping) ? billingDetails : shipping);
 
     try {
-      addCustomer({
+      await addCustomer({
         name: form.name.trim(), company: form.company.trim(),
         email: form.email.trim(), phone: form.phone.trim(),
         industry: form.industry.trim(), city: form.city.trim(),

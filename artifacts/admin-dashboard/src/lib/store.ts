@@ -1,4 +1,5 @@
 import { kvPut, kvGetAll, kvGet, kvDelete, kvDeleteNamespace } from "./api";
+import { customersApi } from "./record-api";
 
 export type LeadStatus = "New" | "Contacted" | "Meeting Scheduled" | "Demo Completed" | "Qualified" | "Proposal Sent" | "Negotiation" | "Won" | "Lost";
 
@@ -73,6 +74,93 @@ clearDemoData();
 
 // ─── Multi-tenant storage namespace ───────────────────────────────────────────
 let _activeTenantId: string | null = null;
+
+/**
+ * Fire-and-forget REST persistence helper for the `customers` per-record table.
+ * Used by the legacy sync `createCustomer`/`updateCustomer`/`deleteCustomer`
+ * AND by internal callers (m10 walk-in seed, COA contact heal, m14 advance
+ * clear, PO-receive supplier write-back, sale-JE customer write-back,
+ * findSubLedgerForParty write-back, convertLeadToCustomer,
+ * ensureCustomerAdvanceLedger) that all must dual-write through to the
+ * relational `customers` table — otherwise the kv.ts read-back bridge (which
+ * ignores `kv_store` for migrated keys) would never see those rows on refresh.
+ *
+ * The active tenantId is captured at call time; if it's null (superadmin
+ * context) we skip. The REST write itself is tenant-scoped on the server so
+ * it can never bleed across tenants even if `_activeTenantId` flips mid-flight.
+ * 409 on CREATE is tolerated (idempotent re-seed paths).
+ *
+ * `_suppressCustomerRestDualWrite` is the hook-side opt-out: when the
+ * `useCustomers` React hook calls the legacy `createCustomer`/`updateCustomer`/
+ * `deleteCustomer` for their COA-ledger + OB-JE + activity-log side effects,
+ * it sets this flag synchronously around the call so the legacy fire-and-forget
+ * REST write is suppressed. The hook then issues its own awaited REST call,
+ * preventing two concurrent POSTs for the same id from racing into a 409.
+ * JS is single-threaded and the legacy CRUD is fully synchronous, so the flag
+ * is always reset before any other code can observe it.
+ */
+let _suppressCustomerRestDualWrite = false;
+
+export function _runWithSuppressedCustomerRest<T>(fn: () => T): T {
+  _suppressCustomerRestDualWrite = true;
+  try { return fn(); }
+  finally { _suppressCustomerRestDualWrite = false; }
+}
+
+/**
+ * Convert `undefined` field-clears into explicit `null` so they survive
+ * JSON.stringify (which drops undefined keys) and reach the backend as
+ * actual SQL NULLs. This mirrors `normalizeLeadUpdates` from Batch 2 — the
+ * frontend convention is "key present in patch" = "set this column, possibly
+ * to null", so the wire format must preserve that intent.
+ *
+ * Returns the normalized object plus a count of defined writable keys
+ * (excluding `id`) — the caller short-circuits when that count is zero, so
+ * a no-op call (or one that contained only stripped-out undefineds) doesn't
+ * fire a guaranteed-400 request at the backend.
+ */
+function _normalizeCustomerUpdates(
+  patch: Record<string, unknown>,
+): { body: Record<string, unknown>; writableKeyCount: number } {
+  const body: Record<string, unknown> = {};
+  let writableKeyCount = 0;
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === "id") { body[k] = v; continue; }
+    body[k] = v === undefined ? null : v;
+    writableKeyCount++;
+  }
+  return { body, writableKeyCount };
+}
+
+function _persistCustomerRest(
+  op: "create" | "update" | "delete",
+  customer: { id: string } & Record<string, unknown>,
+): void {
+  if (_suppressCustomerRestDualWrite) return;
+  const tid = _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    // CREATE always has a full row from the legacy createCustomer path —
+    // no normalization needed (every field is defined).
+    fn = customersApi.create(tid, customer as unknown as Parameters<typeof customersApi.create>[1]);
+  } else if (op === "update") {
+    const { body, writableKeyCount } = _normalizeCustomerUpdates(customer);
+    // Defect found in code review: m14 advance-ledger clears call
+    // updateCustomer(id, { advanceLedgerAccountId: undefined }). After
+    // stripping `id`, that leaves zero writable keys — backend would 400
+    // ("No writable fields supplied"). Short-circuit silently.
+    if (writableKeyCount === 0) return;
+    fn = customersApi.update(tid, customer.id, body as unknown as Parameters<typeof customersApi.update>[2]);
+  } else {
+    fn = customersApi.delete(tid, customer.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    console.warn(`[customers ${op}] REST persistence failed for ${customer.id}:`, msg);
+  });
+}
 
 /**
  * Whitelist of keys that legitimately live in the unprefixed `global`
@@ -1365,6 +1453,10 @@ export const createCustomer = (data: Omit<Customer, "id" | "createdAt" | "update
     updatedAt: new Date().toISOString(),
   };
   setStored(CUSTOMERS_KEY, [...getCustomers(), newCustomer]);
+  // Dual-write to the relational `customers` table — required because the
+  // kv.ts read-back bridge ignores `kv_store` for `admin-customers` once
+  // it's in MIGRATED_KEY_TO_TABLE. Fire-and-forget; UI already updated.
+  _persistCustomerRest("create", newCustomer as unknown as { id: string } & Record<string, unknown>);
   addActivity({ action: "created", entity: "Customer", entityName: newCustomer.name, detail: newCustomer.company || undefined });
 
   // Post opening balance JE if one was provided
@@ -1443,6 +1535,10 @@ export const updateCustomer = (id: string, updates: Partial<Omit<Customer, "id" 
 
   customers[index] = updated;
   setStored(CUSTOMERS_KEY, customers);
+  // Dual-write to the relational `customers` table (see _persistCustomerRest).
+  // Only send the changed fields (`updates`) — backend PUT requires ≥1 writable
+  // column, and sending the full row would re-validate already-frozen columns.
+  _persistCustomerRest("update", { id, ...updates } as { id: string } & Record<string, unknown>);
   const detail = updates.status ? `Status → ${updates.status}` : undefined;
   addActivity({ action: updates.status ? "status_changed" : "updated", entity: "Customer", entityName: updated.name, detail });
 
@@ -1797,6 +1893,11 @@ export const deleteCustomer = (id: string): void => {
     }
   }
   setStored(CUSTOMERS_KEY, getCustomers().filter(c => c.id !== id));
+  // Dual-write soft-delete to the relational `customers` table. Backend
+  // mirrors the same blockers and would 409 if anything still references the
+  // row — by this point the local `_customerFinancialBlockers` preflight has
+  // already passed so 409 here would indicate a race we can safely log.
+  _persistCustomerRest("delete", { id });
   // Safe removal: deactivates instead of hard-deleting if any JE references
   // this sub-ledger — preserves "Unknown ledger" from ever appearing on a JE.
   if (customer?.ledgerAccountId) {
@@ -7705,6 +7806,10 @@ export function seedDefaultCoaAccounts(): void {
         updatedAt:       now10,
       };
       setStored(CUSTOMERS_KEY, [walkInCustomer, ...existingCusts]);
+      // Dual-write the walk-in seed to the relational `customers` table.
+      // 409 is tolerated (re-seed on subsequent logins) inside
+      // `_persistCustomerRest`, so this is safe to fire every time m10 runs.
+      _persistCustomerRest("create", walkInCustomer as unknown as { id: string } & Record<string, unknown>);
     }
     done.add("m10"); migrationsChanged = true;
   }
@@ -8095,6 +8200,15 @@ export function seedDefaultCoaAccounts(): void {
     });
     if (contactsUpdated) {
       setStored(CUSTOMERS_KEY, contactsPatched);
+      // Dual-write each patched contact's new ledgerAccountId to the
+      // relational `customers` table. Skipped rows (unchanged) are filtered
+      // out via the `oldLedgerId !== c.ledgerAccountId` check that mirrors
+      // the contactsUpdated detection logic above. Fire-and-forget per row.
+      for (const c of contactsPatched) {
+        const orig = contacts.find(o => o.id === c.id);
+        if (!orig || orig.ledgerAccountId === c.ledgerAccountId) continue;
+        _persistCustomerRest("update", { id: c.id, ledgerAccountId: c.ledgerAccountId });
+      }
     }
     // Re-link JE lines whose ledgerId points to a now-replaced contact ledger account.
     // This recovers ledger history that would otherwise disappear after an account
@@ -9302,6 +9416,10 @@ export const patchLeadInCache               = (tid: string, l: Lead)            
 export const removeLeadFromCache            = (tid: string, id: string)          => _removeRecordFromCache<Lead>(tid, LEADS_KEY, id);
 export const patchDocInCache                = (tid: string, d: RequirementDoc)   => _patchRecordInCache(tid, DOCS_KEY, d);
 export const removeDocFromCache             = (tid: string, id: string)          => _removeRecordFromCache<RequirementDoc>(tid, DOCS_KEY, id);
+
+// Batch 3 — CRM customer records
+export const patchCustomerInCache           = (tid: string, c: Customer)         => _patchRecordInCache(tid, CUSTOMERS_KEY, c);
+export const removeCustomerFromCache        = (tid: string, id: string)          => _removeRecordFromCache<Customer>(tid, CUSTOMERS_KEY, id);
 
 // ─── Journal Entry ────────────────────────────────────────────────────────────
 

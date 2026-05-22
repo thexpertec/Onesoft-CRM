@@ -53,6 +53,8 @@ import {
   patchProductCategoryInCache, removeProductCategoryFromCache,
   patchLeadInCache, removeLeadFromCache,
   patchDocInCache, removeDocFromCache,
+  patchCustomerInCache, removeCustomerFromCache,
+  _runWithSuppressedCustomerRest,
   addActivity,
 } from "@/lib/store";
 import {
@@ -60,7 +62,7 @@ import {
   apiCreateJE, apiUpdateJE, apiDeleteJE,
   brandsApi, unitsApi, attributesApi, citiesApi, areasApi,
   departmentsApi, designationsApi, productCategoriesApi,
-  leadsApi, requirementDocsApi,
+  leadsApi, requirementDocsApi, customersApi,
   type ApiJELine,
 } from "@/lib/record-api";
 
@@ -207,20 +209,72 @@ export function useCustomers() {
 
   useStoreEffect(fetchCustomers);
 
-  const addCustomer = (data: Parameters<typeof createCustomer>[0]) => {
-    const c = createCustomer(data);
+  // REST-backed (Batch 3). The store-side `createCustomer`/`updateCustomer`/
+  // `deleteCustomer` still orchestrate COA ledger creation, opening-balance
+  // JE writes, FE blocker preflight, and the activity log. They also
+  // dual-write to the `customers` REST endpoint via `_persistCustomerRest`,
+  // but that's fire-and-forget — for hook callers we want the returned row
+  // to be the server's persisted shape, not the local optimistic one. So we
+  // call the legacy function for its side effects, then await an explicit
+  // REST roundtrip and use the server response to patch the cache. The
+  // legacy fire-and-forget POST/PUT and the awaited one share the same
+  // payload but the awaited one wins because `patchCustomerInCache` runs
+  // last on the hook path.
+  const addCustomer = async (data: Parameters<typeof createCustomer>[0]): Promise<Customer> => {
+    const tid = requireTenantId();
+    // Run the legacy sync path inside the suppression scope so its built-in
+    // fire-and-forget REST POST doesn't race the awaited one below. Side
+    // effects (COA ledger create, OB-JE upsert, activity log, _memRaw write,
+    // id allocation) all still run.
+    const local = _runWithSuppressedCustomerRest(() => createCustomer(data));
+    const row = await customersApi.create(tid, local as unknown as Parameters<typeof customersApi.create>[1]);
+    patchCustomerInCache(tid, row);
     fetchCustomers();
-    return c;
+    return row;
   };
 
-  const editCustomer = (id: string, updates: Parameters<typeof updateCustomer>[1]) => {
-    const c = updateCustomer(id, updates);
+  const editCustomer = async (id: string, updates: Parameters<typeof updateCustomer>[1]): Promise<Customer> => {
+    const tid = requireTenantId();
+    // Side-effects (COA ledger rename, OB JE upsert, activity log, _memRaw).
+    // Suppression prevents the legacy fire-and-forget PUT from racing our
+    // awaited PUT — both carried the same payload anyway, but the awaited
+    // one's response is what we patch the cache from.
+    _runWithSuppressedCustomerRest(() => updateCustomer(id, updates));
+    // Normalize undefined → null so field-clears (e.g. clearing area, an
+    // address, a nullable timestamp) survive JSON.stringify and reach the
+    // backend as actual NULLs. Mirrors `normalizeLeadUpdates` from Batch 2.
+    const body: Record<string, unknown> = {};
+    let writableCount = 0;
+    for (const [k, v] of Object.entries(updates as Record<string, unknown>)) {
+      body[k] = v === undefined ? null : v;
+      writableCount++;
+    }
+    if (writableCount === 0) {
+      // Caller passed an empty patch — return current cached row, no roundtrip.
+      const cached = getCustomers().find(c => c.id === id);
+      if (cached) return cached;
+      throw new Error(`Customer ${id} not found`);
+    }
+    const row = await customersApi.update(tid, id, body as Parameters<typeof customersApi.update>[2]);
+    patchCustomerInCache(tid, row);
     fetchCustomers();
-    return c;
+    return row;
   };
 
-  const removeCustomer = (id: string) => {
-    deleteCustomer(id);
+  const removeCustomer = async (id: string): Promise<void> => {
+    const tid = requireTenantId();
+    // Legacy blocker preflight throws if FE-side references exist; that throw
+    // is the user-facing "Cannot delete" toast trigger and runs before any
+    // network call. Also clears _memRaw, deactivates ledger, logs activity.
+    // Suppress its fire-and-forget DELETE so we can run our own awaited one.
+    _runWithSuppressedCustomerRest(() => deleteCustomer(id));
+    try {
+      await customersApi.delete(tid, id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/HTTP 404/i.test(msg)) throw err; // 404 = already gone, OK
+    }
+    removeCustomerFromCache(tid, id);
     fetchCustomers();
   };
 

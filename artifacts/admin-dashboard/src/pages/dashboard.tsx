@@ -546,17 +546,21 @@ export default function Dashboard() {
     defaultValues: { name: "", company: "", email: "", phone: "", status: "Active", currency: "GBP", totalValue: "", notes: "" },
   });
 
-  const handleQuickAddCustomer = (data: QuickCustomerValues) => {
-    addCustomer({
-      name: data.name, company: data.company, email: data.email ?? "", phone: data.phone ?? "",
-      industry: "", city: "", status: data.status, source: "direct",
-      customerSince: new Date().toISOString().split("T")[0],
-      totalValue: data.totalValue ?? "", currency: data.currency,
-      notes: data.notes ?? "", tags: [],
-    });
-    toast({ title: "Customer added", description: `${data.name} has been added.` });
-    quickCustomerForm.reset();
-    setAddCustomerOpen(false);
+  const handleQuickAddCustomer = async (data: QuickCustomerValues) => {
+    try {
+      await addCustomer({
+        name: data.name, company: data.company, email: data.email ?? "", phone: data.phone ?? "",
+        industry: "", city: "", status: data.status, source: "direct",
+        customerSince: new Date().toISOString().split("T")[0],
+        totalValue: data.totalValue ?? "", currency: data.currency,
+        notes: data.notes ?? "", tags: [],
+      });
+      toast({ title: "Customer added", description: `${data.name} has been added.` });
+      quickCustomerForm.reset();
+      setAddCustomerOpen(false);
+    } catch (err) {
+      toast({ title: "Could not add", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
   };
 
   // ── Date boundaries ────────────────────────────────────────────────────────
