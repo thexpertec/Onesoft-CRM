@@ -1,7 +1,61 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
+import { rowToApi } from "../lib/records.js";
 
 const router = Router();
+
+// ─── Per-record migration bridge ──────────────────────────────────────────────
+// As entities are cut over from KV-array writes (`/api/kv/{ns}/{key}` writing a
+// whole `Brand[]` blob) to per-record REST endpoints (`/api/{entity}` writing a
+// single row to a relational table), the frontend's read path — `kvGetAll`
+// inside `syncAllFromServer` — still reads ONLY from `kv_store`. Without this
+// bridge, every record created/updated/deleted through a migrated REST
+// endpoint vanishes from the UI on page refresh because `_memRaw` is empty
+// after a reload and the kv_store row for that key has no fresh data.
+//
+// The bridge: for every migrated key listed below, GET /api/kv/:ns/:key and
+// GET /api/kv/:ns synthesize the array from the relational table (active rows
+// only) instead of returning the stale (or empty) kv_store row. The frontend
+// is unchanged. The bridge can be deleted once kv.ts itself is retired.
+//
+// Keep this map in lockstep with `mountRecordRoutes(...)` callsites in the
+// API server. Adding an entity here is a one-line change per migration batch.
+const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
+  // Batch 1 — master data
+  "admin-brands":             "brands",
+  "admin-units":              "units",
+  "admin-attributes":         "attributes",
+  "admin-cities":             "cities",
+  "admin-areas":              "areas",
+  "admin-hrm-departments":    "departments",
+  "admin-hrm-designations":   "designations",
+  "admin-product-categories": "product_categories",
+  // Batch 2 — CRM
+  "admin-leads":              "leads",
+  "admin-req-docs":           "requirement_docs",
+};
+
+const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
+
+function tenantOfNamespace(namespace: string): string | null {
+  const m = namespace.match(/^t:(.+)$/);
+  return m ? m[1]! : null;
+}
+
+/**
+ * Returns the active (non-archived) rows of a migrated entity table for the
+ * given tenant, shaped as the FE expects (camelCase via `rowToApi`).
+ * Throws on unsafe identifiers (defensive — the table name comes from the
+ * registry above, not user input).
+ */
+async function fetchMigratedRows(table: string, tenantId: string): Promise<unknown[]> {
+  if (!SAFE_IDENT.test(table)) throw new Error(`Unsafe migrated table identifier: ${table}`);
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM ${table} WHERE tenant_id = $1 AND archived_at IS NULL ORDER BY created_at`,
+    [tenantId],
+  );
+  return rows.map(rowToApi);
+}
 
 const KV_API_SECRET = process.env["KV_API_SECRET"];
 
@@ -37,6 +91,16 @@ router.get("/", async (_req, res) => {
 router.get("/:namespace/:key", async (req, res) => {
   try {
     const { namespace, key } = req.params;
+
+    // Bridge: for migrated entities in a tenant namespace, the relational
+    // table is the source of truth. Ignore kv_store (post-migration stale).
+    const tenantId = tenantOfNamespace(namespace);
+    const migratedTable = MIGRATED_KEY_TO_TABLE[key];
+    if (tenantId && migratedTable) {
+      const value = await fetchMigratedRows(migratedTable, tenantId);
+      return res.json({ value });
+    }
+
     const rows = await query(
       "SELECT value FROM kv_store WHERE namespace = $1 AND key = $2",
       [namespace, key]
@@ -63,6 +127,21 @@ router.get("/:namespace", async (req, res) => {
     for (const row of rows) {
       result[row.key] = row.value;
     }
+
+    // Bridge: overlay every migrated entity from its relational table. This
+    // OVERWRITES any same-key kv_store entry — once an entity is migrated, the
+    // kv_store row is dead history. Only applies to tenant namespaces; the
+    // migrated entities are all tenant-scoped.
+    const tenantId = tenantOfNamespace(namespace);
+    if (tenantId) {
+      const migrated = await Promise.all(
+        Object.entries(MIGRATED_KEY_TO_TABLE).map(async ([key, table]) =>
+          [key, await fetchMigratedRows(table, tenantId)] as const,
+        ),
+      );
+      for (const [key, value] of migrated) result[key] = value;
+    }
+
     return res.json(result);
   } catch (err) {
     console.error("KV GET namespace error", err);

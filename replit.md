@@ -128,7 +128,8 @@ The admin-dashboard is moving from KV-array writes (`/api/kv/{ns}/{key}` writing
 |---|---|---|
 | 1 | Shipped | brands, units, attributes, cities, areas, departments, designations, product-categories |
 | 2 | Shipped | leads, requirement-docs |
-| 3 (planned) | Pending | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Dedicated session because `createCustomer`/`updateCustomer`/`deleteCustomer` orchestrate COA ledger creation, opening-balance JE writes, role-change re-parenting, and safe-deactivation. |
+| Read-back bridge | Shipped (foundational fix) | See section below — was silently regressing Batches 1+2 across page refreshes. |
+| 3 (planned) | Pending | customers (and therefore "suppliers" — they are customer rows with `customerRole === "Supplier"`, not a separate table). Larger session than initially scoped — see "Batch 3 scope warning" below. |
 | 4 (planned) | Pending | stock-items + sales + invoices + purchase-orders + returns + stock-ledger — the transactional cluster. Stock-items can't be migrated alone because it's called from PO-receive and sale-fulfillment flows still on KV. |
 
 **Pattern** (consistent across batches):
@@ -140,6 +141,24 @@ The admin-dashboard is moving from KV-array writes (`/api/kv/{ns}/{key}` writing
 **`useLeads` field-clear normalization** (Batch 2): the leads UI clears nullable timestamp/numeric fields (`nextReminder`, `dealValue`, `nextFollowUp`, etc.) by passing `undefined` or `""`. `JSON.stringify` drops `undefined` keys and the backend's `TIMESTAMPTZ` columns reject `""` outright. The `normalizeLeadUpdates` helper in `use-data.ts` converts `undefined` → `null` universally and `""` → `null` for the known-nullable column set, so caller intent ("key present" = "set, possibly to null") survives the wire.
 
 Legacy `createLead`/`updateLead`/`deleteLead`/`createDoc`/`updateDoc`/`deleteDoc` (and the analogous Batch 1 functions) remain exported from `store.ts` but are no longer called by hooks. They will be removed in a follow-up sweep after every batch ships, to keep churn low while the migration is in flight.
+
+**Read-back bridge** (`artifacts/api-server/src/routes/kv.ts`): the foundational fix that makes Batches 1+2 actually durable across page refreshes. The frontend's `syncAllFromServer` only calls `kvGetAll` (which reads `kv_store`), and `_lsCache` only writes to `_memRaw` (an in-memory `Map`, lost on reload — NOT localStorage). Without the bridge, every record written through a migrated REST endpoint vanished on the next refresh because the relational table was never read back. The bridge: a `MIGRATED_KEY_TO_TABLE` registry in `kv.ts` (10 entries today, one per migrated entity) — `GET /api/kv/:ns/:key` and `GET /api/kv/:ns` short-circuit for tenant namespaces, returning rows synthesized from the relational table (active rows only, `rowToApi`-ified) instead of reading `kv_store`. The frontend is unchanged. Add a new entry per batch as it lands. The bridge is removable once `kv.ts` is fully retired. **Critical invariant**: once a key is in the registry, EVERY writer for that entity must go through the per-record REST endpoint — any remaining KV writes for that key become invisible (the bridge ignores `kv_store` for migrated keys). This invariant is what makes Batch 3 (customers) more involved than it first appears.
+
+### Batch 3 scope warning — customers has many internal callers
+
+Adding `admin-customers` to the read-back bridge is an all-or-nothing cutover because of the invariant above. The customer entity is written from many places besides the `useCustomers` hook in `use-data.ts`:
+
+| Caller | Location | Risk if left on KV |
+|---|---|---|
+| Walk-in seed | `seedDefaultCoaAccounts()` runs on every login | Walk-in customer vanishes from UI after every refresh |
+| `convertLeadToCustomer()` | `store.ts:1808` | Newly-converted customers vanish on refresh |
+| Ledger-link backfills | `store.ts:940` (`createSubsidiaryLedger` → `updateCustomer`), `store.ts:4345, 9861, 10175` (heal/backfill loops) | Ledger linkage silently lost on refresh |
+| Advance-ledger clears | `store.ts:7848, 7880` | Stale `advanceLedgerAccountId` on customer row |
+| Page direct-calls | `pages/sales.tsx:3374`, `pages/dashboard.tsx:550` (quick-add) | Quick-added customers vanish on refresh |
+
+All of these must move through the REST path simultaneously with the hook cutover. The cleanest approach is making `createCustomer`/`updateCustomer`/`deleteCustomer` themselves `async` and awaiting at every call site (~10 internal + 6 page-level). The COA ledger creation and opening-balance JE post side effects stay where they are — they already go through the migrated REST routes for accounts/JEs.
+
+Recommend Batch 3 be planned as its own session with a clean session_plan that audits every caller before any code is changed.
 
 ### Sale-return visibility on the sales list
 
