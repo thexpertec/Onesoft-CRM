@@ -113,16 +113,16 @@ export default function UsersPage() {
     if (!u) { setActiveCell(null); return; }
     if ((u as Record<string, string>)[field] === value) { setActiveCell(null); return; }
 
-    if (field === "username" && users.some(x => x.id !== id && x.username.toLowerCase() === value.toLowerCase())) {
-      toast({ title: "Username taken", description: "Another user already has this username.", variant: "destructive" });
+    try {
+      updateAdminUser(id, { [field]: value } as Partial<AdminUser>);
+      if (id === currentUser?.id) refreshCurrentUser();
       setActiveCell(null);
-      return;
+      reload();
+      toast({ title: "Saved" });
+    } catch (e) {
+      setActiveCell(null);
+      toast({ title: "Cannot save", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     }
-    updateAdminUser(id, { [field]: value } as Partial<AdminUser>);
-    if (id === currentUser?.id) refreshCurrentUser();
-    setActiveCell(null);
-    reload();
-    toast({ title: "Saved" });
   }, [users, currentUser, refreshCurrentUser, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
@@ -161,10 +161,6 @@ export default function UsersPage() {
   const watchedRole = addForm.watch("role");
 
   const handleAdd = async (data: AddUserValues) => {
-    const existing = getAdminUsers();
-    if (existing.some(u => u.username.toLowerCase() === data.username.toLowerCase())) {
-      addForm.setError("username", { message: "Username already taken" }); return;
-    }
     setAddSaving(true);
     try {
       await createAdminUserAsync({
@@ -177,8 +173,15 @@ export default function UsersPage() {
       });
       toast({ title: "User created", description: `${data.fullName} (@${data.username}) added.` });
       addForm.reset(); setAddOpen(false); reload();
-    } catch {
-      toast({ title: "Save failed", description: "User was created locally but could not be saved to the server. Please try again.", variant: "destructive" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Uniqueness violations come back as descriptive Error messages from the
+      // store — surface them verbatim. Field-level error keeps the form open.
+      if (/already used by|already taken/i.test(msg)) {
+        addForm.setError("username", { message: msg });
+      } else {
+        toast({ title: "Save failed", description: msg || "Could not save to the server. Please try again.", variant: "destructive" });
+      }
     } finally {
       setAddSaving(false);
     }

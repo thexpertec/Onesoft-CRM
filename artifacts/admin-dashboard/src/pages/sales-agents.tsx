@@ -113,11 +113,16 @@ export default function SalesAgentsPage() {
   };
 
   const savePortalLogin = (agentId: string) => {
-    editAgent(agentId, {
-      username: portalUsername.trim() || undefined,
-      password: portalPassword || undefined,
-      loginEnabled: portalEnabled,
-    });
+    try {
+      editAgent(agentId, {
+        username: portalUsername.trim() || undefined,
+        password: portalPassword || undefined,
+        loginEnabled: portalEnabled,
+      });
+    } catch (e) {
+      toast({ title: "Cannot save portal login", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+      return;
+    }
     setPortalEditing(false);
     toast({ title: "Portal login saved", description: portalEnabled ? "Agent can now log in to the dashboard." : "Portal access disabled." });
   };
@@ -173,9 +178,14 @@ export default function SalesAgentsPage() {
     const agent = agents.find(a => a.id === agentId);
     if (!agent) return;
     if ((agent as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
-    editAgent(agentId, { [field]: value } as Partial<SalesAgent>);
-    setActiveCell(null);
-  }, [agents, editAgent]);
+    try {
+      editAgent(agentId, { [field]: value } as Partial<SalesAgent>);
+      setActiveCell(null);
+    } catch (e) {
+      setActiveCell(null);
+      toast({ title: "Cannot save", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
+  }, [agents, editAgent, toast]);
 
   // ── Tab navigation for existing rows ─────────────────────────────────────
   const navigateCell = useCallback((id: string, ci: number, shift: boolean) => {

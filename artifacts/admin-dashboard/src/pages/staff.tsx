@@ -124,9 +124,14 @@ export default function StaffPage() {
   const commitCell = useCallback((id: string, field: EditableField, value: string) => {
     const s = staff.find(m => m.id === id);
     if (!s || (s as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
-    editStaff(id, { [field]: value } as Partial<Staff>);
-    setActiveCell(null);
-    toast({ title: "Saved" });
+    try {
+      editStaff(id, { [field]: value } as Partial<Staff>);
+      setActiveCell(null);
+      toast({ title: "Saved" });
+    } catch (e) {
+      setActiveCell(null);
+      toast({ title: "Cannot save", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   }, [staff, editStaff, toast]);
 
   const navigateCell = useCallback((id: string, col: number, shift: boolean) => {
@@ -242,11 +247,16 @@ export default function StaffPage() {
         toast({ title: `Username "${loginForm.username.trim()}" is already taken`, variant: "destructive" }); return;
       }
     }
-    editStaff(loginTarget.id, {
-      loginEnabled: loginForm.enabled,
-      username:     loginForm.enabled ? loginForm.username.trim() : undefined,
-      password:     loginForm.enabled ? loginForm.password : undefined,
-    });
+    try {
+      editStaff(loginTarget.id, {
+        loginEnabled: loginForm.enabled,
+        username:     loginForm.enabled ? loginForm.username.trim() : undefined,
+        password:     loginForm.enabled ? loginForm.password : undefined,
+      });
+    } catch (e) {
+      toast({ title: "Cannot save login", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+      return;
+    }
     toast({
       title: loginForm.enabled ? "Login access enabled" : "Login access disabled",
       description: loginForm.enabled

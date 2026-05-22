@@ -2393,8 +2393,10 @@ export const createTenantAsync = (
 
   const slugConflict = existing.find(t => t.slug.toLowerCase() === data.slug.toLowerCase());
   if (slugConflict) throw new Error(`A tenant with slug "${data.slug}" already exists.`);
-  const usernameConflict = existing.find(t => t.adminUsername.toLowerCase() === data.adminUsername.toLowerCase());
-  if (usernameConflict) throw new Error(`A tenant with username "${data.adminUsername}" already exists.`);
+  // Global username uniqueness — across platform users, the freshly-fetched
+  // tenant list, staff, and agents. Using `existing` (server truth) rather
+  // than the cache avoids stale-miss conflicts.
+  assertUsernameUnique(data.adminUsername, undefined, existing);
   const now = new Date().toISOString();
   const tenant: Tenant = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
   await setGlobalAsync(TENANTS_KEY, [...existing, tenant]);
@@ -2424,6 +2426,9 @@ export const updateTenantAsync = (
 
   const idx = tenants.findIndex(t => t.id === id);
   if (idx === -1) throw new Error("Tenant not found");
+  if (updates.adminUsername && updates.adminUsername.toLowerCase() !== tenants[idx].adminUsername.toLowerCase()) {
+    assertUsernameUnique(updates.adminUsername, { kind: "tenant", id }, tenants);
+  }
   tenants[idx] = { ...tenants[idx], ...updates, updatedAt: new Date().toISOString() };
   await setGlobalAsync(TENANTS_KEY, tenants);
   return tenants[idx];
@@ -2765,7 +2770,64 @@ export const getAdminUserById = (id: string): AdminUser | undefined => {
   return getAdminUsers().find(u => u.id === id);
 };
 
+/**
+ * Global username uniqueness check across every login-capable role:
+ *   - Platform admin users (`admin-users` / global)
+ *   - Tenants (`adminUsername` on every Tenant)
+ *   - HRM Staff (`username` when set — login may be disabled but the slot is reserved)
+ *   - Sales agents (`username` when set)
+ *
+ * Comparison is case-insensitive. Pass `excludeRef` to skip the entity being
+ * updated so an update that keeps the same username doesn't false-positive.
+ *
+ * Throws an Error with a human-readable message naming the conflicting record.
+ */
+export type UsernameOwnerRef =
+  | { kind: "user";   id: string }
+  | { kind: "tenant"; id: string }
+  | { kind: "staff";  id: string }
+  | { kind: "agent";  id: string };
+
+export const assertUsernameUnique = (
+  username: string | null | undefined,
+  excludeRef?: UsernameOwnerRef,
+  /** Optional fresh tenant list (e.g. from server kvGet) — preferred over the cache
+   *  in tenant create/update flows that have just fetched authoritative state. */
+  tenantsOverride?: Tenant[],
+): void => {
+  const u = (username ?? "").trim().toLowerCase();
+  if (!u) return; // blank/missing username = nothing to reserve
+  const skip = (k: UsernameOwnerRef["kind"], id: string) =>
+    !!excludeRef && excludeRef.kind === k && excludeRef.id === id;
+
+  // Platform users
+  const adminHit = getAdminUsers().find(
+    x => x.username?.toLowerCase() === u && !skip("user", x.id),
+  );
+  if (adminHit) throw new Error(`Username "${username}" is already used by admin user "${adminHit.fullName || adminHit.username}".`);
+
+  // Tenants
+  const tenantList = tenantsOverride ?? getTenants();
+  const tenantHit = tenantList.find(
+    t => t.adminUsername?.toLowerCase() === u && !skip("tenant", t.id),
+  );
+  if (tenantHit) throw new Error(`Username "${username}" is already used by tenant "${tenantHit.name}".`);
+
+  // Staff
+  const staffHit = getStaff().find(
+    s => s.username?.toLowerCase() === u && !skip("staff", s.id),
+  );
+  if (staffHit) throw new Error(`Username "${username}" is already used by staff member "${staffHit.name}".`);
+
+  // Sales agents
+  const agentHit = getSalesAgents().find(
+    a => a.username?.toLowerCase() === u && !skip("agent", a.id),
+  );
+  if (agentHit) throw new Error(`Username "${username}" is already used by sales agent "${agentHit.name}".`);
+};
+
 export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "updatedAt">): AdminUser => {
+  assertUsernameUnique(user.username);
   const newUser: AdminUser = {
     ...user,
     id: crypto.randomUUID(),
@@ -2781,6 +2843,7 @@ export const createAdminUser = (user: Omit<AdminUser, "id" | "createdAt" | "upda
 };
 
 export const createAdminUserAsync = async (user: Omit<AdminUser, "id" | "createdAt" | "updatedAt">): Promise<AdminUser> => {
+  assertUsernameUnique(user.username);
   const newUser: AdminUser = {
     ...user,
     id: crypto.randomUUID(),
@@ -2798,6 +2861,9 @@ export const updateAdminUser = (id: string, updates: Partial<Omit<AdminUser, "id
   const users = getAdminUsers();
   const index = users.findIndex(u => u.id === id);
   if (index === -1) throw new Error("User not found");
+  if (updates.username && updates.username.toLowerCase() !== users[index].username.toLowerCase()) {
+    assertUsernameUnique(updates.username, { kind: "user", id });
+  }
   users[index] = { ...users[index], ...updates, updatedAt: new Date().toISOString() };
   _lsCache(USERS_KEY, users);
   setGlobalAsync(USERS_KEY, users).catch(() => { /* handled via onesoft:write-error */ });
@@ -5785,6 +5851,7 @@ const nextAgentCode = (): string => {
 };
 
 export const createSalesAgent = (data: Omit<SalesAgent, "id" | "agentCode" | "createdAt" | "updatedAt">): SalesAgent => {
+  if (data.username) assertUsernameUnique(data.username);
   const ledgerAccountId = data.ledgerAccountId || createSubsidiaryLedger({
     parentId:    SYS_ACCS.COMMISSION_GROUP,
     parentCode:  "4300",
@@ -5810,6 +5877,9 @@ export const updateSalesAgent = (id: string, updates: Partial<Omit<SalesAgent, "
   const agents = getSalesAgents();
   const idx = agents.findIndex(a => a.id === id);
   if (idx === -1) throw new Error("Sales agent not found");
+  if (updates.username && updates.username.toLowerCase() !== (agents[idx].username || "").toLowerCase()) {
+    assertUsernameUnique(updates.username, { kind: "agent", id });
+  }
   agents[idx] = { ...agents[idx], ...updates, updatedAt: new Date().toISOString() };
   setStored(SALES_AGENTS_KEY, agents);
   addActivity({ action: "updated", entity: "SalesAgent", entityName: agents[idx].name });
@@ -6394,6 +6464,7 @@ const STAFF_KEY = "admin-hrm-staff";
 export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
 
 export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
+  if (data.username) assertUsernameUnique(data.username);
   // Guard: refuse to create a 4200 salary ledger unless a role or designation is set.
   // Without one, the ledger would silently fall back to the staff member's name and
   // pollute the Chart of Accounts with per-person rows under Salary & Wages.
@@ -6432,6 +6503,9 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
   const i = items.findIndex(s => s.id === id);
   if (i === -1) throw new Error("Staff not found");
   const prev = items[i];
+  if (updates.username && updates.username.toLowerCase() !== (prev.username || "").toLowerCase()) {
+    assertUsernameUnique(updates.username, { kind: "staff", id });
+  }
   items[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
   setStored(STAFF_KEY, items);
 
