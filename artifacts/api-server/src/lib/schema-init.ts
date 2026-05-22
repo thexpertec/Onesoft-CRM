@@ -282,6 +282,59 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS designations_tenant_idx     ON designations (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS designations_tenant_dept_idx ON designations (tenant_id, department)`,
 
+  // ── Cities ───────────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS cities (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    country     TEXT        NOT NULL DEFAULT '',
+    notes       TEXT        NOT NULL DEFAULT '',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS cities_tenant_idx ON cities (tenant_id)`,
+
+  // ── Areas ────────────────────────────────────────────────────────────────────
+  // city_id is a soft reference (no FK) — mirrors how brands/categories handle
+  // parent_id. Frontend already tolerates orphaned cityId references.
+  `CREATE TABLE IF NOT EXISTS areas (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    name        TEXT        NOT NULL,
+    city_id     TEXT,
+    notes       TEXT        NOT NULL DEFAULT '',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS areas_tenant_idx      ON areas (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS areas_tenant_city_idx ON areas (tenant_id, city_id)`,
+
+  // ── Requirement Documents ────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS requirement_docs (
+    id            TEXT        NOT NULL PRIMARY KEY,
+    tenant_id     TEXT        NOT NULL,
+    title         TEXT        NOT NULL,
+    client_name   TEXT        NOT NULL DEFAULT '',
+    company       TEXT        NOT NULL DEFAULT '',
+    email         TEXT        NOT NULL DEFAULT '',
+    phone         TEXT        NOT NULL DEFAULT '',
+    industry      TEXT        NOT NULL DEFAULT '',
+    city          TEXT        NOT NULL DEFAULT '',
+    status        TEXT        NOT NULL DEFAULT 'Draft',
+    software_type TEXT        NOT NULL DEFAULT '',
+    budget        TEXT        NOT NULL DEFAULT '',
+    start_date    TEXT        NOT NULL DEFAULT '',
+    delivery_date TEXT        NOT NULL DEFAULT '',
+    sections      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    archived_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS requirement_docs_tenant_idx        ON requirement_docs (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS requirement_docs_tenant_status_idx ON requirement_docs (tenant_id, status)`,
+
   // ── Audit log ────────────────────────────────────────────────────────────────
   // Table pre-exists with column "at" (not "created_at") — create-if-not-exists is safe.
   `CREATE TABLE IF NOT EXISTS audit_log (

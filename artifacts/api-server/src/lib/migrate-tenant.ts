@@ -90,6 +90,9 @@ export interface MigrateResult {
   leads:             MigrateSection;
   departments:       MigrateSection;
   designations:      MigrateSection;
+  cities:            MigrateSection;
+  areas:             MigrateSection;
+  requirementDocs:   MigrateSection;
 }
 
 interface FrontendProduct {
@@ -194,6 +197,9 @@ export async function migrateTenant(
     leads:             { found: 0, inserted: 0, skipped: 0, errors: [] },
     departments:       { found: 0, inserted: 0, skipped: 0, errors: [] },
     designations:      { found: 0, inserted: 0, skipped: 0, errors: [] },
+    cities:            { found: 0, inserted: 0, skipped: 0, errors: [] },
+    areas:             { found: 0, inserted: 0, skipped: 0, errors: [] },
+    requirementDocs:   { found: 0, inserted: 0, skipped: 0, errors: [] },
   };
 
   // ── 0. Ensure a tenants row exists ─────────────────────────────────────────
@@ -794,6 +800,58 @@ export async function migrateTenant(
     getDisplayName: (d) => d.title,
   });
 
+  // ── 7. Cities / Areas / Requirement Docs ───────────────────────────────────
+  await migrateMaster<{
+    id: string; name: string; country?: string; notes?: string;
+    createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "cities",
+    kvKey: "admin-cities", table: "cities", entityType: "city",
+    columns: ["name", "country", "notes"],
+    extractValues: (c) => [c.name, c.country ?? "", c.notes ?? ""],
+    auditSummary: (c) => ({ name: c.name }),
+  });
+
+  await migrateMaster<{
+    id: string; name: string; cityId?: string; notes?: string;
+    createdAt?: string; updatedAt?: string;
+  }>({
+    tenantId, dryRun, result, section: "areas",
+    kvKey: "admin-areas", table: "areas", entityType: "area",
+    columns: ["name", "city_id", "notes"],
+    extractValues: (a) => [a.name, a.cityId || null, a.notes ?? ""],
+    auditSummary: (a) => ({ name: a.name, cityId: a.cityId ?? null }),
+  });
+
+  type ReqDocRow = {
+    id: string; title: string;
+    clientName?: string; company?: string; email?: string; phone?: string;
+    industry?: string; city?: string; status?: string;
+    softwareType?: string; budget?: string; startDate?: string; deliveryDate?: string;
+    sections?: unknown;
+    createdAt?: string; updatedAt?: string;
+  };
+  await migrateMaster<ReqDocRow>({
+    tenantId, dryRun, result, section: "requirementDocs",
+    kvKey: "admin-req-docs", table: "requirement_docs", entityType: "requirement_doc",
+    columns: [
+      "title", "client_name", "company", "email", "phone", "industry", "city",
+      "status", "software_type", "budget", "start_date", "delivery_date", "sections",
+    ],
+    extractValues: (d) => [
+      d.title, d.clientName ?? "", d.company ?? "", d.email ?? "", d.phone ?? "",
+      d.industry ?? "", d.city ?? "", d.status ?? "Draft",
+      d.softwareType ?? "", d.budget ?? "", d.startDate ?? "", d.deliveryDate ?? "",
+      JSON.stringify(
+        d.sections != null && typeof d.sections === "object" && !Array.isArray(d.sections)
+          ? d.sections
+          : {},
+      ),
+    ],
+    auditSummary: (d) => ({ title: d.title, clientName: d.clientName ?? "" }),
+    getDisplayName: (d) => d.title,
+  });
+
   return result;
 }
 
@@ -809,7 +867,8 @@ async function migrateMaster<T extends { id: string; createdAt?: string; updated
   result: MigrateResult;
   section: keyof MigrateResult & (
     "brands" | "productCategories" | "units" | "attributes" |
-    "leads" | "departments" | "designations"
+    "leads" | "departments" | "designations" |
+    "cities" | "areas" | "requirementDocs"
   );
   kvKey: string;
   table: string;

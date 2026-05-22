@@ -57,6 +57,18 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT COUNT(*)::text AS count FROM designations WHERE tenant_id = $1 AND archived_at IS NULL`,
       [tenantId],
     );
+    const [cityRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM cities WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [areaRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM areas WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
+    const [reqDocRow] = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM requirement_docs WHERE tenant_id = $1 AND archived_at IS NULL`,
+      [tenantId],
+    );
     const [kvAccRow] = await query<{ value: unknown }>(
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-chart-of-accounts' LIMIT 1`,
       [`t:${tenantId}`],
@@ -101,6 +113,18 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
       `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-hrm-designations' LIMIT 1`,
       [`t:${tenantId}`],
     );
+    const [kvCityRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-cities' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvAreaRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-areas' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
+    const [kvReqDocRow] = await query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'admin-req-docs' LIMIT 1`,
+      [`t:${tenantId}`],
+    );
 
     const parseCount = (raw: unknown): number => {
       if (raw == null) return 0;
@@ -119,9 +143,12 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         productCategories: parseInt(pcRow?.count     ?? "0", 10),
         units:             parseInt(unitRow?.count   ?? "0", 10),
         attributes:        parseInt(attrRow?.count   ?? "0", 10),
-        leads:             parseInt(leadRow?.count   ?? "0", 10),
-        departments:       parseInt(deptRow?.count   ?? "0", 10),
-        designations:      parseInt(desigRow?.count  ?? "0", 10),
+        leads:             parseInt(leadRow?.count    ?? "0", 10),
+        departments:       parseInt(deptRow?.count    ?? "0", 10),
+        designations:      parseInt(desigRow?.count   ?? "0", 10),
+        cities:            parseInt(cityRow?.count    ?? "0", 10),
+        areas:             parseInt(areaRow?.count    ?? "0", 10),
+        requirementDocs:   parseInt(reqDocRow?.count  ?? "0", 10),
       },
       kv: {
         accounts:          parseCount(kvAccRow?.value),
@@ -135,6 +162,9 @@ router.get("/tenant/:tenantId/status", async (req, res, next) => {
         leads:             parseCount(kvLeadRow?.value),
         departments:       parseCount(kvDeptRow?.value),
         designations:      parseCount(kvDesigRow?.value),
+        cities:            parseCount(kvCityRow?.value),
+        areas:             parseCount(kvAreaRow?.value),
+        requirementDocs:   parseCount(kvReqDocRow?.value),
       },
     });
   } catch (err) {
