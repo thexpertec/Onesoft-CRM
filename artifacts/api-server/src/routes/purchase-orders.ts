@@ -15,10 +15,18 @@ import { httpStatusFor, rowToApi } from "../lib/records.js";
  *                           Replaces items wholesale (delete + reinsert).
  *   DELETE /:id             ?tenantId=...
  *                           CASCADE removes items via composite FK.
+ *                           Backend financial-integrity guard refuses delete
+ *                           when the PO is linked to a journal entry (own
+ *                           `je_id`, or any JE whose `reference` matches
+ *                           `po_number`) or to a payment voucher (any
+ *                           `rp_vouchers.reference` matching `po_number`).
+ *                           Mirrors the frontend `_purchaseOrderFinancialBlockers`.
  *
- * No business-logic guards (stock reversal, JE unlinking) are enforced here —
- * those still live in the frontend `deletePurchaseOrder` blocker code. This
- * endpoint is the raw persistence layer used during the KV→relational cutover.
+ * Stock-reversal compensation for Received POs still lives in the frontend
+ * `deletePurchaseOrder` — it issues compensating `purchase-cancel` ledger
+ * rows + rolls back stock before calling this endpoint. The backend guard
+ * deliberately does *not* enforce status='Received' as a blocker so the
+ * frontend's compensating-write flow keeps working.
  */
 
 const router: IRouter = Router();
@@ -318,6 +326,48 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Not found" });
     }
     const before = beforeRes.rows[0] as Record<string, unknown>;
+
+    // Backend financial-integrity guard (defence-in-depth — frontend's
+    // `_purchaseOrderFinancialBlockers` enforces the same rules, but the
+    // API is callable by non-UI clients). Refuses delete when:
+    //   • PO carries its own posted JE link (`je_id` set), OR
+    //   • any journal_entries row references this PO by `reference = po_number`, OR
+    //   • any rp_vouchers row references this PO by `reference = po_number`.
+    // The user must remove the JE / voucher first, matching the documented
+    // reverse-cascade semantics in replit.md.
+    const poNumber = typeof before.po_number === "string" ? before.po_number : "";
+    const ownJeId  = typeof before.je_id === "string" ? before.je_id : "";
+    const blockers: string[] = [];
+    if (ownJeId) blockers.push(`linked to JE ${ownJeId}`);
+    if (poNumber) {
+      const jeRefs = await client.query<{ id: string; reference: string }>(
+        `SELECT id, reference FROM journal_entries
+         WHERE tenant_id = $1 AND reference = $2
+         LIMIT 3`,
+        [tenantId, poNumber],
+      );
+      if (jeRefs.rows.length > 0) {
+        const sample = jeRefs.rows.map(r => r.reference || r.id.slice(0, 8)).join(", ");
+        blockers.push(`${jeRefs.rows.length} journal entry record(s) (${sample})`);
+      }
+      const vRefs = await client.query<{ voucher_number: string }>(
+        `SELECT voucher_number FROM rp_vouchers
+         WHERE tenant_id = $1 AND reference = $2
+         LIMIT 3`,
+        [tenantId, poNumber],
+      );
+      if (vRefs.rows.length > 0) {
+        const sample = vRefs.rows.map(r => r.voucher_number).join(", ");
+        blockers.push(`${vRefs.rows.length} payment voucher(s) (${sample})`);
+      }
+    }
+    if (blockers.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: `Cannot delete purchase order ${poNumber || req.params.id}: ${blockers.join(", ")}. Remove the underlying journal entry / voucher first.`,
+      });
+    }
+
     await client.query(
       `DELETE FROM purchase_orders WHERE id = $1 AND tenant_id = $2`,
       [req.params.id, tenantId],

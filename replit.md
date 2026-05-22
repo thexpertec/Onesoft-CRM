@@ -103,6 +103,8 @@ To preserve double-entry book integrity, the following records cannot be deleted
 
 `deleteInvoice` no longer cascades into vouchers/JEs — it now refuses outright, matching the user's "delete the underlying records first" requirement.
 
+**Backend defence-in-depth**: The API DELETE routes for sales, invoices, sale-returns, purchase-returns, rp-vouchers, and purchase-orders enforce the same blockers and return **HTTP 409** with a descriptive message. Non-UI clients (scripts, integrations) get the same protection — the rules live in two layers, not in the UI alone. One intentional divergence: backend PO delete does **not** treat `status='Received'` as a blocker, because the frontend `deletePurchaseOrder` issues compensating `purchase-cancel` stock-ledger rows + rolls back stock *before* calling the API; gating on Received at the API would break that flow. The route docblock in `artifacts/api-server/src/routes/purchase-orders.ts` documents this explicitly.
+
 ### Reverse cascade — JE removal unwinds linked records
 
 When `deleteJournalEntry(id)` runs, the store now scans every record that points at that JE via `jeId` and resets the financial state so the source record reflects "payment removed":
