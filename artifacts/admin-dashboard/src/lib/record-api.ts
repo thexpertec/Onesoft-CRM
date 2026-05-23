@@ -15,7 +15,7 @@ import type {
   StockItem, StockLedgerEntry,
   Sale, Invoice, PurchaseOrder,
   SaleReturn, PurchaseReturn, RPVoucher,
-  Product, Staff,
+  Product, Staff, StaffRole,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -339,9 +339,12 @@ export const rpVouchersApi = makeTxRecordApi<RPVoucher>("rp-vouchers", (v) => {
 // no custom splitter needed.
 export const productsApi           = makeRecordApi<Product>("products");
 
-// ─── HRM REST clients (Batch 5) ───────────────────────────────────────────────
+// ─── HRM REST clients (Batch 5+6) ─────────────────────────────────────────────
 // Staff carry jsonb `allowances` / `deductions` on the row (no child tables).
 export const staffApi              = makeRecordApi<Staff>("staff");
+// Staff roles (Batch 6) — simple lookup table, permissions stored as
+// comma-separated string column.
+export const staffRolesApi         = makeRecordApi<StaffRole>("staff-roles");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired

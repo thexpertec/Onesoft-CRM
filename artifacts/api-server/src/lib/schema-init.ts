@@ -400,6 +400,20 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS designations_tenant_idx     ON designations (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS designations_tenant_dept_idx ON designations (tenant_id, department)`,
 
+  // ── Staff roles (HRM) — Batch 6 ──────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS staff_roles (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    color       TEXT        NOT NULL DEFAULT '',
+    name        TEXT        NOT NULL,
+    description TEXT        NOT NULL DEFAULT '',
+    permissions TEXT        NOT NULL DEFAULT '',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS staff_roles_tenant_idx ON staff_roles (tenant_id)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,

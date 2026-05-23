@@ -6,7 +6,7 @@
 
 import { kvPut, kvGet, kvDeleteNamespace } from "./api";
 import { isTenantCached } from "./store";
-import { productsApi, staffApi } from "./record-api";
+import { productsApi, staffApi, staffRolesApi } from "./record-api";
 
 /**
  * Keys that are bridged in `kv.ts` MIGRATED_KEY_TO_TABLE — direct KV writes
@@ -20,6 +20,7 @@ import { productsApi, staffApi } from "./record-api";
 const BRIDGED_KEY_TO_REST: Record<string, { create: (tid: string, body: unknown) => Promise<unknown> }> = {
   "admin-products":  { create: (tid, body) => productsApi.create(tid, body as Parameters<typeof productsApi.create>[1]) },
   "admin-hrm-staff": { create: (tid, body) => staffApi.create(tid, body as Parameters<typeof staffApi.create>[1]) },
+  "admin-hrm-roles": { create: (tid, body) => staffRolesApi.create(tid, body as Parameters<typeof staffRolesApi.create>[1]) },
 };
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";

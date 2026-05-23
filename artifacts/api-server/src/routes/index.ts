@@ -25,6 +25,7 @@ import saleReturnsRouter from "./sale-returns.js";
 import purchaseReturnsRouter from "./purchase-returns.js";
 import rpVouchersRouter from "./rp-vouchers.js";
 import staffRouter from "./staff.js";
+import staffRolesRouter from "./staff-roles.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
 
@@ -59,6 +60,7 @@ router.use("/sale-returns", saleReturnsRouter);
 router.use("/purchase-returns", purchaseReturnsRouter);
 router.use("/rp-vouchers", rpVouchersRouter);
 router.use("/staff", staffRouter);
+router.use("/staff-roles", staffRolesRouter);
 router.use("/journal-entries", journalEntriesRouter);
 
 // Phase 2 — KV→relational migration endpoint.

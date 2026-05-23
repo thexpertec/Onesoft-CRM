@@ -5,7 +5,7 @@ import {
   apiCreateJE, apiUpdateJE, apiDeleteJE,
   type ApiJELine,
   stockItemsApi, stockLedgerApi,
-  productsApi, staffApi,
+  productsApi, staffApi, staffRolesApi,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -7253,11 +7253,77 @@ export type StaffRole = {
 
 const HRM_ROLES_KEY = "admin-hrm-roles";
 
+/**
+ * Batch 6 chokepoint for HRM staff roles. Same diff-dual-write pattern as
+ * `_saveStaff`. `admin-hrm-roles` is bridged in `kv.ts` — direct KV writes
+ * are invisible to readers, so every writer must call `_saveStaffRoles`.
+ */
+function _saveStaffRoles(items: StaffRole[]): void {
+  const sk = tenantKey(HRM_ROLES_KEY);
+  const prior: StaffRole[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as StaffRole[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(HRM_ROLES_KEY, items);
+  _dualWriteStaffRolesDiff(prior, items, tid ?? undefined);
+}
+
+function _stableStaffRoleJson(r: StaffRole): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = r as StaffRole;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistStaffRoleRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = staffRolesApi.create(tid, item as unknown as Omit<StaffRole, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = staffRolesApi.update(tid, item.id, rest as Partial<Omit<StaffRole, "id" | "createdAt">>);
+  } else {
+    fn = staffRolesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[staff-role ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteStaffRolesDiff(prev: StaffRole[], next: StaffRole[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistStaffRoleRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    } else if (_stableStaffRoleJson(p) !== _stableStaffRoleJson(n)) {
+      _persistStaffRoleRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistStaffRoleRest("delete", { id }, tid);
+  }
+}
+
 export const getStaffRoles = (): StaffRole[] => getStored<StaffRole>(HRM_ROLES_KEY);
 
 export const createStaffRole = (data: Omit<StaffRole, "id" | "createdAt" | "updatedAt">): StaffRole => {
   const item: StaffRole = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(HRM_ROLES_KEY, [...getStaffRoles(), item]);
+  _saveStaffRoles([...getStaffRoles(), item]);
   return item;
 };
 
@@ -7266,12 +7332,12 @@ export const updateStaffRole = (id: string, updates: Partial<Omit<StaffRole, "id
   const i = items.findIndex(r => r.id === id);
   if (i === -1) throw new Error("Role not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(HRM_ROLES_KEY, items);
+  _saveStaffRoles(items);
   return items[i];
 };
 
 export const deleteStaffRole = (id: string): void => {
-  setStored(HRM_ROLES_KEY, getStaffRoles().filter(r => r.id !== id));
+  _saveStaffRoles(getStaffRoles().filter(r => r.id !== id));
 };
 
 // ─── HRM — Departments ────────────────────────────────────────────────────────
@@ -12262,6 +12328,11 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           if (k === "admin-hrm-staff") {
             for (const s of merged as unknown as Staff[]) {
               _persistStaffRest("create", s as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-roles") {
+            // Batch 6: `admin-hrm-roles` is bridged — same as staff.
+            for (const r of merged as unknown as StaffRole[]) {
+              _persistStaffRoleRest("create", r as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});
