@@ -35,9 +35,12 @@ const router = Router();
 //
 // Repopulating the relational tables for analytics/reporting is a separate
 // follow-up — see also the in-process backfill plan in scratchpad.
-const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
-  "admin-products": "products",
-};
+// NOTE: kept empty after the Neon cutover. The relational tables were not
+// backfilled from kv_store during that migration, so flipping any key on here
+// will make the bridge return 0 rows even though the data is intact in
+// kv_store. Re-enable per key only AFTER backfilling that key's relational
+// table from kv_store (see scripts/backfill-relational.ts when written).
+const MIGRATED_KEY_TO_TABLE: Record<string, string> = {};
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
 
