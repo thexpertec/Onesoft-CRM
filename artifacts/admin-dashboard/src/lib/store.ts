@@ -8,6 +8,7 @@ import {
   productsApi, staffApi, staffRolesApi,
   salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
   salarySlipsApi, attendanceRecordsApi, advanceSalariesApi, nullifyUndefined,
+  paymentAccountsApi, salesAgentsApi,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -1200,6 +1201,71 @@ export type PaymentAccount = {
 
 const PAYMENT_ACCOUNTS_KEY = "admin-payment-accounts";
 
+/**
+ * Batch 10 chokepoint for payment accounts. Diff-dual-write — same shape as
+ * Batches 6/7/9 lookups. No JE-cascade fields on the record (just a
+ * `ledgerAccountId` reference), so plain pattern (no nullifyUndefined).
+ * Anti-recursion invariant: exactly 1 inner setStored.
+ */
+function _savePaymentAccounts(items: PaymentAccount[]): void {
+  const sk = tenantKey(PAYMENT_ACCOUNTS_KEY);
+  const prior: PaymentAccount[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as PaymentAccount[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(PAYMENT_ACCOUNTS_KEY, items);
+  _dualWritePaymentAccountsDiff(prior, items, tid ?? undefined);
+}
+
+function _stablePaymentAccountJson(p: PaymentAccount): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = p;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistPaymentAccountRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = paymentAccountsApi.create(tid, item as unknown as Omit<PaymentAccount, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = paymentAccountsApi.update(tid, item.id, rest as Partial<Omit<PaymentAccount, "id" | "createdAt">>);
+  } else {
+    fn = paymentAccountsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[payment-account ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWritePaymentAccountsDiff(prev: PaymentAccount[], next: PaymentAccount[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistPaymentAccountRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stablePaymentAccountJson(p) !== _stablePaymentAccountJson(n))
+      _persistPaymentAccountRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistPaymentAccountRest("delete", { id }, tid);
+  }
+}
+
 /** Stable ID for the built-in default Cash in Hand account — cannot be deleted or edited. */
 export const SYS_PA_CASH = "sys-pa-cash";
 /** Stable ID for the system-seeded "Walk-in" Customer record. */
@@ -1265,7 +1331,7 @@ export const createPaymentAccount = (data: Omit<PaymentAccount, "id" | "createdA
     createdAt:       now,
     updatedAt:       now,
   };
-  setStored(PAYMENT_ACCOUNTS_KEY, [...getPaymentAccounts(), item]);
+  _savePaymentAccounts([...getPaymentAccounts(), item]);
   return item;
 };
 
@@ -1274,7 +1340,7 @@ export const updatePaymentAccount = (id: string, updates: Partial<Omit<PaymentAc
   const i = items.findIndex(a => a.id === id);
   if (i === -1) throw new Error("Payment account not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(PAYMENT_ACCOUNTS_KEY, items);
+  _savePaymentAccounts(items);
   // Sync changes to linked COA account
   const pa = items[i];
   if (pa.ledgerAccountId) {
@@ -1292,7 +1358,7 @@ export const deletePaymentAccount = (id: string): void => {
     const blockers = _paymentAccountFinancialBlockers(pa);
     if (blockers.length) throw new Error(_formatBlockerError("payment account", pa.accountTitle, blockers));
   }
-  setStored(PAYMENT_ACCOUNTS_KEY, getPaymentAccounts().filter(a => a.id !== id));
+  _savePaymentAccounts(getPaymentAccounts().filter(a => a.id !== id));
   // Safe removal: deactivates instead of hard-deleting if any JE or other
   // entity still references this account — preserves historical JE resolution.
   if (pa?.ledgerAccountId) {
@@ -6445,6 +6511,72 @@ export type SalesAgent = {
 
 const SALES_AGENTS_KEY = "admin-sales-agents";
 
+/**
+ * Batch 10 chokepoint for sales agents. Diff-dual-write — same shape as
+ * payment accounts. Anti-recursion invariant: exactly 1 inner setStored.
+ */
+function _saveSalesAgents(items: SalesAgent[]): void {
+  const sk = tenantKey(SALES_AGENTS_KEY);
+  const prior: SalesAgent[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SalesAgent[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALES_AGENTS_KEY, items);
+  _dualWriteSalesAgentsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableSalesAgentJson(a: SalesAgent): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = a;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistSalesAgentRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    // Normalize undefined → null so the UI clearing optional portal-login
+    // fields (`username`/`password`/`loginEnabled` set to `undefined` in
+    // sales-agents.tsx) survives JSON.stringify and reaches the server.
+    fn = salesAgentsApi.create(tid, nullifyUndefined(item) as unknown as Omit<SalesAgent, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = salesAgentsApi.update(tid, item.id, nullifyUndefined(rest) as Partial<Omit<SalesAgent, "id" | "createdAt">>);
+  } else {
+    fn = salesAgentsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[sales-agent ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteSalesAgentsDiff(prev: SalesAgent[], next: SalesAgent[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistSalesAgentRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableSalesAgentJson(p) !== _stableSalesAgentJson(n))
+      _persistSalesAgentRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistSalesAgentRest("delete", { id }, tid);
+  }
+}
+
 export const getSalesAgents = (): SalesAgent[] => getStored<SalesAgent>(SALES_AGENTS_KEY);
 export const getSalesAgent  = (id: string): SalesAgent | undefined => getSalesAgents().find(a => a.id === id);
 
@@ -6476,7 +6608,7 @@ export const createSalesAgent = (data: Omit<SalesAgent, "id" | "agentCode" | "cr
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(SALES_AGENTS_KEY, [...getSalesAgents(), agent]);
+  _saveSalesAgents([...getSalesAgents(), agent]);
   addActivity({ action: "created", entity: "SalesAgent", entityName: agent.name, detail: agent.agentCode });
   return agent;
 };
@@ -6489,7 +6621,7 @@ export const updateSalesAgent = (id: string, updates: Partial<Omit<SalesAgent, "
     assertUsernameUnique(updates.username, { kind: "agent", id });
   }
   agents[idx] = { ...agents[idx], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SALES_AGENTS_KEY, agents);
+  _saveSalesAgents(agents);
   addActivity({ action: "updated", entity: "SalesAgent", entityName: agents[idx].name });
   return agents[idx];
 };
@@ -6500,7 +6632,7 @@ export const deleteSalesAgent = (id: string): void => {
     const blockers = _salesAgentFinancialBlockers(agent);
     if (blockers.length) throw new Error(_formatBlockerError("sales agent", agent.name, blockers));
   }
-  setStored(SALES_AGENTS_KEY, getSalesAgents().filter(a => a.id !== id));
+  _saveSalesAgents(getSalesAgents().filter(a => a.id !== id));
   // Safe removal: deactivates any linked commission sub-ledger when a JE still
   // references it — preserves historical JE resolution.
   if (agent?.ledgerAccountId) _safeDeactivateLedgerAccount(agent.ledgerAccountId);
@@ -7751,7 +7883,7 @@ export const ALL_STORE_KEYS = [
   "admin-products", "admin-product-categories", "admin-brands", "admin-attributes",
   "admin-units", "admin-purchase-orders", "admin-stock", "admin-sales", "admin-invoices",
   "admin-sale-returns", "admin-hrm-staff", "admin-hrm-roles", "admin-hrm-departments", "admin-hrm-designations", "admin-users", "admin-team-members",
-  "admin-settings", "admin-journal-entries", "admin-stock-ledger", "admin-payment-accounts",
+  "admin-settings", "admin-journal-entries", "admin-stock-ledger", "admin-payment-accounts", "admin-sales-agents",
 ] as const;
 
 export type StoreKey = typeof ALL_STORE_KEYS[number];
@@ -7775,6 +7907,13 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
  */
 export function clearStoredModule(keys: readonly string[]): void {
   keys.forEach(k => {
+    // Migrated keys (kv.ts MIGRATED_KEY_TO_TABLE) must route writes through
+    // their per-record chokepoint — direct `_apiWrite` to kv_store is
+    // invisible after the bridge takes over reads. Batch 10 covers PA + SA;
+    // earlier-migrated keys in ALL_STORE_KEYS have a pre-existing latent gap
+    // here and are tracked for a separate sweep.
+    if (k === PAYMENT_ACCOUNTS_KEY) { _savePaymentAccounts([]); return; }
+    if (k === SALES_AGENTS_KEY)     { _saveSalesAgents([]);     return; }
     const sk = tenantKey(k);
     _lsSet(sk, []);
     _apiWrite(sk, []).catch(() => { /* handled via onesoft:write-error event */ });
@@ -7822,6 +7961,14 @@ export function restoreStoredModuleSnapshot(data: Record<string, unknown>): numb
   let count = 0;
   ALL_STORE_KEYS.forEach(k => {
     if (k in data && Array.isArray(data[k])) {
+      // Migrated keys must go through their chokepoint — same reason as
+      // clearStoredModule above.
+      if (k === PAYMENT_ACCOUNTS_KEY) {
+        _savePaymentAccounts(data[k] as PaymentAccount[]); count++; return;
+      }
+      if (k === SALES_AGENTS_KEY) {
+        _saveSalesAgents(data[k] as SalesAgent[]); count++; return;
+      }
       const sk = tenantKey(k);
       _lsSet(sk, data[k]);
       _apiWrite(sk, data[k]).catch(() => { /* handled via onesoft:write-error event */ });
@@ -8319,7 +8466,7 @@ export function seedDefaultCoaAccounts(): void {
 
   // ── m07: Seed default Cash payment account ───────────────────────────────────
   if (!done.has("m07")) {
-    const existingPAs = getStored<{ id: string }>(PAYMENT_ACCOUNTS_KEY);
+    const existingPAs = getStored<PaymentAccount>(PAYMENT_ACCOUNTS_KEY);
     if (!existingPAs.some(p => p.id === SYS_PA_CASH)) {
       const nowPA = new Date().toISOString();
       const defaultCash: PaymentAccount = {
@@ -8334,7 +8481,7 @@ export function seedDefaultCoaAccounts(): void {
         createdAt:       nowPA,
         updatedAt:       nowPA,
       };
-      setStored(PAYMENT_ACCOUNTS_KEY, [defaultCash, ...existingPAs]);
+      _savePaymentAccounts([defaultCash, ...existingPAs]);
     }
     done.add("m07"); migrationsChanged = true;
   }
@@ -8348,7 +8495,7 @@ export function seedDefaultCoaAccounts(): void {
           ? { ...p, accountTitle: "Cash", description: "Default cash account — physical cash on premises", updatedAt: new Date().toISOString() }
           : p
       );
-      setStored(PAYMENT_ACCOUNTS_KEY, patched);
+      _savePaymentAccounts(patched);
     }
     done.add("m08"); migrationsChanged = true;
   }
@@ -8918,7 +9065,7 @@ export function seedDefaultCoaAccounts(): void {
     return { ...pa, ledgerAccountId: lid };
   });
   if (paUpdated) {
-    setStored(PAYMENT_ACCOUNTS_KEY, pAsPatched);
+    _savePaymentAccounts(pAsPatched);
   }
 
   // ── Always: backfill missing codes on existing CB_GROUP child ledgers ─────────
@@ -12305,6 +12452,8 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           "admin-hrm-salary-allowance-cats",
           "admin-hrm-salary-deduction-cats",
           "admin-hrm-advance-salary",
+          "admin-payment-accounts",
+          "admin-sales-agents",
         ] as const;
 
         for (const k of TENANT_ONLY_ORPHAN_KEYS) {
@@ -12360,6 +12509,14 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           } else if (k === "admin-hrm-advance-salary") {
             for (const a of merged as unknown as AdvanceSalary[]) {
               _persistAdvanceSalaryRest("create", a as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-payment-accounts") {
+            for (const pa of merged as unknown as PaymentAccount[]) {
+              _persistPaymentAccountRest("create", pa as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-sales-agents") {
+            for (const sa of merged as unknown as SalesAgent[]) {
+              _persistSalesAgentRest("create", sa as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});

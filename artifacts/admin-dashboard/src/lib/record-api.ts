@@ -18,6 +18,7 @@ import type {
   Product, Staff, StaffRole,
   SalaryTemplate, SalaryAllowanceCategory, SalaryDeductionCategory,
   SalarySlip, AttendanceRecord, AdvanceSalary,
+  PaymentAccount, SalesAgent,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -362,6 +363,11 @@ export const attendanceRecordsApi    = makeRecordApi<AttendanceRecord>("attendan
 
 // Advance salary (Batch 9) — simple HRM lookup, no JE linkage on the record.
 export const advanceSalariesApi      = makeRecordApi<AdvanceSalary>("advance-salaries");
+
+// Payment accounts + sales agents (Batch 10) — admin infra with COA ledger
+// linkage (just a `ledgerAccountId` reference, no JE-cascade fields).
+export const paymentAccountsApi      = makeRecordApi<PaymentAccount>("payment-accounts");
+export const salesAgentsApi          = makeRecordApi<SalesAgent>("sales-agents");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired

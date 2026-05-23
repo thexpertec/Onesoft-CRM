@@ -531,6 +531,50 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS advance_salaries_tenant_idx ON advance_salaries (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS advance_salaries_tenant_staff_idx ON advance_salaries (tenant_id, staff_id)`,
 
+  // ── Payment Accounts (Admin infra) — Batch 10 ────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS payment_accounts (
+    id                  TEXT        NOT NULL PRIMARY KEY,
+    tenant_id           TEXT        NOT NULL,
+    account_title       TEXT        NOT NULL DEFAULT '',
+    bank_name           TEXT        NOT NULL DEFAULT '',
+    payment_method      TEXT        NOT NULL DEFAULT 'Cash',
+    iban                TEXT        NOT NULL DEFAULT '',
+    description         TEXT        NOT NULL DEFAULT '',
+    is_active           BOOLEAN     NOT NULL DEFAULT TRUE,
+    ledger_account_id   TEXT,
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS payment_accounts_tenant_idx ON payment_accounts (tenant_id)`,
+
+  // ── Sales Agents (CRM) — Batch 10 ────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS sales_agents (
+    id                  TEXT        NOT NULL PRIMARY KEY,
+    tenant_id           TEXT        NOT NULL,
+    agent_code          TEXT        NOT NULL DEFAULT '',
+    name                TEXT        NOT NULL DEFAULT '',
+    email               TEXT        NOT NULL DEFAULT '',
+    phone               TEXT        NOT NULL DEFAULT '',
+    region              TEXT        NOT NULL DEFAULT '',
+    city                TEXT,
+    area                TEXT,
+    commission_rate     TEXT        NOT NULL DEFAULT '0',
+    target_amount       TEXT        NOT NULL DEFAULT '0',
+    status              TEXT        NOT NULL DEFAULT 'Active',
+    join_date           TEXT        NOT NULL DEFAULT '',
+    notes               TEXT        NOT NULL DEFAULT '',
+    opening_balance     NUMERIC,
+    ledger_account_id   TEXT,
+    username            TEXT,
+    password            TEXT,
+    login_enabled       BOOLEAN,
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS sales_agents_tenant_idx ON sales_agents (tenant_id)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,

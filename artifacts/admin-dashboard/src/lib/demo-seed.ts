@@ -9,7 +9,7 @@ import { isTenantCached } from "./store";
 import {
   productsApi, staffApi, staffRolesApi,
   salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
-  salarySlipsApi,
+  salarySlipsApi, paymentAccountsApi, salesAgentsApi,
 } from "./record-api";
 
 /**
@@ -29,6 +29,8 @@ const BRIDGED_KEY_TO_REST: Record<string, { create: (tid: string, body: unknown)
   "admin-hrm-salary-allowance-cats": { create: (tid, body) => salaryAllowanceCategoriesApi.create(tid, body as Parameters<typeof salaryAllowanceCategoriesApi.create>[1]) },
   "admin-hrm-salary-deduction-cats": { create: (tid, body) => salaryDeductionCategoriesApi.create(tid, body as Parameters<typeof salaryDeductionCategoriesApi.create>[1]) },
   "admin-hrm-salary-slips":          { create: (tid, body) => salarySlipsApi.create(tid, body as Parameters<typeof salarySlipsApi.create>[1]) },
+  "admin-payment-accounts":          { create: (tid, body) => paymentAccountsApi.create(tid, body as Parameters<typeof paymentAccountsApi.create>[1]) },
+  "admin-sales-agents":              { create: (tid, body) => salesAgentsApi.create(tid, body as Parameters<typeof salesAgentsApi.create>[1]) },
 };
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";
