@@ -509,6 +509,28 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS attendance_records_tenant_idx ON attendance_records (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS attendance_records_tenant_staff_date_idx ON attendance_records (tenant_id, staff_id, date)`,
 
+  // ── Advance Salary (HRM) — Batch 9 ───────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS advance_salaries (
+    id                  TEXT        NOT NULL PRIMARY KEY,
+    tenant_id           TEXT        NOT NULL,
+    staff_id            TEXT        NOT NULL,
+    staff_name          TEXT        NOT NULL DEFAULT '',
+    staff_role          TEXT        NOT NULL DEFAULT '',
+    amount              NUMERIC     NOT NULL DEFAULT 0,
+    deduct_month        TEXT        NOT NULL,
+    pay_via             TEXT        NOT NULL DEFAULT 'Cash',
+    payment_account_id  TEXT,
+    status              TEXT        NOT NULL DEFAULT 'Pending',
+    applied_on          TEXT        NOT NULL,
+    notes               TEXT,
+    approved_by         TEXT,
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS advance_salaries_tenant_idx ON advance_salaries (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS advance_salaries_tenant_staff_idx ON advance_salaries (tenant_id, staff_id)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,

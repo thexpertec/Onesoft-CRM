@@ -17,7 +17,7 @@ import type {
   SaleReturn, PurchaseReturn, RPVoucher,
   Product, Staff, StaffRole,
   SalaryTemplate, SalaryAllowanceCategory, SalaryDeductionCategory,
-  SalarySlip, AttendanceRecord,
+  SalarySlip, AttendanceRecord, AdvanceSalary,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -359,6 +359,9 @@ export const salaryDeductionCategoriesApi    = makeRecordApi<SalaryDeductionCate
 // payload so JE-delete reverse-cascade clears propagate to the relational row.
 export const salarySlipsApi          = makeRecordApi<SalarySlip>("salary-slips");
 export const attendanceRecordsApi    = makeRecordApi<AttendanceRecord>("attendance-records");
+
+// Advance salary (Batch 9) — simple HRM lookup, no JE linkage on the record.
+export const advanceSalariesApi      = makeRecordApi<AdvanceSalary>("advance-salaries");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired

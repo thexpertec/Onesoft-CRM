@@ -7,7 +7,7 @@ import {
   stockItemsApi, stockLedgerApi,
   productsApi, staffApi, staffRolesApi,
   salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
-  salarySlipsApi, attendanceRecordsApi, nullifyUndefined,
+  salarySlipsApi, attendanceRecordsApi, advanceSalariesApi, nullifyUndefined,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -12304,6 +12304,7 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           "admin-hrm-attendance",
           "admin-hrm-salary-allowance-cats",
           "admin-hrm-salary-deduction-cats",
+          "admin-hrm-advance-salary",
         ] as const;
 
         for (const k of TENANT_ONLY_ORPHAN_KEYS) {
@@ -12355,6 +12356,10 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           } else if (k === "admin-hrm-attendance") {
             for (const a of merged as unknown as AttendanceRecord[]) {
               _persistAttendanceRest("create", a as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-advance-salary") {
+            for (const a of merged as unknown as AdvanceSalary[]) {
+              _persistAdvanceSalaryRest("create", a as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});
@@ -13468,6 +13473,70 @@ export type AdvanceSalary = {
 
 const ADVANCE_SALARY_KEY = "admin-hrm-advance-salary";
 
+/**
+ * Batch 9 chokepoint for advance-salary records. Diff-dual-write — same shape
+ * as Batches 6/7 lookups. No JE-cascade fields, so plain pattern (no
+ * nullifyUndefined). Anti-recursion invariant: exactly 1 inner setStored.
+ */
+function _saveAdvanceSalaries(items: AdvanceSalary[]): void {
+  const sk = tenantKey(ADVANCE_SALARY_KEY);
+  const prior: AdvanceSalary[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as AdvanceSalary[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(ADVANCE_SALARY_KEY, items);
+  _dualWriteAdvanceSalariesDiff(prior, items, tid ?? undefined);
+}
+
+function _stableAdvanceSalaryJson(a: AdvanceSalary): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = a;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistAdvanceSalaryRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = advanceSalariesApi.create(tid, item as unknown as Omit<AdvanceSalary, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = advanceSalariesApi.update(tid, item.id, rest as Partial<Omit<AdvanceSalary, "id" | "createdAt">>);
+  } else {
+    fn = advanceSalariesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[advance-salary ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteAdvanceSalariesDiff(prev: AdvanceSalary[], next: AdvanceSalary[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistAdvanceSalaryRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableAdvanceSalaryJson(p) !== _stableAdvanceSalaryJson(n))
+      _persistAdvanceSalaryRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistAdvanceSalaryRest("delete", { id }, tid);
+  }
+}
+
 export const getAdvanceSalaries = (): AdvanceSalary[] =>
   getStored<AdvanceSalary>(ADVANCE_SALARY_KEY);
 
@@ -13480,7 +13549,7 @@ export const createAdvanceSalary = (
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(ADVANCE_SALARY_KEY, [...getAdvanceSalaries(), item]);
+  _saveAdvanceSalaries([...getAdvanceSalaries(), item]);
   return item;
 };
 
@@ -13492,10 +13561,10 @@ export const updateAdvanceSalary = (
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Advance salary record not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(ADVANCE_SALARY_KEY, items);
+  _saveAdvanceSalaries(items);
   return items[i];
 };
 
 export const deleteAdvanceSalary = (id: string): void => {
-  setStored(ADVANCE_SALARY_KEY, getAdvanceSalaries().filter(x => x.id !== id));
+  _saveAdvanceSalaries(getAdvanceSalaries().filter(x => x.id !== id));
 };

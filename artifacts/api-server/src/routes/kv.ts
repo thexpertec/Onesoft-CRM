@@ -82,6 +82,7 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   "admin-hrm-salary-deduction-cats": "salary_deduction_categories",
   "admin-hrm-salary-slips":   "salary_slips",
   "admin-hrm-attendance":     "attendance_records",
+  "admin-hrm-advance-salary": "advance_salaries",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;

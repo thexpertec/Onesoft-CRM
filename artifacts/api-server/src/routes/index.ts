@@ -31,6 +31,7 @@ import salaryAllowanceCategoriesRouter from "./salary-allowance-categories.js";
 import salaryDeductionCategoriesRouter from "./salary-deduction-categories.js";
 import salarySlipsRouter from "./salary-slips.js";
 import attendanceRecordsRouter from "./attendance-records.js";
+import advanceSalariesRouter from "./advance-salaries.js";
 import journalEntriesRouter from "./journal-entries.js";
 import migrateRouter from "./migrate.js";
 
@@ -71,6 +72,7 @@ router.use("/salary-allowance-categories", salaryAllowanceCategoriesRouter);
 router.use("/salary-deduction-categories", salaryDeductionCategoriesRouter);
 router.use("/salary-slips", salarySlipsRouter);
 router.use("/attendance-records", attendanceRecordsRouter);
+router.use("/advance-salaries", advanceSalariesRouter);
 router.use("/journal-entries", journalEntriesRouter);
 
 // Phase 2 — KV→relational migration endpoint.
