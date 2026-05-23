@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { query } from "../lib/db.js";
+import { requireApiKey } from "../middleware/require-api-key.js";
 import { rowToApi } from "../lib/records.js";
 
 const router = Router();
@@ -115,15 +116,95 @@ async function fetchMigratedRows(table: string, tenantId: string): Promise<unkno
   return rows.map(rowToApi);
 }
 
-// NOTE — `/api/kv/*` is intentionally NOT gated by `requireApiKey`.
-// The public-facing storefronts (`tenant-store`, `customer-portal`,
-// `requirement-doc`) call these endpoints anonymously to read products,
-// settings, and store orders. Locking this surface requires first splitting
-// the KV namespace into "public-readable" and "internal" halves, then
-// migrating storefront writes to dedicated public endpoints — tracked as a
-// separate epic. Until that lands, every key under `/api/kv/*` is reachable
-// from anywhere on the internet without credentials. Do not store secrets
-// or anything that wouldn't survive being publicly readable in this table.
+// ── /api/kv gate ─────────────────────────────────────────────────────────────
+// `/api/kv` cannot use the global `requireApiKey` middleware because the
+// public-facing storefronts (`tenant-store`, `customer-portal`,
+// `requirement-doc`) call a small set of these endpoints anonymously. So we
+// use a per-method/per-key allowlist: anything not on the allowlist is gated
+// by `requireApiKey` (i.e. only the admin-dashboard, which sends `X-Api-Key`,
+// can reach it).
+//
+// The allowlists below were derived from a complete audit of every storefront
+// `/api/kv/*` call (May 2026). Anything new the storefronts need must be
+// added here — silently failing with 401 is the intended outcome otherwise.
+//
+// Known residual exposure (acknowledged, not fixed in this pass):
+//   - GET admin-customers / admin-sales: the tenant-store checkout page and
+//     the customer-portal login both read these to match by email+phone.
+//     Replacing them needs dedicated server endpoints (e.g. /api/portal/login,
+//     /api/storefront/customer-lookup) — tracked as a follow-up.
+//   - PUT admin-sales: storefront checkout writes the resulting sale here.
+//     Same replacement story.
+// Until those land, anyone who knows a tenant's `t:{tenantId}` namespace can
+// list that tenant's customers and sales. Tenant IDs are not secrets — treat
+// this as a public read.
+//
+// Namespace-level operations (GET `/`, GET `/:namespace`, DELETE `/:namespace`)
+// and all DELETEs are admin-only — storefronts have no legitimate use for any
+// of them.
+
+const ANON_EXACT_READ = new Set<string>([
+  "admin-products",
+  "admin-settings",
+  "website-cms",
+  "repair-bookings",
+  "store-orders",
+  "online-orders",
+  "portal-accounts",
+  "admin-customers", // residual — see header
+  "admin-sales",     // residual — see header
+]);
+const ANON_EXACT_WRITE = new Set<string>([
+  "repair-bookings",
+  "store-orders",
+  "online-orders",
+  "portal-accounts",
+  "admin-sales",     // residual — see header
+]);
+const ANON_PREFIX_READ = ["portal-profile-", "clubcard-"];
+const ANON_PREFIX_WRITE = ["portal-profile-", "clubcard-"];
+
+function isAnonymousKvAllowed(method: string, key: string): boolean {
+  if (method === "GET") {
+    if (ANON_EXACT_READ.has(key)) return true;
+    return ANON_PREFIX_READ.some(p => key.startsWith(p));
+  }
+  if (method === "PUT" || method === "POST") {
+    if (ANON_EXACT_WRITE.has(key)) return true;
+    return ANON_PREFIX_WRITE.some(p => key.startsWith(p));
+  }
+  // DELETE and everything else: admin-only.
+  return false;
+}
+
+router.use((req, res, next) => {
+  // Router-level middleware runs BEFORE Express route matching, so
+  // `req.params` is empty here — we have to parse `req.path` ourselves.
+  // Path shapes (router is mounted at `/api/kv`, so paths are relative):
+  //   `/`                         → list namespaces  (admin)
+  //   `/:namespace`               → namespace dump   (admin)  or  wipe (admin)
+  //   `/:namespace/:key`          → per-key get/put/delete (allowlist)
+  const segments = req.path.split("/").filter(Boolean);
+  // Only `/:namespace/:key` is eligible for the anonymous allowlist; every
+  // other shape (no key, namespace-level, deeper paths) is admin-only.
+  if (segments.length === 2) {
+    let key: string;
+    try {
+      key = decodeURIComponent(segments[1]!);
+    } catch {
+      // Malformed percent-encoding — fail closed to the gate rather than
+      // throwing a 500. The gate will 401 and the request never reaches the
+      // handler below (which would also throw on the same input).
+      requireApiKey(req, res, next);
+      return;
+    }
+    if (isAnonymousKvAllowed(req.method, key)) {
+      next();
+      return;
+    }
+  }
+  requireApiKey(req, res, next);
+});
 
 // GET /api/kv  → [{ namespace, keyCount, updatedAt }]  (all namespaces summary)
 router.get("/", async (_req, res) => {

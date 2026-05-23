@@ -8,7 +8,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 - **requirement-doc** (`artifacts/requirement-doc/`): Customer Requirement Collection Document — a beautiful, view-only single-page React + Vite frontend. No backend. Served at `/`.
 - **admin-dashboard** (`artifacts/admin-dashboard/`): Onesoft Admin Dashboard — React + Vite + Tailwind. Data storage: **PostgreSQL only** — no localStorage for business data. Every mutation writes to `_memRaw` (in-memory Map, tab-scoped) immediately and fires `_apiWrite` to persist to PostgreSQL via the API server. On login, `syncAllFromServer` hydrates `_memRaw` from the DB. Auth state (login, tenant, impersonation) uses **sessionStorage** (per-tab, no cross-tab bleed). UI-only preferences (theme, document drafts, form layout modes) remain in localStorage. Served at `/admin-dashboard/`.
-- **api-server** (`artifacts/api-server/`): Express 5 API server. Provides `/api/kv/:namespace/:key` REST endpoints (GET/PUT/DELETE) backed by PostgreSQL `kv_store` table. Served at `/api`. No auth on API — it is internal only.
+- **api-server** (`artifacts/api-server/`): Express 5 API server. Provides `/api/kv/:namespace/:key` REST endpoints (GET/PUT/DELETE) backed by PostgreSQL `kv_store` table, plus 30+ per-record relational endpoints (`/api/customers`, `/api/sales`, `/api/journal-entries`, …). Served at `/api`. Auth: `X-Api-Key` header matching `KV_API_SECRET` env var (fail-closed at startup); see "API auth & CORS" section below for the exact gated/anonymous matrix.
 - **customer-portal** (`artifacts/customer-portal/`): Tenant-based customer self-service portal served at `/customer-portal/`. Customers log in with email + phone number (matched against the tenant's `admin-customers` KV data). Pages: Dashboard (stats + recent orders), Orders (full list + search), Order Detail (line items, totals, delivery status), Profile (read-only info). Tenant identified via `?t=<tenantId>` URL param or typed at login. No separate backend — reads directly from the shared KV API (`t:{tenantId}/admin-customers`, `t:{tenantId}/admin-sales`, `t:{tenantId}/admin-settings`).
 - **tenant-store** (`artifacts/tenant-store/`): Tenant-facing e-commerce storefront. Minimal, tech-industry focused React + Vite app served at `/tenant-store/`. Reads products from `/api/kv/{namespace}/admin-products` (namespace = `t:{tenantId}` for tenant-specific, or `global` for superadmin). Cart stored in `onesoft-store-cart` localStorage key. Tenant ID passed via `?tenant=` URL param. Pages: Home, Shop, Product Detail, Category. Features: search, filter by category/brand/price, sort, cart drawer, mobile responsive.
 
@@ -119,6 +119,34 @@ When `deleteJournalEntry(id)` runs, the store now scans every record that points
 | RP Voucher | (existing behaviour) reset to draft, linked invoice payments reversed |
 
 This complements the deletion blockers above: blockers prevent users from deleting the *source* record while a JE still exists; the reverse-cascade lets users delete the *JE* and have the source automatically return to its pre-payment state. Stock movements are not touched — those are handled separately via stock adjustments.
+
+### API auth & CORS (May 2026 hardening)
+
+The api-server runs `assertApiKeyEnvOrExit()` at startup — if `KV_API_SECRET` is unset, the process refuses to boot. Fail-closed, never fail-open. The previous design fell open without the env var, which silently anonymized every per-record route in any environment that forgot the secret.
+
+| Surface | Auth | Notes |
+|---|---|---|
+| `/api/healthz` | anonymous | Deployment probes. |
+| `/api/auth/*` | anonymous | Tenant login (must be open so the admin-dashboard login page can call it). |
+| `/api/public/*` | anonymous | Public requirement-doc lookups. |
+| `/api/kv/:ns/:key` | **per-method allowlist** | Anonymous only for the storefront key set; everything else requires `X-Api-Key`. See `routes/kv.ts`. |
+| `/api/kv/` and `/api/kv/:ns` | `X-Api-Key` | Namespace list, namespace dump, namespace wipe — never anonymous. |
+| All per-record routes (`/api/customers`, `/api/sales`, `/api/journal-entries`, all 30+) | `X-Api-Key` | Admin-dashboard `rFetch` (in `record-api.ts` and `api.ts`) sends the header automatically. No other client should reach these. |
+
+**KV allowlist** (`routes/kv.ts` — `ANON_EXACT_READ` / `ANON_EXACT_WRITE` / `ANON_PREFIX_READ` / `ANON_PREFIX_WRITE`):
+- Anon READ: `admin-products`, `admin-settings`, `website-cms`, `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, `admin-customers`*, `admin-sales`*, prefix `portal-profile-`, prefix `clubcard-`
+- Anon WRITE (PUT/POST): `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, `admin-sales`*, prefix `portal-profile-`, prefix `clubcard-`
+- Anon DELETE: **never**
+
+The gate uses a router-level middleware that parses `req.path` directly (Express `req.params` is empty in `router.use()` callbacks before route matching). Only the `/:namespace/:key` shape is eligible for the allowlist; root list, namespace dump, namespace wipe all require the key. Malformed percent-encoding fails closed to the gate (try/catch around `decodeURIComponent`).
+
+**CORS** (`app.ts`): explicit allowlist from `ALLOWED_ORIGINS` env (comma-separated), with fallback to `REPLIT_DEV_DOMAIN` and a `*.replit.app` / `*.replit.dev` wildcard. Same-origin requests (no `Origin` header — curl, server-to-server) are allowed. Policy deny returns `cb(null, false)` (no CORS headers, browser drops cleanly) instead of throwing through Express's error handler as 500. `credentials: false` — every protected route uses the `X-Api-Key` header, never cookies.
+
+**Known residual exposure** (acknowledged, NOT fixed in this pass — tracked as follow-up):
+1. `GET /api/kv/t:{tid}/admin-customers` and `GET /api/kv/t:{tid}/admin-sales` stay anonymous because the customer-portal login matches email+phone against the customer list, and the orders page reads sales. Closing this needs dedicated server endpoints (e.g. `/api/portal/login`, `/api/storefront/customer-lookup`).
+2. `PUT /api/kv/t:{tid}/admin-sales` stays anonymous because tenant-store checkout writes the resulting sale here. Same replacement story.
+3. `VITE_KV_API_SECRET` is shipped in the admin-dashboard JS bundle (same value as `KV_API_SECRET`) — anyone who can load the admin app can extract the key. The gate is meaningful only against casual scanners, bots, other tenants of the same Replit deployment, and cross-origin attempts bypassing CORS. **Real per-user authentication (server-issued sessions, server-derived `tenantId`) is a separate epic** and remains unbuilt.
+4. Plaintext password comparison in `admin-tenants` and `admin-sales-agents` (still done client-side in `store.ts`). Needs hashing + server-side auth route. Deferred to the same auth epic.
 
 ### Per-record REST migration (incremental cutover from KV)
 

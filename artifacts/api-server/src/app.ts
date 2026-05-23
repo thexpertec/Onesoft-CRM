@@ -80,7 +80,10 @@ app.use(
           return;
         }
       } catch { /* fall through to deny */ }
-      cb(new Error(`CORS: origin not allowed: ${origin}`));
+      // Policy deny — `cb(null, false)` lets the cors lib respond without
+      // CORS headers. The browser blocks the request cleanly; we don't want
+      // to convert this into a 500 in Express's error handler.
+      cb(null, false);
     },
     credentials: false,
   })
