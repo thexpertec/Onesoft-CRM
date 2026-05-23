@@ -1,6 +1,11 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { initSchema } from "./lib/schema-init";
+import { assertApiKeyEnvOrExit } from "./middleware/require-api-key";
+
+// Fail-closed: refuse to start without the shared secret. Protected per-record
+// routes would otherwise be anonymous.
+assertApiKeyEnvOrExit();
 
 const rawPort = process.env["PORT"];
 

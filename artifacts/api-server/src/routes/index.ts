@@ -39,13 +39,27 @@ import jobsRouter from "./jobs.js";
 import jobApplicantsRouter from "./job-applicants.js";
 import interviewSchedulesRouter from "./interview-schedules.js";
 import migrateRouter from "./migrate.js";
+import { requireApiKey } from "../middleware/require-api-key.js";
 
 const router: IRouter = Router();
 
+// ── Anonymous surface ────────────────────────────────────────────────────────
+// Routes mounted before `requireApiKey` accept unauthenticated traffic.
+//   - /healthz       deployment/uptime probes
+//   - /api/kv/*      storefronts read/write through here (see kv.ts header)
+//   - /api/public/*  public requirement-doc lookups
+//   - /api/auth/*    tenant login (issues no session today, but must be open
+//                    so the admin-dashboard's login page can call it)
 router.use(healthRouter);
 router.use("/kv", kvRouter);
 router.use("/public", publicRouter);
 router.use("/auth", authRouter);
+
+// ── Protected surface ────────────────────────────────────────────────────────
+// Everything below requires the `X-Api-Key` header to match `KV_API_SECRET`.
+// The admin-dashboard sends this header automatically via `rFetch` in both
+// `record-api.ts` and `api.ts`; no other client should reach these routes.
+router.use(requireApiKey);
 
 // Phase 0 — per-record relational endpoints. These coexist with /kv for now;
 // the dashboard will migrate one surface at a time in Phases 1–3.

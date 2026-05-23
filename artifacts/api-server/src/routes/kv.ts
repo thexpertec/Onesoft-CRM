@@ -115,17 +115,15 @@ async function fetchMigratedRows(table: string, tenantId: string): Promise<unkno
   return rows.map(rowToApi);
 }
 
-const KV_API_SECRET = process.env["KV_API_SECRET"];
-
-router.use((req, res, next) => {
-  if (!KV_API_SECRET) { next(); return; }
-  const provided = req.headers["x-api-key"];
-  if (provided !== KV_API_SECRET) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
-});
+// NOTE — `/api/kv/*` is intentionally NOT gated by `requireApiKey`.
+// The public-facing storefronts (`tenant-store`, `customer-portal`,
+// `requirement-doc`) call these endpoints anonymously to read products,
+// settings, and store orders. Locking this surface requires first splitting
+// the KV namespace into "public-readable" and "internal" halves, then
+// migrating storefront writes to dedicated public endpoints — tracked as a
+// separate epic. Until that lands, every key under `/api/kv/*` is reachable
+// from anywhere on the internet without credentials. Do not store secrets
+// or anything that wouldn't survive being publicly readable in this table.
 
 // GET /api/kv  → [{ namespace, keyCount, updatedAt }]  (all namespaces summary)
 router.get("/", async (_req, res) => {

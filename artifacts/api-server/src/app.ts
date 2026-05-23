@@ -45,11 +45,44 @@ app.use(
   }),
 );
 
-// Allow requests from the dashboard (same origin in production, cross-origin in dev)
+// CORS — explicit allowlist instead of reflecting any origin.
+//
+// Reads `ALLOWED_ORIGINS` (comma-separated absolute URLs) from the env. In a
+// Replit workspace where the env var isn't set we fall back to the dev domain
+// (`REPLIT_DEV_DOMAIN`) so the in-iframe preview keeps working. Same-origin
+// requests (no `Origin` header — curl, server-to-server, healthchecks) are
+// always allowed.
+//
+// `credentials: false` is intentional: every protected route is gated by the
+// `X-Api-Key` header, not by cookies, so allowing credentials would only
+// widen the surface without buying anything.
+const ALLOWED_ORIGINS: string[] = (() => {
+  const fromEnv = process.env["ALLOWED_ORIGINS"];
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return fromEnv.split(",").map(s => s.trim()).filter(Boolean);
+  }
+  const devDomain = process.env["REPLIT_DEV_DOMAIN"];
+  return devDomain ? [`https://${devDomain}`] : [];
+})();
+
 app.use(
   cors({
-    origin: true,
-    credentials: true,
+    origin: (origin, cb) => {
+      // No Origin header — server-to-server, curl, healthchecks. Allow.
+      if (!origin) { cb(null, true); return; }
+      if (ALLOWED_ORIGINS.includes(origin)) { cb(null, true); return; }
+      // Replit deployment domains (`*.replit.app` for prod, `*.replit.dev`
+      // for workspace previews). Useful when the env var isn't yet set.
+      try {
+        const u = new URL(origin);
+        if (u.hostname.endsWith(".replit.app") || u.hostname.endsWith(".replit.dev")) {
+          cb(null, true);
+          return;
+        }
+      } catch { /* fall through to deny */ }
+      cb(new Error(`CORS: origin not allowed: ${origin}`));
+    },
+    credentials: false,
   })
 );
 
