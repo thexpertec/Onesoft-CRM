@@ -74,6 +74,8 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   "admin-sale-returns":       "sale_returns",
   "admin-purchase-returns":   "purchase_returns",
   "admin-rp-vouchers":        "rp_vouchers",
+  "admin-products":           "products",
+  "admin-hrm-staff":          "staff",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -282,6 +284,16 @@ router.delete("/:namespace/:key", async (req, res) => {
       "DELETE FROM kv_store WHERE namespace = $1 AND key = $2",
       [namespace, key]
     );
+    // Bridge cleanup: when the deleted key is bridged to a relational table
+    // and the namespace is tenant-scoped, also purge the relational rows so
+    // readers (which see the bridged table, not kv_store) actually observe
+    // the deletion. Without this, frontend "clean tenant master data" and
+    // similar flows would leave behind ghost rows for migrated entities.
+    const tenantId = tenantOfNamespace(namespace);
+    const table = MIGRATED_KEY_TO_TABLE[key];
+    if (tenantId && table && SAFE_IDENT.test(table)) {
+      await query(`DELETE FROM ${table} WHERE tenant_id = $1`, [tenantId]);
+    }
     return res.json({ ok: true });
   } catch (err) {
     console.error("KV DELETE error", err);
@@ -294,6 +306,17 @@ router.delete("/:namespace", async (req, res) => {
   try {
     const { namespace } = req.params;
     await query("DELETE FROM kv_store WHERE namespace = $1", [namespace]);
+    // Bridge cleanup: tenant-scoped namespace wipes (demo reset, tenant
+    // delete) must also clear every bridged relational table for that tenant
+    // — otherwise migrated entities (products, staff, sales, …) survive the
+    // wipe and reappear on next reload via the bridge.
+    const tenantId = tenantOfNamespace(namespace);
+    if (tenantId) {
+      for (const table of Object.values(MIGRATED_KEY_TO_TABLE)) {
+        if (!SAFE_IDENT.test(table)) continue;
+        await query(`DELETE FROM ${table} WHERE tenant_id = $1`, [tenantId]);
+      }
+    }
     return res.json({ ok: true });
   } catch (err) {
     console.error("KV DELETE namespace error", err);

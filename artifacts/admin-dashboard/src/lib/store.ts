@@ -5,6 +5,7 @@ import {
   apiCreateJE, apiUpdateJE, apiDeleteJE,
   type ApiJELine,
   stockItemsApi, stockLedgerApi,
+  productsApi, staffApi,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -342,6 +343,91 @@ function _stableStockItemJson(s: StockItem): string {
   const { createdAt: _c, updatedAt: _u, ...rest } = s as StockItem & { tenantId?: string };
   void _c; void _u;
   return JSON.stringify(rest);
+}
+
+// ── Batch 5: products ────────────────────────────────────────────────────────
+function _stableProductJson(p: Product): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = p as Product & { tenantId?: string };
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistProductRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = productsApi.create(tid, item as unknown as Omit<Product, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = productsApi.update(tid, item.id, rest as Partial<Omit<Product, "id" | "createdAt">>);
+  } else {
+    fn = productsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[products ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteProductsDiff(prev: Product[], next: Product[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(p => [p.id, p]));
+  const nextById = new Map(next.map(p => [p.id, p]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistProductRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    } else if (_stableProductJson(p) !== _stableProductJson(n)) {
+      _persistProductRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistProductRest("delete", { id }, tid);
+  }
+}
+
+/**
+ * Awaitable variant of the products diff. Returns a Promise that settles only
+ * after every REST CREATE/UPDATE/DELETE has completed. Use this on durability-
+ * sensitive bulk paths (e.g. CSV import) where the caller needs a guarantee
+ * that the relational `products` table reflects the new state before the page
+ * can be closed. The fire-and-forget `_dualWriteProductsDiff` is still the
+ * right choice for incremental CRUD where the chokepoint is called many times
+ * per session and an awaited per-call REST round-trip would feel laggy.
+ */
+async function _persistProductsAwait(prev: Product[], next: Product[], tid: string): Promise<void> {
+  const prevById = new Map(prev.map(p => [p.id, p]));
+  const nextById = new Map(next.map(p => [p.id, p]));
+  const ops: Promise<unknown>[] = [];
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      ops.push(productsApi.create(tid, n as Omit<Product, "id" | "createdAt" | "updatedAt">));
+    } else if (_stableProductJson(p) !== _stableProductJson(n)) {
+      const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = n as Product & { createdAt?: string; updatedAt?: string };
+      void _id; void _ca; void _ua;
+      ops.push(productsApi.update(tid, id, rest as Partial<Omit<Product, "id" | "createdAt">>));
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) ops.push(productsApi.delete(tid, id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/HTTP 404/i.test(msg)) return; // already gone — acceptable
+      throw err;
+    }));
+  }
+  await Promise.all(ops);
 }
 
 function _persistStockItemRest(
@@ -3381,6 +3467,25 @@ export function replaceAllMediaLibraryItems(items: MediaLibraryItem[]): void {
 // ─── Products (catalogue) ─────────────────────────────────────────────────────
 const PRODUCTS_KEY = "admin-products";
 
+/**
+ * Batch 5 chokepoint — every writer that previously called
+ * `setStored(PRODUCTS_KEY, items)` now goes through this function so the
+ * relational `products` table stays in lockstep with KV. Diffs against the
+ * prior on-disk snapshot, fires per-row CREATE / UPDATE / DELETE via
+ * `productsApi`. Mirrors `_saveStock` from Batch 4b — same anti-recursion
+ * invariant: the single `setStored(PRODUCTS_KEY, items)` below is the ONLY
+ * one allowed in the file; every other writer must call `_saveProducts`.
+ */
+function _saveProducts(items: Product[]): void {
+  const sk = tenantKey(PRODUCTS_KEY);
+  const prior: Product[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as Product[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(PRODUCTS_KEY, items);
+  _dualWriteProductsDiff(prior, items, tid ?? undefined);
+}
+
 export const getProducts = (): Product[] => getStored<Product>(PRODUCTS_KEY);
 
 /**
@@ -3402,7 +3507,16 @@ export async function syncProductsToStore(tenantId?: string | null): Promise<num
     return { ...p, openingStock: String(liveQty) };
   });
 
-  // Use a direct fetch that throws on error instead of the fire-and-forget helper
+  // Batch 5: products is bridged, so KV writes for `admin-products` are
+  // ignored by readers. Push openingStock changes through the per-record
+  // REST endpoint instead. For the global namespace (no tenantId) the
+  // bridge does not apply, so we keep the legacy KV PUT.
+  if (tenantId) {
+    for (const p of productsWithStock) {
+      await productsApi.update(tenantId, p.id, p);
+    }
+    return productsWithStock.length;
+  }
   const url = `/api/kv/${encodeURIComponent(ns)}/${encodeURIComponent(PRODUCTS_KEY)}`;
   const res = await fetch(url, {
     method: "PUT",
@@ -3590,7 +3704,7 @@ export function backfillMissingSKUs(): boolean {
       }
     }
   }
-  if (prodChanged) setStored(PRODUCTS_KEY, products);
+  if (prodChanged) _saveProducts(products);
 
   // ── Step 2: backfill SKU on any stock records that still have none ────────
   // Now that every product has a SKU we can match stock records by productName
@@ -3908,7 +4022,7 @@ export const createProduct = (data: Omit<Product, "id" | "createdAt" | "updatedA
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(PRODUCTS_KEY, [...getProducts(), item]);
+  _saveProducts([...getProducts(), item]);
   addActivity({ action: "created", entity: "Product", entityName: item.name, detail: item.sku ? `SKU: ${item.sku}` : undefined });
   _syncProductLedgers(item);
   return item;
@@ -3963,7 +4077,7 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
     }
   }
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(PRODUCTS_KEY, items);
+  _saveProducts(items);
   addActivity({ action: "updated", entity: "Product", entityName: items[i].name });
   _syncProductLedgers(items[i]);
   return items[i];
@@ -3989,7 +4103,7 @@ export function bulkReplaceProductImages(
     all[i] = next;
     changed = true;
   }
-  if (changed) setStored(PRODUCTS_KEY, all);
+  if (changed) _saveProducts(all);
 }
 
 export const deleteProduct = (id: string): void => {
@@ -3998,7 +4112,7 @@ export const deleteProduct = (id: string): void => {
     const blockers = _productFinancialBlockers(item);
     if (blockers.length) throw new Error(_formatBlockerError("product", item.name, blockers));
   }
-  setStored(PRODUCTS_KEY, getProducts().filter(p => p.id !== id));
+  _saveProducts(getProducts().filter(p => p.id !== id));
   addActivity({ action: "deleted", entity: "Product", entityName: item?.name || id });
   _removeProductLedgers(id);
   // Clean up orphaned stock items and ledger entries for this product's SKUs.
@@ -4025,7 +4139,7 @@ export const reorderProducts = (orderedIds: string[]): void => {
   const map = new Map(all.map(p => [p.id, p]));
   const reordered = orderedIds.map(id => map.get(id)).filter(Boolean) as Product[];
   const leftover  = all.filter(p => !orderedIds.includes(p.id));
-  setStored(PRODUCTS_KEY, [...reordered, ...leftover]);
+  _saveProducts([...reordered, ...leftover]);
 };
 
 /**
@@ -4105,7 +4219,17 @@ export const bulkImportProducts = async (
   };
 
   const productsSk = tenantKey(PRODUCTS_KEY);
-  _lsSetLocal(productsSk, finalList);
+  // Batch 5: route through the chokepoint so the relational `products`
+  // table is diff-updated. `_saveProducts` writes to _memRaw + KV + REST
+  // in one call, replacing the prior `_lsSetLocal` + manual `kvPut` pair
+  // below (which would now be invisible to the bridge). The REST writes
+  // inside the chokepoint are fire-and-forget; the awaited per-record
+  // persistence is added to `writes[]` further down so this bulk import
+  // function keeps its "products durable on resolve" contract.
+  const priorProducts: Product[] = (() => {
+    try { const r = _lsGet(productsSk); return r ? JSON.parse(r) as Product[] : []; } catch { return []; }
+  })();
+  _saveProducts(finalList);
 
   // ── Create opening-balance stock entries for new AND updated products ──
   // For updates: only create a stock item if openingStock > 0 and none exists yet.
@@ -4202,8 +4326,13 @@ export const bulkImportProducts = async (
   }
 
   // ── Await PostgreSQL writes so data survives page refresh ──────────────────
-  const [productsNs, productsKey] = _resolveNsKey(productsSk);
-  const writes: Promise<void>[] = [kvPut(productsNs, productsKey, finalList)];
+  // Products: await the per-record REST diff explicitly so this bulk import
+  // keeps its prior "products durable when promise resolves" contract. The
+  // `_saveProducts` call above already fired (fire-and-forget) the diff into
+  // _memRaw + KV; this awaited helper ensures the relational `products` table
+  // is also caught up before we return to the caller.
+  const writes: Promise<void>[] = [];
+  if (_activeTenantId) writes.push(_persistProductsAwait(priorProducts, finalList, _activeTenantId));
 
   if (newStockItems.length > 0) {
     const [stockNs, stockKey] = _resolveNsKey(stockSk);
@@ -4631,7 +4760,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
     }
   });
 
-  setStored(PRODUCTS_KEY, allProducts);
+  _saveProducts(allProducts);
   setStored(RM_KEY, rms);
   batchLedger(ledger);
 
@@ -6868,7 +6997,7 @@ export const completeManufacturingOrder = (id: string): ManufacturingOrder => {
   });
 
   if (stocksDirty) _saveStock(allStocks);
-  setStored(PRODUCTS_KEY, allProducts);
+  _saveProducts(allProducts);
   batchLedger(ledger);
 
   orders[i] = { ...orders[i], status: "Completed", updatedAt: new Date().toISOString() };
@@ -6938,6 +7067,73 @@ export type Staff = {
 
 const STAFF_KEY = "admin-hrm-staff";
 
+/**
+ * Batch 5 chokepoint for HRM staff. Same diff-dual-write pattern as
+ * `_saveProducts` / `_saveStock`. Every writer that previously called
+ * `_saveStaff(…)` must call this instead — the `admin-hrm-staff`
+ * key is bridged in `kv.ts` and any direct KV write is invisible to readers.
+ */
+function _saveStaff(items: Staff[]): void {
+  const sk = tenantKey(STAFF_KEY);
+  const prior: Staff[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as Staff[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(STAFF_KEY, items);
+  _dualWriteStaffDiff(prior, items, tid ?? undefined);
+}
+
+function _stableStaffJson(s: Staff): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = s as Staff & { tenantId?: string };
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistStaffRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = staffApi.create(tid, item as unknown as Omit<Staff, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = staffApi.update(tid, item.id, rest as Partial<Omit<Staff, "id" | "createdAt">>);
+  } else {
+    fn = staffApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[staff ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteStaffDiff(prev: Staff[], next: Staff[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(s => [s.id, s]));
+  const nextById = new Map(next.map(s => [s.id, s]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) {
+      _persistStaffRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    } else if (_stableStaffJson(p) !== _stableStaffJson(n)) {
+      _persistStaffRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistStaffRest("delete", { id }, tid);
+  }
+}
+
 export const getStaff = (): Staff[] => getStored<Staff>(STAFF_KEY);
 
 export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">): Staff => {
@@ -6971,7 +7167,7 @@ export const createStaff = (data: Omit<Staff, "id" | "createdAt" | "updatedAt">)
     description: `Staff payable account for: ${data.name}`,
   });
   const item: Staff = { ...data, ledgerAccountId, staffPayableLedgerId, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(STAFF_KEY, [...getStaff(), item]);
+  _saveStaff([...getStaff(), item]);
   return item;
 };
 
@@ -6984,7 +7180,7 @@ export const updateStaff = (id: string, updates: Partial<Omit<Staff, "id" | "cre
     assertUsernameUnique(updates.username, { kind: "staff", id });
   }
   items[i] = { ...prev, ...updates, updatedAt: new Date().toISOString() };
-  setStored(STAFF_KEY, items);
+  _saveStaff(items);
 
   // Sync linked COA ledger account names whenever name or designation changes.
   // staffPayableLedgerId  → always named after the staff member's full name.
@@ -7014,7 +7210,7 @@ export const deleteStaff = (id: string): void => {
     const blockers = _staffFinancialBlockers(staff);
     if (blockers.length) throw new Error(_formatBlockerError("staff member", staff.name, blockers));
   }
-  setStored(STAFF_KEY, getStaff().filter(s => s.id !== id));
+  _saveStaff(getStaff().filter(s => s.id !== id));
   // Remove linked ledgers only when they have no JE history.
   // Accounts with posted JEs are left fully active so those JEs continue to resolve correctly.
   // The dynamicAccounts filter in seedDefaultCoaAccounts cleans up zero-history orphans on next login.
@@ -8757,7 +8953,7 @@ export function seedDefaultCoaAccounts(): void {
       return { ...s, ledgerAccountId: lid };
     });
     if (staffUpdated) {
-      setStored(STAFF_KEY, staffPatched);
+      _saveStaff(staffPatched);
     }
   }
 
@@ -8946,7 +9142,7 @@ export function seedDefaultCoaAccounts(): void {
       staffBFUpdated = true;
       return { ...s, staffPayableLedgerId: lid };
     });
-    if (staffBFUpdated) setStored(STAFF_KEY, staffBFPatched);
+    if (staffBFUpdated) _saveStaff(staffBFPatched);
   }
 
   // ── Always: reconcile COA account names to staff full names ─────────────
@@ -9146,7 +9342,7 @@ export function seedDefaultCoaAccounts(): void {
             staffDirtyR = true;
             return { ...st, ledgerAccountId: newId };
           });
-          if (staffDirtyR) setStored(STAFF_KEY, patchedStaffR);
+          if (staffDirtyR) _saveStaff(patchedStaffR);
         }
       }
     }
@@ -9196,7 +9392,7 @@ export function seedDefaultCoaAccounts(): void {
         staffDirtyD = true;
         return { ...st, ledgerAccountId: newId };
       });
-      if (staffDirtyD) setStored(STAFF_KEY, patchedStaffD);
+      if (staffDirtyD) _saveStaff(patchedStaffD);
     }
   }
 
@@ -9268,7 +9464,7 @@ export function seedDefaultCoaAccounts(): void {
         staffDirty = true;
         return { ...st, ledgerAccountId: newLedgerId };
       });
-      if (staffDirty) setStored(STAFF_KEY, patchedStaff);
+      if (staffDirty) _saveStaff(patchedStaff);
       // Remove the old duplicate accounts
       const oldIds = new Set(toMerge.map(m => m.oldId));
       _saveAccounts(getAccounts().filter(a => !oldIds.has(a.id)));
@@ -12058,9 +12254,24 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
             `[sync] Orphan-migration: rescued ${merged.length} global "${k}" record(s) → t:${tenantId}`
           );
           _lsCache(tKey, merged);
-          kvPut(`t:${tenantId}`, k, merged).catch(() => {});
+          // Batch 5: `admin-hrm-staff` is bridged — KV writes are invisible
+          // to readers. Persist each rescued staff row via the per-record
+          // REST endpoint so the relational `staff` table reflects them on
+          // next reload. Other keys in this list are not yet migrated, so
+          // the legacy KV PUT is still correct.
+          if (k === "admin-hrm-staff") {
+            for (const s of merged as unknown as Staff[]) {
+              _persistStaffRest("create", s as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else {
+            kvPut(`t:${tenantId}`, k, merged).catch(() => {});
+          }
 
           // Clear the orphaned global copy so other tenants never see it.
+          // For bridged keys: the orphans only ever lived in `kv_store`
+          // (the relational tables are tenant-scoped), so a `kvPut` of an
+          // empty array against the `global` namespace is still the right
+          // call — there is no relational data to clear.
           const empty: unknown[] = [];
           _lsCache(k, empty);
           kvPut("global", k, empty).catch(() => {});
@@ -12079,7 +12290,18 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           if (clean !== prods) {
             console.info(`[sync] Auto-dedup products: ${prods.length} → ${clean.length}`);
             _lsCache(prodsKey, clean);
-            kvPut(tenantId ? `t:${tenantId}` : "global", PRODUCTS_KEY, clean).catch(() => {});
+            // Batch 5: products is bridged. For tenant scope, DELETE the
+            // duplicates per-record via REST so the relational table reflects
+            // the dedup. For global scope the bridge does not apply, so the
+            // legacy KV write is still correct.
+            if (tenantId) {
+              const cleanIds = new Set((clean as Product[]).map(p => p.id));
+              for (const p of prods) {
+                if (!cleanIds.has(p.id)) _persistProductRest("delete", { id: p.id }, tenantId);
+              }
+            } else {
+              kvPut("global", PRODUCTS_KEY, clean).catch(() => {});
+            }
           }
         }
       } catch { /* malformed */ }

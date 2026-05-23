@@ -6,6 +6,21 @@
 
 import { kvPut, kvGet, kvDeleteNamespace } from "./api";
 import { isTenantCached } from "./store";
+import { productsApi, staffApi } from "./record-api";
+
+/**
+ * Keys that are bridged in `kv.ts` MIGRATED_KEY_TO_TABLE — direct KV writes
+ * for these keys are invisible to readers (the bridge sources them from the
+ * relational table). The demo seeder routes them through the per-record REST
+ * endpoint instead.
+ *
+ * Keep this list in sync with MIGRATED_KEY_TO_TABLE in kv.ts (frontend-side
+ * keys only). Listed by entity so future batches just add a line.
+ */
+const BRIDGED_KEY_TO_REST: Record<string, { create: (tid: string, body: unknown) => Promise<unknown> }> = {
+  "admin-products":  { create: (tid, body) => productsApi.create(tid, body as Parameters<typeof productsApi.create>[1]) },
+  "admin-hrm-staff": { create: (tid, body) => staffApi.create(tid, body as Parameters<typeof staffApi.create>[1]) },
+};
 
 export const DEMO_TENANT_ID   = "demo-premier-2024";
 export const DEMO_TENANT_SLUG = "premier-demo";
@@ -31,6 +46,19 @@ const D = {
 function makePut(tenantId: string) {
   const ns = `t:${tenantId}`;
   return (baseKey: string, data: unknown) => {
+    const bridged = BRIDGED_KEY_TO_REST[baseKey];
+    if (bridged && Array.isArray(data)) {
+      // Bridged key: route every row through the per-record REST endpoint so
+      // the relational table is populated. Tolerate 409 on idempotent reseed.
+      for (const row of data as unknown[]) {
+        bridged.create(tenantId, row).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (/HTTP 409/i.test(msg)) return;
+          console.warn(`[demo-seed] ${baseKey} create failed:`, msg);
+        });
+      }
+      return;
+    }
     kvPut(ns, baseKey, data).catch(() => { /* silently ignore network errors */ });
   };
 }

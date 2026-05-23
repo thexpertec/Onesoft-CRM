@@ -15,6 +15,7 @@ import type {
   StockItem, StockLedgerEntry,
   Sale, Invoice, PurchaseOrder,
   SaleReturn, PurchaseReturn, RPVoucher,
+  Product, Staff,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -331,6 +332,16 @@ export const rpVouchersApi = makeTxRecordApi<RPVoucher>("rp-vouchers", (v) => {
   const { lines, bankLines, ...voucher } = v;
   return { voucher: nullifyUndefined(voucher), lines: lines ?? [], bankLines: bankLines ?? [] };
 });
+
+// ─── Catalogue REST clients (Batch 5) ─────────────────────────────────────────
+// Products carry jsonb `variants` and `productAttributes` directly on the row
+// (no child tables), so the simple `makeRecordApi` factory is sufficient —
+// no custom splitter needed.
+export const productsApi           = makeRecordApi<Product>("products");
+
+// ─── HRM REST clients (Batch 5) ───────────────────────────────────────────────
+// Staff carry jsonb `allowances` / `deductions` on the row (no child tables).
+export const staffApi              = makeRecordApi<Staff>("staff");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired
