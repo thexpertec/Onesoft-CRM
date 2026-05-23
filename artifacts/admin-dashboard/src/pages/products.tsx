@@ -771,6 +771,10 @@ export default function ProductsPage() {
                   wholesalePrice:   gr.variantWholesalePrice?.trim()  || undefined,
                   stock:            gr.variantStock?.trim()           || gr.openingStock?.trim()  || undefined,
                   condition:        gr.variantCondition?.trim()       || gr.condition?.trim()     || undefined,
+                  // Inherit parent row's status/description so variants don't
+                  // show "—" in the grid and require manual editing.
+                  status:           (r.status as string) || "Active",
+                  description:      r.description?.trim() || undefined,
                 } satisfies ProductVariant;
               });
             const attrNameSet = new Set<string>();
