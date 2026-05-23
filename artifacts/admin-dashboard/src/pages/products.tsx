@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
-import { useProducts, useStock } from "@/hooks/use-data";
+import { useProducts, useStock, useAttributes } from "@/hooks/use-data";
 import { useAuth } from "@/contexts/auth-context";
 import { Product, ProductVariant, getBrands, getProductCategories, getUnits, getProductDepartments, createBrand, createProductCategory, createUnit, bulkImportProducts, syncProductsToStore, getProductStockQty, generateEan13 } from "@/lib/store";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -304,6 +304,7 @@ function parseCSV(text: string): ImportRow[] {
 export default function ProductsPage() {
   const { products, addProduct, editProduct, removeProduct, reorderProds, refresh: refreshProducts } = useProducts();
   const { stock, refresh: refreshStock } = useStock();
+  const { attributes, addAttribute, editAttribute } = useAttributes();
   const { isAuthenticated, currentTenantId, can, isSyncing } = useAuth();
   const dp = getSettingsDecimalPlaces();
 
@@ -599,11 +600,58 @@ export default function ProductsPage() {
       createUnit({ name: u, symbol: u.substring(0, 4).toUpperCase(), description: "" });
     }
 
+    // ── Attributes ────────────────────────────────────────────────────────────
+    // Scan variantAttrName + variantAttrValue across every row, group values by
+    // attribute name (case-insensitive), then create-or-merge into the master
+    // Product Attributes table. addAttribute/editAttribute hit REST async; we
+    // fire-and-forget with .catch so import progress isn't blocked.
+    const valuesByAttrName = new Map<string, { displayName: string; values: Set<string> }>();
+    for (const r of validRows) {
+      const aName = trim(r.variantAttrName);
+      const aVal  = trim(r.variantAttrValue);
+      if (!aName || !aVal) continue;
+      const key = aName.toLowerCase();
+      if (!valuesByAttrName.has(key)) {
+        valuesByAttrName.set(key, { displayName: aName, values: new Set<string>() });
+      }
+      valuesByAttrName.get(key)!.values.add(aVal);
+    }
+    const existingAttrByName = new Map(attributes.map(a => [a.name.toLowerCase().trim(), a]));
+    let attrsCreated = 0;
+    let attrsUpdated = 0;
+    for (const [key, { displayName, values }] of valuesByAttrName.entries()) {
+      const incoming = [...values].map(v => v.trim()).filter(Boolean);
+      const existing = existingAttrByName.get(key);
+      if (!existing) {
+        addAttribute({
+          name: displayName,
+          type: "select",
+          values: incoming.join(", "),
+          description: "Auto-created from product import",
+          active: true,
+        }).catch(e => console.error("[import] addAttribute failed for", displayName, e));
+        attrsCreated++;
+      } else {
+        const existingVals = (existing.values || "")
+          .split(",").map(s => s.trim()).filter(Boolean);
+        const existingSet = new Set(existingVals.map(v => v.toLowerCase()));
+        const toAdd = incoming.filter(v => !existingSet.has(v.toLowerCase()));
+        if (toAdd.length > 0) {
+          const merged = [...existingVals, ...toAdd].join(", ");
+          editAttribute(existing.id, { values: merged })
+            .catch(e => console.error("[import] editAttribute failed for", displayName, e));
+          attrsUpdated++;
+        }
+      }
+    }
+
     return {
       brands:     newBrands.length,
       categories: newCatNames.length,
       subcats:    subsAdded,
       units:      newUnits.length,
+      attrsCreated,
+      attrsUpdated,
     };
   };
 
@@ -639,7 +687,7 @@ export default function ProductsPage() {
       refSync = syncReferenceDataFromImport(valid);
     } catch (e) {
       console.error("[import] syncReferenceDataFromImport failed:", e);
-      refSync = { brands: 0, categories: 0, subcats: 0, units: 0 };
+      refSync = { brands: 0, categories: 0, subcats: 0, units: 0, attrsCreated: 0, attrsUpdated: 0 };
     }
 
     // ── Accumulate ALL rows in memory — NO localStorage writes per batch ──
@@ -799,6 +847,8 @@ export default function ProductsPage() {
         if (refSync.categories > 0) refParts.push(`${refSync.categories} categor${refSync.categories !== 1 ? "ies" : "y"}`);
         if (refSync.subcats    > 0) refParts.push(`${refSync.subcats} subcategor${refSync.subcats !== 1 ? "ies" : "y"}`);
         if (refSync.units      > 0) refParts.push(`${refSync.units} unit${refSync.units !== 1 ? "s" : ""}`);
+        if (refSync.attrsCreated > 0) refParts.push(`${refSync.attrsCreated} attribute${refSync.attrsCreated !== 1 ? "s" : ""}`);
+        if (refSync.attrsUpdated > 0) refParts.push(`${refSync.attrsUpdated} attribute${refSync.attrsUpdated !== 1 ? "s" : ""} updated`);
 
         refreshProducts();
         refreshStock();
