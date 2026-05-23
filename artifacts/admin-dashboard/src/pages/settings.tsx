@@ -2472,6 +2472,30 @@ export default function SettingsPage() {
                   </AlertDialogContent>
                 </AlertDialog>
 
+                {/* Confirm full DB restore */}
+                <AlertDialog open={systemDbRestoreOpen} onOpenChange={setSystemDbRestoreOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertTriangle size={16} className="text-red-600" /> Restore Full Database?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription asChild>
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          <p>This will <strong className="text-foreground">wipe every table</strong> in the database and replace it with the contents of <strong className="text-foreground">{pendingDbFile?.name ?? "the uploaded file"}</strong>.</p>
+                          <p>Every tenant's data — products, customers, sales, journal entries, users, settings — will be overwritten. This cannot be undone.</p>
+                          <p className="text-foreground font-medium">Have you downloaded a fresh backup first?</p>
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setPendingDbFile(null)}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={confirmSystemDbRestore} disabled={systemDbBusy}>
+                        {systemDbBusy ? "Restoring…" : "Yes, Wipe & Restore"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
                 {/* ── Database Migration ───────────────────────────────── */}
                 {currentTenant?.id && (
                   <div>

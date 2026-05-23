@@ -35,12 +35,20 @@ const router = Router();
 //
 // Repopulating the relational tables for analytics/reporting is a separate
 // follow-up — see also the in-process backfill plan in scratchpad.
-// NOTE: kept empty after the Neon cutover. The relational tables were not
-// backfilled from kv_store during that migration, so flipping any key on here
-// will make the bridge return 0 rows even though the data is intact in
+// NOTE: kept mostly empty after the Neon cutover. The relational tables were
+// not backfilled from kv_store during that migration, so flipping any key on
+// here will make the bridge return 0 rows even though the data is intact in
 // kv_store. Re-enable per key only AFTER backfilling that key's relational
-// table from kv_store (see scripts/backfill-relational.ts when written).
-const MIGRATED_KEY_TO_TABLE: Record<string, string> = {};
+// table from kv_store (see `POST /api/admin-backup/backfill-products` for the
+// products one-shot — same pattern can be reused for other keys).
+//
+// `admin-products` was backfilled May 2026 via the endpoint above (156 rows
+// across 12 tenants) and is now safe to bridge. All FE writes route through
+// `_saveProducts` → `_dualWriteProductsDiff` → `productsApi`, so the
+// relational table stays in lockstep going forward.
+const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
+  "admin-products": "products",
+};
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
 
