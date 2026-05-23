@@ -10,6 +10,7 @@ import {
   salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
   salarySlipsApi, attendanceRecordsApi, advanceSalariesApi, nullifyUndefined,
   paymentAccountsApi, salesAgentsApi,
+  jobsApi, jobApplicantsApi, interviewSchedulesApi,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -7986,6 +7987,10 @@ function _buildBulkReplaceRegistry(): Map<string, _BulkReplaceFn> {
   m.set(HRM_ROLES_KEY,        (i) => _saveStaffRoles(i as StaffRole[]));
   m.set(JE_KEY,               (i) => _saveJournalEntries(i as JournalEntry[]));
   m.set(LEDGER_KEY,           (i) => _saveStockLedger(i as StockLedgerEntry[]));
+  // Batch 12 — HRM recruitment cluster
+  m.set(JOBS_KEY,             (i) => _saveJobs(i as JobPosting[]));
+  m.set(APPLICANTS_KEY,       (i) => _saveJobApplicants(i as JobApplicant[]));
+  m.set(INTERVIEWS_KEY,       (i) => _saveInterviews(i as InterviewSchedule[]));
   // ── Hook-cutover migrated keys (Batches 1–3, no chokepoint) ────────────────
   // Routed through the generic diff helper. Cast each api to the uniform
   // shape the helper expects.
@@ -12566,6 +12571,9 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           "admin-hrm-advance-salary",
           "admin-payment-accounts",
           "admin-sales-agents",
+          "admin-hrm-jobs",
+          "admin-hrm-applicants",
+          "admin-hrm-interviews",
         ] as const;
 
         for (const k of TENANT_ONLY_ORPHAN_KEYS) {
@@ -12629,6 +12637,18 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
           } else if (k === "admin-sales-agents") {
             for (const sa of merged as unknown as SalesAgent[]) {
               _persistSalesAgentRest("create", sa as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-jobs") {
+            for (const j of merged as unknown as JobPosting[]) {
+              _persistJobRest("create", j as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-applicants") {
+            for (const a of merged as unknown as JobApplicant[]) {
+              _persistJobApplicantRest("create", a as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-interviews") {
+            for (const i of merged as unknown as InterviewSchedule[]) {
+              _persistInterviewRest("create", i as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});
@@ -12743,10 +12763,75 @@ export type JobPosting = {
 };
 
 const JOBS_KEY = "admin-hrm-jobs";
+
+/**
+ * Batch 12 chokepoint for job postings. Simple HRM lookup, no JE-cascade
+ * fields — plain diff-dual-write (no nullifyUndefined). Anti-recursion
+ * invariant: exactly 1 inner setStored.
+ */
+function _saveJobs(items: JobPosting[]): void {
+  const sk = tenantKey(JOBS_KEY);
+  const prior: JobPosting[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as JobPosting[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(JOBS_KEY, items);
+  _dualWriteJobsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableJobJson(j: JobPosting): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = j;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistJobRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = jobsApi.create(tid, nullifyUndefined(item) as unknown as Omit<JobPosting, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = jobsApi.update(tid, item.id, nullifyUndefined(rest) as Partial<Omit<JobPosting, "id" | "createdAt">>);
+  } else {
+    fn = jobsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[job ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteJobsDiff(prev: JobPosting[], next: JobPosting[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistJobRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableJobJson(p) !== _stableJobJson(n))
+      _persistJobRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistJobRest("delete", { id }, tid);
+  }
+}
+
 export const getJobPostings   = (): JobPosting[] => getStored<JobPosting>(JOBS_KEY);
 export const createJobPosting = (data: Omit<JobPosting, "id" | "createdAt" | "updatedAt">): JobPosting => {
   const item: JobPosting = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(JOBS_KEY, [...getJobPostings(), item]);
+  _saveJobs([...getJobPostings(), item]);
   return item;
 };
 export const updateJobPosting = (id: string, updates: Partial<Omit<JobPosting, "id" | "createdAt">>): JobPosting => {
@@ -12754,11 +12839,11 @@ export const updateJobPosting = (id: string, updates: Partial<Omit<JobPosting, "
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Job not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(JOBS_KEY, items);
+  _saveJobs(items);
   return items[i];
 };
 export const deleteJobPosting = (id: string): void => {
-  setStored(JOBS_KEY, getJobPostings().filter(x => x.id !== id));
+  _saveJobs(getJobPostings().filter(x => x.id !== id));
 };
 
 // ─── Recruitment — Job Applicants ─────────────────────────────────────────────
@@ -12785,13 +12870,74 @@ export type JobApplicant = {
 };
 
 const APPLICANTS_KEY = "admin-hrm-applicants";
+
+/** Batch 12 chokepoint for job applicants. See `_saveJobs` for the pattern. */
+function _saveJobApplicants(items: JobApplicant[]): void {
+  const sk = tenantKey(APPLICANTS_KEY);
+  const prior: JobApplicant[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as JobApplicant[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(APPLICANTS_KEY, items);
+  _dualWriteJobApplicantsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableJobApplicantJson(a: JobApplicant): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = a;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistJobApplicantRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = jobApplicantsApi.create(tid, nullifyUndefined(item) as unknown as Omit<JobApplicant, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = jobApplicantsApi.update(tid, item.id, nullifyUndefined(rest) as Partial<Omit<JobApplicant, "id" | "createdAt">>);
+  } else {
+    fn = jobApplicantsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[job-applicant ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteJobApplicantsDiff(prev: JobApplicant[], next: JobApplicant[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistJobApplicantRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableJobApplicantJson(p) !== _stableJobApplicantJson(n))
+      _persistJobApplicantRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistJobApplicantRest("delete", { id }, tid);
+  }
+}
+
 export const getJobApplicants   = (jobId?: string): JobApplicant[] => {
   const all = getStored<JobApplicant>(APPLICANTS_KEY);
   return jobId ? all.filter(a => a.jobId === jobId) : all;
 };
 export const createJobApplicant = (data: Omit<JobApplicant, "id" | "createdAt" | "updatedAt">): JobApplicant => {
   const item: JobApplicant = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(APPLICANTS_KEY, [...getJobApplicants(), item]);
+  _saveJobApplicants([...getJobApplicants(), item]);
   return item;
 };
 export const updateJobApplicant = (id: string, updates: Partial<Omit<JobApplicant, "id" | "createdAt">>): JobApplicant => {
@@ -12799,11 +12945,11 @@ export const updateJobApplicant = (id: string, updates: Partial<Omit<JobApplican
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Applicant not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(APPLICANTS_KEY, items);
+  _saveJobApplicants(items);
   return items[i];
 };
 export const deleteJobApplicant = (id: string): void => {
-  setStored(APPLICANTS_KEY, getJobApplicants().filter(x => x.id !== id));
+  _saveJobApplicants(getJobApplicants().filter(x => x.id !== id));
 };
 
 // ─── Recruitment — Interview Schedules ────────────────────────────────────────
@@ -12825,6 +12971,67 @@ export type InterviewSchedule = {
 };
 
 const INTERVIEWS_KEY = "admin-hrm-interviews";
+
+/** Batch 12 chokepoint for interview schedules. See `_saveJobs` for the pattern. */
+function _saveInterviews(items: InterviewSchedule[]): void {
+  const sk = tenantKey(INTERVIEWS_KEY);
+  const prior: InterviewSchedule[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as InterviewSchedule[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(INTERVIEWS_KEY, items);
+  _dualWriteInterviewsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableInterviewJson(i: InterviewSchedule): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = i;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistInterviewRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = interviewSchedulesApi.create(tid, nullifyUndefined(item) as unknown as Omit<InterviewSchedule, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = interviewSchedulesApi.update(tid, item.id, nullifyUndefined(rest) as Partial<Omit<InterviewSchedule, "id" | "createdAt">>);
+  } else {
+    fn = interviewSchedulesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[interview ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteInterviewsDiff(prev: InterviewSchedule[], next: InterviewSchedule[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistInterviewRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableInterviewJson(p) !== _stableInterviewJson(n))
+      _persistInterviewRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistInterviewRest("delete", { id }, tid);
+  }
+}
+
 export const getInterviewSchedules   = (jobId?: string): InterviewSchedule[] => {
   const all = getStored<InterviewSchedule>(INTERVIEWS_KEY);
   return jobId ? all.filter(i => i.jobId === jobId) : all;
@@ -12833,7 +13040,7 @@ export const getInterviewByApplicant = (applicantId: string): InterviewSchedule 
   getStored<InterviewSchedule>(INTERVIEWS_KEY).find(i => i.applicantId === applicantId);
 export const createInterviewSchedule = (data: Omit<InterviewSchedule, "id" | "createdAt" | "updatedAt">): InterviewSchedule => {
   const item: InterviewSchedule = { ...data, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(INTERVIEWS_KEY, [...getInterviewSchedules(), item]);
+  _saveInterviews([...getInterviewSchedules(), item]);
   return item;
 };
 export const upsertInterviewSchedule = (applicantId: string, data: Omit<InterviewSchedule, "id" | "createdAt" | "updatedAt">): InterviewSchedule => {
@@ -12842,7 +13049,7 @@ export const upsertInterviewSchedule = (applicantId: string, data: Omit<Intervie
     const all = getStored<InterviewSchedule>(INTERVIEWS_KEY);
     const i = all.findIndex(x => x.id === existing.id);
     all[i] = { ...all[i], ...data, updatedAt: new Date().toISOString() };
-    setStored(INTERVIEWS_KEY, all);
+    _saveInterviews(all);
     return all[i];
   }
   return createInterviewSchedule(data);
@@ -12852,11 +13059,11 @@ export const updateInterviewSchedule = (id: string, updates: Partial<Omit<Interv
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Interview not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(INTERVIEWS_KEY, items);
+  _saveInterviews(items);
   return items[i];
 };
 export const deleteInterviewSchedule = (id: string): void => {
-  setStored(INTERVIEWS_KEY, getStored<InterviewSchedule>(INTERVIEWS_KEY).filter(x => x.id !== id));
+  _saveInterviews(getStored<InterviewSchedule>(INTERVIEWS_KEY).filter(x => x.id !== id));
 };
 
 // ─── HRM — Salary Management ──────────────────────────────────────────────────

@@ -85,6 +85,12 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   "admin-hrm-advance-salary": "advance_salaries",
   "admin-payment-accounts":   "payment_accounts",
   "admin-sales-agents":       "sales_agents",
+  // Batch 12 — HRM recruitment cluster. Simple lookup entities, no JE/financial
+  // linkage. Chokepoints `_saveJobs` / `_saveJobApplicants` / `_saveInterviews`
+  // in store.ts diff-dual-write via the matching record-api clients.
+  "admin-hrm-jobs":           "jobs",
+  "admin-hrm-applicants":     "job_applicants",
+  "admin-hrm-interviews":     "interview_schedules",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;

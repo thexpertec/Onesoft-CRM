@@ -575,6 +575,70 @@ const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS sales_agents_tenant_idx ON sales_agents (tenant_id)`,
 
+  // ── Recruitment — Job Postings (HRM) — Batch 12 ──────────────────────────────
+  `CREATE TABLE IF NOT EXISTS jobs (
+    id           TEXT        NOT NULL PRIMARY KEY,
+    tenant_id    TEXT        NOT NULL,
+    title        TEXT        NOT NULL,
+    department   TEXT        NOT NULL DEFAULT '',
+    location     TEXT        NOT NULL DEFAULT '',
+    type         TEXT        NOT NULL DEFAULT 'full-time',
+    status       TEXT        NOT NULL DEFAULT 'draft',
+    description  TEXT        NOT NULL DEFAULT '',
+    requirements TEXT        NOT NULL DEFAULT '',
+    salary       TEXT,
+    archived_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS jobs_tenant_idx        ON jobs (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS jobs_tenant_status_idx ON jobs (tenant_id, status)`,
+
+  // ── Recruitment — Job Applicants (HRM) — Batch 12 ────────────────────────────
+  `CREATE TABLE IF NOT EXISTS job_applicants (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    job_id      TEXT        NOT NULL,
+    full_name   TEXT        NOT NULL,
+    email       TEXT        NOT NULL DEFAULT '',
+    phone       TEXT,
+    experience  TEXT        NOT NULL DEFAULT '',
+    education   TEXT        NOT NULL DEFAULT '',
+    match       NUMERIC     NOT NULL DEFAULT 0,
+    stage       TEXT        NOT NULL DEFAULT 'applied',
+    round       TEXT,
+    rating      NUMERIC,
+    decision    TEXT,
+    resume_url  TEXT,
+    notes       TEXT,
+    applied_at  TEXT        NOT NULL DEFAULT '',
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS job_applicants_tenant_idx     ON job_applicants (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS job_applicants_tenant_job_idx ON job_applicants (tenant_id, job_id)`,
+
+  // ── Recruitment — Interview Schedules (HRM) — Batch 12 ───────────────────────
+  `CREATE TABLE IF NOT EXISTS interview_schedules (
+    id             TEXT        NOT NULL PRIMARY KEY,
+    tenant_id      TEXT        NOT NULL,
+    job_id         TEXT        NOT NULL,
+    applicant_id   TEXT        NOT NULL,
+    interviewer_id TEXT        NOT NULL DEFAULT '',
+    date           TEXT        NOT NULL DEFAULT '',
+    time           TEXT        NOT NULL DEFAULT '',
+    link           TEXT        NOT NULL DEFAULT '',
+    status         TEXT        NOT NULL DEFAULT 'scheduled',
+    notes          TEXT,
+    email_sent     BOOLEAN,
+    archived_at    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS interview_schedules_tenant_idx           ON interview_schedules (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS interview_schedules_tenant_applicant_idx ON interview_schedules (tenant_id, applicant_id)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,

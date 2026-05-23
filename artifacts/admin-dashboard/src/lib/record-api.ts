@@ -19,6 +19,7 @@ import type {
   SalaryTemplate, SalaryAllowanceCategory, SalaryDeductionCategory,
   SalarySlip, AttendanceRecord, AdvanceSalary,
   PaymentAccount, SalesAgent,
+  JobPosting, JobApplicant, InterviewSchedule,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -380,3 +381,11 @@ export const salesAgentsApi          = makeRecordApi<SalesAgent>("sales-agents")
 // (the kv.ts read-back bridge ignores `kv_store` once `admin-customers` is in
 // the MIGRATED_KEY_TO_TABLE registry).
 export const customersApi          = makeRecordApi<Customer>("customers");
+
+// ─── HRM recruitment cluster (Batch 12) ───────────────────────────────────────
+// Simple lookup entities — no JE/financial linkage on any record, so the plain
+// diff-dual-write pattern (no `nullifyUndefined` needed) used in Batches 6/7/9
+// is sufficient.
+export const jobsApi               = makeRecordApi<JobPosting>("jobs");
+export const jobApplicantsApi      = makeRecordApi<JobApplicant>("job-applicants");
+export const interviewSchedulesApi = makeRecordApi<InterviewSchedule>("interview-schedules");

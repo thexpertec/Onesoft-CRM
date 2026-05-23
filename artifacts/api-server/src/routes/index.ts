@@ -35,6 +35,9 @@ import advanceSalariesRouter from "./advance-salaries.js";
 import paymentAccountsRouter from "./payment-accounts.js";
 import salesAgentsRouter from "./sales-agents.js";
 import journalEntriesRouter from "./journal-entries.js";
+import jobsRouter from "./jobs.js";
+import jobApplicantsRouter from "./job-applicants.js";
+import interviewSchedulesRouter from "./interview-schedules.js";
 import migrateRouter from "./migrate.js";
 
 const router: IRouter = Router();
@@ -78,6 +81,9 @@ router.use("/advance-salaries", advanceSalariesRouter);
 router.use("/payment-accounts", paymentAccountsRouter);
 router.use("/sales-agents", salesAgentsRouter);
 router.use("/journal-entries", journalEntriesRouter);
+router.use("/jobs", jobsRouter);
+router.use("/job-applicants", jobApplicantsRouter);
+router.use("/interview-schedules", interviewSchedulesRouter);
 
 // Phase 2 — KV→relational migration endpoint.
 router.use("/migrate", migrateRouter);
