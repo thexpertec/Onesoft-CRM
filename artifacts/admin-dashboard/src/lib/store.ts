@@ -366,13 +366,18 @@ function _persistProductRest(
   if (!tid) return;
   let fn: Promise<unknown>;
   if (op === "create") {
-    fn = productsApi.create(tid, item as unknown as Omit<Product, "id" | "createdAt" | "updatedAt">);
+    fn = productsApi.create(tid, nullifyUndefined(item) as unknown as Omit<Product, "id" | "createdAt" | "updatedAt">);
   } else if (op === "update") {
     const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
       id: string; createdAt?: unknown; updatedAt?: unknown;
     } & Record<string, unknown>;
     void _id; void _ca; void _ua;
-    fn = productsApi.update(tid, item.id, rest as Partial<Omit<Product, "id" | "createdAt">>);
+    // nullifyUndefined: Product has many optional fields (localName, barcode,
+    // metaTitle, websitePriceWas, …). UI clears them to `undefined`, which
+    // JSON.stringify drops, which makes the backend skip the column, which
+    // means the bridge surfaces the stale value on refresh. Convert to null
+    // so the backend explicitly nulls the column.
+    fn = productsApi.update(tid, item.id, nullifyUndefined(rest) as Partial<Omit<Product, "id" | "createdAt">>);
   } else {
     fn = productsApi.delete(tid, item.id);
   }
@@ -418,11 +423,12 @@ async function _persistProductsAwait(prev: Product[], next: Product[], tid: stri
   for (const [id, n] of nextById) {
     const p = prevById.get(id);
     if (!p) {
-      ops.push(productsApi.create(tid, n as Omit<Product, "id" | "createdAt" | "updatedAt">));
+      ops.push(productsApi.create(tid, nullifyUndefined(n as unknown as Record<string, unknown>) as unknown as Omit<Product, "id" | "createdAt" | "updatedAt">));
     } else if (_stableProductJson(p) !== _stableProductJson(n)) {
       const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = n as Product & { createdAt?: string; updatedAt?: string };
       void _id; void _ca; void _ua;
-      ops.push(productsApi.update(tid, id, rest as Partial<Omit<Product, "id" | "createdAt">>));
+      // See `_persistProductRest` comment — undefined→null required so optional-field clears persist.
+      ops.push(productsApi.update(tid, id, nullifyUndefined(rest as unknown as Record<string, unknown>) as Partial<Omit<Product, "id" | "createdAt">>));
     }
   }
   for (const id of prevById.keys()) {

@@ -35,7 +35,9 @@ const router = Router();
 //
 // Repopulating the relational tables for analytics/reporting is a separate
 // follow-up — see also the in-process backfill plan in scratchpad.
-const MIGRATED_KEY_TO_TABLE: Record<string, string> = {};
+const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
+  "admin-products": "products",
+};
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
 
