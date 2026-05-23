@@ -41,6 +41,7 @@ import jobsRouter from "./jobs.js";
 import jobApplicantsRouter from "./job-applicants.js";
 import interviewSchedulesRouter from "./interview-schedules.js";
 import migrateRouter from "./migrate.js";
+import adminBackupRouter from "./admin-backup.js";
 import { requireApiKey } from "../middleware/require-api-key.js";
 
 const router: IRouter = Router();
@@ -109,5 +110,8 @@ router.use("/interview-schedules", interviewSchedulesRouter);
 
 // Phase 2 — KV→relational migration endpoint.
 router.use("/migrate", migrateRouter);
+
+// Full-DB backup/restore (superadmin only — UI gated; backend trusts X-Api-Key).
+router.use("/admin-backup", adminBackupRouter);
 
 export default router;

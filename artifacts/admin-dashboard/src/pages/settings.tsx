@@ -725,6 +725,11 @@ export default function SettingsPage() {
   const logoInputRef  = useRef<HTMLInputElement>(null);
   const importRef     = useRef<HTMLInputElement>(null);
   const masterRef     = useRef<HTMLInputElement>(null);
+  const systemDbRef   = useRef<HTMLInputElement>(null);
+
+  const [systemDbBusy, setSystemDbBusy]         = useState(false);
+  const [systemDbRestoreOpen, setSystemDbRestoreOpen] = useState(false);
+  const [pendingDbFile, setPendingDbFile]       = useState<File | null>(null);
 
   const [masterImportError, setMasterImportError] = useState<string | null>(null);
   const [masterConfirmOpen, setMasterConfirmOpen] = useState(false);
@@ -807,6 +812,71 @@ export default function SettingsPage() {
       set("logoBase64", e.target?.result as string);
     };
     reader.readAsDataURL(file);
+  }
+
+  // ── Full system DB backup (superadmin only) ────────────────────────────────
+  // Calls /api/admin-backup/download which dumps every table in the DB into
+  // a single JSON file. The matching restore (/restore) wipes and reinserts.
+  async function handleSystemDbExport() {
+    setSystemDbBusy(true);
+    try {
+      const KEY = (import.meta.env.VITE_KV_API_SECRET as string) ?? "";
+      const res = await fetch("/api/admin-backup/download", { headers: { "X-Api-Key": KEY } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, "-");
+      a.download = `onesoft-db-backup-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "System backup downloaded", description: "Full database dumped to JSON." });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({ title: "Backup failed", description: msg, variant: "destructive" });
+    } finally {
+      setSystemDbBusy(false);
+    }
+  }
+
+  function handleSystemDbFilePick(file: File) {
+    setPendingDbFile(file);
+    setSystemDbRestoreOpen(true);
+    if (systemDbRef.current) systemDbRef.current.value = "";
+  }
+
+  async function confirmSystemDbRestore() {
+    if (!pendingDbFile) return;
+    setSystemDbBusy(true);
+    try {
+      const text = await pendingDbFile.text();
+      // Validate format client-side before sending — avoids a 50mb round-trip
+      // just to get a "wrong format" back.
+      const parsed = JSON.parse(text);
+      if (parsed?._format !== "onesoft-db-backup-v1") {
+        throw new Error("Not a valid system DB backup file (expected _format=onesoft-db-backup-v1).");
+      }
+      const KEY = (import.meta.env.VITE_KV_API_SECRET as string) ?? "";
+      const res = await fetch("/api/admin-backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": KEY },
+        body: text,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
+      toast({
+        title: "System restore complete",
+        description: `Restored ${data.restoredRows ?? "?"} rows across ${data.restoredTables ?? "?"} tables. Please log out and log back in.`,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({ title: "Restore failed", description: msg, variant: "destructive" });
+    } finally {
+      setSystemDbBusy(false);
+      setSystemDbRestoreOpen(false);
+      setPendingDbFile(null);
+    }
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────
@@ -2269,6 +2339,45 @@ export default function SettingsPage() {
                     Backup includes: leads, customers, products, stock, purchases, sales, documents, HRM staff, roles, users, and settings.
                   </p>
                 </div>
+
+                {/* ── Full System DB Backup (superadmin only) ───────────────────── */}
+                {isSuperAdmin && (
+                  <div>
+                    <SectionHeader
+                      title="Full System Database Backup"
+                      desc="Download a complete dump of every tenant's data straight from the database. Restore it onto another instance to migrate the whole system."
+                    />
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={handleSystemDbExport}
+                        disabled={systemDbBusy}
+                        className="gap-2 h-9 text-[13px] bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        <Download size={14} />
+                        {systemDbBusy ? "Working…" : "Download Full DB (.json)"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={systemDbBusy}
+                        className="gap-2 h-9 text-[13px]"
+                        onClick={() => systemDbRef.current?.click()}
+                      >
+                        <Upload size={14} />
+                        Restore Full DB
+                      </Button>
+                      <input
+                        ref={systemDbRef} type="file" accept=".json" className="hidden"
+                        onChange={e => e.target.files?.[0] && handleSystemDbFilePick(e.target.files[0])}
+                      />
+                    </div>
+                    <div className="mt-3 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg px-3 py-2.5">
+                      <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">
+                        <strong>Restore wipes the entire database</strong> across every tenant and replaces it with the uploaded file. There is no undo. Always download a fresh backup before restoring.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* ── Master Data Transfer ─────────────────────────────── */}
                 <div>
