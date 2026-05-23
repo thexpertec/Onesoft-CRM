@@ -71,53 +71,28 @@ async function saveOrder(order: Record<string, unknown>, tenantId: string | null
   });
 }
 
-async function saveToAdminSales(saleRecord: Record<string, unknown>, tenantId: string | null): Promise<void> {
-  // Never write to the global namespace — orders must always be scoped to a tenant.
-  // A null tenantId means the store page was loaded without a valid tenant context;
-  // writing to "global" in this case is the primary source of cross-tenant mixing.
+async function placeOrderServerSide(
+  saleRecord: Record<string, unknown>,
+  order: Record<string, unknown>,
+  tenantId: string | null,
+): Promise<void> {
+  // Never call without a tenant — orders must always be scoped to a tenant.
   if (!tenantId) return;
-
-  const id = saleRecord.id as string;
-
-  // 1. Append to the tenant's own online-orders list so the admin sales page can import it.
-  const onlineOrdersNs = encodeURIComponent(`t:${tenantId}`);
-  try {
-    let existing: unknown[] = [];
-    const r = await fetch(`${apiBase()}/kv/${onlineOrdersNs}/online-orders`);
-    if (r.ok) {
-      const d = await r.json() as { value: unknown[] };
-      if (Array.isArray(d.value)) existing = d.value;
-    }
-    if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
-      existing.push(saleRecord);
-    }
-    await fetch(`${apiBase()}/kv/${onlineOrdersNs}/online-orders`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: existing }),
-    });
-  } catch { /* non-fatal */ }
-
-  // 2. Also write directly into the tenant's admin-sales so the customer portal can read it immediately
-  if (tenantId) {
-    try {
-      const ns = encodeURIComponent(`t:${tenantId}`);
-      let existing: unknown[] = [];
-      const r = await fetch(`${apiBase()}/kv/${ns}/admin-sales`);
-      if (r.ok) {
-        const d = await r.json() as { value: unknown[] };
-        if (Array.isArray(d.value)) existing = d.value;
-      }
-      if (!existing.some((e) => (e as Record<string, unknown>).id === id)) {
-        existing.push(saleRecord);
-      }
-      await fetch(`${apiBase()}/kv/${ns}/admin-sales`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: existing }),
-      });
-    } catch { /* non-fatal */ }
-  }
+  // Split sale shell from its items so the server can insert into both
+  // `sales` and `sale_items` atomically. The server also appends `order` to
+  // the tenant's `online-orders` kv key for the admin's recent-orders view.
+  const { items, ...sale } = saleRecord as { items?: unknown[]; [k: string]: unknown };
+  const r = await fetch(`${apiBase()}/storefront/place-order`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tenantId,
+      sale,
+      items: Array.isArray(items) ? items : [],
+      order,
+    }),
+  });
+  if (!r.ok) throw new Error(`place-order failed (HTTP ${r.status})`);
 }
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
@@ -217,28 +192,9 @@ export function CheckoutPage() {
     setLoginError("");
 
     const apiBase = getApiBase();
-    const ns = encodeURIComponent(`t:${tenantId}`);
     const email = loginEmail.trim().toLowerCase();
 
-    // Step 1 — fetch portal accounts
-    let accounts: Array<{ email: string; passwordHash: string; customerId: string; name: string; createdAt: string }> = [];
-    try {
-      const r = await fetch(`${apiBase}/kv/${ns}/portal-accounts`);
-      if (r.ok) {
-        const json = await r.json();
-        if (Array.isArray(json?.value)) accounts = json.value;
-      } else {
-        setLoginError("Could not reach the server. Please try again.");
-        setLoginLoading(false);
-        return;
-      }
-    } catch {
-      setLoginError("Network error. Please check your connection and try again.");
-      setLoginLoading(false);
-      return;
-    }
-
-    // Step 2 — hash password
+    // Hash password client-side
     let hash = "";
     try {
       hash = await sha256hex(loginPassword);
@@ -248,33 +204,27 @@ export function CheckoutPage() {
       return;
     }
 
-    // Step 3 — find matching account
-    const account = accounts.find(
-      a => a.email.trim().toLowerCase() === email && a.passwordHash === hash
-    );
-    if (!account) {
-      setLoginError("Incorrect email or password.");
+    // Single server call — portal-accounts + customers lookup done server-side
+    let loginJson: { ok?: boolean; customer?: { id: string; name: string; email: string; phone?: string; city?: string }; error?: string };
+    try {
+      const r = await fetch(`${apiBase}/portal/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId, email, passwordHash: hash }),
+      });
+      loginJson = await r.json();
+      if (!r.ok || !loginJson.ok || !loginJson.customer) {
+        setLoginError(loginJson.error || "Incorrect email or password.");
+        setLoginLoading(false);
+        return;
+      }
+    } catch {
+      setLoginError("Network error. Please check your connection and try again.");
       setLoginLoading(false);
       return;
     }
 
-    // Step 4 — fetch customers (non-fatal)
-    let customers: Array<{ id: string; name: string; email: string; phone?: string; city?: string }> = [];
-    try {
-      const r = await fetch(`${apiBase}/kv/${ns}/admin-customers`);
-      if (r.ok) {
-        const json = await r.json();
-        if (Array.isArray(json?.value)) customers = json.value;
-      }
-    } catch { /* proceed with stub */ }
-
-    // Step 5 — build session and store
-    const customer = customers.find(c => c.id === account.customerId) ?? {
-      id: account.customerId,
-      name: account.name || email.split("@")[0],
-      email: account.email,
-      phone: "", city: "",
-    };
+    const customer = loginJson.customer;
     const sessionData: StoredSession = { tenantId, customer, loginAt: new Date().toISOString() };
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
@@ -457,10 +407,25 @@ export function CheckoutPage() {
 
     try {
       await saveOrder(order, tenantId);
-    } catch { /* non-fatal */ }
+    } catch { /* non-fatal — store-orders is a soft cache for the
+                  customer-facing recap; the canonical record is below. */ }
+
+    // The canonical sale write MUST succeed before we confirm the order to
+    // the customer. Architect-flagged (May 2026): silently swallowing this
+    // failure lets the UI flash "Order placed" while the relational `sales`
+    // row was never inserted.
     try {
-      await saveToAdminSales(adminSaleRecord, tenantId);
-    } catch { /* non-fatal */ }
+      await placeOrderServerSide(adminSaleRecord, order, tenantId);
+    } catch (err) {
+      console.error("[checkout] place-order failed:", err);
+      alert(
+        "We couldn't complete your order. Your card was not charged and your " +
+        "cart has been kept. Please try again in a moment.\n\n" +
+        `(${err instanceof Error ? err.message : String(err)})`,
+      );
+      setPlacing(false);
+      return;
+    }
 
     /* Save the customer's phone + address to their portal profile for next time */
     if (isLoggedIn && portalSession && tenantId) {

@@ -1,5 +1,3 @@
-import type { PortalAccount } from "./auth";
-
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function apiRoot(): string {
@@ -93,28 +91,85 @@ export interface StoreSettings {
   decimalPlaces?: string;
 }
 
-export async function fetchCustomers(tenantId: string): Promise<Customer[]> {
-  const data = await kvGet<Customer[]>(`t:${tenantId}`, "admin-customers");
-  return data ?? [];
-}
-
-export async function fetchSales(tenantId: string): Promise<Sale[]> {
-  const data = await kvGet<Sale[]>(`t:${tenantId}`, "admin-sales");
-  return data ?? [];
-}
-
 export async function fetchSettings(tenantId: string): Promise<StoreSettings> {
   const data = await kvGet<StoreSettings>(`t:${tenantId}`, "admin-settings");
   return data ?? {};
 }
 
-export async function fetchPortalAccounts(tenantId: string): Promise<PortalAccount[]> {
-  const data = await kvGet<PortalAccount[]>(`t:${tenantId}`, "portal-accounts");
-  return data ?? [];
+/**
+ * Portal-scoped server endpoints (no admin API key needed). These replace
+ * the previous anonymous reads of `admin-customers` / `admin-sales` via
+ * `/api/kv/*` — each call returns only the requesting customer's data
+ * instead of the whole tenant dataset.
+ */
+export interface PortalLoginResult {
+  ok: boolean;
+  customer?: Customer;
+  error?: string;
 }
 
-export async function savePortalAccounts(tenantId: string, accounts: PortalAccount[]): Promise<void> {
-  await kvPut(`t:${tenantId}`, "portal-accounts", accounts);
+export async function portalLogin(
+  tenantId: string, email: string, passwordHash: string,
+): Promise<PortalLoginResult> {
+  try {
+    const r = await fetch(`${apiRoot()}/portal/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId, email, passwordHash }),
+    });
+    const json = await r.json();
+    return r.ok ? { ok: true, customer: json.customer as Customer }
+                : { ok: false, error: json.error || "Sign in failed." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function portalSignup(
+  tenantId: string, email: string, passwordHash: string,
+): Promise<PortalLoginResult> {
+  try {
+    const r = await fetch(`${apiRoot()}/portal/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId, email, passwordHash }),
+    });
+    const json = await r.json();
+    return r.ok ? { ok: true, customer: json.customer as Customer }
+                : { ok: false, error: json.error || "Sign up failed." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function portalChangePassword(
+  tenantId: string, email: string, currentHash: string, newHash: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetch(`${apiRoot()}/portal/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId, email, currentHash, newHash }),
+    });
+    const json = await r.json();
+    return r.ok ? { ok: true } : { ok: false, error: json.error || "Update failed." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Server-side filter: returns only this customer's sales. */
+export async function portalSales(tenantId: string, customerName: string): Promise<Sale[]> {
+  try {
+    const r = await fetch(
+      `${apiRoot()}/portal/sales?tenantId=${encodeURIComponent(tenantId)}&customerName=${encodeURIComponent(customerName)}`,
+    );
+    if (!r.ok) return [];
+    const json = await r.json();
+    return Array.isArray(json.items) ? (json.items as Sale[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export interface ClubCardTransaction {

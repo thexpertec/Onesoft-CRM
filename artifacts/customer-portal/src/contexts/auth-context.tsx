@@ -5,8 +5,8 @@ import {
   type CustomerSession,
 } from "@/lib/auth";
 import {
-  fetchCustomers, fetchSettings, fetchPortalAccounts, savePortalAccounts,
-  fetchClubcard, saveClubcard, generateCardId,
+  fetchSettings,
+  portalLogin, portalSignup, portalChangePassword,
   type StoreSettings,
 } from "@/lib/api";
 
@@ -47,31 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError("");
     try {
-      const [accounts, customers, s] = await Promise.all([
-        fetchPortalAccounts(tenantId),
-        fetchCustomers(tenantId),
-        fetchSettings(tenantId),
-      ]);
       const key = normalizeEmail(email);
       const hash = await hashPassword(password);
-      const account = accounts.find(a => normalizeEmail(a.email) === key && a.passwordHash === hash);
-      if (!account) {
-        setError("Incorrect email or password.");
+      const [result, s] = await Promise.all([
+        portalLogin(tenantId, key, hash),
+        fetchSettings(tenantId),
+      ]);
+      if (!result.ok || !result.customer) {
+        setError(result.error || "Incorrect email or password.");
         return false;
       }
-      // Use linked customer record if it exists, otherwise build a minimal stub
-      const customer = customers.find(c => c.id === account.customerId) ?? {
-        id: account.customerId,
-        name: account.name || key.split("@")[0],
-        email: account.email,
-        company: "", phone: "", industry: "", city: "", area: undefined,
-        status: "Active" as const, source: "direct", customerType: "Regular Customer",
-        customerSince: account.createdAt.split("T")[0],
-        totalValue: "0", currency: "GBP", notes: "", tags: [],
-        createdAt: account.createdAt, updatedAt: account.createdAt,
-      };
-      saveSession(tenantId, customer);
-      setSession({ tenantId, customer, loginAt: new Date().toISOString() });
+      saveSession(tenantId, result.customer);
+      setSession({ tenantId, customer: result.customer, loginAt: new Date().toISOString() });
       setSettings(s);
       return true;
     } catch (err) {
@@ -89,65 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError("");
     try {
-      const [customers, accounts, s] = await Promise.all([
-        fetchCustomers(tenantId),
-        fetchPortalAccounts(tenantId),
+      const key = normalizeEmail(email);
+      const hash = await hashPassword(password);
+      const [result, s] = await Promise.all([
+        portalSignup(tenantId, key, hash),
         fetchSettings(tenantId),
       ]);
-      const key = normalizeEmail(email);
-
-      // Cannot sign up twice
-      if (accounts.some(a => normalizeEmail(a.email) === key)) {
-        setError("An account with this email already exists. Please sign in instead.");
+      if (!result.ok || !result.customer) {
+        setError(result.error || "Sign up failed.");
         return false;
       }
-
-      // Link to existing customer record if email matches, otherwise create a self-registered account
-      const existingCustomer = customers.find(c => normalizeEmail(c.email) === key);
-      const customerId = existingCustomer?.id ?? crypto.randomUUID();
-      const displayName = existingCustomer?.name ?? key.split("@")[0];
-
-      const hash = await hashPassword(password);
-      const newAccount = {
-        email: key,
-        passwordHash: hash,
-        customerId,
-        name: displayName,
-        createdAt: new Date().toISOString(),
-      };
-      await savePortalAccounts(tenantId, [...accounts, newAccount]);
-
-      // Issue a permanent Clubcard ID and award 100 welcome coins
-      const existingCard = await fetchClubcard(tenantId, customerId);
-      const cardId = existingCard.cardId || generateCardId();
-      await saveClubcard(tenantId, customerId, {
-        cardId,
-        coins: (existingCard.coins || 0) + 100,
-        transactions: [
-          ...existingCard.transactions,
-          {
-            id: crypto.randomUUID(),
-            type: "credit" as const,
-            coins: 100,
-            description: "Welcome bonus — Club Card sign-up",
-            date: new Date().toISOString(),
-          },
-        ],
-      });
-
-      const customer = existingCustomer ?? {
-        id: customerId,
-        name: displayName,
-        email: key,
-        company: "", phone: "", industry: "", city: "", area: undefined,
-        status: "Active" as const, source: "direct", customerType: "Regular Customer",
-        customerSince: new Date().toISOString().split("T")[0],
-        totalValue: "0", currency: "GBP", notes: "", tags: [],
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      };
-
-      saveSession(tenantId, customer);
-      setSession({ tenantId, customer, loginAt: new Date().toISOString() });
+      saveSession(tenantId, result.customer);
+      setSession({ tenantId, customer: result.customer, loginAt: new Date().toISOString() });
       setSettings(s);
       return true;
     } catch (err) {
@@ -163,15 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
     if (!tenantId || !session) return { ok: false, error: "Not logged in." };
     try {
-      const accounts = await fetchPortalAccounts(tenantId);
       const email = normalizeEmail(session.customer.email);
       const currentHash = await hashPassword(currentPassword);
-      const idx = accounts.findIndex(a => normalizeEmail(a.email) === email && a.passwordHash === currentHash);
-      if (idx === -1) return { ok: false, error: "Current password is incorrect." };
       const newHash = await hashPassword(newPassword);
-      const updated = accounts.map((a, i) => i === idx ? { ...a, passwordHash: newHash } : a);
-      await savePortalAccounts(tenantId, updated);
-      return { ok: true };
+      return await portalChangePassword(tenantId, email, currentHash, newHash);
     } catch (err) {
       console.error("[portal] changePassword error:", err);
       return { ok: false, error: "Something went wrong. Please try again." };

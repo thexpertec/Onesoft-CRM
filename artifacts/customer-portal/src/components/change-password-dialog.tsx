@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { Eye, EyeOff, KeyRound, Loader2, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { fetchPortalAccounts, savePortalAccounts } from "@/lib/api";
-import { hashPassword } from "@/lib/auth";
 
 type Props = { open: boolean; onClose: () => void };
 
 export function ChangePasswordDialog({ open, onClose }: Props) {
-  const { session } = useAuth();
+  const { session, changePassword } = useAuth();
 
   const [current, setCurrent]         = useState("");
   const [next, setNext]               = useState("");
@@ -51,31 +49,11 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
 
     setBusy(true);
     try {
-      const { tenantId, customer } = session;
-      const email = (customer as { email?: string }).email ?? "";
-      const normalizedEmail = email.toLowerCase().trim();
-
-      const accounts = await fetchPortalAccounts(tenantId);
-      const account  = accounts.find(a => a.email.toLowerCase().trim() === normalizedEmail);
-
-      if (!account) { setError("Account not found. Please contact support."); return; }
-
-      // Verify current password
-      const currentHash = await hashPassword(current);
-      if (account.passwordHash !== currentHash) {
-        setError("Current password is incorrect.");
+      const result = await changePassword(current, next);
+      if (!result.ok) {
+        setError(result.error || "Failed to update password. Please try again.");
         return;
       }
-
-      // Save new password
-      const newHash    = await hashPassword(next);
-      const updated    = accounts.map(a =>
-        a.email.toLowerCase().trim() === normalizedEmail
-          ? { ...a, passwordHash: newHash }
-          : a
-      );
-      await savePortalAccounts(tenantId, updated);
-
       setDone(true);
       setTimeout(() => close(), 1800);
     } catch {

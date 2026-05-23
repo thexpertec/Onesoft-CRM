@@ -134,17 +134,24 @@ The api-server runs `assertApiKeyEnvOrExit()` at startup — if `KV_API_SECRET` 
 | All per-record routes (`/api/customers`, `/api/sales`, `/api/journal-entries`, all 30+) | `X-Api-Key` | Admin-dashboard `rFetch` (in `record-api.ts` and `api.ts`) sends the header automatically. No other client should reach these. |
 
 **KV allowlist** (`routes/kv.ts` — `ANON_EXACT_READ` / `ANON_EXACT_WRITE` / `ANON_PREFIX_READ` / `ANON_PREFIX_WRITE`):
-- Anon READ: `admin-products`, `admin-settings`, `website-cms`, `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, `admin-customers`*, `admin-sales`*, prefix `portal-profile-`, prefix `clubcard-`
-- Anon WRITE (PUT/POST): `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, `admin-sales`*, prefix `portal-profile-`, prefix `clubcard-`
+- Anon READ: `admin-products`, `admin-settings`, `website-cms`, `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, prefix `portal-profile-`, prefix `clubcard-`
+- Anon WRITE (PUT/POST): `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, prefix `portal-profile-`, prefix `clubcard-`
 - Anon DELETE: **never**
+
+**Scoped storefront endpoints** (replaced previous whole-tenant anon reads of `admin-customers` / `admin-sales`, May 2026):
+- `POST /api/portal/login` — verifies email + sha256 password hash against `portal-accounts`; returns the matching customer record only.
+- `POST /api/portal/signup` — creates portal account + seeds clubcard (100 coins).
+- `POST /api/portal/change-password` — verifies current hash before swapping.
+- `GET /api/portal/sales?tenantId&customerName` — returns only the named customer's sales from the relational `sales`+`sale_items` tables.
+- `POST /api/storefront/place-order` — atomic insert into `sales` + `sale_items` + append to tenant's `online-orders` kv. Callers: `customer-portal/src/{lib/api.ts,contexts/auth-context.tsx,pages/*}` + `tenant-store/src/pages/checkout.tsx`.
 
 The gate uses a router-level middleware that parses `req.path` directly (Express `req.params` is empty in `router.use()` callbacks before route matching). Only the `/:namespace/:key` shape is eligible for the allowlist; root list, namespace dump, namespace wipe all require the key. Malformed percent-encoding fails closed to the gate (try/catch around `decodeURIComponent`).
 
 **CORS** (`app.ts`): explicit allowlist from `ALLOWED_ORIGINS` env (comma-separated), with fallback to `REPLIT_DEV_DOMAIN` and a `*.replit.app` / `*.replit.dev` wildcard. Same-origin requests (no `Origin` header — curl, server-to-server) are allowed. Policy deny returns `cb(null, false)` (no CORS headers, browser drops cleanly) instead of throwing through Express's error handler as 500. `credentials: false` — every protected route uses the `X-Api-Key` header, never cookies.
 
-**Known residual exposure** (acknowledged, NOT fixed in this pass — tracked as follow-up):
-1. `GET /api/kv/t:{tid}/admin-customers` and `GET /api/kv/t:{tid}/admin-sales` stay anonymous because the customer-portal login matches email+phone against the customer list, and the orders page reads sales. Closing this needs dedicated server endpoints (e.g. `/api/portal/login`, `/api/storefront/customer-lookup`).
-2. `PUT /api/kv/t:{tid}/admin-sales` stays anonymous because tenant-store checkout writes the resulting sale here. Same replacement story.
+**Known residual exposure** (May 2026):
+1. ~~`admin-customers` / `admin-sales` / `portal-accounts` anonymous KV~~ — **CLOSED**. Replaced by the scoped `/api/portal/*` + `/api/storefront/*` endpoints above; all three keys now require `X-Api-Key`.
+2. **`/api/portal/sales` and the rest of `/api/portal/*` are still anonymous** — they only require `tenantId` + a customer name or password hash, not a server-issued session. So anyone who guesses a customer's email + a weak password (or a name for `/sales`) can read their orders. This is materially better than the previous whole-tenant leak but full caller binding requires server-issued sessions — same auth epic as #3.
 3. `VITE_KV_API_SECRET` is shipped in the admin-dashboard JS bundle (same value as `KV_API_SECRET`) — anyone who can load the admin app can extract the key. The gate is meaningful only against casual scanners, bots, other tenants of the same Replit deployment, and cross-origin attempts bypassing CORS. **Real per-user authentication (server-issued sessions, server-derived `tenantId`) is a separate epic** and remains unbuilt.
 4. Plaintext password comparison in `admin-tenants` and `admin-sales-agents` (still done client-side in `store.ts`). Needs hashing + server-side auth route. Deferred to the same auth epic.
 

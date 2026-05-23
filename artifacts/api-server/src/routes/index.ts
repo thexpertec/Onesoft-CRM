@@ -3,6 +3,8 @@ import healthRouter from "./health.js";
 import kvRouter from "./kv.js";
 import publicRouter from "./public.js";
 import authRouter from "./auth.js";
+import portalRouter from "./portal.js";
+import storefrontRouter from "./storefront.js";
 import accountsRouter from "./accounts.js";
 import customersRouter from "./customers.js";
 import productsRouter from "./products.js";
@@ -54,6 +56,12 @@ router.use(healthRouter);
 router.use("/kv", kvRouter);
 router.use("/public", publicRouter);
 router.use("/auth", authRouter);
+//   - /api/portal/*      customer-portal login/signup/change-password/sales
+//                        (replaces anonymous reads of admin-customers/admin-sales)
+//   - /api/storefront/*  tenant-store place-order
+//                        (replaces anonymous write of admin-sales)
+router.use("/portal", portalRouter);
+router.use("/storefront", storefrontRouter);
 
 // ── Protected surface ────────────────────────────────────────────────────────
 // Everything below requires the `X-Api-Key` header to match `KV_API_SECRET`.

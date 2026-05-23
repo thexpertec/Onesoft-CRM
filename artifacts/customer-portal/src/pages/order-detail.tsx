@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { ChevronLeft, Package, Truck, CreditCard, FileText, CheckCircle2, Circle, Clock, XCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { fetchSales, calcLineTotal, type Sale } from "@/lib/api";
+import { portalSales, calcLineTotal, type Sale } from "@/lib/api";
 import { fmt, fmtDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Layout } from "@/components/layout";
@@ -173,15 +173,8 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!session || !params?.id) return;
-    fetchSales(session.tenantId)
-      .then(all => {
-        const found = all.find(s =>
-          s.id === params.id &&
-          ((s as Record<string, unknown>).portalCustomerId === session.customer.id ||
-           s.customer === session.customer.name)
-        );
-        setSale(found ?? null);
-      })
+    portalSales(session.tenantId, session.customer.name)
+      .then(all => setSale(all.find(s => s.id === params.id) ?? null))
       .finally(() => setBusy(false));
   }, [session, params?.id]);
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ShoppingBag, CheckCircle, Clock, TrendingUp, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { fetchSales, calcSaleTotal, type Sale } from "@/lib/api";
+import { portalSales, calcSaleTotal, type Sale } from "@/lib/api";
 import { fmt, fmtDate } from "@/lib/utils";
 import { Layout } from "@/components/layout";
 import { StatusBadge, DeliveryBadge } from "@/components/badges";
@@ -17,14 +17,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!session) return;
-    fetchSales(session.tenantId)
-      .then(all => {
-        const mine = all.filter(s =>
-          (s as Record<string, unknown>).portalCustomerId === session.customer.id ||
-          s.customer === session.customer.name
-        );
-        setSales(mine);
-      })
+    portalSales(session.tenantId, session.customer.name)
+      .then(setSales)
       .finally(() => setBusy(false));
   }, [session]);
 

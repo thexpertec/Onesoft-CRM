@@ -128,16 +128,13 @@ async function fetchMigratedRows(table: string, tenantId: string): Promise<unkno
 // `/api/kv/*` call (May 2026). Anything new the storefronts need must be
 // added here — silently failing with 401 is the intended outcome otherwise.
 //
-// Known residual exposure (acknowledged, not fixed in this pass):
-//   - GET admin-customers / admin-sales: the tenant-store checkout page and
-//     the customer-portal login both read these to match by email+phone.
-//     Replacing them needs dedicated server endpoints (e.g. /api/portal/login,
-//     /api/storefront/customer-lookup) — tracked as a follow-up.
-//   - PUT admin-sales: storefront checkout writes the resulting sale here.
-//     Same replacement story.
-// Until those land, anyone who knows a tenant's `t:{tenantId}` namespace can
-// list that tenant's customers and sales. Tenant IDs are not secrets — treat
-// this as a public read.
+// admin-customers / admin-sales (read + write) used to be on this list as
+// acknowledged residuals because the customer-portal login matched
+// email+phone against the customer list and the storefront checkout wrote
+// the resulting sale back into `admin-sales`. They were removed (May 2026)
+// once the dedicated `/api/portal/*` and `/api/storefront/place-order`
+// endpoints landed — both now scope each request to a single customer or
+// transaction server-side, so the whole-tenant exposure is closed.
 //
 // Namespace-level operations (GET `/`, GET `/:namespace`, DELETE `/:namespace`)
 // and all DELETEs are admin-only — storefronts have no legitimate use for any
@@ -150,17 +147,18 @@ const ANON_EXACT_READ = new Set<string>([
   "repair-bookings",
   "store-orders",
   "online-orders",
-  "portal-accounts",
-  "admin-customers", // residual — see header
-  "admin-sales",     // residual — see header
 ]);
 const ANON_EXACT_WRITE = new Set<string>([
   "repair-bookings",
   "store-orders",
   "online-orders",
-  "portal-accounts",
-  "admin-sales",     // residual — see header
 ]);
+// `portal-accounts` is intentionally NOT on the anonymous allowlist any more
+// (May 2026). It holds the SHA-256 password hashes for every portal user
+// in the tenant — leaving it readable lets anyone extract hashes for offline
+// cracking, and leaving it writable lets anyone overwrite the whole list and
+// hijack every account. All account operations now go exclusively through
+// the `/api/portal/*` endpoints, which scope every call to a single account.
 const ANON_PREFIX_READ = ["portal-profile-", "clubcard-"];
 const ANON_PREFIX_WRITE = ["portal-profile-", "clubcard-"];
 
