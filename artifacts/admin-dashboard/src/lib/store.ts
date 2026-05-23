@@ -6,6 +6,7 @@ import {
   type ApiJELine,
   stockItemsApi, stockLedgerApi,
   productsApi, staffApi, staffRolesApi,
+  salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -12334,6 +12335,18 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
             for (const r of merged as unknown as StaffRole[]) {
               _persistStaffRoleRest("create", r as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
+          } else if (k === "admin-hrm-salary-templates") {
+            for (const t of merged as unknown as SalaryTemplate[]) {
+              _persistSalaryTemplateRest("create", t as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-salary-allowance-cats") {
+            for (const c of merged as unknown as SalaryAllowanceCategory[]) {
+              _persistSalaryAllowanceCatRest("create", c as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-salary-deduction-cats") {
+            for (const c of merged as unknown as SalaryDeductionCategory[]) {
+              _persistSalaryDeductionCatRest("create", c as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});
           }
@@ -12978,6 +12991,70 @@ export type SalaryTemplate = {
 
 const SALARY_TEMPLATE_KEY = "admin-hrm-salary-templates";
 
+/**
+ * Batch 7 chokepoint for HRM salary templates. Diff-dual-write — same shape as
+ * `_saveStaffRoles`. `admin-hrm-salary-templates` is bridged in `kv.ts` so
+ * direct KV writes are invisible to readers.
+ */
+function _saveSalaryTemplates(items: SalaryTemplate[]): void {
+  const sk = tenantKey(SALARY_TEMPLATE_KEY);
+  const prior: SalaryTemplate[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SalaryTemplate[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALARY_TEMPLATE_KEY, items);
+  _dualWriteSalaryTemplatesDiff(prior, items, tid ?? undefined);
+}
+
+function _stableSalaryTemplateJson(t: SalaryTemplate): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = t;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistSalaryTemplateRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = salaryTemplatesApi.create(tid, item as unknown as Omit<SalaryTemplate, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = salaryTemplatesApi.update(tid, item.id, rest as Partial<Omit<SalaryTemplate, "id" | "createdAt">>);
+  } else {
+    fn = salaryTemplatesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[salary-template ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteSalaryTemplatesDiff(prev: SalaryTemplate[], next: SalaryTemplate[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistSalaryTemplateRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableSalaryTemplateJson(p) !== _stableSalaryTemplateJson(n))
+      _persistSalaryTemplateRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistSalaryTemplateRest("delete", { id }, tid);
+  }
+}
+
 export const getSalaryTemplates = (): SalaryTemplate[] =>
   getStored<SalaryTemplate>(SALARY_TEMPLATE_KEY);
 
@@ -12990,7 +13067,7 @@ export const createSalaryTemplate = (
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  setStored(SALARY_TEMPLATE_KEY, [...getSalaryTemplates(), item]);
+  _saveSalaryTemplates([...getSalaryTemplates(), item]);
   return item;
 };
 
@@ -13002,12 +13079,12 @@ export const updateSalaryTemplate = (
   const i = items.findIndex(t => t.id === id);
   if (i === -1) throw new Error("Salary template not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SALARY_TEMPLATE_KEY, items);
+  _saveSalaryTemplates(items);
   return items[i];
 };
 
 export const deleteSalaryTemplate = (id: string): void => {
-  setStored(SALARY_TEMPLATE_KEY, getSalaryTemplates().filter(t => t.id !== id));
+  _saveSalaryTemplates(getSalaryTemplates().filter(t => t.id !== id));
 };
 
 // ─── Salary Allowance Categories ──────────────────────────────────────────────
@@ -13023,6 +13100,69 @@ export type SalaryAllowanceCategory = {
 
 const SALARY_ALLOWANCE_CAT_KEY = "admin-hrm-salary-allowance-cats";
 
+/**
+ * Batch 7 chokepoint for salary allowance categories. Diff-dual-write.
+ * `admin-hrm-salary-allowance-cats` is bridged in `kv.ts`.
+ */
+function _saveSalaryAllowanceCats(items: SalaryAllowanceCategory[]): void {
+  const sk = tenantKey(SALARY_ALLOWANCE_CAT_KEY);
+  const prior: SalaryAllowanceCategory[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SalaryAllowanceCategory[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALARY_ALLOWANCE_CAT_KEY, items);
+  _dualWriteSalaryAllowanceCatsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableSalaryAllowanceCatJson(c: SalaryAllowanceCategory): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = c;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistSalaryAllowanceCatRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = salaryAllowanceCategoriesApi.create(tid, item as unknown as Omit<SalaryAllowanceCategory, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = salaryAllowanceCategoriesApi.update(tid, item.id, rest as Partial<Omit<SalaryAllowanceCategory, "id" | "createdAt">>);
+  } else {
+    fn = salaryAllowanceCategoriesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[salary-allowance-cat ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteSalaryAllowanceCatsDiff(prev: SalaryAllowanceCategory[], next: SalaryAllowanceCategory[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistSalaryAllowanceCatRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableSalaryAllowanceCatJson(p) !== _stableSalaryAllowanceCatJson(n))
+      _persistSalaryAllowanceCatRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistSalaryAllowanceCatRest("delete", { id }, tid);
+  }
+}
+
 export const getSalaryAllowanceCategories = (): SalaryAllowanceCategory[] =>
   getStored<SalaryAllowanceCategory>(SALARY_ALLOWANCE_CAT_KEY);
 
@@ -13033,7 +13173,7 @@ export const createSalaryAllowanceCategory = (
     ...data, id: crypto.randomUUID(),
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
-  setStored(SALARY_ALLOWANCE_CAT_KEY, [...getSalaryAllowanceCategories(), item]);
+  _saveSalaryAllowanceCats([...getSalaryAllowanceCategories(), item]);
   return item;
 };
 
@@ -13044,12 +13184,12 @@ export const updateSalaryAllowanceCategory = (
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Allowance category not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SALARY_ALLOWANCE_CAT_KEY, items);
+  _saveSalaryAllowanceCats(items);
   return items[i];
 };
 
 export const deleteSalaryAllowanceCategory = (id: string): void => {
-  setStored(SALARY_ALLOWANCE_CAT_KEY, getSalaryAllowanceCategories().filter(x => x.id !== id));
+  _saveSalaryAllowanceCats(getSalaryAllowanceCategories().filter(x => x.id !== id));
 };
 
 // ─── Salary Deduction Categories ──────────────────────────────────────────────
@@ -13066,6 +13206,69 @@ export type SalaryDeductionCategory = {
 
 const SALARY_DEDUCTION_CAT_KEY = "admin-hrm-salary-deduction-cats";
 
+/**
+ * Batch 7 chokepoint for salary deduction categories. Diff-dual-write.
+ * `admin-hrm-salary-deduction-cats` is bridged in `kv.ts`.
+ */
+function _saveSalaryDeductionCats(items: SalaryDeductionCategory[]): void {
+  const sk = tenantKey(SALARY_DEDUCTION_CAT_KEY);
+  const prior: SalaryDeductionCategory[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SalaryDeductionCategory[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALARY_DEDUCTION_CAT_KEY, items);
+  _dualWriteSalaryDeductionCatsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableSalaryDeductionCatJson(c: SalaryDeductionCategory): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = c;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistSalaryDeductionCatRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = salaryDeductionCategoriesApi.create(tid, item as unknown as Omit<SalaryDeductionCategory, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = salaryDeductionCategoriesApi.update(tid, item.id, rest as Partial<Omit<SalaryDeductionCategory, "id" | "createdAt">>);
+  } else {
+    fn = salaryDeductionCategoriesApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[salary-deduction-cat ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteSalaryDeductionCatsDiff(prev: SalaryDeductionCategory[], next: SalaryDeductionCategory[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistSalaryDeductionCatRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableSalaryDeductionCatJson(p) !== _stableSalaryDeductionCatJson(n))
+      _persistSalaryDeductionCatRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistSalaryDeductionCatRest("delete", { id }, tid);
+  }
+}
+
 export const getSalaryDeductionCategories = (): SalaryDeductionCategory[] =>
   getStored<SalaryDeductionCategory>(SALARY_DEDUCTION_CAT_KEY);
 
@@ -13076,7 +13279,7 @@ export const createSalaryDeductionCategory = (
     ...data, id: crypto.randomUUID(),
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
-  setStored(SALARY_DEDUCTION_CAT_KEY, [...getSalaryDeductionCategories(), item]);
+  _saveSalaryDeductionCats([...getSalaryDeductionCategories(), item]);
   return item;
 };
 
@@ -13087,12 +13290,12 @@ export const updateSalaryDeductionCategory = (
   const i = items.findIndex(x => x.id === id);
   if (i === -1) throw new Error("Deduction category not found");
   items[i] = { ...items[i], ...updates, updatedAt: new Date().toISOString() };
-  setStored(SALARY_DEDUCTION_CAT_KEY, items);
+  _saveSalaryDeductionCats(items);
   return items[i];
 };
 
 export const deleteSalaryDeductionCategory = (id: string): void => {
-  setStored(SALARY_DEDUCTION_CAT_KEY, getSalaryDeductionCategories().filter(x => x.id !== id));
+  _saveSalaryDeductionCats(getSalaryDeductionCategories().filter(x => x.id !== id));
 };
 
 // ─── Advance Salary ───────────────────────────────────────────────────────────

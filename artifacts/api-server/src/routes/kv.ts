@@ -76,7 +76,10 @@ const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   "admin-rp-vouchers":        "rp_vouchers",
   "admin-products":           "products",
   "admin-hrm-staff":          "staff",
-  "admin-hrm-roles":          "staff_roles",
+  "admin-hrm-roles":              "staff_roles",
+  "admin-hrm-salary-templates":   "salary_templates",
+  "admin-hrm-salary-allowance-cats": "salary_allowance_categories",
+  "admin-hrm-salary-deduction-cats": "salary_deduction_categories",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;

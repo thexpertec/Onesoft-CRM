@@ -16,6 +16,7 @@ import type {
   Sale, Invoice, PurchaseOrder,
   SaleReturn, PurchaseReturn, RPVoucher,
   Product, Staff, StaffRole,
+  SalaryTemplate, SalaryAllowanceCategory, SalaryDeductionCategory,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -345,6 +346,12 @@ export const staffApi              = makeRecordApi<Staff>("staff");
 // Staff roles (Batch 6) — simple lookup table, permissions stored as
 // comma-separated string column.
 export const staffRolesApi         = makeRecordApi<StaffRole>("staff-roles");
+
+// Salary cluster lookups (Batch 7). Templates carry jsonb allowances/deductions
+// on the row; categories are flat scalar columns.
+export const salaryTemplatesApi              = makeRecordApi<SalaryTemplate>("salary-templates");
+export const salaryAllowanceCategoriesApi    = makeRecordApi<SalaryAllowanceCategory>("salary-allowance-categories");
+export const salaryDeductionCategoriesApi    = makeRecordApi<SalaryDeductionCategory>("salary-deduction-categories");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired

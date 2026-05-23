@@ -414,6 +414,51 @@ const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS staff_roles_tenant_idx ON staff_roles (tenant_id)`,
 
+  // ── Salary Templates (HRM) — Batch 7 ─────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS salary_templates (
+    id                        TEXT        NOT NULL PRIMARY KEY,
+    tenant_id                 TEXT        NOT NULL,
+    designation               TEXT        NOT NULL DEFAULT '',
+    staff_id                  TEXT        NOT NULL DEFAULT '',
+    basic_salary              NUMERIC     NOT NULL DEFAULT 0,
+    overtime_rate_per_hour    NUMERIC     NOT NULL DEFAULT 0,
+    per_leave_deduction       NUMERIC     NOT NULL DEFAULT 0,
+    per_short_leave_deduction NUMERIC     NOT NULL DEFAULT 0,
+    allowances                JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    deductions                JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    archived_at               TIMESTAMPTZ,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS salary_templates_tenant_idx ON salary_templates (tenant_id)`,
+
+  // ── Salary Allowance Categories (HRM) — Batch 7 ──────────────────────────────
+  `CREATE TABLE IF NOT EXISTS salary_allowance_categories (
+    id                  TEXT        NOT NULL PRIMARY KEY,
+    tenant_id           TEXT        NOT NULL,
+    name                TEXT        NOT NULL,
+    account_group_id    TEXT        NOT NULL DEFAULT '',
+    account_group_name  TEXT        NOT NULL DEFAULT '',
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS salary_allowance_categories_tenant_idx ON salary_allowance_categories (tenant_id)`,
+
+  // ── Salary Deduction Categories (HRM) — Batch 7 ──────────────────────────────
+  `CREATE TABLE IF NOT EXISTS salary_deduction_categories (
+    id                  TEXT        NOT NULL PRIMARY KEY,
+    tenant_id           TEXT        NOT NULL,
+    name                TEXT        NOT NULL,
+    account_group_id    TEXT        NOT NULL DEFAULT '',
+    account_group_name  TEXT        NOT NULL DEFAULT '',
+    type                TEXT        NOT NULL DEFAULT '',
+    archived_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS salary_deduction_categories_tenant_idx ON salary_deduction_categories (tenant_id)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,
