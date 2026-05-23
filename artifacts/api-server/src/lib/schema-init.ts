@@ -459,6 +459,56 @@ const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS salary_deduction_categories_tenant_idx ON salary_deduction_categories (tenant_id)`,
 
+  // ── Salary Slips (HRM) — Batch 8 ─────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS salary_slips (
+    id                        TEXT        NOT NULL PRIMARY KEY,
+    tenant_id                 TEXT        NOT NULL,
+    staff_id                  TEXT        NOT NULL,
+    staff_name                TEXT        NOT NULL DEFAULT '',
+    department                TEXT        NOT NULL DEFAULT '',
+    designation               TEXT        NOT NULL DEFAULT '',
+    role                      TEXT,
+    period                    TEXT        NOT NULL,
+    salary_type               TEXT        NOT NULL DEFAULT 'Monthly',
+    basic_salary              NUMERIC     NOT NULL DEFAULT 0,
+    allowances                JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    deductions                JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    advance_salary            NUMERIC,
+    gross_salary              NUMERIC     NOT NULL DEFAULT 0,
+    net_salary                NUMERIC     NOT NULL DEFAULT 0,
+    status                    TEXT        NOT NULL DEFAULT 'Draft',
+    payment_method            TEXT,
+    payment_account_id        TEXT,
+    paid_at                   TEXT,
+    amount_paid               NUMERIC,
+    journal_entry_id          TEXT,
+    accrual_journal_entry_id  TEXT,
+    staff_payable_ledger_id   TEXT,
+    notes                     TEXT,
+    archived_at               TIMESTAMPTZ,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS salary_slips_tenant_idx ON salary_slips (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS salary_slips_tenant_staff_period_idx ON salary_slips (tenant_id, staff_id, period)`,
+
+  // ── Attendance (HRM) — Batch 8 ───────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS attendance_records (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    tenant_id   TEXT        NOT NULL,
+    staff_id    TEXT        NOT NULL,
+    date        TEXT        NOT NULL,
+    status      TEXT        NOT NULL DEFAULT 'Present',
+    check_in    TEXT,
+    check_out   TEXT,
+    notes       TEXT,
+    archived_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS attendance_records_tenant_idx ON attendance_records (tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS attendance_records_tenant_staff_date_idx ON attendance_records (tenant_id, staff_id, date)`,
+
   // ── Cities ───────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS cities (
     id          TEXT        NOT NULL PRIMARY KEY,

@@ -7,6 +7,7 @@ import {
   stockItemsApi, stockLedgerApi,
   productsApi, staffApi, staffRolesApi,
   salaryTemplatesApi, salaryAllowanceCategoriesApi, salaryDeductionCategoriesApi,
+  salarySlipsApi, attendanceRecordsApi, nullifyUndefined,
   salesApi, invoicesApi, purchaseOrdersApi,
   saleReturnsApi, purchaseReturnsApi, rpVouchersApi,
 } from "./record-api";
@@ -9273,7 +9274,7 @@ export function seedDefaultCoaAccounts(): void {
           return s; // skip if JE creation fails
         }
       });
-      setStored(SALARY_SLIPS_KEY, updated);
+      _saveSalarySlips(updated);
     }
   }
 
@@ -9297,7 +9298,7 @@ export function seedDefaultCoaAccounts(): void {
           return s; // skip if JE creation fails
         }
       });
-      setStored(SALARY_SLIPS_KEY, updated);
+      _saveSalarySlips(updated);
     }
   }
 
@@ -10510,7 +10511,7 @@ export function deleteJournalEntry(id: string): void {
     }
     slipsChanged = true;
   }
-  if (slipsChanged) setStored(SALARY_SLIPS_KEY, slips);
+  if (slipsChanged) _saveSalarySlips(slips);
 
   // Dual-write DELETE to relational `journal_entries` happens inside
   // _doSaveJournalEntries via _dualWriteJEsDiff (diffs by id).
@@ -12347,6 +12348,14 @@ export async function syncAllFromServer(tenantId: string | null): Promise<void> 
             for (const c of merged as unknown as SalaryDeductionCategory[]) {
               _persistSalaryDeductionCatRest("create", c as unknown as { id: string } & Record<string, unknown>, tenantId);
             }
+          } else if (k === "admin-hrm-salary-slips") {
+            for (const s of merged as unknown as SalarySlip[]) {
+              _persistSalarySlipRest("create", s as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
+          } else if (k === "admin-hrm-attendance") {
+            for (const a of merged as unknown as AttendanceRecord[]) {
+              _persistAttendanceRest("create", a as unknown as { id: string } & Record<string, unknown>, tenantId);
+            }
           } else {
             kvPut(`t:${tenantId}`, k, merged).catch(() => {});
           }
@@ -12611,6 +12620,80 @@ export type SalarySlip = {
 
 const SALARY_SLIPS_KEY = "admin-hrm-salary-slips";
 
+/**
+ * Batch 8 chokepoint for salary slips. Same diff-dual-write shape as
+ * Batches 6/7 lookups, but the update payload is passed through
+ * `nullifyUndefined` so JE-delete reverse-cascade clears (jeId/accrualJeId/
+ * paidAt/paymentAccountId/paymentMethod set to `undefined`) propagate to the
+ * relational row as explicit NULLs instead of being dropped by JSON.stringify.
+ * Mirrors Batch 4 Bug #2 fix from the transactional cluster.
+ */
+function _saveSalarySlips(items: SalarySlip[]): void {
+  const sk = tenantKey(SALARY_SLIPS_KEY);
+  const prior: SalarySlip[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as SalarySlip[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(SALARY_SLIPS_KEY, items);
+  _dualWriteSalarySlipsDiff(prior, items, tid ?? undefined);
+}
+
+function _stableSalarySlipJson(s: SalarySlip): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = s;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistSalarySlipRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = salarySlipsApi.create(
+      tid,
+      nullifyUndefined(item as Record<string, unknown>) as unknown as Omit<SalarySlip, "id" | "createdAt" | "updatedAt">,
+    );
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = salarySlipsApi.update(
+      tid,
+      item.id,
+      nullifyUndefined(rest) as Partial<Omit<SalarySlip, "id" | "createdAt">>,
+    );
+  } else {
+    fn = salarySlipsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[salary-slip ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteSalarySlipsDiff(prev: SalarySlip[], next: SalarySlip[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistSalarySlipRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableSalarySlipJson(p) !== _stableSalarySlipJson(n))
+      _persistSalarySlipRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistSalarySlipRest("delete", { id }, tid);
+  }
+}
+
 function _calcSlipTotals(basic: number, allowances: SalarySlipItem[], deductions: SalarySlipItem[], advanceSalary = 0) {
   const grossSalary = basic + allowances.reduce((s, a) => s + (a.amount || 0), 0);
   const netSalary   = grossSalary - deductions.reduce((s, d) => s + (d.amount || 0), 0) - (advanceSalary || 0);
@@ -12646,7 +12729,7 @@ export const createSalarySlip = (data: Omit<SalarySlip, "id" | "grossSalary" | "
   const { grossSalary, netSalary } = _calcSlipTotals(data.basicSalary, data.allowances, data.deductions, data.advanceSalary);
   const resolvedRole = data.role || staffMember?.role || undefined;
   const item: SalarySlip = { ...data, role: resolvedRole, grossSalary, netSalary, id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  setStored(SALARY_SLIPS_KEY, [...existing, item]);
+  _saveSalarySlips([...existing, item]);
   return item;
 };
 
@@ -12657,7 +12740,7 @@ export const updateSalarySlip = (id: string, updates: Partial<Omit<SalarySlip, "
   const merged = { ...items[i], ...updates };
   const { grossSalary, netSalary } = _calcSlipTotals(merged.basicSalary, merged.allowances, merged.deductions, merged.advanceSalary);
   items[i] = { ...merged, grossSalary, netSalary, updatedAt: new Date().toISOString() };
-  setStored(SALARY_SLIPS_KEY, items);
+  _saveSalarySlips(items);
   return items[i];
 };
 
@@ -12667,7 +12750,7 @@ export const deleteSalarySlip = (id: string): void => {
     const blockers = _salarySlipFinancialBlockers(slip);
     if (blockers.length) throw new Error(_formatBlockerError("salary slip", `${slip.staffName} ${slip.period}`, blockers));
   }
-  setStored(SALARY_SLIPS_KEY, getSalarySlips().filter(s => s.id !== id));
+  _saveSalarySlips(getSalarySlips().filter(s => s.id !== id));
 };
 
 /**
@@ -12941,6 +13024,70 @@ export type AttendanceRecord = {
 
 const ATTENDANCE_KEY = "admin-hrm-attendance";
 
+/**
+ * Batch 8 chokepoint for attendance records. Diff-dual-write — same shape as
+ * Batches 6/7 lookups. Attendance has no JE-cascade fields so plain pattern
+ * (no nullifyUndefined needed).
+ */
+function _saveAttendance(items: AttendanceRecord[]): void {
+  const sk = tenantKey(ATTENDANCE_KEY);
+  const prior: AttendanceRecord[] = (() => {
+    try { const r = _lsGet(sk); return r ? JSON.parse(r) as AttendanceRecord[] : []; } catch { return []; }
+  })();
+  const tid = _activeTenantId;
+  setStored(ATTENDANCE_KEY, items);
+  _dualWriteAttendanceDiff(prior, items, tid ?? undefined);
+}
+
+function _stableAttendanceJson(a: AttendanceRecord): string {
+  const { createdAt: _c, updatedAt: _u, ...rest } = a;
+  void _c; void _u;
+  return JSON.stringify(rest);
+}
+
+function _persistAttendanceRest(
+  op: "create" | "update" | "delete",
+  item: { id: string } & Record<string, unknown>,
+  tenantIdOverride?: string,
+): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  let fn: Promise<unknown>;
+  if (op === "create") {
+    fn = attendanceRecordsApi.create(tid, item as unknown as Omit<AttendanceRecord, "id" | "createdAt" | "updatedAt">);
+  } else if (op === "update") {
+    const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item as {
+      id: string; createdAt?: unknown; updatedAt?: unknown;
+    } & Record<string, unknown>;
+    void _id; void _ca; void _ua;
+    fn = attendanceRecordsApi.update(tid, item.id, rest as Partial<Omit<AttendanceRecord, "id" | "createdAt">>);
+  } else {
+    fn = attendanceRecordsApi.delete(tid, item.id);
+  }
+  fn.catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (op === "create" && /HTTP 409/i.test(msg)) return;
+    if (op === "delete" && /HTTP 404/i.test(msg)) return;
+    console.warn(`[attendance ${op}] REST persistence failed for ${item.id}:`, msg);
+  });
+}
+
+function _dualWriteAttendanceDiff(prev: AttendanceRecord[], next: AttendanceRecord[], tenantIdOverride?: string): void {
+  const tid = tenantIdOverride ?? _activeTenantId;
+  if (!tid) return;
+  const prevById = new Map(prev.map(r => [r.id, r]));
+  const nextById = new Map(next.map(r => [r.id, r]));
+  for (const [id, n] of nextById) {
+    const p = prevById.get(id);
+    if (!p) _persistAttendanceRest("create", n as unknown as { id: string } & Record<string, unknown>, tid);
+    else if (_stableAttendanceJson(p) !== _stableAttendanceJson(n))
+      _persistAttendanceRest("update", n as unknown as { id: string } & Record<string, unknown>, tid);
+  }
+  for (const id of prevById.keys()) {
+    if (!nextById.has(id)) _persistAttendanceRest("delete", { id }, tid);
+  }
+}
+
 export const getAttendanceRecords = (): AttendanceRecord[] => getStored<AttendanceRecord>(ATTENDANCE_KEY);
 
 export const upsertAttendance = (
@@ -12951,11 +13098,11 @@ export const upsertAttendance = (
   const now = new Date().toISOString();
   if (existing) {
     const updated = { ...existing, ...data, updatedAt: now };
-    setStored(ATTENDANCE_KEY, all.map(r => r.id === existing.id ? updated : r));
+    _saveAttendance(all.map(r => r.id === existing.id ? updated : r));
     return updated;
   }
   const record: AttendanceRecord = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
-  setStored(ATTENDANCE_KEY, [...all, record]);
+  _saveAttendance([...all, record]);
   return record;
 };
 
@@ -12964,7 +13111,7 @@ export const bulkUpsertAttendance = (
 ): AttendanceRecord[] => records.map(upsertAttendance);
 
 export const deleteAttendanceRecord = (id: string): void => {
-  setStored(ATTENDANCE_KEY, getAttendanceRecords().filter(r => r.id !== id));
+  _saveAttendance(getAttendanceRecords().filter(r => r.id !== id));
 };
 
 // ─── Salary Templates ─────────────────────────────────────────────────────────

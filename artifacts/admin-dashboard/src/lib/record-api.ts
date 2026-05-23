@@ -17,6 +17,7 @@ import type {
   SaleReturn, PurchaseReturn, RPVoucher,
   Product, Staff, StaffRole,
   SalaryTemplate, SalaryAllowanceCategory, SalaryDeductionCategory,
+  SalarySlip, AttendanceRecord,
 } from "@/lib/store";
 
 const BASE = "/api";
@@ -298,7 +299,7 @@ function makeTxRecordApi<T extends { id: string }>(
  * straight through; their per-row undefined→null handling happens in the
  * route's value helpers (e.g. `saleValues`, `payValues`).
  */
-function nullifyUndefined<T extends Record<string, unknown>>(obj: T): T {
+export function nullifyUndefined<T extends Record<string, unknown>>(obj: T): T {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(obj)) out[k] = obj[k] === undefined ? null : obj[k];
   return out as T;
@@ -352,6 +353,12 @@ export const staffRolesApi         = makeRecordApi<StaffRole>("staff-roles");
 export const salaryTemplatesApi              = makeRecordApi<SalaryTemplate>("salary-templates");
 export const salaryAllowanceCategoriesApi    = makeRecordApi<SalaryAllowanceCategory>("salary-allowance-categories");
 export const salaryDeductionCategoriesApi    = makeRecordApi<SalaryDeductionCategory>("salary-deduction-categories");
+
+// Salary slips + attendance (Batch 8). Slips have many nullable JE-cascade
+// fields; the chokepoint in store.ts applies `nullifyUndefined` on the update
+// payload so JE-delete reverse-cascade clears propagate to the relational row.
+export const salarySlipsApi          = makeRecordApi<SalarySlip>("salary-slips");
+export const attendanceRecordsApi    = makeRecordApi<AttendanceRecord>("attendance-records");
 
 // ─── CRM REST clients (Batch 3) ───────────────────────────────────────────────
 // `customersApi` is consumed by `useCustomers` (hook-side cutover) AND fired
