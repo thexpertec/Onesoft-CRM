@@ -21,78 +21,21 @@ const router = Router();
 //
 // Keep this map in lockstep with `mountRecordRoutes(...)` callsites in the
 // API server. Adding an entity here is a one-line change per migration batch.
-const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
-  // Batch 1 — master data
-  "admin-brands":             "brands",
-  "admin-units":              "units",
-  "admin-attributes":         "attributes",
-  "admin-cities":             "cities",
-  "admin-areas":              "areas",
-  "admin-hrm-departments":    "departments",
-  "admin-hrm-designations":   "designations",
-  "admin-product-categories": "product_categories",
-  // Batch 2 — CRM
-  "admin-leads":              "leads",
-  "admin-req-docs":           "requirement_docs",
-  // Batch 3 — CRM customers (and suppliers — they are customer rows with
-  // customerRole='Supplier', not a separate table). Adding this entry makes
-  // the bridge ignore `kv_store` for admin-customers, so every customer
-  // writer in the FE MUST go through customersApi (either the useCustomers
-  // hook, or the dual-write fire-and-forget inside createCustomer/
-  // updateCustomer/deleteCustomer in store.ts, including the m10 walk-in
-  // seed and the COA contact-ledger heal at line ~8097).
-  "admin-customers":          "customers",
-  // Batch 4a — accounts + journal-entries foundation. The hooks `useAccounts`
-  // / `useJournalEntries` call the REST API directly; the 13+ internal
-  // callers of legacy `createAccount`/`updateAccount`/`deleteAccount` and
-  // the 21+ internal callers of `createJournalEntry`/`updateJournalEntry`/
-  // `deleteJournalEntry` dual-write via `_persistAccountRest` /
-  // `_persistJERest` in store.ts. Adding these keys to the registry makes
-  // the bridge ignore `kv_store` for `admin-chart-of-accounts` /
-  // `admin-journal-entries`, so every account or JE writer MUST persist
-  // through to the relational table.
-  "admin-chart-of-accounts":  "accounts",
-  "admin-journal-entries":    "journal_entries",
-  // Batch 4b — stock items + stock ledger. The legacy CRUDs
-  // createStockItem/updateStockItem/deleteStockItem AND the central
-  // _saveStock / _saveStockLedger chokepoints in store.ts dual-write to
-  // these tables via stockItemsApi / stockLedgerApi. Every setStored to
-  // STOCK_KEY / LEDGER_KEY now funnels through those chokepoints, so the
-  // 9+ callers of batchLedger (PO-receive, sale fulfillment, returns,
-  // m11/m14 rebuilds) all persist through to the relational table.
-  "admin-stock":              "stock_items",
-  "admin-stock-ledger":       "stock_ledger",
-  // Batch 4c — transactional outer cluster. Every writer funnels through
-  // `_saveSales` / `_saveInvoices` / `_savePOs` / `_saveSaleReturns` /
-  // `_savePurchaseReturns` / `_saveRPVouchers` in store.ts, which dual-write
-  // via the {sales,invoices,purchaseOrders,saleReturns,purchaseReturns,
-  // rpVouchers}Api clients. Reverse-cascade write-backs from
-  // `deleteJournalEntry` go through the same chokepoints so JE removal also
-  // persists the resulting amountPaid/status/jeId resets.
-  "admin-sales":              "sales",
-  "admin-invoices":           "invoices",
-  "admin-purchase-orders":    "purchase_orders",
-  "admin-sale-returns":       "sale_returns",
-  "admin-purchase-returns":   "purchase_returns",
-  "admin-rp-vouchers":        "rp_vouchers",
-  "admin-products":           "products",
-  "admin-hrm-staff":          "staff",
-  "admin-hrm-roles":              "staff_roles",
-  "admin-hrm-salary-templates":   "salary_templates",
-  "admin-hrm-salary-allowance-cats": "salary_allowance_categories",
-  "admin-hrm-salary-deduction-cats": "salary_deduction_categories",
-  "admin-hrm-salary-slips":   "salary_slips",
-  "admin-hrm-attendance":     "attendance_records",
-  "admin-hrm-advance-salary": "advance_salaries",
-  "admin-payment-accounts":   "payment_accounts",
-  "admin-sales-agents":       "sales_agents",
-  // Batch 12 — HRM recruitment cluster. Simple lookup entities, no JE/financial
-  // linkage. Chokepoints `_saveJobs` / `_saveJobApplicants` / `_saveInterviews`
-  // in store.ts diff-dual-write via the matching record-api clients.
-  "admin-hrm-jobs":           "jobs",
-  "admin-hrm-applicants":     "job_applicants",
-  "admin-hrm-interviews":     "interview_schedules",
-};
+// NEON DATA DEPLOYMENT (May 2026): bridge intentionally emptied.
+// The production Neon database holds 12+ months of real tenant data in
+// `kv_store` only — the relational tables (created by `pg_dump --schema-only`
+// from Replit) are empty. Routing reads through the bridge would surface
+// 0 rows for every tenant. By emptying this map, every GET falls through to
+// the kv_store value, which is the real data.
+//
+// Writes are unaffected: the admin-dashboard chokepoints (`_saveProducts`,
+// `_saveSales`, …) still call `setStored(KEY, items)` which fires a PUT to
+// /api/kv/:ns/:key writing the FULL array to kv_store. The fire-and-forget
+// per-record dual-write is best-effort; failures only log.
+//
+// Repopulating the relational tables for analytics/reporting is a separate
+// follow-up — see also the in-process backfill plan in scratchpad.
+const MIGRATED_KEY_TO_TABLE: Record<string, string> = {};
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
 
