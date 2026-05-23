@@ -1,6 +1,7 @@
 import { kvPut, kvGetAll, kvGet, kvDelete, kvDeleteNamespace } from "./api";
 import {
   customersApi, brandsApi, unitsApi, productCategoriesApi,
+  attributesApi, departmentsApi, designationsApi, leadsApi, requirementDocsApi,
   apiCreateAccount, apiUpdateAccount, apiDeleteAccount,
   apiCreateJE, apiUpdateJE, apiDeleteJE,
   type ApiJELine,
@@ -7901,6 +7902,119 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
 };
 
 /**
+ * Batch 11 — bulk-replace registry.
+ *
+ * Every migrated KV key (kv.ts MIGRATED_KEY_TO_TABLE) needs writes routed
+ * through per-record REST — direct `_apiWrite` to kv_store is invisible after
+ * the bridge takes over reads. clearStoredModule / restoreStoredModuleSnapshot
+ * operate at module-snapshot granularity (whole-array writes), so we need a
+ * uniform "bulk replace" handler per key.
+ *
+ * Two strategies:
+ *  - **Chokepoint keys** (Batches 4–10): call the chokepoint, which itself
+ *    handles cache write + diff dual-write via the existing _saveXxx fn.
+ *  - **Hook-cutover keys** (Batches 1–3, no chokepoint exists): use the
+ *    generic `_diffReplaceViaApi` helper that writes the local cache via
+ *    setStored and then DELETEs removed ids + POSTs (or PUTs on 409) the
+ *    new ids via the record api.
+ *
+ * Lazy-initialised: chokepoint fns are declared throughout the file, so we
+ * build the registry at first call rather than at module load.
+ */
+type _BulkReplaceFn = (items: { id: string }[]) => void;
+let _bulkReplaceRegistry: Map<string, _BulkReplaceFn> | null = null;
+
+function _diffReplaceViaApi(
+  key: string,
+  api: {
+    create: (tid: string, body: Record<string, unknown>) => Promise<unknown>;
+    update: (tid: string, id: string, body: Record<string, unknown>) => Promise<unknown>;
+    delete: (tid: string, id: string) => Promise<unknown>;
+  },
+  items: { id: string }[],
+): void {
+  // Capture tenant FIRST per the documented race-guard style — any tenant
+  // switch during the synchronous diff would otherwise leak writes across.
+  const tid = _activeTenantId;
+  const sk = tenantKey(key);
+  let prior: { id: string }[] = [];
+  try { const r = _lsGet(sk); prior = r ? JSON.parse(r) as { id: string }[] : []; } catch { prior = []; }
+  setStored(key, items);
+  if (!tid) return;
+  const nextIds = new Set(items.map(r => r.id));
+  for (const p of prior) {
+    if (!nextIds.has(p.id)) {
+      api.delete(tid, p.id).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/HTTP 404/i.test(msg)) console.warn(`[bulk-replace ${key} delete] ${p.id}:`, msg);
+      });
+    }
+  }
+  const priorIds = new Set(prior.map(r => r.id));
+  for (const n of items) {
+    const { id: _id, ...rest } = n as Record<string, unknown> & { id: string };
+    void _id;
+    if (priorIds.has(n.id)) {
+      api.update(tid, n.id, rest).catch((err: unknown) => {
+        console.warn(`[bulk-replace ${key} update] ${n.id}:`, err);
+      });
+    } else {
+      api.create(tid, n as unknown as Record<string, unknown>).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/HTTP 409/i.test(msg)) {
+          api.update(tid, n.id, rest).catch(() => { /* idempotent re-seed */ });
+        } else {
+          console.warn(`[bulk-replace ${key} create] ${n.id}:`, msg);
+        }
+      });
+    }
+  }
+}
+
+function _buildBulkReplaceRegistry(): Map<string, _BulkReplaceFn> {
+  const m = new Map<string, _BulkReplaceFn>();
+  // ── Chokepoint-bearing migrated keys (Batches 4–10) ────────────────────────
+  m.set(PAYMENT_ACCOUNTS_KEY, (i) => _savePaymentAccounts(i as PaymentAccount[]));
+  m.set(SALES_AGENTS_KEY,     (i) => _saveSalesAgents(i as SalesAgent[]));
+  m.set(PRODUCTS_KEY,         (i) => _saveProducts(i as Product[]));
+  m.set(PURCHASE_ORDERS_KEY,  (i) => _savePOs(i as PurchaseOrder[]));
+  m.set(STOCK_KEY,            (i) => _saveStock(i as StockItem[]));
+  m.set(SALES_KEY,            (i) => _saveSales(i as Sale[]));
+  m.set(INVOICES_KEY,         (i) => _saveInvoices(i as Invoice[]));
+  m.set(SR_KEY,               (i) => _saveSaleReturns(i as SaleReturn[]));
+  m.set(STAFF_KEY,            (i) => _saveStaff(i as Staff[]));
+  m.set(HRM_ROLES_KEY,        (i) => _saveStaffRoles(i as StaffRole[]));
+  m.set(JE_KEY,               (i) => _saveJournalEntries(i as JournalEntry[]));
+  m.set(LEDGER_KEY,           (i) => _saveStockLedger(i as StockLedgerEntry[]));
+  // ── Hook-cutover migrated keys (Batches 1–3, no chokepoint) ────────────────
+  // Routed through the generic diff helper. Cast each api to the uniform
+  // shape the helper expects.
+  const asGen = (api: unknown) => api as {
+    create: (tid: string, body: Record<string, unknown>) => Promise<unknown>;
+    update: (tid: string, id: string, body: Record<string, unknown>) => Promise<unknown>;
+    delete: (tid: string, id: string) => Promise<unknown>;
+  };
+  m.set(BRANDS_KEY,             (i) => _diffReplaceViaApi(BRANDS_KEY,             asGen(brandsApi),             i));
+  m.set(UNITS_KEY,              (i) => _diffReplaceViaApi(UNITS_KEY,              asGen(unitsApi),              i));
+  m.set(ATTRIBUTES_KEY,         (i) => _diffReplaceViaApi(ATTRIBUTES_KEY,         asGen(attributesApi),         i));
+  m.set(PRODUCT_CATEGORIES_KEY, (i) => _diffReplaceViaApi(PRODUCT_CATEGORIES_KEY, asGen(productCategoriesApi), i));
+  m.set(HRM_DEPT_KEY,           (i) => _diffReplaceViaApi(HRM_DEPT_KEY,           asGen(departmentsApi),        i));
+  m.set(HRM_DESIG_KEY,          (i) => _diffReplaceViaApi(HRM_DESIG_KEY,          asGen(designationsApi),       i));
+  m.set(LEADS_KEY,              (i) => _diffReplaceViaApi(LEADS_KEY,              asGen(leadsApi),              i));
+  m.set(DOCS_KEY,               (i) => _diffReplaceViaApi(DOCS_KEY,               asGen(requirementDocsApi),    i));
+  m.set(CUSTOMERS_KEY,          (i) => _diffReplaceViaApi(CUSTOMERS_KEY,          asGen(customersApi),          i));
+  return m;
+}
+
+function _bulkReplaceMigratedKey(key: string, items: { id: string }[]): boolean {
+  if (!_bulkReplaceRegistry) _bulkReplaceRegistry = _buildBulkReplaceRegistry();
+  const fn = _bulkReplaceRegistry.get(key);
+  if (!fn) return false;
+  fn(items);
+  return true;
+}
+
+/**
  * Clears one or more module keys for the CURRENT tenant (or superadmin if no
  * tenant is active).  Removes from localStorage AND pushes [] to the server so
  * data does not reappear on the next page load.
@@ -7908,12 +8022,12 @@ export const MODULE_KEYS: Record<string, StoreKey[]> = {
 export function clearStoredModule(keys: readonly string[]): void {
   keys.forEach(k => {
     // Migrated keys (kv.ts MIGRATED_KEY_TO_TABLE) must route writes through
-    // their per-record chokepoint — direct `_apiWrite` to kv_store is
-    // invisible after the bridge takes over reads. Batch 10 covers PA + SA;
-    // earlier-migrated keys in ALL_STORE_KEYS have a pre-existing latent gap
-    // here and are tracked for a separate sweep.
-    if (k === PAYMENT_ACCOUNTS_KEY) { _savePaymentAccounts([]); return; }
-    if (k === SALES_AGENTS_KEY)     { _saveSalesAgents([]);     return; }
+    // per-record REST — direct `_apiWrite` to kv_store is invisible after the
+    // bridge takes over reads. Batch 11 covers every migrated key in
+    // ALL_STORE_KEYS via the bulk-replace registry. Non-migrated keys
+    // (admin-users, admin-team-members, admin-settings) fall through to the
+    // legacy KV write.
+    if (_bulkReplaceMigratedKey(k, [])) return;
     const sk = tenantKey(k);
     _lsSet(sk, []);
     _apiWrite(sk, []).catch(() => { /* handled via onesoft:write-error event */ });
@@ -7961,13 +8075,11 @@ export function restoreStoredModuleSnapshot(data: Record<string, unknown>): numb
   let count = 0;
   ALL_STORE_KEYS.forEach(k => {
     if (k in data && Array.isArray(data[k])) {
-      // Migrated keys must go through their chokepoint — same reason as
-      // clearStoredModule above.
-      if (k === PAYMENT_ACCOUNTS_KEY) {
-        _savePaymentAccounts(data[k] as PaymentAccount[]); count++; return;
-      }
-      if (k === SALES_AGENTS_KEY) {
-        _saveSalesAgents(data[k] as SalesAgent[]); count++; return;
+      // Migrated keys must go through their per-record REST handler — same
+      // reason as clearStoredModule above. Batch 11 covers every migrated
+      // key via the bulk-replace registry.
+      if (_bulkReplaceMigratedKey(k, data[k] as { id: string }[])) {
+        count++; return;
       }
       const sk = tenantKey(k);
       _lsSet(sk, data[k]);
