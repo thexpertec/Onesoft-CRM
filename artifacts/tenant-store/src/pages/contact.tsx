@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import {
   MapPin, Phone, Mail, Clock, Send, MessageSquare,
   CheckCircle2, ChevronRight, Loader2,
@@ -246,11 +247,11 @@ export function ContactPage() {
                   { label: "View our services",   href: "/services" },
                   { label: "Go to checkout",       href: "/checkout" },
                 ].map(l => (
-                  <a key={l.href} href={l.href}
+                  <Link key={l.href} href={l.href}
                     className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 transition-colors"
                   >
                     <ChevronRight size={13} /> {l.label}
-                  </a>
+                  </Link>
                 ))}
               </div>
             </div>
