@@ -56,11 +56,34 @@ function sortProducts(products: Product[], sort: SortKey): Product[] {
   });
 }
 
+// ─── Theme accent helpers ────────────────────────────────────────────────────────
+function makeAC(mp: boolean) {
+  return {
+    bg:        mp ? "bg-orange-500"                             : "bg-blue-600",
+    bgHov:     mp ? "hover:bg-orange-600"                      : "hover:bg-blue-700",
+    bgSoft:    mp ? "bg-orange-50 dark:bg-orange-950/30"       : "bg-blue-50 dark:bg-blue-950/30",
+    bgSoftDk:  mp ? "dark:bg-orange-950/40"                    : "dark:bg-blue-950/40",
+    text:      mp ? "text-orange-600"                          : "text-blue-600",
+    textHov:   mp ? "hover:text-orange-700"                    : "hover:text-blue-700",
+    text700:   mp ? "text-orange-700 dark:text-orange-300"     : "text-blue-700 dark:text-blue-300",
+    text200:   mp ? "text-orange-200"                          : "text-blue-200",
+    textMuted: mp ? "text-orange-500"                          : "text-blue-500",
+    border:    mp ? "border-orange-500"                        : "border-blue-500",
+    border600: mp ? "border-orange-500"                        : "border-blue-600",
+    focusRing: mp ? "focus:ring-orange-500/20 focus:border-orange-500" : "focus:ring-blue-500/20 focus:border-blue-500",
+    chipBg:    mp ? "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800/50"
+                  : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50",
+    chipX:     mp ? "text-orange-400 hover:text-orange-700 dark:hover:text-orange-200" : "text-blue-400 hover:text-blue-700 dark:hover:text-blue-200",
+  };
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────────
 export function ShopPage() {
-  const { products, loading } = useStore();
+  const { products, loading, storeTheme } = useStore();
   const search = useSearch();
   const params = new URLSearchParams(search);
+  const mp = storeTheme === "marketplace";
+  const AC = makeAC(mp);
 
   // Filter state
   const [query,              setQuery]              = useState(params.get("q") ?? "");
@@ -160,7 +183,6 @@ export function ShopPage() {
     if (!isNaN(pMax)) res = res.filter(p => ep(p) <= pMax);
 
     if (inStockOnly) {
-      // Use same getStockQty logic as the product card so results match badges
       res = res.filter(p => getStockQty(p.openingStock) > 0);
     }
 
@@ -203,6 +225,7 @@ export function ShopPage() {
     priceMax, setPriceMax,
     inStockOnly, setInStockOnly,
     selectedConditions, setSelectedConditions,
+    mp,
   };
 
   return (
@@ -235,7 +258,10 @@ export function ShopPage() {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search products…"
-                className="w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 dark:text-white placeholder:text-gray-400 transition-all"
+                className={cn(
+                  "w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg outline-none text-slate-900 dark:text-white placeholder:text-gray-400 transition-all",
+                  AC.focusRing
+                )}
               />
             </div>
 
@@ -245,14 +271,14 @@ export function ShopPage() {
               className={cn(
                 "lg:hidden flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors",
                 activeBadges.length > 0
-                  ? "border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-400"
+                  ? cn("border-current", AC.text, AC.bgSoft)
                   : "border-gray-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800"
               )}
             >
               <SlidersHorizontal size={14} />
               Filters
               {activeBadges.length > 0 && (
-                <span className="text-xs font-bold bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                <span className={cn("text-xs font-bold text-white rounded-full w-4 h-4 flex items-center justify-center", AC.bg)}>
                   {activeBadges.length}
                 </span>
               )}
@@ -263,7 +289,10 @@ export function ShopPage() {
               <select
                 value={sort}
                 onChange={e => setSort(e.target.value as SortKey)}
-                className="appearance-none pl-3 pr-7 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 dark:text-slate-300 cursor-pointer"
+                className={cn(
+                  "appearance-none pl-3 pr-7 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg outline-none text-slate-700 dark:text-slate-300 cursor-pointer",
+                  AC.focusRing
+                )}
               >
                 {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
@@ -279,7 +308,7 @@ export function ShopPage() {
                   className={cn(
                     "px-2.5 py-2 transition-colors",
                     gridCols === n
-                      ? "bg-blue-600 text-white"
+                      ? cn(AC.bg, "text-white")
                       : "text-slate-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
                   )}
                 >
@@ -293,8 +322,8 @@ export function ShopPage() {
           {filtersOpen && (
             <div className="lg:hidden mb-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-700">
-                <div className="flex items-center gap-1.5 font-semibold text-sm text-slate-900 dark:text-white">
-                  <SlidersVertical size={14} className="text-blue-500" /> Filters
+                <div className={cn("flex items-center gap-1.5 font-semibold text-sm text-slate-900 dark:text-white")}>
+                  <SlidersVertical size={14} className={AC.textMuted} /> Filters
                 </div>
                 <button onClick={() => setFiltersOpen(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1">
                   <X size={14} />
@@ -311,9 +340,9 @@ export function ShopPage() {
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Applied:</span>
               {activeBadges.map(b => (
-                <span key={b.label} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-200 dark:border-blue-800/50">
+                <span key={b.label} className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium", AC.chipBg)}>
                   {b.label}
-                  <button onClick={b.clear} className="text-blue-400 hover:text-blue-700 dark:hover:text-blue-200 ml-0.5">
+                  <button onClick={b.clear} className={cn("ml-0.5", AC.chipX)}>
                     <X size={10} />
                   </button>
                 </span>
@@ -337,7 +366,7 @@ export function ShopPage() {
               <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-1">No products found</h3>
               <p className="text-sm text-slate-400 mb-4">Try adjusting your search or filters</p>
               {activeBadges.length > 0 && (
-                <button onClick={clearAll} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                <button onClick={clearAll} className={cn("text-sm font-medium", AC.text, AC.textHov)}>
                   Clear all filters
                 </button>
               )}
@@ -365,7 +394,7 @@ export function ShopPage() {
                   className={cn(
                     "w-9 h-9 rounded-lg text-sm font-semibold transition-all",
                     page === p
-                      ? "bg-blue-600 text-white"
+                      ? cn(AC.bg, "text-white")
                       : "border border-gray-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
                   )}
                 >
@@ -406,6 +435,7 @@ interface FilterSidebarProps {
   inStockOnly: boolean; setInStockOnly: (v: boolean) => void;
   selectedConditions: string[]; setSelectedConditions: React.Dispatch<React.SetStateAction<string[]>>;
   inline?: boolean;
+  mp: boolean;
 }
 
 function FilterSidebar({
@@ -418,7 +448,9 @@ function FilterSidebar({
   inStockOnly, setInStockOnly,
   selectedConditions, setSelectedConditions,
   inline,
+  mp,
 }: FilterSidebarProps) {
+  const AC = makeAC(mp);
   const [openCats,    setOpenCats]    = useState<string[]>([selectedCat]);
   const [sectCat,     setSectCat]     = useState(true);
   const [sectBrand,   setSectBrand]   = useState(true);
@@ -473,12 +505,12 @@ function FilterSidebar({
               className={cn(
                 "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-colors",
                 !selectedCat
-                  ? "bg-blue-600 text-white font-semibold"
+                  ? cn(AC.bg, "text-white font-semibold")
                   : "text-slate-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
               )}
             >
               <span>All Categories</span>
-              <span className={cn("text-xs tabular-nums", !selectedCat ? "text-blue-200" : "text-slate-400")}>
+              <span className={cn("text-xs tabular-nums", !selectedCat ? AC.text200 : "text-slate-400")}>
                 {catTree.reduce((s, n) => s + n.total, 0)}
               </span>
             </button>
@@ -495,7 +527,7 @@ function FilterSidebar({
                 {/* Parent row */}
                 <div className={cn(
                   "flex items-center rounded-lg transition-colors",
-                  isParentActive && !selectedSubcat ? "bg-blue-50 dark:bg-blue-950/40" : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                  isParentActive && !selectedSubcat ? AC.bgSoft : "hover:bg-gray-50 dark:hover:bg-slate-800"
                 )}>
                   <button
                     onClick={() => {
@@ -509,12 +541,12 @@ function FilterSidebar({
                     className={cn(
                       "flex-1 flex items-center justify-between px-2.5 py-1.5 text-sm text-left transition-colors",
                       isParentActive && !selectedSubcat
-                        ? "text-blue-700 dark:text-blue-300 font-semibold"
+                        ? cn(AC.text700, "font-semibold")
                         : "text-slate-700 dark:text-slate-300"
                     )}
                   >
                     <span className="truncate pr-1">{node.cat}</span>
-                    <span className={cn("text-xs tabular-nums flex-shrink-0", isParentActive && !selectedSubcat ? "text-blue-500" : "text-slate-400")}>
+                    <span className={cn("text-xs tabular-nums flex-shrink-0", isParentActive && !selectedSubcat ? AC.textMuted : "text-slate-400")}>
                       {node.total}
                     </span>
                   </button>
@@ -549,12 +581,12 @@ function FilterSidebar({
                             className={cn(
                               "w-full flex items-center justify-between px-2 py-1 rounded-md text-xs transition-colors",
                               isActive
-                                ? "bg-blue-600 text-white font-semibold"
+                                ? cn(AC.bg, "text-white font-semibold")
                                 : "text-slate-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200"
                             )}
                           >
                             <span className="truncate">{sub}</span>
-                            <span className={cn("tabular-nums flex-shrink-0 ml-1", isActive ? "text-blue-200" : "text-slate-400")}>
+                            <span className={cn("tabular-nums flex-shrink-0 ml-1", isActive ? AC.text200 : "text-slate-400")}>
                               {count}
                             </span>
                           </button>
@@ -580,7 +612,10 @@ function FilterSidebar({
                 value={brandSearch}
                 onChange={e => setBrandSearch(e.target.value)}
                 placeholder="Search brands…"
-                className="w-full pl-7 pr-2 py-1.5 text-xs bg-gray-50 dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-400 text-slate-700 dark:text-slate-300 placeholder:text-gray-400"
+                className={cn(
+                  "w-full pl-7 pr-2 py-1.5 text-xs bg-gray-50 dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700 rounded-lg outline-none text-slate-700 dark:text-slate-300 placeholder:text-gray-400",
+                  mp ? "focus:border-orange-400" : "focus:border-blue-400"
+                )}
               />
             </div>
           )}
@@ -601,19 +636,19 @@ function FilterSidebar({
                 <li key={name}>
                   <label className={cn(
                     "flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm transition-colors select-none",
-                    checked ? "bg-blue-50 dark:bg-blue-950/30" : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                    checked ? AC.bgSoft : "hover:bg-gray-50 dark:hover:bg-slate-800"
                   )}>
                     <span className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all",
                       checked
-                        ? "bg-blue-600 border-blue-600"
+                        ? cn(AC.bg, AC.border600)
                         : "border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                     )}>
                       {checked && <Check size={10} className="text-white" strokeWidth={3} />}
                     </span>
                     <span className={cn(
                       "flex-1 truncate",
-                      checked ? "text-blue-700 dark:text-blue-300 font-medium" : "text-slate-600 dark:text-slate-400"
+                      checked ? cn(AC.text700, "font-medium") : "text-slate-600 dark:text-slate-400"
                     )}>
                       {name}
                     </span>
@@ -628,7 +663,7 @@ function FilterSidebar({
           {visibleBrands.length > 6 && (
             <button
               onClick={() => setShowAllBrands(v => !v)}
-              className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 font-medium flex items-center gap-1"
+              className={cn("mt-2 text-xs font-medium flex items-center gap-1", AC.text, AC.textHov)}
             >
               {showAllBrands
                 ? <><ChevronDown size={12} className="rotate-180" /> Show less</>
@@ -651,8 +686,8 @@ function FilterSidebar({
                 className={cn(
                   "text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
                   active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-blue-400 hover:text-blue-600"
+                    ? cn(AC.bg, "text-white", AC.border600)
+                    : cn("border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-400", mp ? "hover:border-orange-400 hover:text-orange-600" : "hover:border-blue-400 hover:text-blue-600")
                 )}
               >
                 {preset.label}
@@ -669,7 +704,10 @@ function FilterSidebar({
               type="number" min="0" value={priceMin}
               onChange={e => setPriceMin(e.target.value)}
               placeholder={String(priceExtents.min)}
-              className="w-full pl-6 pr-2 py-1.5 text-sm bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-500 text-slate-900 dark:text-white placeholder:text-gray-400"
+              className={cn(
+                "w-full pl-6 pr-2 py-1.5 text-sm bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg outline-none text-slate-900 dark:text-white placeholder:text-gray-400",
+                mp ? "focus:border-orange-500" : "focus:border-blue-500"
+              )}
             />
           </div>
           <span className="text-slate-400 text-xs flex-shrink-0">to</span>
@@ -679,7 +717,10 @@ function FilterSidebar({
               type="number" min="0" value={priceMax}
               onChange={e => setPriceMax(e.target.value)}
               placeholder={String(priceExtents.max)}
-              className="w-full pl-6 pr-2 py-1.5 text-sm bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-500 text-slate-900 dark:text-white placeholder:text-gray-400"
+              className={cn(
+                "w-full pl-6 pr-2 py-1.5 text-sm bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg outline-none text-slate-900 dark:text-white placeholder:text-gray-400",
+                mp ? "focus:border-orange-500" : "focus:border-blue-500"
+              )}
             />
           </div>
         </div>
@@ -703,17 +744,17 @@ function FilterSidebar({
                 <li key={name}>
                   <label className={cn(
                     "flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm transition-colors select-none",
-                    checked ? "bg-blue-50 dark:bg-blue-950/30" : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                    checked ? AC.bgSoft : "hover:bg-gray-50 dark:hover:bg-slate-800"
                   )}>
                     <span className={cn(
                       "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all",
-                      checked ? "bg-blue-600 border-blue-600" : "border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                      checked ? cn(AC.bg, AC.border600) : "border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                     )}>
                       {checked && <Check size={10} className="text-white" strokeWidth={3} />}
                     </span>
                     <span className={cn(
                       "flex-1",
-                      checked ? "text-blue-700 dark:text-blue-300 font-medium" : "text-slate-600 dark:text-slate-400"
+                      checked ? cn(AC.text700, "font-medium") : "text-slate-600 dark:text-slate-400"
                     )}>
                       {name}
                     </span>
@@ -737,10 +778,10 @@ function FilterSidebar({
         <label className="flex items-center justify-between cursor-pointer select-none px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
           <span className="text-sm text-slate-700 dark:text-slate-300">In stock only</span>
           <span
-            onClick={() => setInStockOnly(v => !v)}
+            onClick={() => setInStockOnly(!inStockOnly)}
             className={cn(
               "relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0",
-              inStockOnly ? "bg-blue-600" : "bg-gray-200 dark:bg-slate-600"
+              inStockOnly ? AC.bg : "bg-gray-200 dark:bg-slate-600"
             )}
           >
             <span className={cn(

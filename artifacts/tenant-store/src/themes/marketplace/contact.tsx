@@ -86,7 +86,7 @@ export function MarketplaceContactPage() {
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "64px 24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 40, alignItems: "start" }}>
+        <div className="mp-contact-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 40, alignItems: "start" }}>
 
           {/* Left: offices + quick links */}
           <div>
@@ -171,7 +171,7 @@ export function MarketplaceContactPage() {
                   <p style={{ color: "#8a9bb5", fontSize: 13, margin: 0 }}>We typically reply within a few hours.</p>
                 </div>
                 <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div className="mp-contact-names" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                     {[
                       { key: "name",  label: "Your Name",    type: "text",  required: true  },
                       { key: "email", label: "Email Address", type: "email", required: true  },
@@ -263,7 +263,13 @@ export function MarketplaceContactPage() {
         </div>
       </div>
 
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');
+        @media (max-width: 768px) {
+          .mp-contact-grid  { grid-template-columns: 1fr !important; }
+          .mp-contact-names { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

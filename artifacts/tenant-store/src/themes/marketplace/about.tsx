@@ -83,7 +83,7 @@ export function MarketplaceAboutPage() {
 
       {/* ── Our story ─────────────────────────────────────────────────────── */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "64px 24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+        <div className="mp-about-story" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12 }}>Who We Are</div>
             <h2 style={{ fontSize: "clamp(22px,3vw,34px)", fontWeight: 900, color: C.navy, fontFamily: "'Barlow Condensed','Barlow',sans-serif", margin: "0 0 20px", lineHeight: 1.2 }}>
@@ -201,7 +201,12 @@ export function MarketplaceAboutPage() {
         </div>
       </div>
 
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');
+        @media (max-width: 768px) {
+          .mp-about-story { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

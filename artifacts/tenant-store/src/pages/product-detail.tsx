@@ -13,13 +13,15 @@ import type { ProductVariant } from "@/types/product";
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { products, cms } = useStore();
+  const { products, cms, storeTheme } = useStore();
   const { addItem } = useCart();
   const { isLoggedIn } = useCustomerSession();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [wishlist, setWishlist] = useState(false);
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
+
+  const mp = storeTheme === "marketplace";
 
   const product = useMemo(() => products.find(p => p.id === id), [products, id]);
   const related = useMemo(() =>
@@ -66,7 +68,13 @@ export function ProductDetailPage() {
         </div>
         <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-2">Product not found</h2>
         <p className="text-slate-400 mb-6 text-sm">This product may have been removed or is unavailable.</p>
-        <Link href="/shop" className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors">
+        <Link
+          href="/shop"
+          className={cn(
+            "inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-medium text-sm transition-colors",
+            mp ? "bg-orange-500 hover:bg-orange-600" : "bg-blue-600 hover:bg-blue-700"
+          )}
+        >
           <ArrowLeft size={14} /> Back to Shop
         </Link>
       </div>
@@ -87,7 +95,6 @@ export function ProductDetailPage() {
   function handleAdd() {
     if (!product || cartDisabled) return;
     if (hasVariants && !allAttrsSelected) return;
-    // BOGO: each "1 selected" gives 2 physical items (buy 1, get 1 free)
     const cartQty = bogoActive ? qty * 2 : qty;
     addItem(product, cartQty, selectedVariant);
     setAdded(true);
@@ -99,12 +106,13 @@ export function ProductDetailPage() {
       {/* Breadcrumb */}
       {cms.breadcrumbs.enabled && (() => {
         const sep = <span className="opacity-50">{cms.breadcrumbs.separator}</span>;
+        const linkCls = cn("transition-colors", mp ? "hover:text-orange-600" : "hover:text-blue-600");
         return (
           <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6">
-            <Link href="/home" className="hover:text-blue-600 transition-colors">Home</Link>
+            <Link href="/home" className={linkCls}>Home</Link>
             {sep}
-            <Link href="/shop" className="hover:text-blue-600 transition-colors">Shop</Link>
-            {product.category && (<>{sep}<Link href={`/category/${encodeURIComponent(product.category)}`} className="hover:text-blue-600 transition-colors">{product.category}</Link></>)}
+            <Link href="/shop" className={linkCls}>Shop</Link>
+            {product.category && (<>{sep}<Link href={`/category/${encodeURIComponent(product.category)}`} className={linkCls}>{product.category}</Link></>)}
             {sep}
             <span className="text-slate-600 dark:text-slate-300 font-medium truncate max-w-[200px]">{product.name}</span>
           </nav>
@@ -122,7 +130,10 @@ export function ProductDetailPage() {
           )}>
             {hasImage ? (
               <>
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20" />
+                <div className={cn(
+                  "absolute inset-0 bg-gradient-to-br to-transparent",
+                  mp ? "from-orange-50/50 dark:from-orange-950/20" : "from-blue-50/50 dark:from-blue-950/20"
+                )} />
                 <img
                   src={displayImage}
                   alt={product.name}
@@ -131,16 +142,13 @@ export function ProductDetailPage() {
               </>
             ) : (
               <>
-                {/* Decorative circles — same as ProductCard */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                   <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10" />
                   <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-white/10" />
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-white/5" />
                   <div className="absolute top-1/4 right-1/4 w-24 h-24 rounded-full bg-white/5" />
                 </div>
-                {/* Shimmer overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/0 via-white/10 to-white/0" />
-                {/* Centred icon + label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
                   <div className={cn("rounded-3xl p-7 backdrop-blur-sm shadow-xl", theme.iconBg)}>
                     <ThemeIcon size={72} className="text-white drop-shadow-lg" strokeWidth={1.2} />
@@ -151,7 +159,6 @@ export function ProductDetailPage() {
                       : (product.category ?? "Product")}
                   </p>
                 </div>
-                {/* Bottom accent bar */}
                 <div className={cn("absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r", theme.gradient, "opacity-60")} />
               </>
             )}
@@ -174,7 +181,12 @@ export function ProductDetailPage() {
         <div>
           <div className="flex items-center gap-2 mb-3">
             {product.brand && (
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+              <span className={cn(
+                "text-xs font-semibold px-2.5 py-1 rounded-full border",
+                mp
+                  ? "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800/50"
+                  : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50"
+              )}>
                 {product.brand}
               </span>
             )}
@@ -220,13 +232,15 @@ export function ProductDetailPage() {
               <div className="mb-6 pb-6 border-b border-gray-100 dark:border-slate-800 space-y-3">
                 {/* ── Price row ── */}
                 {clubPrice && isLoggedIn ? (
-                  /* Logged-in: show regular price tiny + struck, clubcard price large */
                   <div>
                     <p className="text-sm text-slate-400 dark:text-slate-500 line-through tabular-nums">
                       {formatPrice(displayPrice)}
                     </p>
                     <div className="flex items-baseline gap-3 mt-0.5">
-                      <span className="text-3xl font-bold text-blue-700 dark:text-blue-300 tabular-nums">
+                      <span className={cn(
+                        "text-3xl font-bold tabular-nums",
+                        mp ? "text-orange-700 dark:text-orange-300" : "text-blue-700 dark:text-blue-300"
+                      )}>
                         {formatPrice(clubPrice)}
                       </span>
                       {clubSaving && parseFloat(clubSaving) > 0 && (
@@ -237,7 +251,6 @@ export function ProductDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  /* Guest or no clubcard: show current price, wasPrice struck */
                   <div className="flex items-end gap-3">
                     <div className="text-3xl font-bold text-slate-900 dark:text-white tabular-nums">
                       {formatPrice(displayPrice)}
@@ -253,7 +266,6 @@ export function ProductDetailPage() {
                 {/* ── Clubcard BOGO block ── */}
                 {product.clubcardBogo && (
                   bogoActive ? (
-                    /* Logged-in: BOGO active banner */
                     <div className="rounded-xl bg-teal-500 px-4 py-3 flex items-center gap-3">
                       <BadgeCheck size={18} className="text-white shrink-0" />
                       <div>
@@ -264,7 +276,6 @@ export function ProductDetailPage() {
                       </div>
                     </div>
                   ) : (
-                    /* Guest: teal BOGO teaser */
                     <div className="rounded-xl border-2 border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/30 p-3.5">
                       <div className="flex items-center gap-2 mb-1">
                         <BadgeCheck size={14} className="text-teal-600 dark:text-teal-400" />
@@ -289,7 +300,6 @@ export function ProductDetailPage() {
                 {/* ── Clubcard price block (only when no BOGO) ── */}
                 {!product.clubcardBogo && clubPrice && (
                   isLoggedIn ? (
-                    /* Logged-in: green "Saved X | Clubcard" banner */
                     <div className="rounded-xl bg-emerald-500 px-4 py-3 flex items-center gap-3">
                       <BadgeCheck size={18} className="text-white shrink-0" />
                       <div>
@@ -306,7 +316,6 @@ export function ProductDetailPage() {
                       </div>
                     </div>
                   ) : (
-                    /* Guest: red outline teaser */
                     <div className="rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3.5">
                       <div className="flex items-center gap-2 mb-1">
                         <CreditCard size={14} className="text-red-500 dark:text-red-400" />
@@ -368,9 +377,13 @@ export function ProductDetailPage() {
                           className={cn(
                             "px-4 py-1.5 rounded-full text-sm font-medium border-2 transition-all duration-150",
                             isSelected
-                              ? "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                              ? mp
+                                ? "border-orange-500 bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                                : "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20"
                               : isAvailable
-                                ? "border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-800"
+                                ? mp
+                                  ? "border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-orange-400 dark:hover:border-orange-500 hover:text-orange-600 dark:hover:text-orange-400 bg-white dark:bg-slate-800"
+                                  : "border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-800"
                                 : "border-gray-100 dark:border-slate-700 text-slate-300 dark:text-slate-600 bg-gray-50 dark:bg-slate-800/50 cursor-not-allowed line-through"
                           )}
                         >
@@ -384,15 +397,23 @@ export function ProductDetailPage() {
 
               {/* Variant price & selection status */}
               {allAttrsSelected && selectedVariant ? (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900">
-                  <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <div className={cn(
+                  "flex items-center gap-2 p-3 rounded-xl border",
+                  mp
+                    ? "bg-orange-50 dark:bg-orange-950/30 border-orange-100 dark:border-orange-900"
+                    : "bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900"
+                )}>
+                  <Check size={14} className={cn("shrink-0", mp ? "text-orange-600 dark:text-orange-400" : "text-blue-600 dark:text-blue-400")} />
                   <div className="flex-1">
                     <span className="text-sm text-slate-700 dark:text-slate-300">
                       {Object.entries(selectedAttrs).map(([k, v]) => `${k}: ${v}`).join(" · ")}
                     </span>
                   </div>
                   {selectedVariant.price && parseFloat(selectedVariant.price) > 0 && (
-                    <span className="text-base font-bold text-blue-700 dark:text-blue-300 tabular-nums">
+                    <span className={cn(
+                      "text-base font-bold tabular-nums",
+                      mp ? "text-orange-700 dark:text-orange-300" : "text-blue-700 dark:text-blue-300"
+                    )}>
                       {formatPrice(selectedVariant.price)}
                     </span>
                   )}
@@ -457,7 +478,9 @@ export function ProductDetailPage() {
                   ? "bg-gray-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
                   : added
                     ? "bg-green-500 text-white"
-                    : "bg-blue-600 hover:bg-blue-700 text-white active:scale-[0.98] shadow-lg shadow-blue-600/20"
+                    : mp
+                      ? "bg-orange-500 hover:bg-orange-600 text-white active:scale-[0.98] shadow-lg shadow-orange-500/20"
+                      : "bg-blue-600 hover:bg-blue-700 text-white active:scale-[0.98] shadow-lg shadow-blue-600/20"
               )}
             >
               {added ? <Check size={16} /> : <ShoppingCart size={16} />}
@@ -484,7 +507,12 @@ export function ProductDetailPage() {
             </button>
 
             <button
-              className="w-12 h-12 rounded-xl border border-gray-200 dark:border-slate-700 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800/50 flex items-center justify-center transition-all"
+              className={cn(
+                "w-12 h-12 rounded-xl border border-gray-200 dark:border-slate-700 flex items-center justify-center transition-all",
+                mp
+                  ? "text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-200 dark:hover:border-orange-800/50"
+                  : "text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800/50"
+              )}
               aria-label="Share"
             >
               <Share2 size={16} />
@@ -498,7 +526,7 @@ export function ProductDetailPage() {
               { icon: RotateCcw, label: "30-Day Returns", sub: "Hassle-free" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex flex-col items-center text-center p-3 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50">
-                <Icon size={16} className="text-blue-600 dark:text-blue-400 mb-1.5" />
+                <Icon size={16} className={cn("mb-1.5", mp ? "text-orange-500 dark:text-orange-400" : "text-blue-600 dark:text-blue-400")} />
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">{label}</div>
                 <div className="text-[10px] text-slate-400">{sub}</div>
               </div>
@@ -511,7 +539,13 @@ export function ProductDetailPage() {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Related Products</h2>
-            <Link href={`/category/${encodeURIComponent(product.category ?? "")}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium">
+            <Link
+              href={`/category/${encodeURIComponent(product.category ?? "")}`}
+              className={cn(
+                "text-sm hover:underline flex items-center gap-1 font-medium",
+                mp ? "text-orange-600 dark:text-orange-400" : "text-blue-600 dark:text-blue-400"
+              )}
+            >
               View all <ChevronRight size={13} />
             </Link>
           </div>
