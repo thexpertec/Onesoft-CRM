@@ -54,4 +54,4 @@ channel = "stable-25_05"
 [userenv.shared]
 VITE_KV_API_SECRET = "ad3932b770d947fb86fe7dd7136897ea89b37423175f4a8fbf3047dd920a9844"
 KV_API_SECRET = "ad3932b770d947fb86fe7dd7136897ea89b37423175f4a8fbf3047dd920a9844"
-ONESOFTERP_DB = "postgresql://neondb_owner:npg_jdOGTIs42McW@ep-sweet-haze-apkws2a1.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require"
+ONESOFTERP_DB = "postgresql://neondb_owner:npg_Qlqe8dR2ZiBm@ep-summer-bar-aok3je9m.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
