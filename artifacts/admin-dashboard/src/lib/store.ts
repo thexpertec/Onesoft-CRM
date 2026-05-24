@@ -10144,43 +10144,52 @@ export function updateAccount(id: string, updates: Partial<Omit<Account, "id" | 
 export function deleteAccount(id: string): void {
   const all = getAccounts();
 
-  // Guard 1 — has child accounts (UI hierarchy integrity).
-  // Always enforced — soft-deleting a parent would orphan its visible children.
+  // Guard 1 — system accounts (COA infrastructure, cannot be removed).
+  if (isSystemAccount(id)) {
+    throw new Error("System accounts cannot be deleted.");
+  }
+
+  // Guard 2 — has live child accounts.
   if (all.some(a => a.parentId === id)) {
     throw new Error("This account has child accounts. Remove or reassign them first.");
   }
 
-  // ── Soft-delete policy ─────────────────────────────────────────────────────
-  // If the account is referenced anywhere (JE lines, customers/suppliers,
-  // payment accounts, staff, shareholders), we DEACTIVATE it instead of
-  // physically removing the row. This guarantees every historical JE line
-  // can still resolve to a real account name — "Unknown ledger" becomes
-  // impossible by construction. The account simply disappears from pickers
-  // (which already filter on `isActive !== false`).
+  // Guard 3 — STRICT: any DR or CR journal-entry line referencing this account
+  // is an absolute block. We count the affected entries so the error message
+  // is actionable ("delete those N entries first").
   const entries = getJournalEntries();
-  const referencedByJE       = entries.some(je => je.lines.some(l => l.ledgerId === id));
+  const affectedJEs = entries.filter(je => je.lines.some(l => l.ledgerId === id));
+  if (affectedJEs.length > 0) {
+    const lineCount = affectedJEs.reduce(
+      (sum, je) => sum + je.lines.filter(l => l.ledgerId === id).length,
+      0,
+    );
+    throw new Error(
+      `Cannot delete — this account has ${lineCount} DR/CR line(s) across ` +
+      `${affectedJEs.length} journal entr${affectedJEs.length === 1 ? "y" : "ies"}. ` +
+      `Delete those journal entries first, or reassign their lines to another account.`,
+    );
+  }
+
+  // Guard 4 — CRM / operational back-pointers (no JEs, so no financial
+  // history, but other records still reference this account). Soft-deactivate
+  // so the UI hides it from pickers without breaking any back-pointer lookup.
   const referencedByCustomer = getCustomers().some(c => c.ledgerAccountId === id);
   const referencedByPA       = getPaymentAccounts().some(a => a.ledgerAccountId === id);
   const referencedByStaff    = getStaff().some(s =>
     s.ledgerAccountId === id || s.staffPayableLedgerId === id);
   const referencedByShare    = getShareholders().some(s => s.ledgerAccountId === id);
 
-  const isReferenced = referencedByJE || referencedByCustomer
-    || referencedByPA || referencedByStaff || referencedByShare;
-
-  if (isReferenced) {
-    // Soft-delete: deactivate but preserve the row so JE lookups still resolve.
+  const hasCrmRef = referencedByCustomer || referencedByPA || referencedByStaff || referencedByShare;
+  if (hasCrmRef) {
+    // Soft-deactivate: keeps the row so any future JE attempt resolves the
+    // account name, but removes it from all new-posting dropdowns.
     const acct = all.find(a => a.id === id);
-    if (acct && acct.isActive !== false) {
-      updateAccount(id, { isActive: false });
-    }
+    if (acct && acct.isActive !== false) updateAccount(id, { isActive: false });
     return;
   }
 
   // No references anywhere → safe to physically remove.
-  // The dual-write to the relational `accounts` table happens inside
-  // `_saveAccounts` via `_dualWriteAccountsDiff` (diffs by id), so the
-  // physical removal here automatically fires a REST DELETE.
   _saveAccounts(all.filter(a => a.id !== id));
 }
 

@@ -72,17 +72,41 @@ mountRecordRoutes(router, {
     // (1) System-account guard — every sys-* id is COA infrastructure.
     if (id.startsWith("sys-")) {
       blockers.push("this is a system account and cannot be removed");
-      return blockers; // short-circuit: a fundamental block, no point counting children
+      return blockers;
     }
 
     // (2) Live child accounts (archived ones excluded).
-    const r = await client.query<{ c: string }>(
+    const childRes = await client.query<{ c: string }>(
       `SELECT COUNT(*)::text AS c FROM accounts
        WHERE tenant_id = $1 AND parent_id = $2 AND archived_at IS NULL`,
       [tenantId, id],
     );
-    const n = parseInt(r.rows[0]?.c ?? "0", 10);
-    if (n > 0) blockers.push(`${n} child account(s) — remove or reassign them first`);
+    const childCount = parseInt(childRes.rows[0]?.c ?? "0", 10);
+    if (childCount > 0) {
+      blockers.push(`${childCount} child account(s) — remove or reassign them first`);
+    }
+
+    // (3) STRICT: any DR or CR journal-entry line referencing this account.
+    // Count affected JEs (not just lines) so the error message is actionable.
+    const jeRes = await client.query<{ je_count: string; line_count: string }>(
+      `SELECT
+         COUNT(DISTINCT je.id)::text          AS je_count,
+         COUNT(jel.id)::text                  AS line_count
+       FROM journal_entry_lines jel
+       JOIN journal_entries     je  ON je.id = jel.journal_entry_id
+       WHERE je.tenant_id = $1
+         AND jel.ledger_account_id = $2`,
+      [tenantId, id],
+    );
+    const jeCount   = parseInt(jeRes.rows[0]?.je_count   ?? "0", 10);
+    const lineCount = parseInt(jeRes.rows[0]?.line_count ?? "0", 10);
+    if (jeCount > 0) {
+      blockers.push(
+        `${lineCount} DR/CR line(s) across ${jeCount} journal entr${jeCount === 1 ? "y" : "ies"} — ` +
+        `delete those journal entries first, or reassign their lines to another account`,
+      );
+    }
+
     return blockers;
   },
 });
