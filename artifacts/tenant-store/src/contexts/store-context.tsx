@@ -11,6 +11,7 @@ interface StoreContextType {
   storeName: string;
   categories: string[];
   cms: StoreCms;
+  storeTheme: "tech" | "marketplace";
   refresh: () => void;
 }
 
@@ -18,6 +19,7 @@ const StoreContext = createContext<StoreContextType>({
   products: [], loading: true, error: null,
   tenantId: null, storeName: "TechZone", categories: [],
   cms: CMS_DEFAULTS,
+  storeTheme: "tech",
   refresh: () => {},
 });
 
@@ -61,6 +63,14 @@ export function StoreProvider({
   // CMS brand.storeName overrides admin setting if set
   const storeName = (cms.brand.storeName?.trim()) || adminStoreName;
 
+  // Theme: URL param takes precedence, then CMS setting, then default "tech"
+  const urlTheme = new URLSearchParams(window.location.search).get("theme");
+  const storeTheme: "tech" | "marketplace" =
+    urlTheme === "marketplace" ? "marketplace"
+    : urlTheme === "tech" ? "tech"
+    : cms.theme === "marketplace" ? "marketplace"
+    : "tech";
+
   // Apply favicon from CMS if provided
   useEffect(() => {
     const fav = cms.brand.faviconBase64;
@@ -75,7 +85,7 @@ export function StoreProvider({
   }, [cms.brand.faviconBase64]);
 
   return (
-    <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, cms, refresh: load }}>
+    <StoreContext.Provider value={{ products, loading, error, tenantId, storeName, categories, cms, storeTheme, refresh: load }}>
       {children}
     </StoreContext.Provider>
   );

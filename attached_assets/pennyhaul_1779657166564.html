@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PennyHaul – Shop Everything, Save More</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a1628;
+    --navy2: #0f2040;
+    --accent: #ff6b00;
+    --accent2: #ffb300;
+    --teal: #00b4d8;
+    --green: #00c853;
+    --red: #f44336;
+    --white: #ffffff;
+    --off: #f4f6fa;
+    --muted: #8a9bb5;
+    --card: #ffffff;
+    --border: #e3e8f0;
+    --text: #1a2540;
+    --sub: #5a6a85;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Barlow',sans-serif; background:var(--off); color:var(--text); min-height:100vh; }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    background:var(--navy);
+    color:#afc3e0;
+    font-size:12px;
+    padding:6px 0;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .topbar .tb-inner { max-width:1400px; margin:auto; padding:0 24px; display:flex; justify-content:space-between; align-items:center; width:100%; }
+  .topbar a { color:#afc3e0; text-decoration:none; margin-left:16px; }
+  .topbar a:hover { color:var(--accent2); }
+  .topbar-left span { margin-right:20px; }
+  .topbar-left span::before { content:"✦ "; color:var(--accent); }
+
+  /* ─── HEADER ─── */
+  header {
+    background:linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+    position:sticky; top:0; z-index:999;
+    box-shadow:0 4px 24px rgba(0,0,0,0.35);
+  }
+  .header-inner {
+    max-width:1400px; margin:auto; padding:0 24px;
+    display:flex; align-items:center; gap:16px;
+    height:70px;
+  }
+  .logo {
+    display:flex; align-items:center; gap:10px;
+    text-decoration:none; flex-shrink:0;
+  }
+  .logo-icon {
+    width:42px; height:42px;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; font-weight:900; color:#fff;
+    font-family:'Barlow Condensed',sans-serif;
+    box-shadow:0 4px 16px rgba(255,107,0,0.4);
+  }
+  .logo-text { display:flex; flex-direction:column; line-height:1; }
+  .logo-name { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:900; color:#fff; letter-spacing:-0.5px; }
+  .logo-name span { color:var(--accent); }
+  .logo-tagline { font-size:10px; color:#afc3e0; letter-spacing:1.5px; text-transform:uppercase; margin-top:2px; }
+
+  /* Search */
+  .search-wrap {
+    flex:1; display:flex; max-width:640px;
+    background:#fff; border-radius:10px;
+    overflow:hidden; border:2px solid transparent;
+    transition:border-color .2s;
+    box-shadow:0 2px 12px rgba(0,0,0,0.15);
+  }
+  .search-wrap:focus-within { border-color:var(--accent2); }
+  .search-cat {
+    background:var(--off); border:none; outline:none;
+    padding:0 12px; font-size:13px; color:var(--sub);
+    border-right:1px solid var(--border); cursor:pointer;
+    font-family:'Barlow',sans-serif; font-weight:600;
+    white-space:nowrap;
+  }
+  .search-input {
+    flex:1; border:none; outline:none;
+    padding:0 16px; font-size:15px;
+    font-family:'Barlow',sans-serif;
+    color:var(--text);
+  }
+  .search-btn {
+    background:linear-gradient(135deg, var(--accent), #ff8c00);
+    border:none; padding:0 22px;
+    color:#fff; font-size:18px; cursor:pointer;
+    transition:opacity .2s;
+  }
+  .search-btn:hover { opacity:.88; }
+
+  /* Header actions */
+  .header-actions { display:flex; align-items:center; gap:4px; margin-left:auto; }
+  .hbtn {
+    display:flex; flex-direction:column; align-items:center;
+    padding:8px 14px; color:#afc3e0; text-decoration:none;
+    border-radius:8px; transition:background .2s, color .2s;
+    cursor:pointer; border:none; background:none; font-family:'Barlow',sans-serif;
+    font-size:11px; gap:2px; position:relative;
+  }
+  .hbtn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+  .hbtn-icon { font-size:20px; }
+  .hbtn-label { font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+  .badge {
+    position:absolute; top:4px; right:8px;
+    background:var(--accent); color:#fff;
+    border-radius:50%; width:18px; height:18px;
+    font-size:10px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .hbtn-sell {
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    color:#fff; border-radius:8px; padding:10px 18px;
+    font-weight:700; font-size:13px;
+    box-shadow:0 4px 16px rgba(255,107,0,0.35);
+    flex-direction:row; gap:6px;
+  }
+  .hbtn-sell:hover { opacity:.9; background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; }
+
+  /* ─── NAV BAR ─── */
+  nav {
+    background:var(--navy2);
+    border-top:1px solid rgba(255,255,255,0.07);
+  }
+  .nav-inner {
+    max-width:1400px; margin:auto; padding:0 24px;
+    display:flex; align-items:center; gap:0;
+    overflow-x:auto; scrollbar-width:none;
+  }
+  .nav-inner::-webkit-scrollbar { display:none; }
+  .nav-all {
+    background:var(--accent); color:#fff; border:none;
+    padding:11px 18px; font-weight:800; font-size:13px;
+    font-family:'Barlow',sans-serif; cursor:pointer;
+    display:flex; align-items:center; gap:8px;
+    white-space:nowrap; text-transform:uppercase; letter-spacing:.5px;
+  }
+  .navlink {
+    color:#afc3e0; text-decoration:none; padding:11px 15px;
+    font-size:13px; font-weight:600; white-space:nowrap;
+    transition:color .2s;
+    border-bottom:3px solid transparent;
+    display:block;
+  }
+  .navlink:hover { color:#fff; border-bottom-color:var(--accent2); }
+  .navlink.active { color:var(--accent2); border-bottom-color:var(--accent2); }
+
+  /* ─── HERO BANNER ─── */
+  .hero {
+    max-width:1400px; margin:20px auto 0; padding:0 24px;
+    display:grid; grid-template-columns:1fr 1fr 1fr;
+    gap:16px; height:340px;
+  }
+  .hero-main {
+    grid-column:1/3;
+    border-radius:16px; overflow:hidden; position:relative;
+    background:linear-gradient(135deg, #0a1628 0%, #0f3460 50%, #16213e 100%);
+    display:flex; align-items:center; padding:40px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.2);
+  }
+  .hero-main::before {
+    content:''; position:absolute; right:-30px; top:-60px;
+    width:420px; height:420px;
+    background:radial-gradient(circle, rgba(255,107,0,0.18) 0%, transparent 70%);
+    border-radius:50%;
+  }
+  .hero-main::after {
+    content:'🛒'; position:absolute; right:60px; bottom:-10px;
+    font-size:190px; opacity:.12; transform:rotate(-15deg);
+    pointer-events:none;
+  }
+  .hero-content { position:relative; z-index:1; }
+  .hero-badge {
+    background:var(--accent); color:#fff; display:inline-block;
+    padding:4px 14px; border-radius:20px; font-size:11px;
+    font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;
+  }
+  .hero-title { font-family:'Barlow Condensed',sans-serif; font-size:52px; font-weight:900; color:#fff; line-height:1; margin-bottom:10px; }
+  .hero-title span { color:var(--accent2); }
+  .hero-sub { color:#afc3e0; font-size:16px; margin-bottom:24px; max-width:380px; }
+  .hero-btns { display:flex; gap:12px; }
+  .btn-primary {
+    background:linear-gradient(135deg, var(--accent), #ff8c00);
+    color:#fff; border:none; padding:13px 28px;
+    border-radius:8px; font-weight:700; font-size:15px;
+    cursor:pointer; font-family:'Barlow',sans-serif;
+    box-shadow:0 4px 20px rgba(255,107,0,0.4);
+    transition:transform .15s, box-shadow .15s;
+  }
+  .btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(255,107,0,0.5); }
+  .btn-outline {
+    background:transparent; color:#fff;
+    border:2px solid rgba(255,255,255,0.3);
+    padding:13px 28px; border-radius:8px; font-weight:700; font-size:15px;
+    cursor:pointer; font-family:'Barlow',sans-serif;
+    transition:border-color .2s;
+  }
+  .btn-outline:hover { border-color:#fff; }
+
+  .hero-side { display:flex; flex-direction:column; gap:16px; }
+  .hero-card {
+    flex:1; border-radius:16px; overflow:hidden; position:relative;
+    display:flex; align-items:flex-end; padding:20px;
+    cursor:pointer;
+    box-shadow:0 4px 20px rgba(0,0,0,0.15);
+    transition:transform .2s;
+    text-decoration:none;
+  }
+  .hero-card:hover { transform:scale(1.01); }
+  .hero-card-1 { background:linear-gradient(135deg, #1a1a2e, #e94560); }
+  .hero-card-2 { background:linear-gradient(135deg, #0d3b66, #00b4d8); }
+  .hero-card-emoji { position:absolute; right:20px; top:50%; transform:translateY(-50%); font-size:62px; opacity:.9; }
+  .hero-card-info h3 { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:800; color:#fff; }
+  .hero-card-info p { color:rgba(255,255,255,0.75); font-size:13px; }
+
+  /* ─── DEALS TICKER ─── */
+  .deals-ticker {
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    padding:10px 0; margin-top:20px; overflow:hidden;
+  }
+  .ticker-inner { display:flex; gap:60px; white-space:nowrap; animation:ticker 30s linear infinite; width:max-content; }
+  @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .ticker-item { font-weight:700; font-size:13px; color:#fff; display:flex; align-items:center; gap:8px; }
+  .ticker-tag { background:rgba(0,0,0,0.2); border-radius:4px; padding:2px 8px; font-size:11px; }
+
+  /* ─── SECTION WRAPPER ─── */
+  .section { max-width:1400px; margin:32px auto 0; padding:0 24px; }
+  .sec-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .sec-title { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:800; color:var(--text); display:flex; align-items:center; gap:10px; }
+  .sec-title::before { content:''; display:block; width:5px; height:28px; background:var(--accent); border-radius:3px; }
+  .sec-link { color:var(--accent); font-weight:700; font-size:13px; text-decoration:none; border:2px solid var(--accent); border-radius:6px; padding:6px 16px; transition:background .2s, color .2s; }
+  .sec-link:hover { background:var(--accent); color:#fff; }
+
+  /* ─── CATEGORIES ─── */
+  .cats { display:grid; grid-template-columns:repeat(10,1fr); gap:12px; }
+  .cat-card {
+    background:#fff; border-radius:14px; padding:18px 10px;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    text-decoration:none; color:var(--text);
+    border:2px solid var(--border); transition:all .2s; cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,0.05);
+  }
+  .cat-card:hover { border-color:var(--accent); box-shadow:0 6px 24px rgba(255,107,0,0.15); transform:translateY(-3px); }
+  .cat-icon { font-size:30px; }
+  .cat-name { font-size:11px; font-weight:700; text-align:center; color:var(--sub); text-transform:uppercase; letter-spacing:.3px; }
+
+  /* ─── PRODUCT GRID ─── */
+  .products { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; }
+  .prod-card {
+    background:#fff; border-radius:14px; overflow:hidden;
+    border:2px solid var(--border);
+    transition:all .2s; cursor:pointer;
+    position:relative;
+    box-shadow:0 2px 10px rgba(0,0,0,0.05);
+  }
+  .prod-card:hover { border-color:var(--accent); box-shadow:0 8px 30px rgba(255,107,0,0.15); transform:translateY(-4px); }
+  .prod-img {
+    width:100%; aspect-ratio:1; background:var(--off);
+    display:flex; align-items:center; justify-content:center; font-size:64px;
+    position:relative; overflow:hidden;
+  }
+  .prod-img::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,transparent 60%,rgba(0,0,0,0.04)); }
+  .prod-badge {
+    position:absolute; top:10px; left:10px; z-index:2;
+    background:var(--red); color:#fff; font-size:11px; font-weight:700;
+    padding:3px 9px; border-radius:5px; text-transform:uppercase;
+  }
+  .prod-badge.new { background:var(--teal); }
+  .prod-badge.hot { background:var(--accent); }
+  .prod-wishlist {
+    position:absolute; top:10px; right:10px; z-index:2;
+    background:#fff; border:none; border-radius:50%; width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.12);
+    transition:transform .2s;
+  }
+  .prod-wishlist:hover { transform:scale(1.15); }
+  .prod-info { padding:14px; }
+  .prod-cat { font-size:10px; text-transform:uppercase; color:var(--teal); font-weight:700; letter-spacing:.5px; margin-bottom:4px; }
+  .prod-name { font-size:13px; font-weight:700; color:var(--text); line-height:1.35; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .prod-rating { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .stars { color:var(--accent2); font-size:12px; letter-spacing:1px; }
+  .rating-count { font-size:11px; color:var(--muted); }
+  .prod-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .prod-price { font-size:20px; font-weight:900; color:var(--accent); font-family:'Barlow Condensed',sans-serif; }
+  .prod-orig { font-size:13px; color:var(--muted); text-decoration:line-through; }
+  .prod-save { font-size:11px; color:var(--green); font-weight:700; }
+  .prod-stock { font-size:11px; color:var(--red); font-weight:600; margin-bottom:10px; }
+  .prod-atc {
+    width:100%; background:linear-gradient(135deg, var(--accent), #ff8c00);
+    border:none; color:#fff; padding:10px; border-radius:8px;
+    font-weight:700; font-size:13px; cursor:pointer; font-family:'Barlow',sans-serif;
+    transition:opacity .2s;
+  }
+  .prod-atc:hover { opacity:.88; }
+  .seller-info { font-size:11px; color:var(--muted); margin-top:6px; display:flex; align-items:center; gap:4px; }
+
+  /* ─── BANNER STRIP ─── */
+  .banner-strip { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .b-card {
+    border-radius:16px; padding:28px 28px;
+    display:flex; align-items:center; gap:20px;
+    position:relative; overflow:hidden;
+  }
+  .b-card-1 { background:linear-gradient(135deg, #0d3b66, #1d6fa4); }
+  .b-card-2 { background:linear-gradient(135deg, #1a0533, #6a0572); }
+  .b-card-3 { background:linear-gradient(135deg, #004d40, #00897b); }
+  .b-emoji { font-size:52px; }
+  .b-info h3 { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:800; color:#fff; margin-bottom:4px; }
+  .b-info p { color:rgba(255,255,255,0.75); font-size:13px; margin-bottom:12px; }
+  .b-btn { background:rgba(255,255,255,0.2); color:#fff; border:2px solid rgba(255,255,255,0.5); padding:8px 18px; border-radius:7px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Barlow',sans-serif; transition:background .2s; }
+  .b-btn:hover { background:rgba(255,255,255,0.3); }
+
+  /* ─── FLASH SALE ─── */
+  .flash-header {
+    background:linear-gradient(135deg, var(--navy), var(--navy2));
+    border-radius:14px 14px 0 0; padding:16px 24px;
+    display:flex; align-items:center; gap:16px;
+  }
+  .flash-title { font-family:'Barlow Condensed',sans-serif; font-size:28px; font-weight:900; color:#fff; display:flex; align-items:center; gap:10px; }
+  .flash-title span { color:var(--accent2); }
+  .countdown { display:flex; gap:8px; margin-left:auto; }
+  .cd-box { background:var(--accent); border-radius:8px; padding:6px 12px; text-align:center; min-width:52px; }
+  .cd-num { font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:900; color:#fff; line-height:1; }
+  .cd-label { font-size:10px; color:rgba(255,255,255,0.8); text-transform:uppercase; letter-spacing:.5px; }
+  .cd-sep { color:#fff; font-size:22px; font-weight:900; align-self:center; margin-top:-6px; }
+  .flash-products { background:#fff; border:2px solid var(--border); border-top:0; border-radius:0 0 14px 14px; padding:20px; display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+
+  /* ─── TRUST BADGES ─── */
+  .trust { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .trust-card { background:#fff; border-radius:14px; padding:24px 20px; display:flex; align-items:center; gap:16px; border:2px solid var(--border); }
+  .trust-icon { font-size:36px; }
+  .trust-info h4 { font-weight:800; font-size:15px; margin-bottom:3px; }
+  .trust-info p { font-size:12px; color:var(--muted); }
+
+  /* ─── RECENTLY VIEWED ─── */
+  .scroll-row { display:flex; gap:14px; overflow-x:auto; padding-bottom:8px; scrollbar-width:thin; }
+  .scroll-row::-webkit-scrollbar { height:4px; }
+  .scroll-row::-webkit-scrollbar-track { background:var(--border); border-radius:2px; }
+  .scroll-row::-webkit-scrollbar-thumb { background:var(--accent); border-radius:2px; }
+  .mini-prod { flex-shrink:0; width:170px; background:#fff; border-radius:12px; border:2px solid var(--border); overflow:hidden; cursor:pointer; transition:all .2s; }
+  .mini-prod:hover { border-color:var(--accent); transform:translateY(-3px); }
+  .mini-img { height:120px; background:var(--off); display:flex; align-items:center; justify-content:center; font-size:46px; }
+  .mini-info { padding:10px; }
+  .mini-name { font-size:12px; font-weight:700; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .mini-price { font-size:15px; font-weight:900; color:var(--accent); font-family:'Barlow Condensed',sans-serif; }
+
+  /* ─── FOOTER ─── */
+  footer { background:var(--navy); margin-top:48px; padding-top:48px; }
+  .footer-top { max-width:1400px; margin:auto; padding:0 24px 40px; display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr; gap:40px; }
+  .footer-brand .logo { margin-bottom:16px; display:inline-flex; }
+  .footer-brand p { color:#afc3e0; font-size:13px; line-height:1.7; max-width:260px; margin-bottom:20px; }
+  .social-links { display:flex; gap:10px; }
+  .social-btn { width:36px; height:36px; border-radius:8px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; transition:background .2s; }
+  .social-btn:hover { background:var(--accent); }
+  .footer-col h4 { color:#fff; font-weight:800; font-size:14px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:16px; }
+  .footer-col ul { list-style:none; display:flex; flex-direction:column; gap:9px; }
+  .footer-col ul li a { color:#afc3e0; text-decoration:none; font-size:13px; transition:color .2s; }
+  .footer-col ul li a:hover { color:var(--accent2); }
+  .newsletter { background:rgba(255,255,255,0.05); border-radius:12px; padding:24px; margin-bottom:24px; }
+  .newsletter h4 { color:#fff; font-weight:800; margin-bottom:8px; }
+  .newsletter p { color:#afc3e0; font-size:12px; margin-bottom:14px; }
+  .nl-form { display:flex; gap:8px; }
+  .nl-input { flex:1; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:10px 14px; color:#fff; font-family:'Barlow',sans-serif; font-size:13px; outline:none; }
+  .nl-input::placeholder { color:#afc3e0; }
+  .nl-input:focus { border-color:var(--accent2); }
+  .nl-btn { background:var(--accent); border:none; color:#fff; padding:10px 18px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Barlow',sans-serif; white-space:nowrap; }
+
+  .footer-bottom {
+    border-top:1px solid rgba(255,255,255,0.07);
+    padding:20px 24px;
+  }
+  .footer-bottom-inner { max-width:1400px; margin:auto; display:flex; justify-content:space-between; align-items:center; }
+  .footer-bottom p { color:#4a6080; font-size:12px; }
+  .payment-methods { display:flex; gap:8px; align-items:center; }
+  .pay-badge { background:rgba(255,255,255,0.08); border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; color:#afc3e0; }
+
+  /* ─── CART DRAWER (mock) ─── */
+  .cart-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1998; }
+  .cart-drawer {
+    position:fixed; right:0; top:0; bottom:0; width:380px;
+    background:#fff; z-index:1999; transform:translateX(100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column;
+    box-shadow:-8px 0 40px rgba(0,0,0,0.2);
+  }
+  .cart-drawer.open { transform:translateX(0); }
+  .cart-overlay.open { display:block; }
+  .cart-head { background:var(--navy); color:#fff; padding:20px 24px; display:flex; justify-content:space-between; align-items:center; }
+  .cart-head h3 { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:800; }
+  .cart-close { background:none; border:none; color:#fff; font-size:22px; cursor:pointer; }
+  .cart-body { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .cart-item { display:flex; gap:12px; align-items:center; background:var(--off); border-radius:10px; padding:12px; }
+  .ci-img { width:60px; height:60px; border-radius:8px; background:#fff; display:flex; align-items:center; justify-content:center; font-size:30px; flex-shrink:0; }
+  .ci-info h4 { font-size:13px; font-weight:700; margin-bottom:4px; }
+  .ci-info p { font-size:12px; color:var(--muted); }
+  .ci-price { font-size:16px; font-weight:900; color:var(--accent); font-family:'Barlow Condensed',sans-serif; margin-left:auto; }
+  .cart-foot { padding:20px 24px; border-top:2px solid var(--border); }
+  .cart-total { display:flex; justify-content:space-between; margin-bottom:16px; font-weight:800; font-size:18px; }
+  .checkout-btn { width:100%; background:linear-gradient(135deg, var(--accent), #ff8c00); border:none; color:#fff; padding:15px; border-radius:10px; font-weight:800; font-size:16px; cursor:pointer; font-family:'Barlow',sans-serif; }
+
+  /* Toast */
+  .toast { position:fixed; bottom:30px; right:30px; background:var(--navy); color:#fff; padding:14px 22px; border-radius:10px; font-weight:700; font-size:14px; z-index:2000; display:flex; align-items:center; gap:10px; transform:translateY(100px); opacity:0; transition:all .3s; }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast-icon { font-size:20px; }
+
+  @media(max-width:900px){
+    .hero { grid-template-columns:1fr; height:auto; }
+    .hero-main { grid-column:1; }
+    .hero-side { flex-direction:row; }
+    .cats { grid-template-columns:repeat(5,1fr); }
+    .products, .flash-products { grid-template-columns:repeat(2,1fr); }
+    .footer-top { grid-template-columns:1fr 1fr; }
+    .trust { grid-template-columns:1fr 1fr; }
+    .banner-strip { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="tb-inner">
+    <div class="topbar-left">
+      <span>Free Shipping on Orders $35+</span>
+      <span>30-Day Returns</span>
+      <span>Buyer Protection Guaranteed</span>
+    </div>
+    <div>
+      <a href="#">Sign In</a>
+      <a href="#">New Customer? Register</a>
+      <a href="#">Sell on PennyHaul</a>
+      <a href="#">Help</a>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">P</div>
+      <div class="logo-text">
+        <div class="logo-name">Penny<span>Haul</span></div>
+        <div class="logo-tagline">Shop Everything · Save More</div>
+      </div>
+    </a>
+
+    <div class="search-wrap">
+      <select class="search-cat">
+        <option>All Categories</option>
+        <option>Electronics</option>
+        <option>Mobiles</option>
+        <option>Laptops</option>
+        <option>Clothing</option>
+        <option>Home & Kitchen</option>
+        <option>Tools</option>
+        <option>Accessories</option>
+      </select>
+      <input class="search-input" type="text" placeholder="Search millions of products…" id="searchInput">
+      <button class="search-btn" onclick="handleSearch()">🔍</button>
+    </div>
+
+    <div class="header-actions">
+      <button class="hbtn" onclick="toggleCart()">
+        <span class="hbtn-icon">🛒</span>
+        <span class="hbtn-label">Cart</span>
+        <span class="badge" id="cartBadge">3</span>
+      </button>
+      <button class="hbtn">
+        <span class="hbtn-icon">❤️</span>
+        <span class="hbtn-label">Wishlist</span>
+      </button>
+      <button class="hbtn">
+        <span class="hbtn-icon">👤</span>
+        <span class="hbtn-label">Account</span>
+      </button>
+      <button class="hbtn">
+        <span class="hbtn-icon">📦</span>
+        <span class="hbtn-label">Orders</span>
+      </button>
+      <button class="hbtn hbtn-sell">
+        🏪 Sell
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <button class="nav-all">☰ All Departments</button>
+    <a href="#" class="navlink active">Today's Deals</a>
+    <a href="#" class="navlink">Electronics</a>
+    <a href="#" class="navlink">Mobiles & Accessories</a>
+    <a href="#" class="navlink">Laptops & Computers</a>
+    <a href="#" class="navlink">T-Shirts & Clothing</a>
+    <a href="#" class="navlink">Home & Kitchen</a>
+    <a href="#" class="navlink">Tools & Hardware</a>
+    <a href="#" class="navlink">Gadgets</a>
+    <a href="#" class="navlink">Best Sellers</a>
+    <a href="#" class="navlink">New Arrivals</a>
+    <a href="#" class="navlink">Clearance</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-main">
+    <div class="hero-content">
+      <div class="hero-badge">🔥 Limited Time Offer</div>
+      <h1 class="hero-title">Shop More,<br>Pay <span>Less.</span></h1>
+      <p class="hero-sub">Discover millions of products — electronics, fashion, home essentials & more. All in one place.</p>
+      <div class="hero-btns">
+        <button class="btn-primary" onclick="scrollToDeals()">🛍️ Shop Now</button>
+        <button class="btn-outline">View All Deals →</button>
+      </div>
+    </div>
+  </div>
+  <div class="hero-side">
+    <a class="hero-card hero-card-1" href="#">
+      <div class="hero-card-emoji">📱</div>
+      <div class="hero-card-info">
+        <h3>Mobiles & Gadgets</h3>
+        <p>Up to 55% off today</p>
+      </div>
+    </a>
+    <a class="hero-card hero-card-2" href="#">
+      <div class="hero-card-emoji">💻</div>
+      <div class="hero-card-info">
+        <h3>Laptops & PCs</h3>
+        <p>Best deals of the week</p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- DEALS TICKER -->
+<div class="deals-ticker">
+  <div class="ticker-inner">
+    <div class="ticker-item"><span class="ticker-tag">SALE</span> iPhone 15 Pro Max — $899 🔥</div>
+    <div class="ticker-item"><span class="ticker-tag">HOT</span> Samsung 65" QLED TV — $599</div>
+    <div class="ticker-item"><span class="ticker-tag">NEW</span> Nike Graphic Tees — $12.99</div>
+    <div class="ticker-item"><span class="ticker-tag">DEAL</span> Air Fryer 5.8QT — $49</div>
+    <div class="ticker-item"><span class="ticker-tag">SALE</span> MacBook Air M3 — $999</div>
+    <div class="ticker-item"><span class="ticker-tag">HOT</span> DeWalt Drill Kit — $79</div>
+    <div class="ticker-item"><span class="ticker-tag">NEW</span> ANC Headphones — $39</div>
+    <div class="ticker-item"><span class="ticker-tag">DEAL</span> Smart LED Strip 10m — $18</div>
+    <!-- duplicate for seamless loop -->
+    <div class="ticker-item"><span class="ticker-tag">SALE</span> iPhone 15 Pro Max — $899 🔥</div>
+    <div class="ticker-item"><span class="ticker-tag">HOT</span> Samsung 65" QLED TV — $599</div>
+    <div class="ticker-item"><span class="ticker-tag">NEW</span> Nike Graphic Tees — $12.99</div>
+    <div class="ticker-item"><span class="ticker-tag">DEAL</span> Air Fryer 5.8QT — $49</div>
+    <div class="ticker-item"><span class="ticker-tag">SALE</span> MacBook Air M3 — $999</div>
+    <div class="ticker-item"><span class="ticker-tag">HOT</span> DeWalt Drill Kit — $79</div>
+    <div class="ticker-item"><span class="ticker-tag">NEW</span> ANC Headphones — $39</div>
+    <div class="ticker-item"><span class="ticker-tag">DEAL</span> Smart LED Strip 10m — $18</div>
+  </div>
+</div>
+
+<!-- CATEGORIES -->
+<div class="section">
+  <div class="sec-header">
+    <div class="sec-title">Shop by Category</div>
+    <a href="#" class="sec-link">All Categories →</a>
+  </div>
+  <div class="cats">
+    <a class="cat-card" href="#"><div class="cat-icon">📱</div><div class="cat-name">Mobiles</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">💻</div><div class="cat-name">Laptops</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🎧</div><div class="cat-name">Audio</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">👕</div><div class="cat-name">T-Shirts</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🏠</div><div class="cat-name">Home</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🔧</div><div class="cat-name">Tools</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">⌚</div><div class="cat-name">Wearables</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🎮</div><div class="cat-name">Gaming</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🍳</div><div class="cat-name">Kitchen</div></a>
+    <a class="cat-card" href="#"><div class="cat-icon">🔌</div><div class="cat-name">Accessories</div></a>
+  </div>
+</div>
+
+<!-- FLASH SALE -->
+<div class="section" id="deals">
+  <div class="flash-header">
+    <div class="flash-title">⚡ Flash <span>Sale</span></div>
+    <div style="color:#afc3e0;font-size:14px;">Ends in:</div>
+    <div class="countdown">
+      <div class="cd-box"><div class="cd-num" id="cdH">08</div><div class="cd-label">HRS</div></div>
+      <div class="cd-sep">:</div>
+      <div class="cd-box"><div class="cd-num" id="cdM">43</div><div class="cd-label">MIN</div></div>
+      <div class="cd-sep">:</div>
+      <div class="cd-box"><div class="cd-num" id="cdS">17</div><div class="cd-label">SEC</div></div>
+    </div>
+  </div>
+  <div class="flash-products" id="flashGrid"></div>
+</div>
+
+<!-- BANNER STRIP -->
+<div class="section">
+  <div class="banner-strip">
+    <div class="b-card b-card-1">
+      <div class="b-emoji">📱</div>
+      <div class="b-info">
+        <h3>Mobile Mega Sale</h3>
+        <p>Top smartphones up to 55% off. Limited stock!</p>
+        <button class="b-btn">Shop Phones</button>
+      </div>
+    </div>
+    <div class="b-card b-card-2">
+      <div class="b-emoji">👕</div>
+      <div class="b-info">
+        <h3>Style for Less</h3>
+        <p>Premium graphic tees starting from $8.99</p>
+        <button class="b-btn">Shop Clothing</button>
+      </div>
+    </div>
+    <div class="b-card b-card-3">
+      <div class="b-emoji">🏠</div>
+      <div class="b-info">
+        <h3>Home Essentials</h3>
+        <p>Everything your home needs under one roof</p>
+        <button class="b-btn">Shop Home</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BEST SELLERS -->
+<div class="section">
+  <div class="sec-header">
+    <div class="sec-title">🏆 Best Sellers</div>
+    <a href="#" class="sec-link">See All →</a>
+  </div>
+  <div class="products" id="bestGrid"></div>
+</div>
+
+<!-- TRUST BADGES -->
+<div class="section">
+  <div class="trust">
+    <div class="trust-card"><div class="trust-icon">🚚</div><div class="trust-info"><h4>Free Fast Shipping</h4><p>On all orders over $35. Same-day dispatch available.</p></div></div>
+    <div class="trust-card"><div class="trust-icon">🔒</div><div class="trust-info"><h4>Secure Payments</h4><p>256-bit SSL encryption. Your data is always safe.</p></div></div>
+    <div class="trust-card"><div class="trust-icon">↩️</div><div class="trust-info"><h4>30-Day Returns</h4><p>Not happy? Return it hassle-free, no questions asked.</p></div></div>
+    <div class="trust-card"><div class="trust-icon">🛡️</div><div class="trust-info"><h4>Buyer Protection</h4><p>Full purchase protection. We've got your back.</p></div></div>
+  </div>
+</div>
+
+<!-- NEW ARRIVALS -->
+<div class="section">
+  <div class="sec-header">
+    <div class="sec-title">✨ New Arrivals</div>
+    <a href="#" class="sec-link">View All →</a>
+  </div>
+  <div class="products" id="newGrid"></div>
+</div>
+
+<!-- RECENTLY VIEWED -->
+<div class="section" style="margin-bottom:0">
+  <div class="sec-header">
+    <div class="sec-title">👁 Recently Viewed</div>
+  </div>
+  <div class="scroll-row" id="recentRow"></div>
+</div>
+
+<!-- FOOTER -->
+<footer style="margin-top:48px">
+  <div class="footer-top">
+    <div class="footer-brand">
+      <a href="#" class="logo">
+        <div class="logo-icon">P</div>
+        <div class="logo-text">
+          <div class="logo-name">Penny<span>Haul</span></div>
+          <div class="logo-tagline">Shop Everything · Save More</div>
+        </div>
+      </a>
+      <p>Your one-stop marketplace for electronics, fashion, home goods, tools & more. Millions of products, unbeatable prices.</p>
+      <div class="social-links">
+        <div class="social-btn">📘</div>
+        <div class="social-btn">🐦</div>
+        <div class="social-btn">📸</div>
+        <div class="social-btn">▶️</div>
+        <div class="social-btn">📌</div>
+      </div>
+      <div class="newsletter" style="margin-top:20px">
+        <h4>Get Exclusive Deals</h4>
+        <p>Subscribe for flash sale alerts & discount codes</p>
+        <div class="nl-form">
+          <input class="nl-input" type="email" placeholder="your@email.com">
+          <button class="nl-btn">Subscribe</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Shop</h4>
+      <ul>
+        <li><a href="#">Today's Deals</a></li>
+        <li><a href="#">New Arrivals</a></li>
+        <li><a href="#">Best Sellers</a></li>
+        <li><a href="#">Electronics</a></li>
+        <li><a href="#">Mobiles</a></li>
+        <li><a href="#">Laptops</a></li>
+        <li><a href="#">Clothing</a></li>
+        <li><a href="#">Home & Kitchen</a></li>
+        <li><a href="#">Tools</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Sellers</h4>
+      <ul>
+        <li><a href="#">Start Selling</a></li>
+        <li><a href="#">Seller Hub</a></li>
+        <li><a href="#">Seller Fees</a></li>
+        <li><a href="#">Seller Protection</a></li>
+        <li><a href="#">Business Accounts</a></li>
+        <li><a href="#">Seller Support</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Help</h4>
+      <ul>
+        <li><a href="#">Help Center</a></li>
+        <li><a href="#">Track Your Order</a></li>
+        <li><a href="#">Returns & Refunds</a></li>
+        <li><a href="#">Buyer Protection</a></li>
+        <li><a href="#">Report an Item</a></li>
+        <li><a href="#">Contact Us</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>About</h4>
+      <ul>
+        <li><a href="#">About PennyHaul</a></li>
+        <li><a href="#">Careers</a></li>
+        <li><a href="#">Press</a></li>
+        <li><a href="#">Affiliates</a></li>
+        <li><a href="#">Privacy Policy</a></li>
+        <li><a href="#">Terms of Service</a></li>
+        <li><a href="#">Cookie Policy</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-bottom-inner">
+      <p>© 2025 PennyHaul – pennyhaul.shop · All rights reserved.</p>
+      <div class="payment-methods">
+        <span style="color:#4a6080;font-size:12px;margin-right:4px">We Accept:</span>
+        <span class="pay-badge">VISA</span>
+        <span class="pay-badge">MC</span>
+        <span class="pay-badge">AMEX</span>
+        <span class="pay-badge">PayPal</span>
+        <span class="pay-badge">Apple Pay</span>
+        <span class="pay-badge">GPay</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- CART DRAWER -->
+<div class="cart-overlay" id="cartOverlay" onclick="toggleCart()"></div>
+<div class="cart-drawer" id="cartDrawer">
+  <div class="cart-head">
+    <h3>🛒 Your Cart (3 items)</h3>
+    <button class="cart-close" onclick="toggleCart()">✕</button>
+  </div>
+  <div class="cart-body">
+    <div class="cart-item">
+      <div class="ci-img">📱</div>
+      <div class="ci-info">
+        <h4>Samsung Galaxy A54 128GB</h4>
+        <p>Color: Black · Qty: 1</p>
+      </div>
+      <div class="ci-price">$249</div>
+    </div>
+    <div class="cart-item">
+      <div class="ci-img">🎧</div>
+      <div class="ci-info">
+        <h4>ANC Wireless Headphones Pro</h4>
+        <p>Color: White · Qty: 2</p>
+      </div>
+      <div class="ci-price">$78</div>
+    </div>
+    <div class="cart-item">
+      <div class="ci-img">👕</div>
+      <div class="ci-info">
+        <h4>Graphic Crew Neck Tee</h4>
+        <p>Size: L · Color: Navy · Qty: 1</p>
+      </div>
+      <div class="ci-price">$12</div>
+    </div>
+  </div>
+  <div class="cart-foot">
+    <div class="cart-total"><span>Total</span><span style="color:var(--accent)">$339.00</span></div>
+    <button class="checkout-btn">Proceed to Checkout →</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon">✅</span>
+  <span id="toastMsg">Added to cart!</span>
+</div>
+
+<script>
+  // ─── PRODUCT DATA ───
+  const flashSaleItems = [
+    { emoji:'📱', name:'iPhone 15 128GB Unlocked', cat:'Mobiles', price:'$599', orig:'$799', save:'25% off', rating:'4.8', reviews:'2.4k', stock:'Only 9 left!', badge:'SALE' },
+    { emoji:'💻', name:'Lenovo IdeaPad 15.6" Laptop i5', cat:'Laptops', price:'$379', orig:'$599', save:'37% off', rating:'4.6', reviews:'1.1k', stock:'Only 5 left!', badge:'HOT' },
+    { emoji:'🎧', name:'Sony WH-1000XM5 ANC Headphones', cat:'Audio', price:'$198', orig:'$349', save:'43% off', rating:'4.9', reviews:'8.7k', stock:'In Stock', badge:'SALE' },
+    { emoji:'🔥', name:'Ninja Air Fryer 5.8QT Digital', cat:'Home', price:'$49', orig:'$89', save:'45% off', rating:'4.7', reviews:'5.2k', stock:'Only 14 left!', badge:'HOT' },
+    { emoji:'⌚', name:'Smart Watch Fitness Tracker AMOLED', cat:'Wearables', price:'$38', orig:'$79', save:'52% off', rating:'4.5', reviews:'3.3k', stock:'In Stock', badge:'SALE' },
+  ];
+
+  const bestSellers = [
+    { emoji:'📱', name:'Samsung Galaxy A54 5G 128GB', cat:'Mobiles', price:'$249', orig:'$349', save:'$100 off', rating:'4.7', reviews:'6.1k', stock:'In Stock', badge:'HOT' },
+    { emoji:'💻', name:'MacBook Air M2 13" 256GB', cat:'Laptops', price:'$899', orig:'$1099', save:'$200 off', rating:'4.9', reviews:'4.5k', stock:'In Stock', badge:'SALE' },
+    { emoji:'👕', name:'Essential Graphic Tee 100% Cotton', cat:'Clothing', price:'$12', orig:'$24', save:'50% off', rating:'4.4', reviews:'9.8k', stock:'In Stock', badge:'HOT' },
+    { emoji:'🔧', name:'DeWalt 20V Cordless Drill Driver Kit', cat:'Tools', price:'$79', orig:'$129', save:'$50 off', rating:'4.8', reviews:'2.9k', stock:'In Stock', badge:'SALE' },
+    { emoji:'🍳', name:'Instant Pot 7-in-1 Multi Cooker 6QT', cat:'Kitchen', price:'$59', orig:'$99', save:'40% off', rating:'4.7', reviews:'11.2k', stock:'In Stock', badge:'HOT' },
+  ];
+
+  const newArrivals = [
+    { emoji:'🕶️', name:'Smart AR Glasses Bluetooth 5.3', cat:'Gadgets', price:'$79', orig:'$120', save:'34% off', rating:'4.3', reviews:'412', stock:'New!', badge:'NEW' },
+    { emoji:'🔌', name:'140W GaN 4-Port Charger USB-C Hub', cat:'Accessories', price:'$34', orig:'$59', save:'42% off', rating:'4.6', reviews:'830', stock:'In Stock', badge:'NEW' },
+    { emoji:'📺', name:'Samsung 55" 4K QLED Smart TV', cat:'Electronics', price:'$449', orig:'$799', save:'$350 off', rating:'4.8', reviews:'2.1k', stock:'In Stock', badge:'NEW' },
+    { emoji:'🧹', name:'Robot Vacuum Cleaner LiDAR Mapping', cat:'Home', price:'$149', orig:'$299', save:'50% off', rating:'4.5', reviews:'1.7k', stock:'In Stock', badge:'NEW' },
+    { emoji:'💪', name:'Resistance Bands Set 11pcs Pro Grade', cat:'Sports', price:'$18', orig:'$35', save:'49% off', rating:'4.6', reviews:'3.4k', stock:'In Stock', badge:'NEW' },
+  ];
+
+  const recentItems = [
+    { emoji:'📱', name:'Poco X6 Pro 5G', price:'$199' },
+    { emoji:'🎮', name:'PS5 DualSense Controller', price:'$59' },
+    { emoji:'🔦', name:'Tactical Flashlight 5000LM', price:'$22' },
+    { emoji:'🖱️', name:'Logitech MX Master 3S Mouse', price:'$79' },
+    { emoji:'👕', name:'Vintage Wash Tee Pack 3x', price:'$28' },
+    { emoji:'🔋', name:'20000mAh Power Bank 65W', price:'$35' },
+    { emoji:'🧰', name:'250-Piece Tool Kit Set', price:'$44' },
+    { emoji:'💡', name:'Smart Bulb RGBW WiFi 4-Pack', price:'$19' },
+  ];
+
+  function buildCard(p, flash=false) {
+    return `
+    <div class="prod-card" onclick="addToCart('${p.name}')">
+      <div class="prod-img">
+        ${p.badge ? `<span class="prod-badge ${p.badge==='NEW'?'new':p.badge==='HOT'?'hot':''}">${p.badge}</span>` : ''}
+        <button class="prod-wishlist" onclick="event.stopPropagation();showToast('❤️ Added to Wishlist!')">❤️</button>
+        ${p.emoji}
+      </div>
+      <div class="prod-info">
+        <div class="prod-cat">${p.cat}</div>
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-rating">
+          <span class="stars">${'★'.repeat(Math.round(parseFloat(p.rating)))}${'☆'.repeat(5-Math.round(parseFloat(p.rating)))}</span>
+          <span class="rating-count">(${p.reviews})</span>
+        </div>
+        <div class="prod-price-row">
+          <span class="prod-price">${p.price}</span>
+          <span class="prod-orig">${p.orig}</span>
+          <span class="prod-save">${p.save}</span>
+        </div>
+        <div class="prod-stock" style="color:${p.stock.includes('Only')?'var(--red)':'var(--green)'}">${p.stock.includes('In')||p.stock.includes('New')?'✓ '+p.stock:'⚠ '+p.stock}</div>
+        <button class="prod-atc" onclick="event.stopPropagation();addToCart('${p.name}')">Add to Cart</button>
+        <div class="seller-info">🏪 <span>PennyHaul Verified Seller</span></div>
+      </div>
+    </div>`;
+  }
+
+  function buildMini(p) {
+    return `<div class="mini-prod"><div class="mini-img">${p.emoji}</div><div class="mini-info"><div class="mini-name">${p.name}</div><div class="mini-price">${p.price}</div></div></div>`;
+  }
+
+  document.getElementById('flashGrid').innerHTML = flashSaleItems.map(p=>buildCard(p,true)).join('');
+  document.getElementById('bestGrid').innerHTML = bestSellers.map(p=>buildCard(p)).join('');
+  document.getElementById('newGrid').innerHTML = newArrivals.map(p=>buildCard(p)).join('');
+  document.getElementById('recentRow').innerHTML = recentItems.map(p=>buildMini(p)).join('');
+
+  // ─── CART ───
+  function toggleCart() {
+    document.getElementById('cartDrawer').classList.toggle('open');
+    document.getElementById('cartOverlay').classList.toggle('open');
+  }
+
+  // ─── ADD TO CART ───
+  function addToCart(name) {
+    let b = document.getElementById('cartBadge');
+    b.textContent = parseInt(b.textContent) + 1;
+    showToast('🛒 Added to cart: ' + name.slice(0,28) + '…');
+  }
+
+  // ─── TOAST ───
+  function showToast(msg) {
+    let t = document.getElementById('toast');
+    document.getElementById('toastMsg').textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 3000);
+  }
+
+  // ─── COUNTDOWN ───
+  let h=8,m=43,s=17;
+  setInterval(()=>{
+    s--; if(s<0){s=59;m--;} if(m<0){m=59;h--;} if(h<0){h=8;m=59;s=59;}
+    document.getElementById('cdH').textContent=String(h).padStart(2,'0');
+    document.getElementById('cdM').textContent=String(m).padStart(2,'0');
+    document.getElementById('cdS').textContent=String(s).padStart(2,'0');
+  }, 1000);
+
+  // ─── SEARCH ───
+  function scrollToDeals(){document.getElementById('deals').scrollIntoView({behavior:'smooth'});}
+  function handleSearch(){
+    let q=document.getElementById('searchInput').value.trim();
+    if(q) showToast('🔍 Searching for "'+q+'"…');
+  }
+  document.getElementById('searchInput').addEventListener('keydown',e=>{if(e.key==='Enter')handleSearch();});
+</script>
+</body>
+</html>

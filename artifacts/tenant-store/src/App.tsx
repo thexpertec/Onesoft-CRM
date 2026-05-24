@@ -3,23 +3,28 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { StoreProvider } from "@/contexts/store-context";
+import { StoreProvider, useStore } from "@/contexts/store-context";
 import { CartProvider } from "@/lib/cart";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
+import { MarketplaceHeader } from "@/themes/marketplace/header";
+import { MarketplaceFooter } from "@/themes/marketplace/footer";
 import NotFound from "@/pages/not-found";
 
 // Lazy-loaded page components — fetched on-demand as the user navigates
-const HomePage         = lazy(() => import("@/pages/home").then(m => ({ default: m.HomePage })));
-const ShopPage         = lazy(() => import("@/pages/shop").then(m => ({ default: m.ShopPage })));
-const ProductDetailPage = lazy(() => import("@/pages/product-detail").then(m => ({ default: m.ProductDetailPage })));
-const CategoryPage     = lazy(() => import("@/pages/category").then(m => ({ default: m.CategoryPage })));
-const CheckoutPage     = lazy(() => import("@/pages/checkout").then(m => ({ default: m.CheckoutPage })));
-const ServicesPage     = lazy(() => import("@/pages/services").then(m => ({ default: m.ServicesPage })));
-const AboutPage        = lazy(() => import("@/pages/about").then(m => ({ default: m.AboutPage })));
-const ContactPage      = lazy(() => import("@/pages/contact").then(m => ({ default: m.ContactPage })));
-const RepairTrackPage  = lazy(() => import("@/pages/repair-track"));
+const HomePage              = lazy(() => import("@/pages/home").then(m => ({ default: m.HomePage })));
+const ShopPage              = lazy(() => import("@/pages/shop").then(m => ({ default: m.ShopPage })));
+const ProductDetailPage     = lazy(() => import("@/pages/product-detail").then(m => ({ default: m.ProductDetailPage })));
+const CategoryPage          = lazy(() => import("@/pages/category").then(m => ({ default: m.CategoryPage })));
+const CheckoutPage          = lazy(() => import("@/pages/checkout").then(m => ({ default: m.CheckoutPage })));
+const ServicesPage          = lazy(() => import("@/pages/services").then(m => ({ default: m.ServicesPage })));
+const AboutPage             = lazy(() => import("@/pages/about").then(m => ({ default: m.AboutPage })));
+const ContactPage           = lazy(() => import("@/pages/contact").then(m => ({ default: m.ContactPage })));
+const RepairTrackPage       = lazy(() => import("@/pages/repair-track"));
+const MarketplaceHomePage   = lazy(() =>
+  import("@/themes/marketplace/home").then(m => ({ default: m.MarketplaceHomePage }))
+);
 
 const queryClient = new QueryClient();
 
@@ -31,8 +36,8 @@ function PageSkeleton() {
   );
 }
 
-// ── Inner router (all routes relative to /{tenantId}) ──────────────────────────
-function StoreRouter() {
+// ── Tech theme router (existing layout) ───────────────────────────────────────
+function TechRouter() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950">
       <Header />
@@ -58,7 +63,40 @@ function StoreRouter() {
   );
 }
 
-// ── Tenant router — reads tenantId from first URL path segment ─────────────────
+// ── Marketplace theme router (PennyHaul layout) ───────────────────────────────
+function MarketplaceRouter() {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f4f6fa" }}>
+      <MarketplaceHeader />
+      <main style={{ flex: 1 }}>
+        <Suspense fallback={<PageSkeleton />}>
+          <Switch>
+            <Route path="/"               component={MarketplaceHomePage} />
+            <Route path="/home"           component={MarketplaceHomePage} />
+            <Route path="/shop"           component={ShopPage} />
+            <Route path="/product/:id"    component={ProductDetailPage} />
+            <Route path="/category/:slug" component={CategoryPage} />
+            <Route path="/checkout"       component={CheckoutPage} />
+            <Route path="/services"       component={ServicesPage} />
+            <Route path="/about"          component={AboutPage} />
+            <Route path="/contact"        component={ContactPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </main>
+      <MarketplaceFooter />
+      <CartDrawer />
+    </div>
+  );
+}
+
+// ── Theme switcher — reads storeTheme from context ────────────────────────────
+function StoreRouter() {
+  const { storeTheme } = useStore();
+  return storeTheme === "marketplace" ? <MarketplaceRouter /> : <TechRouter />;
+}
+
+// ── Tenant router — reads tenantId from first URL path segment ────────────────
 // Lives inside the outer WouterRouter (base = Vite BASE_URL), so useLocation()
 // already has the base stripped, e.g.  "/12/shop"
 function TenantRouter() {
@@ -98,7 +136,7 @@ function TenantRouter() {
   );
 }
 
-// ── Root app ───────────────────────────────────────────────────────────────────
+// ── Root app ──────────────────────────────────────────────────────────────────
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

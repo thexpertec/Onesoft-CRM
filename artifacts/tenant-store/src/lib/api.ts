@@ -70,6 +70,7 @@ export type StoreCms = {
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
   shop: { showStockBadge: boolean; allowBackorder: boolean };
+  theme?: "tech" | "marketplace";
 };
 
 export const CMS_DEFAULTS: StoreCms = {
