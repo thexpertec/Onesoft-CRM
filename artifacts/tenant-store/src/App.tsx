@@ -19,6 +19,7 @@ const CheckoutPage     = lazy(() => import("@/pages/checkout").then(m => ({ defa
 const ServicesPage     = lazy(() => import("@/pages/services").then(m => ({ default: m.ServicesPage })));
 const AboutPage        = lazy(() => import("@/pages/about").then(m => ({ default: m.AboutPage })));
 const ContactPage      = lazy(() => import("@/pages/contact").then(m => ({ default: m.ContactPage })));
+const RepairTrackPage  = lazy(() => import("@/pages/repair-track"));
 
 const queryClient = new QueryClient();
 
@@ -104,7 +105,15 @@ function App() {
       <TooltipProvider>
         {/* Outer router strips the Vite base path (e.g. /tenant-store) */}
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <TenantRouter />
+          <Switch>
+            {/* Public repair tracking — intercept before TenantRouter treats the segment as a tenantId */}
+            <Route path="/repair-track">
+              <Suspense fallback={<PageSkeleton />}>
+                <RepairTrackPage />
+              </Suspense>
+            </Route>
+            <Route component={TenantRouter} />
+          </Switch>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

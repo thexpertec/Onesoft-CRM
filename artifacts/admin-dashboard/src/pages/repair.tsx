@@ -4,12 +4,15 @@ import {
   Phone, User, CalendarDays, Tag, Loader2, Search, ChevronDown,
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
   Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
-  BarChart3, AlertTriangle, TrendingUp,
+  BarChart3, TrendingUp, Printer, Link2, Eye,
 } from "lucide-react";
 import { Link } from "wouter";
+import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
+import { getSettings } from "@/lib/store";
+import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
 const API = "/api/kv/global/repair-bookings";
 
@@ -37,6 +40,7 @@ interface RepairBooking {
   priority?: Priority;
   estimatedDate?: string;
   notes?: string;
+  publicNote?: string;
   source?: RequestSource;
 }
 
@@ -103,7 +107,7 @@ function normaliseBooking(b: RepairBooking): RepairBooking {
 
 const EMPTY_FORM = {
   name: "", phone: "", service: "Device Repair",
-  deviceIssue: "", notes: "", estimatedDate: "",
+  deviceIssue: "", notes: "", publicNote: "", estimatedDate: "",
   status: "New" as BookingStatus,
   priority: "Normal" as Priority,
   source: "Shop Visitor" as RequestSource,
@@ -150,6 +154,28 @@ export default function RepairPage() {
     setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }
 
+  async function printJobCard(booking: RepairBooking) {
+    try {
+      const settings     = getSettings();
+      const trackingUrl  = `${window.location.origin}/tenant-store/repair-track?id=${booking.id}`;
+      const qrDataUrl    = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1, color: { dark: "#000000", light: "#ffffff" } });
+      const html         = buildRepairJobCardHtml(booking, settings, qrDataUrl, trackingUrl);
+      printReceiptHtml(html);
+    } catch {
+      toast({ title: "Could not generate job card", variant: "destructive" });
+    }
+  }
+
+  async function copyTrackingLink(booking: RepairBooking) {
+    const url = `${window.location.origin}/tenant-store/repair-track?id=${booking.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Tracking link copied!", description: "Share it with the customer." });
+    } catch {
+      toast({ title: "Link: " + url });
+    }
+  }
+
   async function updateField<K extends keyof RepairBooking>(id: string, key: K, val: RepairBooking[K]) {
     setSaving(id);
     try {
@@ -193,6 +219,7 @@ export default function RepairPage() {
         source: addForm.source,
         estimatedDate: addForm.estimatedDate || undefined,
         notes: addForm.notes.trim() || undefined,
+        publicNote: addForm.publicNote.trim() || undefined,
       };
       await saveAll([...bookings, newBooking]);
       setAddOpen(false);
@@ -597,11 +624,50 @@ export default function RepairPage() {
 
                             </div>
 
-                            <button
-                              onClick={() => setExpanded(null)}
-                              className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                              <ChevronUp size={12} /> Collapse
-                            </button>
+                            {/* Customer Update (public note) + Actions */}
+                            <div className="mt-4 space-y-3">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                    <Eye size={11} /> Customer Update <span className="text-muted-foreground normal-case font-normal">(visible to customer via QR)</span>
+                                  </div>
+                                </div>
+                                {can("Edit Repairs") ? (
+                                  <textarea
+                                    rows={2}
+                                    defaultValue={b.publicNote || ""}
+                                    onBlur={e => {
+                                      const v = e.target.value.trim();
+                                      if (v !== (b.publicNote || "")) updateField(b.id, "publicNote", v);
+                                    }}
+                                    placeholder="Public update for the customer (e.g. Screen replacement ordered, ready by Friday)…"
+                                    className="w-full text-sm px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 text-foreground outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-muted-foreground/40 resize-none leading-relaxed"
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground bg-amber-50/40 dark:bg-amber-950/20 rounded-lg px-3 py-2.5 border border-amber-200 dark:border-amber-800 min-h-[50px] leading-relaxed">
+                                    {b.publicNote || <span className="text-muted-foreground italic text-xs">No public update</span>}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  onClick={() => printJobCard(b)}
+                                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                                  <Printer size={12} /> Print Job Card
+                                </button>
+                                <button
+                                  onClick={() => copyTrackingLink(b)}
+                                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-border hover:bg-gray-100 dark:hover:bg-muted/30 text-foreground transition-colors">
+                                  <Link2 size={12} /> Copy Tracking Link
+                                </button>
+                                <button
+                                  onClick={() => setExpanded(null)}
+                                  className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                  <ChevronUp size={12} /> Collapse
+                                </button>
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -731,10 +797,18 @@ export default function RepairPage() {
                   className={FIELD_CLS} />
               </div>
               <div>
-                <label className={LABEL_CLS}>Technician notes</label>
+                <label className={LABEL_CLS}>Technician notes (internal)</label>
                 <textarea rows={2} placeholder="Initial diagnosis, quote, or instructions…"
                   value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
                   className={FIELD_CLS + " resize-none"} />
+              </div>
+              <div>
+                <label className={LABEL_CLS + " text-amber-600 dark:text-amber-400"}>
+                  Customer update <span className="font-normal text-muted-foreground">(shown on tracking page)</span>
+                </label>
+                <textarea rows={2} placeholder="e.g. Screen replacement ordered, ready by Friday…"
+                  value={addForm.publicNote} onChange={e => setAddForm(f => ({ ...f, publicNote: e.target.value }))}
+                  className={FIELD_CLS + " resize-none border-amber-200 dark:border-amber-800 focus:ring-amber-400"} />
               </div>
 
               {/* Submit */}

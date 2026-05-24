@@ -28,6 +28,7 @@
     "@types/jsbarcode": "^3.11.4",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.3",
+    "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -66,6 +67,7 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@types/node": "catalog:",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",

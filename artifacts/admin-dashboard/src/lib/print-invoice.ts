@@ -402,3 +402,212 @@ export function printReceiptHtml(html: string): void {
 export function printSaleInvoice(sale: Sale, settings: AppSettings): void {
   printReceiptHtml(buildSaleReceiptHtml(sale, settings));
 }
+
+// ─── Repair Job Card ──────────────────────────────────────────────────────────
+
+interface RepairJobData {
+  id: string;
+  name: string;
+  phone: string;
+  service: string;
+  deviceIssue?: string;
+  status: string;
+  priority?: string;
+  estimatedDate?: string;
+  publicNote?: string;
+  createdAt: string;
+}
+
+const REPAIR_STATUSES = [
+  "New", "Diagnosing", "Quoted", "Awaiting Parts", "In Repair", "Ready", "Completed",
+];
+
+const REPAIR_STATUS_COLORS: Record<string, string> = {
+  "New":            "#3b82f6",
+  "Diagnosing":     "#8b5cf6",
+  "Quoted":         "#6366f1",
+  "Awaiting Parts": "#f97316",
+  "In Repair":      "#f59e0b",
+  "Ready":          "#14b8a6",
+  "Completed":      "#10b981",
+};
+
+function buildPipelineHtml(status: string): string {
+  const currentIdx = REPAIR_STATUSES.indexOf(status);
+  return REPAIR_STATUSES.map((s, i) => {
+    const filled = i <= currentIdx;
+    const color  = filled ? (REPAIR_STATUS_COLORS[s] ?? "#6b7280") : "#e5e7eb";
+    const textCol = filled ? "#fff" : "#9ca3af";
+    const label = s === "Awaiting Parts" ? "Parts" : s;
+    return `<div style="flex:1;text-align:center;">
+      <div style="width:22px;height:22px;border-radius:50%;background:${color};margin:0 auto 3px;display:flex;align-items:center;justify-content:center;">
+        ${filled ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${textCol}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>` : ""}
+      </div>
+      <div style="font-size:7px;color:${filled ? "#111" : "#9ca3af"};line-height:1.2;font-weight:${filled ? "700" : "400"}">${esc(label)}</div>
+    </div>`;
+  }).join(`<div style="flex:0 0 auto;width:8px;height:2px;background:#e5e7eb;margin-top:10px;"></div>`);
+}
+
+export function buildRepairJobCardHtml(
+  booking: RepairJobData,
+  settings: AppSettings,
+  qrDataUrl: string,
+  trackingUrl: string,
+): string {
+  const companyName = settings.companyName || "Repair Shop";
+  const address  = settings.addressHull || settings.addressIslamabad || "";
+  const phone    = settings.phoneHull   || settings.phoneIslamabad   || "";
+  const email    = settings.emailHull   || settings.emailIslamabad   || "";
+  const website  = settings.website || "";
+
+  const receivedFmt = fmtDateOnly(booking.createdAt);
+  const estFmt = booking.estimatedDate
+    ? fmtDateOnly(booking.estimatedDate + "T00:00:00")
+    : "Not set";
+
+  const shortId = booking.id.slice(0, 8).toUpperCase();
+  const priorityColor: Record<string, string> = {
+    "Urgent": "#dc2626", "High": "#ea580c", "Normal": "#2563eb", "Low": "#6b7280",
+  };
+  const prColor = priorityColor[booking.priority ?? "Normal"] ?? "#6b7280";
+  const statusColor = REPAIR_STATUS_COLORS[booking.status] ?? "#6b7280";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Repair Job Card ${esc(shortId)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,'Segoe UI',Arial,sans-serif;
+    font-size:11pt;
+    color:#111;
+    background:#fff;
+    width:100mm;
+    margin:0 auto;
+    padding:4mm 0;
+    line-height:1.5;
+  }
+  .card{width:100%;}
+  .hdr{text-align:center;padding-bottom:6px;border-bottom:2px solid #111;margin-bottom:8px;}
+  .hdr img{max-width:40mm;height:auto;display:block;margin:0 auto 5px;}
+  .co{font-size:14pt;font-weight:800;letter-spacing:.5px;}
+  .contact{font-size:8pt;color:#555;margin-top:3px;line-height:1.6;}
+  .title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .job-title{font-size:13pt;font-weight:900;letter-spacing:2px;color:#111;}
+  .job-ref{font-size:9pt;font-weight:700;color:#555;}
+  .section{margin:6px 0;}
+  .kv{display:flex;font-size:9.5pt;padding:2px 0;}
+  .kv .lbl{color:#555;min-width:70px;font-weight:600;}
+  .kv .val{font-weight:700;flex:1;}
+  .divider{border:none;border-top:1px dashed #ccc;margin:6px 0;}
+  .status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:9pt;font-weight:700;color:#fff;background:${statusColor};}
+  .priority-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:8.5pt;font-weight:700;color:#fff;background:${prColor};}
+  .pipeline{display:flex;align-items:flex-start;margin:8px 0;padding:6px;background:#f9fafb;border-radius:8px;}
+  .issue-box{background:#f9fafb;border-radius:6px;padding:6px 8px;font-size:9pt;margin:4px 0;min-height:30px;color:#333;}
+  .public-note-box{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;font-size:9pt;margin:4px 0;color:#92400e;}
+  .qr-section{text-align:center;margin:8px 0;padding:8px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;}
+  .qr-section img{width:110px;height:110px;display:block;margin:0 auto 5px;}
+  .qr-label{font-size:8.5pt;color:#0369a1;font-weight:700;margin-bottom:3px;}
+  .qr-url{font-size:7pt;color:#555;word-break:break-all;}
+  .footer{text-align:center;font-size:8pt;color:#555;margin-top:8px;padding-top:6px;border-top:1px solid #eee;}
+  .screen-wrap{max-width:480px;margin:24px auto;background:#fff;border:1px solid #ddd;border-radius:6px;padding:12px 16px;box-shadow:0 2px 16px rgba(0,0,0,.1);}
+  .print-bar{display:flex;gap:10px;justify-content:center;margin-top:16px;padding-top:14px;border-top:1px dashed #bbb;}
+  .btn-print{padding:9px 28px;font-size:13px;font-weight:700;background:#111;color:#fff;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;}
+  .btn-close{padding:9px 20px;font-size:13px;font-weight:600;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;}
+  .btn-print:hover{background:#333;}
+  .btn-close:hover{background:#e5e7eb;}
+  @media print{
+    body{margin:0;padding:0;width:100mm;}
+    .screen-wrap{border:none;box-shadow:none;padding:0;margin:0;border-radius:0;}
+    .print-bar{display:none !important;}
+  }
+  @page{size:105mm auto;margin:4mm 3mm;}
+</style>
+</head>
+<body>
+<div class="screen-wrap">
+<div class="card">
+
+  <div class="hdr">
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" alt="Logo"/>` : ""}
+    <div class="co">${esc(companyName)}</div>
+    <div class="contact">
+      ${address ? `<div>${esc(address)}</div>` : ""}
+      ${phone   ? `<div>Tel: ${esc(phone)}</div>` : ""}
+      ${email   ? `<div>${esc(email)}</div>` : ""}
+    </div>
+  </div>
+
+  <div class="title-row">
+    <div class="job-title">REPAIR JOB CARD</div>
+    <div class="job-ref">#${esc(shortId)}</div>
+  </div>
+
+  <div class="section">
+    <div class="kv"><span class="lbl">Customer</span><span class="val">${esc(booking.name)}</span></div>
+    <div class="kv"><span class="lbl">Phone</span><span class="val">${esc(booking.phone)}</span></div>
+    <div class="kv"><span class="lbl">Service</span><span class="val">${esc(booking.service)}</span></div>
+    <div class="kv"><span class="lbl">Received</span><span class="val">${esc(receivedFmt)}</span></div>
+    <div class="kv"><span class="lbl">Est. Done</span><span class="val">${esc(estFmt)}</span></div>
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="section">
+    <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Device Issue</div>
+    <div class="issue-box">${esc(booking.deviceIssue || "Not provided")}</div>
+  </div>
+
+  ${booking.publicNote ? `
+  <div class="section">
+    <div style="font-size:8pt;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Update for Customer</div>
+    <div class="public-note-box">${esc(booking.publicNote)}</div>
+  </div>` : ""}
+
+  <hr class="divider"/>
+
+  <div class="section" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span class="status-badge">${esc(booking.status)}</span>
+    <span class="priority-badge">${esc(booking.priority ?? "Normal")}</span>
+  </div>
+
+  <div class="pipeline">
+    ${buildPipelineHtml(booking.status)}
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="qr-section">
+    <div class="qr-label">📱 Scan to track your repair</div>
+    <img src="${qrDataUrl}" alt="Tracking QR Code"/>
+    <div class="qr-url">${esc(trackingUrl)}</div>
+  </div>
+
+  <div class="footer">
+    ${esc(settings.receiptFooter || "Thank you for choosing us!")}
+    ${website ? `<div>${esc(website)}</div>` : ""}
+    ${phone ? `<div>Call us: ${esc(phone)}</div>` : ""}
+    <div style="font-size:7pt;color:#888;margin-top:3px;">Printed: ${fmtShort(new Date().toISOString())}</div>
+  </div>
+
+</div>
+
+<div class="print-bar">
+  <button class="btn-print" onclick="window.print()">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Print Job Card
+  </button>
+  <button class="btn-close" onclick="window.close()">✕ Close</button>
+</div>
+
+</div>
+<script>
+  window.addEventListener("load", function() {
+    setTimeout(function() { window.print(); }, 400);
+  });
+</script>
+</body>
+</html>`;
+}
