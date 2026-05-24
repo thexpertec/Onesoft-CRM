@@ -2164,10 +2164,25 @@ function _customerFinancialBlockers(c: Customer): string[] {
   const vouchers = getRPVouchers().filter(v => v.partyName === name);
   if (vouchers.length) blockers.push(`${vouchers.length} payment voucher(s)`);
 
-  if (c.ledgerAccountId) {
-    const lid = c.ledgerAccountId;
+  // Check JE references on the party's sub-ledger.
+  // Primary: use the stored ledgerAccountId (fast, exact).
+  // Fallback: old records created before ledger auto-linking may not have the
+  //   field populated — search by name under the correct parent group so the
+  //   guard still fires even for those records.
+  const _checkLedgerJEs = (lid: string) => {
     const jeLines = getJournalEntries().filter(e => e.lines.some(l => l.ledgerId === lid));
     if (jeLines.length) blockers.push(`${jeLines.length} journal entry record(s) on this party's ledger`);
+  };
+  if (c.ledgerAccountId) {
+    _checkLedgerJEs(c.ledgerAccountId);
+  } else {
+    // Fallback: locate by name under the AP/AR group (read-only — never creates)
+    const parentGroup = isSupplier ? SYS_ACCS.AP_TRADE : SYS_ACCS.AR_GROUP;
+    const nameL = name.trim().toLowerCase();
+    const matchingAcc = getAccounts().find(
+      a => a.parentId === parentGroup && a.name.trim().toLowerCase() === nameL,
+    );
+    if (matchingAcc) _checkLedgerJEs(matchingAcc.id);
   }
 
   return blockers;
