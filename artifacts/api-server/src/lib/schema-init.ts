@@ -934,6 +934,7 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS invoices_tenant_type_idx     ON invoices (tenant_id, invoice_type)`,
   `CREATE INDEX IF NOT EXISTS invoices_tenant_agent_idx    ON invoices (tenant_id, agent_id)`,
   `CREATE INDEX IF NOT EXISTS invoices_tenant_je_idx       ON invoices (tenant_id, je_id) WHERE je_id IS NOT NULL`,
+  `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS memo_no TEXT NOT NULL DEFAULT ''`,
 
   // ── Invoice Items ────────────────────────────────────────────────────────────
   // Mirrors sale_items column-for-column (frontend reuses the SaleItem type).

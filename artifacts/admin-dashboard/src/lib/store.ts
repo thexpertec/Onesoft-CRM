@@ -6404,6 +6404,7 @@ export type Invoice = {
   notes:             string;    // legacy — use invoiceDocs
   agreement:         string;    // legacy — use invoiceDocs
   invoiceFooter:     string;    // footer text printed at bottom of invoice
+  memoNo?:           string;    // manual register / memo receipt number (optional cross-reference)
   invoiceDocs?:      InvoiceDoc[];  // dynamic document blocks (replaces paymentTerms/notes/agreement)
   stockDeducted:     boolean;
   jeId?:             string;   // journal entry ID auto-created on payment (prevents duplicates)

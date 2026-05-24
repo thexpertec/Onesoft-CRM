@@ -89,6 +89,7 @@ interface IncomingInvoice {
   notes?: string;
   agreement?: string;
   invoiceFooter?: string;
+  memoNo?: string;
   invoiceDocs?: unknown | null;
   stockDeducted?: boolean;
   jeId?: string | null;
@@ -130,7 +131,7 @@ const INV_COLS = [
   "amount_paid", "paid_at", "tax_rate", "pricing_mode",
   "shipping_fee", "handling_fee", "shipping_method",
   "agent_id", "agent_name",
-  "notes", "agreement", "invoice_footer", "invoice_docs",
+  "notes", "agreement", "invoice_footer", "memo_no", "invoice_docs",
   "stock_deducted", "je_id", "je_uses_ar",
 ] as const;
 
@@ -157,6 +158,7 @@ function invValues(invId: string, tenantId: string, v: IncomingInvoice): unknown
     v.shippingMethod ?? "",
     v.agentId ?? null, v.agentName ?? null,
     v.notes ?? "", v.agreement ?? "", v.invoiceFooter ?? "",
+    v.memoNo ?? "",
     v.invoiceDocs === undefined || v.invoiceDocs === null ? null : JSON.stringify(v.invoiceDocs),
     v.stockDeducted === true,
     v.jeId ?? null,
@@ -417,12 +419,13 @@ router.put("/:id", async (req, res) => {
          notes            = COALESCE($29, notes),
          agreement        = COALESCE($30, agreement),
          invoice_footer   = COALESCE($31, invoice_footer),
-         invoice_docs     = $32,
-         stock_deducted   = COALESCE($33, stock_deducted),
-         je_id            = $34,
-         je_uses_ar       = $35,
+         memo_no          = COALESCE($32, memo_no),
+         invoice_docs     = $33,
+         stock_deducted   = COALESCE($34, stock_deducted),
+         je_id            = $35,
+         je_uses_ar       = $36,
          updated_at       = NOW()
-       WHERE id = $36 AND tenant_id = $37
+       WHERE id = $37 AND tenant_id = $38
        RETURNING *`,
       [
         inv.invoiceNumber ?? null,
@@ -456,6 +459,7 @@ router.put("/:id", async (req, res) => {
         inv.notes         ?? null,
         inv.agreement     ?? null,
         inv.invoiceFooter ?? null,
+        inv.memoNo        !== undefined ? inv.memoNo        : before.memo_no,
         // JSONB round-trip: when keeping the existing value, re-stringify it —
         // node-pg returns JSONB as a parsed JS array/object, and binding a raw
         // JS array to a JSONB column makes the driver treat it as TEXT[].

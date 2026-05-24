@@ -338,6 +338,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   .inv-header-right { text-align: right; flex-shrink: 0; }
   .inv-title { font-size: 22pt; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
   .inv-number { font-size: 10pt; font-weight: 700; color: #60a5fa; margin-top: 3pt; letter-spacing: 0.5px; }
+  .inv-memo   { font-size: 7.5pt; color: #94a3b8; margin-top: 2pt; letter-spacing: 0.3px; }
 
   /* ── SUBHEADER: Bill To + meta strip ──────────────────────────────────── */
   .subheader {
@@ -499,6 +500,7 @@ export function printFullInvoice(inv: Invoice, settings: AppSettings): void {
   <div class="inv-header-right">
     <div class="inv-title">${sl("invoiceTitle", L.invoiceTitle || inv.invoiceTitle || "Invoice")}</div>
     <div class="inv-number">${esc(inv.invoiceNumber)}</div>
+    ${inv.memoNo ? `<div class="inv-memo">Memo / Receipt #: ${esc(inv.memoNo)}</div>` : ""}
   </div>
 </div>
 

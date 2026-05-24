@@ -120,6 +120,7 @@ const blankInvoice = (type: "sale" | "purchase" = "sale"): Omit<Invoice, "id" | 
     notes:          "",
     agreement:      "",
     invoiceFooter:  "",
+    memoNo:         "",
     stockDeducted:  false,
   };
 };
@@ -1141,6 +1142,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Invoice Title</label>
                   <input value={form.invoiceTitle} onChange={e => setF("invoiceTitle", e.target.value)}
+                    className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
+                </div>
+                {/* Memo / Receipt # */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-1">Memo / Receipt #</label>
+                  <input value={form.memoNo ?? ""} onChange={e => setF("memoNo", e.target.value)} placeholder="Manual register or receipt reference…"
                     className="w-full px-3 py-2 rounded-none border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"/>
                 </div>
                 {/* Date + Due Date */}
