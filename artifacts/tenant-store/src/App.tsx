@@ -10,6 +10,9 @@ import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
 import { MarketplaceHeader } from "@/themes/marketplace/header";
 import { MarketplaceFooter } from "@/themes/marketplace/footer";
+import { MarketplaceServicesPage } from "@/themes/marketplace/services";
+import { MarketplaceAboutPage } from "@/themes/marketplace/about";
+import { MarketplaceContactPage } from "@/themes/marketplace/contact";
 import NotFound from "@/pages/not-found";
 
 // Lazy-loaded page components — fetched on-demand as the user navigates
@@ -77,9 +80,9 @@ function MarketplaceRouter() {
             <Route path="/product/:id"    component={ProductDetailPage} />
             <Route path="/category/:slug" component={CategoryPage} />
             <Route path="/checkout"       component={CheckoutPage} />
-            <Route path="/services"       component={ServicesPage} />
-            <Route path="/about"          component={AboutPage} />
-            <Route path="/contact"        component={ContactPage} />
+            <Route path="/services"       component={MarketplaceServicesPage} />
+            <Route path="/about"          component={MarketplaceAboutPage} />
+            <Route path="/contact"        component={MarketplaceContactPage} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>
