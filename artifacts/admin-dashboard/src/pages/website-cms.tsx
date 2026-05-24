@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Globe, Save, RotateCcw, Eye, ExternalLink, Info, ChevronDown, ChevronUp,
   Image as ImageIcon, Phone, Share2, LayoutTemplate, Navigation,
-  Star, Megaphone, Plus, Trash2, Layers, ShoppingBag, Upload, X,
+  Star, Megaphone, Plus, Trash2, Layers, ShoppingBag, Upload, X, Palette, CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -69,6 +69,7 @@ export type StoreCms = {
   newArrivalsSection: { title: string; subtitle: string };
   seo: { title: string; description: string; keywords: string };
   shop: { showStockBadge: boolean; allowBackorder: boolean };
+  theme: "tech" | "marketplace";
 };
 
 export const CMS_DEFAULTS: StoreCms = {
@@ -141,6 +142,7 @@ export const CMS_DEFAULTS: StoreCms = {
   newArrivalsSection: { title: "New Arrivals",      subtitle: "Just landed in our store"        },
   seo: { title: "Onesoft Tech Store", description: "Premium tech products delivered fast across the UK.", keywords: "tech, smartphones, laptops, accessories" },
   shop: { showStockBadge: true, allowBackorder: false },
+  theme: "tech",
 };
 
 // ─── KV helpers ───────────────────────────────────────────────────────────────
@@ -163,6 +165,7 @@ function mergeCms(saved: Partial<StoreCms>): StoreCms {
     newArrivalsSection: { ...CMS_DEFAULTS.newArrivalsSection, ...(saved.newArrivalsSection ?? {}) },
     seo:                { ...CMS_DEFAULTS.seo,                ...(saved.seo ?? {}) },
     shop:               { ...CMS_DEFAULTS.shop,               ...(saved.shop ?? {}) },
+    theme: (saved.theme === "marketplace" ? "marketplace" : "tech") as "tech" | "marketplace",
   };
 }
 
@@ -481,6 +484,188 @@ export default function WebsiteCmsPage() {
           You have unsaved changes — click Save Changes to publish to the store.
         </div>
       )}
+
+      {/* ── STORE THEME ──────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 flex items-center gap-3 border-b border-gray-100 dark:border-zinc-800">
+          <Palette size={16} className="text-blue-600 dark:text-blue-400" />
+          <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Store Theme</span>
+          <span className="ml-auto text-[11px] text-gray-400 dark:text-zinc-500 font-medium">
+            Choose the layout and visual style for your storefront
+          </span>
+        </div>
+        <div className="px-5 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          {/* ── Tech Theme card ────────────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => { setCms(prev => ({ ...prev, theme: "tech" })); setDirty(true); }}
+            className={`relative text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 focus:outline-none hover:shadow-lg ${
+              cms.theme === "tech"
+                ? "border-blue-600 dark:border-blue-500 shadow-md shadow-blue-500/20"
+                : "border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-zinc-500"
+            }`}
+          >
+            {/* Mini preview */}
+            <div className="h-36 relative overflow-hidden bg-slate-950">
+              {/* Faux header */}
+              <div className="h-9 bg-slate-900 border-b border-white/10 flex items-center px-3 gap-2">
+                <div className="w-5 h-5 rounded-lg bg-blue-600 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-sm bg-white opacity-80" />
+                </div>
+                <div className="flex-1 h-1.5 bg-white/10 rounded-full max-w-[60px]" />
+                <div className="flex gap-1.5 ml-auto">
+                  {["w-7", "w-6", "w-5"].map((w, i) => (
+                    <div key={i} className={`${w} h-1.5 bg-white/20 rounded-full`} />
+                  ))}
+                </div>
+              </div>
+              {/* Faux hero */}
+              <div className="px-3 py-2.5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950">
+                <div className="w-20 h-1.5 bg-blue-400/40 rounded-full mb-1.5" />
+                <div className="w-32 h-2.5 bg-white/80 rounded-full mb-1" />
+                <div className="w-24 h-1.5 bg-white/40 rounded-full mb-2.5" />
+                <div className="flex gap-1.5">
+                  <div className="w-14 h-5 bg-blue-600 rounded-lg" />
+                  <div className="w-14 h-5 bg-white/10 border border-white/20 rounded-lg" />
+                </div>
+              </div>
+              {/* Faux product cards */}
+              <div className="absolute bottom-0 left-0 right-0 flex gap-1.5 px-3 pb-1.5">
+                {[1,2,3].map(i => (
+                  <div key={i} className="flex-1 h-8 bg-white/5 border border-white/10 rounded-lg" />
+                ))}
+              </div>
+              {cms.theme === "tech" && (
+                <div className="absolute top-2 right-2 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+                  <CheckCircle2 size={14} className="text-white fill-white" />
+                </div>
+              )}
+            </div>
+            {/* Card info */}
+            <div className="p-4 bg-white dark:bg-zinc-900">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Tech Store</span>
+                {cms.theme === "tech" && (
+                  <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wide">Active</span>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-relaxed">
+                Dark navy/blue theme with hero slider, product grids and a minimal modern aesthetic. Best for electronics and tech brands.
+              </p>
+              <div className="flex items-center gap-1.5 mt-2.5">
+                {["bg-slate-900", "bg-blue-600", "bg-slate-700", "bg-cyan-400"].map(c => (
+                  <div key={c} className={`w-4 h-4 rounded-full ${c} border border-white/20`} />
+                ))}
+                <span className="text-[10px] text-gray-400 ml-1">Navy · Blue · Cyan</span>
+              </div>
+            </div>
+          </button>
+
+          {/* ── Marketplace Theme card ──────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={() => { setCms(prev => ({ ...prev, theme: "marketplace" })); setDirty(true); }}
+            className={`relative text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 focus:outline-none hover:shadow-lg ${
+              cms.theme === "marketplace"
+                ? "border-orange-500 dark:border-orange-400 shadow-md shadow-orange-400/20"
+                : "border-gray-200 dark:border-zinc-700 hover:border-orange-300 dark:hover:border-zinc-500"
+            }`}
+          >
+            {/* Mini preview */}
+            <div className="h-36 relative overflow-hidden" style={{ background: "#0a1628" }}>
+              {/* Faux top bar */}
+              <div className="h-5 flex items-center px-3 gap-3" style={{ background: "#06101e" }}>
+                {["w-16","w-14","w-12"].map((w, i) => (
+                  <div key={i} className={`${w} h-1 rounded-full bg-white/10`} />
+                ))}
+              </div>
+              {/* Faux main header */}
+              <div className="h-9 flex items-center px-3 gap-2" style={{ background: "#0f2040" }}>
+                <div className="w-5 h-5 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#ff6b00,#ffb300)" }}>
+                  <div className="w-2 h-2 rounded-sm bg-white opacity-90" />
+                </div>
+                <div className="flex-1 h-5 rounded-lg bg-white/90 mx-2 max-w-[100px]" />
+                <div className="w-5 h-5 rounded" style={{ background: "#ff6b00" }} />
+              </div>
+              {/* Faux nav strip */}
+              <div className="h-6 flex items-center px-3 gap-2" style={{ background: "#0f2040", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                <div className="w-16 h-3.5 rounded text-[7px] font-bold flex items-center justify-center text-white" style={{ background: "#ff6b00" }}>≡ ALL</div>
+                {["w-10","w-12","w-9"].map((w, i) => (
+                  <div key={i} className={`${w} h-1.5 rounded-full bg-white/20`} />
+                ))}
+              </div>
+              {/* Faux hero */}
+              <div className="px-3 py-1.5" style={{ background: "#f4f6fa" }}>
+                <div className="flex gap-1.5 h-14">
+                  <div className="flex-[2] rounded-lg" style={{ background: "linear-gradient(135deg,#0a1628,#0f3460)" }}>
+                    <div className="p-1.5">
+                      <div className="w-10 h-1.5 rounded-full mb-1" style={{ background: "#ff6b00" }} />
+                      <div className="w-16 h-2 rounded-full bg-white/80 mb-0.5" />
+                      <div className="w-10 h-1 rounded-full bg-white/40 mb-1.5" />
+                      <div className="flex gap-1">
+                        <div className="w-8 h-2.5 rounded" style={{ background: "#ff6b00" }} />
+                        <div className="w-8 h-2.5 rounded border border-white/30 bg-white/10" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <div className="flex-1 rounded-lg" style={{ background: "linear-gradient(135deg,#1a1a2e,#e94560)" }} />
+                    <div className="flex-1 rounded-lg" style={{ background: "linear-gradient(135deg,#0d3b66,#00b4d8)" }} />
+                  </div>
+                </div>
+              </div>
+              {cms.theme === "marketplace" && (
+                <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center shadow-lg" style={{ background: "#ff6b00" }}>
+                  <CheckCircle2 size={14} className="text-white fill-white" />
+                </div>
+              )}
+            </div>
+            {/* Card info */}
+            <div className="p-4 bg-white dark:bg-zinc-900">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Marketplace</span>
+                {cms.theme === "marketplace" && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wide" style={{ background: "#fff3e6", color: "#cc4e00" }}>Active</span>
+                )}
+                <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full uppercase tracking-wide ml-auto">PennyHaul</span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-relaxed">
+                Navy &amp; orange marketplace layout with deals ticker, flash sale countdown, hero side-cards, and category grid. Best for multi-category retailers.
+              </p>
+              <div className="flex items-center gap-1.5 mt-2.5">
+                {["bg-[#0a1628]", "bg-[#ff6b00]", "bg-[#ffb300]", "bg-[#00b4d8]"].map(c => (
+                  <div key={c} className={`w-4 h-4 rounded-full ${c} border border-white/20`} />
+                ))}
+                <span className="text-[10px] text-gray-400 ml-1">Navy · Orange · Teal</span>
+              </div>
+            </div>
+          </button>
+
+        </div>
+        {currentTenantId && (
+          <div className="px-5 pb-4 flex items-center gap-3">
+            <a
+              href={`/tenant-store/${encodeURIComponent(currentTenantId)}/home?theme=tech`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-lg border border-gray-200 dark:border-zinc-700 transition-colors"
+            >
+              <Eye size={11} /> Preview Tech <ExternalLink size={10} />
+            </a>
+            <a
+              href={`/tenant-store/${encodeURIComponent(currentTenantId)}/home?theme=marketplace`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white rounded-lg border border-transparent transition-colors"
+              style={{ background: "#ff6b00" }}
+            >
+              <Eye size={11} /> Preview Marketplace <ExternalLink size={10} />
+            </a>
+            <p className="text-[11px] text-gray-400 dark:text-zinc-500">
+              Save changes to make the selected theme permanent for your visitors.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* ── BRAND & IDENTITY ─────────────────────────────────────────────── */}
       <BrandSection cms={cms} patch={patch} inp={inp} />
