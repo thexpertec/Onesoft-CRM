@@ -7522,6 +7522,8 @@ export type Designation = {
   department: string;
   jobDescription: string;
   isActive: boolean;
+  /** Marks designations whose holders work in the Repair module as technicians. */
+  isRepairTechnician?: boolean;
   createdAt: string;
   updatedAt: string;
 };

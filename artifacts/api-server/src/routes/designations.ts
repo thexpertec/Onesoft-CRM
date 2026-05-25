@@ -6,7 +6,7 @@ const router: IRouter = Router();
 mountRecordRoutes(router, {
   table: "designations",
   entityType: "designation",
-  writableColumns: ["title", "department", "job_description", "is_active"],
+  writableColumns: ["title", "department", "job_description", "is_active", "is_repair_technician"],
 });
 
 export default router;

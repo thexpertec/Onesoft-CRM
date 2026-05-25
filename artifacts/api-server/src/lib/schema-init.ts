@@ -399,6 +399,8 @@ const STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS designations_tenant_idx     ON designations (tenant_id)`,
   `CREATE INDEX IF NOT EXISTS designations_tenant_dept_idx ON designations (tenant_id, department)`,
+  // Repair module: mark designations whose holders are repair technicians (added May 2026).
+  `ALTER TABLE designations ADD COLUMN IF NOT EXISTS is_repair_technician BOOLEAN NOT NULL DEFAULT FALSE`,
 
   // ── Staff roles (HRM) — Batch 6 ──────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS staff_roles (

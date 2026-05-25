@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import {
   Layers3, Plus, Save, X, Trash2, Pencil, Search, Shield,
-  ChevronDown, Users2, Check
+  ChevronDown, Users2, Check, Wrench
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,7 @@ type SetupRow = {
   description: string;
   headOf:      string;
   permissions: string;
+  isRepairTechnician: boolean;
 };
 
 type Draft = {
@@ -83,11 +84,12 @@ type Draft = {
   description: string;
   headOf:      string;
   permissions: string;
+  isRepairTechnician: boolean;
 };
 
 const BLANK = (): Draft => ({
   color: "#94a3b8", roleName: "", deptName: "", desigTitle: "",
-  description: "", headOf: "", permissions: "",
+  description: "", headOf: "", permissions: "", isRepairTechnician: false,
 });
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -131,6 +133,7 @@ export default function HrmSetupPage() {
         description: d.jobDescription || "",
         headOf:      dept?.headOf || "",
         permissions: role?.permissions || "",
+        isRepairTechnician: !!d.isRepairTechnician,
       });
     }
     for (const dept of departments) {
@@ -149,6 +152,7 @@ export default function HrmSetupPage() {
         description: "",
         headOf:      dept.headOf || "",
         permissions: role?.permissions || "",
+        isRepairTechnician: false,
       });
     }
     for (const role of roles) {
@@ -166,6 +170,7 @@ export default function HrmSetupPage() {
         description: role.description || "",
         headOf:      "",
         permissions: role.permissions || "",
+        isRepairTechnician: false,
       });
     }
     return result;
@@ -206,6 +211,7 @@ export default function HrmSetupPage() {
       color: row.color, roleName: row.roleName, deptName: row.deptName,
       desigTitle: row.desigTitle, description: row.description,
       headOf: row.headOf, permissions: row.permissions,
+      isRepairTechnician: row.isRepairTechnician,
     });
     setColorKey(null);
   };
@@ -237,9 +243,10 @@ export default function HrmSetupPage() {
     // Persist Designation changes (title + description + dept reassignment)
     if (row.desigId) {
       editDesignation(row.desigId, {
-        title:          editDraft.desigTitle.trim() || row.desigTitle,
-        jobDescription: editDraft.description,
-        department:     editDraft.deptName,
+        title:             editDraft.desigTitle.trim() || row.desigTitle,
+        jobDescription:    editDraft.description,
+        department:        editDraft.deptName,
+        isRepairTechnician: editDraft.isRepairTechnician,
       });
     }
 
@@ -282,6 +289,7 @@ export default function HrmSetupPage() {
       addDesignation({
         title: newDraft.desigTitle.trim(), department: newDraft.deptName.trim(),
         jobDescription: newDraft.description, isActive: true,
+        isRepairTechnician: newDraft.isRepairTechnician,
       });
     }
 
@@ -578,13 +586,30 @@ export default function HrmSetupPage() {
                   {/* Description */}
                   <td className={`${TD} min-w-[200px]`} style={{ paddingTop: 5, paddingBottom: 5 }}>
                     {isEditing ? (
-                      <input value={d!.description} placeholder="Job description…"
-                        onChange={e => setEditDraft(dr => dr ? { ...dr, description: e.target.value } : dr)}
-                        className={EDIT_INPUT} />
+                      <div className="space-y-1">
+                        <input value={d!.description} placeholder="Job description…"
+                          onChange={e => setEditDraft(dr => dr ? { ...dr, description: e.target.value } : dr)}
+                          className={EDIT_INPUT} />
+                        {row.rowType === "designation" && (
+                          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-700 dark:text-blue-300 cursor-pointer select-none">
+                            <input type="checkbox" checked={d!.isRepairTechnician}
+                              onChange={e => setEditDraft(dr => dr ? { ...dr, isRepairTechnician: e.target.checked } : dr)}
+                              className="h-3 w-3 accent-blue-600" />
+                            <Wrench size={10} /> Repair Technician
+                          </label>
+                        )}
+                      </div>
                     ) : (
-                      <span className="truncate max-w-[190px] block text-[13px] text-muted-foreground">
-                        {row.description || <span className="text-gray-300 dark:text-zinc-600">—</span>}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="truncate max-w-[190px] block text-[13px] text-muted-foreground">
+                          {row.description || <span className="text-gray-300 dark:text-zinc-600">—</span>}
+                        </span>
+                        {row.rowType === "designation" && row.isRepairTechnician && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded px-1.5 py-0.5 w-fit">
+                            <Wrench size={9} /> Repair Technician
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
 
@@ -1016,8 +1041,18 @@ function NewRow({ draft, setDraft, roleNames, deptNames, desigNames, colorKey, s
 
       {/* Description */}
       <td className={`${TD} min-w-[200px]`} style={{ paddingTop: 5, paddingBottom: 5 }}>
-        <input value={draft.description} placeholder="Description…" className={EDIT_INPUT}
-          onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} />
+        <div className="space-y-1">
+          <input value={draft.description} placeholder="Description…" className={EDIT_INPUT}
+            onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} />
+          {!!draft.desigTitle.trim() && (
+            <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-700 dark:text-blue-300 cursor-pointer select-none">
+              <input type="checkbox" checked={draft.isRepairTechnician}
+                onChange={e => setDraft(d => ({ ...d, isRepairTechnician: e.target.checked }))}
+                className="h-3 w-3 accent-blue-600" />
+              <Wrench size={10} /> Repair Technician
+            </label>
+          )}
+        </div>
       </td>
 
       {/* Head of Dept */}

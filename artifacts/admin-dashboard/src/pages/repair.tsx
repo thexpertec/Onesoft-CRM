@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Wrench, RefreshCw, Trash2, CheckCircle2, Clock, AlertCircle,
   Phone, User, CalendarDays, Tag, Loader2, Search, ChevronDown,
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
   Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
-  BarChart3, TrendingUp, Printer, Link2, Eye,
+  BarChart3, TrendingUp, Printer, Link2, Eye, HardHat,
 } from "lucide-react";
 import { Link } from "wouter";
 import QRCode from "qrcode";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { getSettings } from "@/lib/store";
+import { useDesignations, useStaff } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
 const API = "/api/kv/global/repair-bookings";
@@ -42,6 +43,10 @@ interface RepairBooking {
   notes?: string;
   publicNote?: string;
   source?: RequestSource;
+  /** Assigned repair technician (staff id). */
+  technicianId?: string;
+  /** Snapshot of technician's name at assignment time (for display when staff record is missing). */
+  technicianName?: string;
 }
 
 const STATUS_ORDER: BookingStatus[] = [
@@ -111,6 +116,7 @@ const EMPTY_FORM = {
   status: "New" as BookingStatus,
   priority: "Normal" as Priority,
   source: "Shop Visitor" as RequestSource,
+  technicianId: "",
 };
 
 export default function RepairPage() {
@@ -123,6 +129,25 @@ export default function RepairPage() {
   const [statusFilter, setStatusFilter] = useState<"All" | BookingStatus>("All");
   const [priorityFilter, setPriorityFilter] = useState<"All" | Priority>("All");
   const [sourceFilter, setSourceFilter] = useState<"All" | RequestSource>("All");
+  const [technicianFilter, setTechnicianFilter] = useState<string>("All");
+  const { designations } = useDesignations();
+  const { staff } = useStaff();
+
+  /** Active staff whose designation is flagged as Repair Technician in HRM Setup. */
+  const technicians = useMemo(() => {
+    const techTitles = new Set(
+      designations.filter(d => d.isRepairTechnician).map(d => d.title.trim().toLowerCase()).filter(Boolean)
+    );
+    if (techTitles.size === 0) return [];
+    return staff
+      .filter(s => s.status === "Active" && techTitles.has((s.designation || "").trim().toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [designations, staff]);
+  const technicianById = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; designation: string }>();
+    technicians.forEach(t => m.set(t.id, { id: t.id, name: t.name, designation: t.designation }));
+    return m;
+  }, [technicians]);
   const [deleteId, setDeleteId]         = useState<string | null>(null);
   const [expanded, setExpanded]         = useState<string | null>(null);
   const [addOpen, setAddOpen]           = useState(false);
@@ -146,11 +171,12 @@ export default function RepairPage() {
   useEffect(() => { load(); }, [load]);
 
   async function saveAll(updated: RepairBooking[]) {
-    await fetch(API, {
+    const res = await fetch(API, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: updated }),
     });
+    if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
     setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   }
 
@@ -206,6 +232,7 @@ export default function RepairPage() {
     e.preventDefault();
     setAddSaving(true);
     try {
+      const tech = addForm.technicianId ? technicianById.get(addForm.technicianId) : undefined;
       const newBooking: RepairBooking = {
         id: crypto.randomUUID(),
         name: addForm.name.trim(),
@@ -220,6 +247,8 @@ export default function RepairPage() {
         estimatedDate: addForm.estimatedDate || undefined,
         notes: addForm.notes.trim() || undefined,
         publicNote: addForm.publicNote.trim() || undefined,
+        technicianId: tech?.id,
+        technicianName: tech?.name,
       };
       await saveAll([...bookings, newBooking]);
       setAddOpen(false);
@@ -243,7 +272,10 @@ export default function RepairPage() {
     const matchStatus   = statusFilter   === "All" || b.status   === statusFilter;
     const matchPriority = priorityFilter === "All" || b.priority === priorityFilter;
     const matchSource   = sourceFilter   === "All" || (b.source ?? "Online") === sourceFilter;
-    return matchSearch && matchStatus && matchPriority && matchSource;
+    const matchTech =
+      technicianFilter === "All" ||
+      (technicianFilter === "__unassigned__" ? !b.technicianId : b.technicianId === technicianFilter);
+    return matchSearch && matchStatus && matchPriority && matchSource && matchTech;
   });
 
   const stageCounts = STATUS_ORDER.reduce((acc, s) => {
@@ -392,6 +424,12 @@ export default function RepairPage() {
           <option value="Online">Online</option>
           <option value="Shop Visitor">Shop Visitor</option>
         </select>
+        <select value={technicianFilter} onChange={e => setTechnicianFilter(e.target.value)}
+          className="px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="All">All technicians</option>
+          <option value="__unassigned__">Unassigned</option>
+          {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
       </div>
 
       {/* Table */}
@@ -422,6 +460,7 @@ export default function RepairPage() {
                   <th className="px-3 py-3 text-left font-medium"><CalendarDays size={11} className="inline mr-1" />Received</th>
                   <th className="px-3 py-3 text-left font-medium">Stage</th>
                   <th className="px-3 py-3 text-left font-medium"><Flag size={11} className="inline mr-1" />Priority</th>
+                  <th className="px-3 py-3 text-left font-medium"><HardHat size={11} className="inline mr-1" />Technician</th>
                   {can("Delete Repairs") && <th className="px-3 py-3 text-center font-medium w-16">Del</th>}
                 </tr>
               </thead>
@@ -499,6 +538,45 @@ export default function RepairPage() {
                             </span>
                           )}
                         </td>
+                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                          {can("Edit Repairs") ? (
+                            <select
+                              value={b.technicianId || ""}
+                              onChange={async e => {
+                                const id = e.target.value;
+                                const tech = id ? technicianById.get(id) : undefined;
+                                setSaving(b.id);
+                                try {
+                                  const updated = bookings.map(x =>
+                                    x.id === b.id
+                                      ? { ...x, technicianId: tech?.id, technicianName: tech?.name }
+                                      : x);
+                                  await saveAll(updated);
+                                } catch {
+                                  toast({ title: "Failed to assign technician", variant: "destructive" });
+                                } finally {
+                                  setSaving(null);
+                                }
+                              }}
+                              disabled={saving === b.id}
+                              className="text-xs px-2 py-1 rounded-lg border border-border bg-background text-foreground font-medium outline-none focus:ring-2 focus:ring-blue-400 transition-all cursor-pointer disabled:opacity-60 max-w-32"
+                            >
+                              <option value="">— Unassigned —</option>
+                              {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              {/* Preserve stale assignment so the value renders even if the staff record is gone or no longer a technician */}
+                              {b.technicianId && !technicianById.has(b.technicianId) && (
+                                <option value={b.technicianId}>{b.technicianName || "(missing)"} (former)</option>
+                              )}
+                            </select>
+                          ) : b.technicianId ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 whitespace-nowrap">
+                              <HardHat size={10} />
+                              {technicianById.get(b.technicianId)?.name || b.technicianName || "—"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/50 italic">Unassigned</span>
+                          )}
+                        </td>
                         {can("Delete Repairs") && (
                           <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
                             {deleteId === b.id ? (
@@ -523,7 +601,7 @@ export default function RepairPage() {
                       {/* Expanded detail row */}
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
-                          <td colSpan={can("Delete Repairs") ? 10 : 9} className="px-4 py-4">
+                          <td colSpan={can("Delete Repairs") ? 11 : 10} className="px-4 py-4">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
                               {/* Device issue */}
@@ -787,6 +865,27 @@ export default function RepairPage() {
                     <option value="Urgent">Urgent</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Assigned technician */}
+              <div>
+                <label className={LABEL_CLS}>
+                  <HardHat size={11} className="inline mr-1 -mt-0.5" />
+                  Assigned technician
+                </label>
+                <select value={addForm.technicianId}
+                  onChange={e => setAddForm(f => ({ ...f, technicianId: e.target.value }))}
+                  className={FIELD_CLS}>
+                  <option value="">— Unassigned —</option>
+                  {technicians.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}{t.designation ? ` · ${t.designation}` : ""}</option>
+                  ))}
+                </select>
+                {technicians.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                    No technicians available. In <Link href="/hrm-setup" className="text-blue-600 hover:underline">HRM Setup</Link>, edit a designation and tick <strong>Repair Technician</strong> to make active staff selectable here.
+                  </p>
+                )}
               </div>
 
               {/* Est. date + Notes */}
