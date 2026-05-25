@@ -5,7 +5,7 @@ import {
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
   Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
   BarChart3, TrendingUp, Printer, Link2, Eye, HardHat,
-  Hammer, Receipt,
+  Hammer, Receipt, Save,
 } from "lucide-react";
 import { Link } from "wouter";
 import QRCode from "qrcode";
@@ -276,6 +276,11 @@ export default function RepairPage() {
   const [addOpen, setAddOpen]           = useState(false);
   const [addForm, setAddForm]           = useState({ ...EMPTY_FORM });
   const [addSaving, setAddSaving]       = useState(false);
+  // Per-booking draft state: edits in the expanded detail panel accumulate here
+  // and are only written to the API when the user explicitly clicks Save.
+  // Keys are booking ids; values are partial patches to merge over the saved record.
+  const [drafts, setDrafts]             = useState<Record<string, Partial<RepairBooking>>>({});
+  const [draftSaving, setDraftSaving]   = useState<string | null>(null);
 
   // Repair bookings live under the per-tenant namespace `t:{tenantId}` keyed
   // by `repair-bookings` (May 2026 hardening — previously a single global key
@@ -331,6 +336,40 @@ export default function RepairPage() {
 
   async function saveAll(updated: RepairBooking[]) {
     await enqueueSave(() => updated);
+  }
+
+  // ── Draft helpers ─────────────────────────────────────────────────────────
+  const getDraft  = (id: string): Partial<RepairBooking> => drafts[id] ?? {};
+  const hasDraft  = (id: string) => { const d = drafts[id]; return !!d && Object.keys(d).length > 0; };
+  const patchDraft = (id: string, patch: Partial<RepairBooking>) =>
+    setDrafts(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } }));
+  const clearDraft = (id: string) =>
+    setDrafts(prev => { const n = { ...prev }; delete n[id]; return n; });
+
+  /** Flush any pending draft edits for a booking to the API, then clear the
+   *  draft. Called before consequential actions (Issue Parts, Approve, Convert
+   *  to Sale) so those operations always see the latest editable values. */
+  async function flushDraft(id: string): Promise<void> {
+    const d = getDraft(id);
+    if (!d || Object.keys(d).length === 0) return;
+    await updateFields(id, d);
+    clearDraft(id);
+  }
+
+  /** Explicit Save button handler for the expanded detail panel. */
+  async function saveDraftForBooking(id: string) {
+    if (!hasDraft(id)) return;
+    setDraftSaving(id);
+    try {
+      const d = getDraft(id);
+      await updateFields(id, d);
+      clearDraft(id);
+      toast({ title: "Saved" });
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setDraftSaving(null);
+    }
   }
 
   async function printJobCard(booking: RepairBooking) {
@@ -846,7 +885,11 @@ export default function RepairPage() {
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
                           <td colSpan={can("Delete Repairs") ? 12 : 11} className="px-3 py-2.5">
-                            {/* Top info grid — 4 cols on lg+: Issue | Notes | Customer Update | Compact Details + Pipeline.
+                            {/* Merge any unsaved draft edits into a view-only copy so the user
+                                sees their changes immediately without hitting the API on every
+                                keystroke. The Save button commits the draft. */}
+                            {(() => { const bv = { ...b, ...getDraft(b.id) }; return (
+                            <>{/* Top info grid — 4 cols on lg+: Issue | Notes | Customer Update | Compact Details + Pipeline.
                                 Customer Update was previously its own full-width section below; consolidating it here
                                 reclaims ~80px and keeps related context-setting fields visually together. */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -869,11 +912,8 @@ export default function RepairPage() {
                                 {can("Edit Repairs") ? (
                                   <textarea
                                     rows={2}
-                                    defaultValue={b.notes || ""}
-                                    onBlur={e => {
-                                      const v = e.target.value.trim();
-                                      if (v !== (b.notes || "")) updateField(b.id, "notes", v);
-                                    }}
+                                    value={bv.notes || ""}
+                                    onChange={e => patchDraft(b.id, { notes: e.target.value })}
                                     placeholder="Add technician notes…"
                                     className="w-full text-xs px-2 py-1.5 rounded-md border border-border bg-white dark:bg-slate-800 text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40 resize-none leading-snug min-h-[52px]"
                                   />
@@ -892,11 +932,8 @@ export default function RepairPage() {
                                 {can("Edit Repairs") ? (
                                   <textarea
                                     rows={2}
-                                    defaultValue={b.publicNote || ""}
-                                    onBlur={e => {
-                                      const v = e.target.value.trim();
-                                      if (v !== (b.publicNote || "")) updateField(b.id, "publicNote", v);
-                                    }}
+                                    value={bv.publicNote || ""}
+                                    onChange={e => patchDraft(b.id, { publicNote: e.target.value })}
                                     placeholder="Public update (e.g. Screen ordered, ready Friday)…"
                                     className="w-full text-xs px-2 py-1.5 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 text-foreground outline-none focus:ring-1 focus:ring-amber-400 placeholder:text-muted-foreground/40 resize-none leading-snug min-h-[52px]"
                                   />
@@ -935,11 +972,8 @@ export default function RepairPage() {
                                     {can("Edit Repairs") ? (
                                       <input
                                         type="date"
-                                        defaultValue={b.estimatedDate || ""}
-                                        onBlur={e => {
-                                          const v = e.target.value;
-                                          if (v !== (b.estimatedDate || "")) updateField(b.id, "estimatedDate", v);
-                                        }}
+                                        value={bv.estimatedDate || ""}
+                                        onChange={e => patchDraft(b.id, { estimatedDate: e.target.value })}
                                         className="text-[10px] bg-transparent text-foreground outline-none focus:ring-1 focus:ring-blue-400 rounded border border-border px-1 py-0 w-[96px]"
                                       />
                                     ) : (
@@ -975,13 +1009,13 @@ export default function RepairPage() {
 
                             {/* ─── Parts & Labour — quote builder ─────────────────────── */}
                             {(() => {
-                              const totals  = calcTotals(b);
-                              const parts   = b.parts  || [];
-                              const labour  = b.labour || [];
+                              const totals  = calcTotals(bv);
+                              const parts   = bv.parts  || [];
+                              const labour  = bv.labour || [];
                               const ccy     = getSettings().currency || "AED";
                               const fmt     = (n: number) => `${ccy} ${n.toFixed(2)}`;
                               const canEdit = can("Edit Repairs");
-                              const approved = !!b.approvedAt;
+                              const approved = !!bv.approvedAt;
                               // Once parts are issued the row becomes a locked audit record:
                               // quantities, costs, and the line set itself must not change,
                               // otherwise the stock-ledger / JE / booking would drift apart.
@@ -1000,8 +1034,11 @@ export default function RepairPage() {
                                     </div>
                                     {canEdit && (
                                       <button
-                                        onClick={() => updateFields(b.id, { approvedAt: approved ? undefined : new Date().toISOString() })}
-                                        disabled={saving === b.id || (!approved && parts.length === 0 && labour.length === 0)}
+                                        onClick={async () => {
+                                          if (hasDraft(b.id)) await flushDraft(b.id);
+                                          await updateFields(b.id, { approvedAt: approved ? undefined : new Date().toISOString() });
+                                        }}
+                                        disabled={saving === b.id || draftSaving === b.id || (!approved && parts.length === 0 && labour.length === 0)}
                                         className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${approved
                                           ? "border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300"
                                           : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"}`}
@@ -1046,6 +1083,7 @@ export default function RepairPage() {
                                               */}
                                               <button
                                                 onClick={async () => {
+                                                  if (hasDraft(b.id)) await flushDraft(b.id);
                                                   setSaving(b.id);
                                                   try {
                                                     // Tag each line with its array index as a stable lineId so the
@@ -1106,7 +1144,7 @@ export default function RepairPage() {
                                               <button
                                                 onClick={() => {
                                                   const next: typeof parts = [...parts, { productId: "", productName: "", qty: 1, unitCost: 0, unitPrice: 0, source: "stock" }];
-                                                  updateFields(b.id, { parts: next });
+                                                  patchDraft(b.id, { parts: next });
                                                 }}
                                                 disabled={alreadyIssued}
                                                 title={alreadyIssued ? "Parts already issued — re-issuing not supported in this PR" : ""}
@@ -1144,7 +1182,7 @@ export default function RepairPage() {
                                               const editableRow = partsEditable;
                                               const patchPart = (patch: Partial<typeof line>) => {
                                                 const next = parts.map((p, i) => i === idx ? { ...p, ...patch } : p);
-                                                updateFields(b.id, { parts: next });
+                                                patchDraft(b.id, { parts: next });
                                               };
                                               const onPickProduct = (pid: string) => {
                                                 const p = productById.get(pid);
@@ -1199,7 +1237,7 @@ export default function RepairPage() {
                                                     <td className="py-1.5 px-1 text-center">
                                                       {editableRow && (
                                                         <button
-                                                          onClick={() => updateFields(b.id, { parts: parts.filter((_, i) => i !== idx) })}
+                                                          onClick={() => patchDraft(b.id, { parts: parts.filter((_, i) => i !== idx) })}
                                                           disabled={saving === b.id}
                                                           className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
                                                           title="Remove part">
@@ -1227,7 +1265,7 @@ export default function RepairPage() {
                                         <button
                                           onClick={() => {
                                             const next: typeof labour = [...labour, { description: "", hours: 1, rate: 0, amount: 0 }];
-                                            updateFields(b.id, { labour: next });
+                                            patchDraft(b.id, { labour: next });
                                           }}
                                           className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors"
                                         >
@@ -1256,7 +1294,7 @@ export default function RepairPage() {
                                                   merged.amount = (merged.hours || 0) * (merged.rate || 0);
                                                 }
                                                 const next = labour.map((l, i) => i === idx ? merged : l);
-                                                updateFields(b.id, { labour: next });
+                                                patchDraft(b.id, { labour: next });
                                               };
                                               return (
                                                 <tr key={idx} className="align-middle">
@@ -1278,7 +1316,7 @@ export default function RepairPage() {
                                                   {canEdit && (
                                                     <td className="py-1.5 px-1 text-center">
                                                       <button
-                                                        onClick={() => updateFields(b.id, { labour: labour.filter((_, i) => i !== idx) })}
+                                                        onClick={() => patchDraft(b.id, { labour: labour.filter((_, i) => i !== idx) })}
                                                         disabled={saving === b.id}
                                                         className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
                                                         title="Remove service">
@@ -1309,21 +1347,19 @@ export default function RepairPage() {
                                       {canEdit ? (
                                         <div className="flex items-center gap-1.5">
                                           <span className="text-muted-foreground text-[11px] font-medium">{ccy}</span>
-                                          {/* keyed by persisted value so programmatic clears/changes remount the input */}
                                           <input type="number" min="0" step="0.01"
-                                            key={`qt-${b.quotedTotal ?? ""}`}
-                                            defaultValue={b.quotedTotal ?? ""}
+                                            value={bv.quotedTotal ?? ""}
                                             placeholder={totals.grand.toFixed(2)}
                                             disabled={saving === b.id}
-                                            onBlur={e => {
-                                              const raw = e.target.value.trim();
+                                            onChange={e => {
+                                              const raw = e.target.value;
                                               const val = raw === "" ? undefined : (parseFloat(raw) || 0);
-                                              if (val !== b.quotedTotal) updateField(b.id, "quotedTotal", val);
+                                              patchDraft(b.id, { quotedTotal: val });
                                             }}
                                             className="flex-1 text-right text-sm px-2 py-1.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
-                                          {b.quotedTotal !== undefined && (
+                                          {bv.quotedTotal !== undefined && (
                                             <button
-                                              onClick={() => updateField(b.id, "quotedTotal", undefined)}
+                                              onClick={() => patchDraft(b.id, { quotedTotal: undefined })}
                                               disabled={saving === b.id}
                                               className="text-[10px] text-muted-foreground hover:text-red-600 px-1 py-0.5 rounded transition-colors"
                                               title="Clear quoted total">
@@ -1332,11 +1368,11 @@ export default function RepairPage() {
                                           )}
                                         </div>
                                       ) : (
-                                        <p className="text-sm font-semibold tabular-nums">{b.quotedTotal !== undefined ? fmt(b.quotedTotal) : <span className="text-muted-foreground italic font-normal">Not quoted</span>}</p>
+                                        <p className="text-sm font-semibold tabular-nums">{bv.quotedTotal !== undefined ? fmt(bv.quotedTotal) : <span className="text-muted-foreground italic font-normal">Not quoted</span>}</p>
                                       )}
-                                      {b.quotedTotal !== undefined && Math.abs(b.quotedTotal - totals.grand) > 0.005 && (
+                                      {bv.quotedTotal !== undefined && Math.abs(bv.quotedTotal - totals.grand) > 0.005 && (
                                         <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
-                                          Quoted differs from computed by {fmt(Math.abs(b.quotedTotal - totals.grand))}
+                                          Quoted differs from computed by {fmt(Math.abs((bv.quotedTotal ?? 0) - totals.grand))}
                                         </p>
                                       )}
                                     </div>
@@ -1378,15 +1414,16 @@ export default function RepairPage() {
                                     </a>
                                   </Link>
                                 ) : (() => {
-                                  const partsCount    = (b.parts ?? []).length;
-                                  const partsIssued   = (b.partsIssueJeIds ?? []).length > 0;
-                                  const labourCount   = (b.labour ?? []).length;
-                                  const approved      = !!b.approvedAt;
-                                  const hasCustomerId = !!b.customerId;
+                                  const partsCount    = (bv.parts ?? []).length;
+                                  const partsIssued   = (bv.partsIssueJeIds ?? []).length > 0;
+                                  const labourCount   = (bv.labour ?? []).length;
+                                  const approved      = !!bv.approvedAt;
+                                  const hasCustomerId = !!bv.customerId;
                                   const partsBlocker  = partsCount > 0 && !partsIssued;
                                   const nothingToBill = partsCount === 0 && labourCount === 0;
                                   const disabled =
                                     saving === b.id ||
+                                    draftSaving === b.id ||
                                     !approved ||
                                     !hasCustomerId ||
                                     partsBlocker ||
@@ -1403,24 +1440,25 @@ export default function RepairPage() {
                                   return can("Edit Repairs") && (
                                     <button
                                       onClick={async () => {
+                                        if (hasDraft(b.id)) await flushDraft(b.id);
                                         setSaving(b.id);
                                         try {
                                           const sale = convertRepairToSale({
                                             bookingId:     b.id,
-                                            customerId:    b.customerId!,
+                                            customerId:    bv.customerId!,
                                             date:          new Date().toISOString().slice(0, 10),
-                                            approved:      !!b.approvedAt,
-                                            partsCount:    (b.parts ?? []).length,
-                                            partsIssued:   (b.partsIssueJeIds ?? []).length > 0,
+                                            approved:      !!bv.approvedAt,
+                                            partsCount:    (bv.parts ?? []).length,
+                                            partsIssued:   (bv.partsIssueJeIds ?? []).length > 0,
                                             // Ignore stale saleId pointing to a deleted sale — allow re-conversion.
-                                            currentSaleId: b.saleId && saleIdSet.has(b.saleId) ? b.saleId : undefined,
-                                            parts: (b.parts ?? []).map(p => ({
+                                            currentSaleId: bv.saleId && saleIdSet.has(bv.saleId) ? bv.saleId : undefined,
+                                            parts: (bv.parts ?? []).map(p => ({
                                               productName: p.productName || "(unnamed)",
                                               sku:         p.productId,
                                               qty:         p.qty,
                                               unitPrice:   p.unitPrice,
                                             })),
-                                            labour: (b.labour ?? []).map(l => ({
+                                            labour: (bv.labour ?? []).map(l => ({
                                               description: l.description,
                                               amount:      l.amount,
                                             })),
@@ -1449,6 +1487,17 @@ export default function RepairPage() {
                                     </button>
                                   );
                                 })()}
+                                {can("Edit Repairs") && hasDraft(b.id) && (
+                                  <button
+                                    onClick={() => saveDraftForBooking(b.id)}
+                                    disabled={draftSaving === b.id || saving === b.id}
+                                    className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-60">
+                                    {draftSaving === b.id
+                                      ? <Loader2 size={11} className="animate-spin" />
+                                      : <Save size={11} />}
+                                    Save
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setExpanded(null)}
                                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -1456,6 +1505,7 @@ export default function RepairPage() {
                                 </button>
                               </div>
                             </div>
+                            </>);})()}
                           </td>
                         </tr>
                       )}
