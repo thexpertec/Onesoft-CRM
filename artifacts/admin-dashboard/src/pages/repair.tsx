@@ -654,6 +654,7 @@ export default function RepairPage() {
               <thead>
                 <tr className="border-b border-border bg-gray-50 dark:bg-muted/30 text-xs text-muted-foreground">
                   <th className="px-3 py-3 text-left font-medium w-8">#</th>
+                  <th className="px-3 py-3 text-left font-medium">Job ID</th>
                   <th className="px-3 py-3 text-left font-medium"><User size={11} className="inline mr-1" />Customer</th>
                   <th className="px-3 py-3 text-left font-medium"><Phone size={11} className="inline mr-1" />Phone</th>
                   <th className="px-3 py-3 text-left font-medium"><Tag size={11} className="inline mr-1" />Service</th>
@@ -682,6 +683,11 @@ export default function RepairPage() {
                         onClick={() => setExpanded(isOpen ? null : b.id)}
                         className="hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors group cursor-pointer">
                         <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-3">
+                          <span className="inline-flex items-center font-mono text-[11px] font-semibold tracking-wide px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                            RJ-{b.id.slice(0, 8).toUpperCase()}
+                          </span>
+                        </td>
                         <td className="px-3 py-3">
                           <div className="font-medium text-foreground text-sm">{b.name}</div>
                           {b.tenantId && <div className="text-[10px] text-muted-foreground/60 mt-0.5 truncate max-w-28">{b.tenantId}</div>}
@@ -802,7 +808,7 @@ export default function RepairPage() {
                       {/* Expanded detail row */}
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
-                          <td colSpan={can("Delete Repairs") ? 11 : 10} className="px-3 py-2.5">
+                          <td colSpan={can("Delete Repairs") ? 12 : 11} className="px-3 py-2.5">
                             {/* Top info grid — 4 cols on lg+: Issue | Notes | Customer Update | Compact Details + Pipeline.
                                 Customer Update was previously its own full-width section below; consolidating it here
                                 reclaims ~80px and keeps related context-setting fields visually together. */}
