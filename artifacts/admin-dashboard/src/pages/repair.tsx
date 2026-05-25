@@ -649,22 +649,22 @@ export default function RepairPage() {
         </div>
       ) : (
         <div className="rounded-xl border border-border overflow-hidden bg-white dark:bg-card">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="w-full">
+            <table className="w-full text-sm table-auto">
               <thead>
-                <tr className="border-b border-border bg-gray-50 dark:bg-muted/30 text-xs text-muted-foreground">
-                  <th className="px-3 py-3 text-left font-medium w-8">#</th>
-                  <th className="px-3 py-3 text-left font-medium">Job ID</th>
-                  <th className="px-3 py-3 text-left font-medium"><User size={11} className="inline mr-1" />Customer</th>
-                  <th className="px-3 py-3 text-left font-medium"><Phone size={11} className="inline mr-1" />Phone</th>
-                  <th className="px-3 py-3 text-left font-medium"><Tag size={11} className="inline mr-1" />Service</th>
-                  <th className="px-3 py-3 text-left font-medium"><MessageSquare size={11} className="inline mr-1" />Issue</th>
-                  <th className="px-3 py-3 text-left font-medium">Source</th>
-                  <th className="px-3 py-3 text-left font-medium"><CalendarDays size={11} className="inline mr-1" />Received</th>
-                  <th className="px-3 py-3 text-left font-medium">Stage</th>
-                  <th className="px-3 py-3 text-left font-medium"><Flag size={11} className="inline mr-1" />Priority</th>
-                  <th className="px-3 py-3 text-left font-medium"><HardHat size={11} className="inline mr-1" />Technician</th>
-                  {can("Delete Repairs") && <th className="px-3 py-3 text-center font-medium w-16">Del</th>}
+                <tr className="border-b border-border bg-gray-50 dark:bg-muted/30 text-[11px] text-muted-foreground">
+                  <th className="px-1.5 py-2.5 text-left font-medium w-6">#</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium">Job ID</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><User size={10} className="inline mr-0.5" />Customer</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><Phone size={10} className="inline mr-0.5" />Phone</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><Tag size={10} className="inline mr-0.5" />Service</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><MessageSquare size={10} className="inline mr-0.5" />Issue</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium">Source</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><CalendarDays size={10} className="inline mr-0.5" />Received</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium">Stage</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><Flag size={10} className="inline mr-0.5" />Priority</th>
+                  <th className="px-1.5 py-2.5 text-left font-medium"><HardHat size={10} className="inline mr-0.5" />Technician</th>
+                  {can("Delete Repairs") && <th className="px-1.5 py-2.5 text-center font-medium w-10"></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -682,36 +682,38 @@ export default function RepairPage() {
                       <tr key={b.id}
                         onClick={() => setExpanded(isOpen ? null : b.id)}
                         className="hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors group cursor-pointer">
-                        <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
-                        <td className="px-3 py-3">
-                          <span className="inline-flex items-center font-mono text-[11px] font-semibold tracking-wide px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                        <td className="px-1.5 py-2.5 text-[11px] text-muted-foreground tabular-nums">{i + 1}</td>
+                        <td className="px-1.5 py-2.5">
+                          <span className="inline-flex items-center font-mono text-[10px] font-semibold tracking-tight px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
                             RJ-{b.id.slice(0, 8).toUpperCase()}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
-                          <div className="font-medium text-foreground text-sm">{b.name}</div>
-                          {b.tenantId && <div className="text-[10px] text-muted-foreground/60 mt-0.5 truncate max-w-28">{b.tenantId}</div>}
+                        <td className="px-1.5 py-2.5 max-w-[140px]">
+                          <div className="font-medium text-foreground text-xs truncate" title={b.name}>{b.name}</div>
                         </td>
-                        <td className="px-3 py-3 text-muted-foreground font-mono text-xs">{b.phone}</td>
-                        <td className="px-3 py-3">
-                          <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800 font-medium whitespace-nowrap">
-                            <Wrench size={9} /> {b.service}
+                        <td className="px-1.5 py-2.5 text-muted-foreground font-mono text-[11px] whitespace-nowrap">{b.phone}</td>
+                        <td className="px-1.5 py-2.5">
+                          <span className="inline-flex items-center gap-0.5 text-[11px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-800 font-medium leading-tight">
+                            <Wrench size={9} className="shrink-0" /> {b.service}
                           </span>
                         </td>
-                        <td className="px-3 py-3 max-w-40">
+                        <td className="px-1.5 py-2.5 max-w-[160px]">
                           {b.deviceIssue ? (
-                            <span className="text-xs text-foreground/80 line-clamp-2 leading-snug">{b.deviceIssue}</span>
+                            <span className="text-[11px] text-foreground/80 line-clamp-2 leading-snug" title={b.deviceIssue}>{b.deviceIssue}</span>
                           ) : (
-                            <span className="text-xs text-muted-foreground/40 italic">—</span>
+                            <span className="text-[11px] text-muted-foreground/40 italic">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-3">
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border whitespace-nowrap ${srcMeta.color}`}>
-                            <SrcIcon size={10} /> {src}
+                        <td className="px-1.5 py-2.5">
+                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded border leading-tight ${srcMeta.color}`}>
+                            <SrcIcon size={9} className="shrink-0" /> {src}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDate(b.createdAt)}</td>
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2.5 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">
+                          <div>{formatDateShort(b.createdAt)}</div>
+                          <div className="text-[10px] text-muted-foreground/60">{new Date(b.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
+                        </td>
+                        <td className="px-1.5 py-2.5" onClick={e => e.stopPropagation()}>
                           {can("Edit Repairs") ? (
                             <select
                               value={b.status}
@@ -785,7 +787,7 @@ export default function RepairPage() {
                           )}
                         </td>
                         {can("Delete Repairs") && (
-                          <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                          <td className="px-1.5 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             {deleteId === b.id ? (
                               <div className="flex items-center justify-center gap-1">
                                 <button onClick={() => confirmDelete(b.id)} disabled={saving === b.id}
