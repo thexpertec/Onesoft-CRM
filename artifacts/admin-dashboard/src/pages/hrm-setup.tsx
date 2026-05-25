@@ -228,6 +228,34 @@ export default function HrmSetupPage() {
     if (!editKey || !editDraft) return;
     const row = rows.find(r => r.key === editKey);
     if (!row) return;
+    // ── Duplicate guards ──────────────────────────────────────────────
+    // Case-insensitive name compare; "Repair Service" === "repair service".
+    const norm = (s: string) => s.trim().toLowerCase();
+    const newDeptName  = editDraft.deptName.trim();
+    const newDesigName = editDraft.desigTitle.trim();
+    const newRoleName  = editDraft.roleName.trim();
+    if (newRoleName && norm(newRoleName) !== norm(row.roleName)
+        && roles.some(r => norm(r.name) === norm(newRoleName))) {
+      toast({ title: "Duplicate role", description: `A role named "${newRoleName}" already exists.`, variant: "destructive" });
+      return;
+    }
+    if (newDeptName && (!row.deptId || norm(newDeptName) !== norm(row.deptName))
+        && departments.some(d => d.id !== row.deptId && norm(d.name) === norm(newDeptName))) {
+      toast({ title: "Duplicate department", description: `A department named "${newDeptName}" already exists.`, variant: "destructive" });
+      return;
+    }
+    if (newDesigName
+        && designations.some(d =>
+          d.id !== row.desigId
+          && norm(d.title) === norm(newDesigName)
+          && norm(d.department || "") === norm(newDeptName || row.deptName))) {
+      toast({
+        title: "Duplicate designation",
+        description: `"${newDesigName}" already exists under "${newDeptName || row.deptName || "(no department)"}".`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     // ── Role persistence ──────────────────────────────────────────────
     // For role rows, persist color + permissions + description against
@@ -316,12 +344,26 @@ export default function HrmSetupPage() {
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.message || String(e), variant: "destructive" });
     }
-  }, [editKey, editDraft, rows, roles, departments, editRole, editDepartment, addDepartment, editDesignation, addDesignation, toast]);
+  }, [editKey, editDraft, rows, roles, departments, designations, editRole, editDepartment, addDepartment, editDesignation, addDesignation, toast]);
 
   // ── Save new row ──────────────────────────────────────────────────────────
   const saveNew = useCallback(() => {
     if (!newDraft.desigTitle.trim() && !newDraft.deptName.trim() && !newDraft.roleName.trim()) {
       toast({ title: "Fill in at least one field", variant: "destructive" }); return;
+    }
+
+    // ── Duplicate guards (case-insensitive on name) ────────────────────
+    const norm = (s: string) => s.trim().toLowerCase();
+    const dName = newDraft.deptName.trim();
+    const dTitle = newDraft.desigTitle.trim();
+    if (dTitle && designations.some(d =>
+      norm(d.title) === norm(dTitle) && norm(d.department || "") === norm(dName))) {
+      toast({
+        title: "Duplicate designation",
+        description: `"${dTitle}" already exists under "${dName || "(no department)"}".`,
+        variant: "destructive",
+      });
+      return;
     }
 
     // Find or create role
@@ -359,7 +401,7 @@ export default function HrmSetupPage() {
     setAddingRow(false);
     setNewDraft(BLANK());
     toast({ title: "Row added" });
-  }, [newDraft, roles, departments, addRole, editRole, addDepartment, editDepartment, addDesignation, toast]);
+  }, [newDraft, roles, departments, designations, addRole, editRole, addDepartment, editDepartment, addDesignation, toast]);
 
   // ── Delete row ────────────────────────────────────────────────────────────
   const confirmDelete = useCallback(() => {
