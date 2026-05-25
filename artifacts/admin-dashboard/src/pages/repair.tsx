@@ -1161,7 +1161,6 @@ export default function RepairPage() {
                                                     {editableRow ? (
                                                       <input type="number" min="0" step="1" value={line.qty}
                                                         onChange={e => patchPart({ qty: parseInt(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
                                                         className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.qty}</span>}
                                                   </td>
@@ -1169,7 +1168,6 @@ export default function RepairPage() {
                                                     {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitPrice}
                                                         onChange={e => patchPart({ unitPrice: parseFloat(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
                                                         className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.unitPrice.toFixed(2)}</span>}
                                                   </td>
@@ -1244,7 +1242,6 @@ export default function RepairPage() {
                                                       <input type="text" placeholder="e.g. Screen replacement"
                                                         value={line.description}
                                                         onChange={e => patchLab({ description: e.target.value })}
-                                                        disabled={saving === b.id}
                                                         className="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40" />
                                                     ) : <span className="text-foreground block truncate" title={line.description}>{line.description || "—"}</span>}
                                                   </td>
@@ -1252,7 +1249,6 @@ export default function RepairPage() {
                                                     {canEdit ? (
                                                       <input type="number" min="0" step="0.01" value={line.amount}
                                                         onChange={e => patchLab({ amount: parseFloat(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
                                                         className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
                                                     ) : <span className="tabular-nums font-semibold">{line.amount.toFixed(2)}</span>}
                                                   </td>
