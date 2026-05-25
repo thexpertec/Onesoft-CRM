@@ -476,6 +476,22 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Not found" });
     }
     const before = beforeRes.rows[0] as Record<string, unknown>;
+
+    // Repair Parts Issue JEs (reference prefix "AUTO-REP-") are paired with
+    // stock-ledger rows + a global-KV repair-booking's `partsIssueJeIds`
+    // array that this layer cannot mutate. Refuse the delete entirely so
+    // stock, JE, and booking stay internally consistent — the user must
+    // undo via the booking (future un-issue flow). Mirrors the store-side
+    // guard in `deleteJournalEntry` so non-UI clients can't bypass it.
+    const _ref = typeof before.reference === "string" ? before.reference : "";
+    if (_ref.startsWith("AUTO-REP-")) {
+      await client.query("ROLLBACK");
+      const bookingId = _ref.slice("AUTO-REP-".length);
+      return res.status(409).json({
+        error: `Cannot delete this Journal Entry — it was auto-posted by a Repair Parts Issue (booking ${bookingId.slice(0, 8).toUpperCase()}). Undo the parts issuance from the Repair Bookings page instead.`,
+      });
+    }
+
     if (before.status === "posted") {
       await client.query("ROLLBACK");
       return res.status(409).json({
