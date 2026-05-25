@@ -219,15 +219,19 @@ function PurchasesRedirect() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, currentTenantId } = useAuth();
+  const { isAuthenticated, isBootstrapping, currentTenantId } = useAuth();
   const [location, navigate] = useLocation();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Hold the /login redirect while the auth context is still hydrating
+    // the user record from the API (tenant/staff/agent logins need a sync
+    // round-trip after a fresh page load). Without this gate, refresh would
+    // briefly flash the login screen before bouncing back via ?from=…
+    if (!isAuthenticated && !isBootstrapping) {
       navigate(`/login?from=${encodeURIComponent(location)}`, { replace: true });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isBootstrapping]);
 
   // Run one-time backfills on login. Each backfill self-skips when the cache is
   // unsafe (failed writes or partial COA load) — see _isSafeToHeal() in store.ts.
@@ -322,7 +326,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(id);
   }, [isAuthenticated]);
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated) {
+    // Still resolving the user from the API — render a neutral skeleton so
+    // the auth page doesn't flash on refresh for tenant/staff/agent logins.
+    if (isBootstrapping) return <PageSkeleton />;
+    return null;
+  }
   return <>{children}</>;
 }
 

@@ -40,6 +40,13 @@ export type ImpersonateAs = "admin" | "staff" | "sales_agent";
 
 type AuthContextType = {
   isAuthenticated:   boolean;
+  /** True on first page load while sessionStorage says we're logged in but
+   *  the user record hasn't been resolved yet — happens for tenant/staff/
+   *  agent logins where the user identity lives in admin-tenants / staff /
+   *  sales-agents and must be fetched from the API before isAuthenticated
+   *  can flip to true. Route guards should hold off the /login redirect
+   *  while this is true to avoid the auth-page flicker on refresh. */
+  isBootstrapping:   boolean;
   currentUser:       AdminUser | null;
   isSuperAdmin:      boolean;
   isManager:         boolean;         // multi-tenant manager role
@@ -64,6 +71,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({
   isAuthenticated:    false,
+  isBootstrapping:    false,
   currentUser:        null,
   isSuperAdmin:       false,
   isManager:          false,
@@ -109,6 +117,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return null;
     }
+  });
+
+  // ── Bootstrap flag ──────────────────────────────────────────────────────────
+  // On a fresh page load, `_memRaw` is empty — so for tenant/staff/agent logins
+  // (where the user identity lives in admin-tenants / admin-team-members /
+  // admin-sales-agents) the lazy initializer above returns null because the
+  // backing list hasn't been hydrated from the API yet. Without this flag,
+  // `RequireAuth` would see isAuthenticated=false and bounce to /login, then
+  // bounce back once the sync resolves — producing the auth-page flicker.
+  // Initialise true only when sessionStorage marks us as logged in but the
+  // user couldn't be resolved synchronously; the mount-time sync useEffect
+  // below flips it to false in its .finally.
+  const [isBootstrapping, setIsBootstrapping] = useState<boolean>(() => {
+    try {
+      const isAuth = _ss.getItem(AUTH_KEY) === "true";
+      const userId = _ss.getItem(AUTH_USER_ID);
+      if (!isAuth || !userId) return false;
+      return getAdminUserById(userId) == null;
+    } catch { return false; }
   });
 
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(
@@ -228,7 +255,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // here (after _activeTenantId has been restored) was the second source of
       // the data-loss bug — it ran in the wrong tenant context and could corrupt
       // global-namespace accounts. Removed.
-      // After sync, re-read the user in case their record was updated in DB
+      // After sync, re-read the user in case their record was updated in DB.
+      // For tenant/staff/agent logins this is also the first time the user can
+      // be resolved at all (the backing list was empty before the sync).
       const refreshed = getAdminUserById(userId);
       if (refreshed) {
         setCurrentUser(refreshed);
@@ -237,6 +266,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActivityUser(refreshed.fullName || refreshed.username);
       }
       setIsSyncing(false);
+      // Release the route-guard hold regardless of outcome — if the user
+      // genuinely couldn't be resolved (e.g. tenant deleted server-side),
+      // letting isAuthenticated stay false and falling through to /login is
+      // the correct behaviour rather than spinning forever.
+      setIsBootstrapping(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -537,7 +571,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      isAuthenticated, currentUser, isSuperAdmin,
+      isAuthenticated, isBootstrapping, currentUser, isSuperAdmin,
       isManager, assignedTenants,
       isStaff, isSalesAgent, currentAgentId, staffPermissions,
       currentTenantId, currentTenant,
