@@ -5170,6 +5170,10 @@ export type SaleReturnItem = {
   unitPrice:   string;
   discount:    string;
   costPrice?:  string;
+  /** Mirrors SaleItem.revenueAccountId — preserved from the original sale so
+   *  the return JE reverses against the same revenue ledger (e.g. labour
+   *  rows from a repair-derived invoice debit `sys-3110` on return). */
+  revenueAccountId?: string;
 };
 
 export type SaleReturnStatus = "draft" | "posted";

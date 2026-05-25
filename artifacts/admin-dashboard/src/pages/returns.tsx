@@ -382,6 +382,9 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
       costPrice:   item.costPrice ||
                    products.find(p => p.sku === item.sku ||
                      p.variants?.some(v => v.sku === item.sku))?.costPrice || "",
+      // Preserve revenue-ledger override so the return JE reverses against
+      // the same ledger the original sale credited (e.g. sys-3110 for labour).
+      ...(item.revenueAccountId ? { revenueAccountId: item.revenueAccountId } : {}),
     })));
     setStep(2);
   };
@@ -444,22 +447,40 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
         sr.returnNumber
       );
 
-      const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+      // Mirror invoices.tsx buildSaleCatLines: items carrying revenueAccountId
+      // (e.g. labour rows from a repair-derived invoice) bucket per-ledger so
+      // the reversal hits the same ledger originally credited (e.g. sys-3110).
+      type RetEntry = { category: string; subtotal: number; costTotal: number; revenueLedgerId?: string };
+      const catMap      = new Map<string, RetEntry>();
+      const overrideMap = new Map<string, RetEntry>();
       for (const it of effectiveItems) {
-        const prod  = products.find(p => p.sku === it.sku || p.variants?.some(v => v.sku === it.sku));
-        const qty   = parseFloat(it.qty) || 0;
-        const price = parseFloat(it.unitPrice) || 0;
-        const disc  = parseFloat(it.discount) || 0;
+        const prod    = products.find(p => p.sku === it.sku || p.variants?.some(v => v.sku === it.sku));
+        const qty     = parseFloat(it.qty) || 0;
+        const price   = parseFloat(it.unitPrice) || 0;
+        const disc    = parseFloat(it.discount) || 0;
         const lineNet = qty * price * (1 - disc / 100);
-        const cp    = parseFloat(it.costPrice || "0") || 0;
-        const cat   = prod?.category?.trim() || "Uncategorised";
-        const prev  = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
-        catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + qty * cp });
+        const cp      = parseFloat(it.costPrice || "0") || 0;
+        const override = (it as { revenueAccountId?: string }).revenueAccountId;
+        if (override) {
+          const label = it.productName || "Service";
+          const e = overrideMap.get(override)
+                ?? { category: label, subtotal: 0, costTotal: 0, revenueLedgerId: override };
+          e.subtotal  += lineNet;
+          e.costTotal += qty * cp;
+          overrideMap.set(override, e);
+        } else {
+          const cat = prod?.category?.trim() || "Uncategorised";
+          const e   = catMap.get(cat) ?? { category: cat, subtotal: 0, costTotal: 0 };
+          e.subtotal  += lineNet;
+          e.costTotal += qty * cp;
+          catMap.set(cat, e);
+        }
       }
-      const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
-        category,
+      const categoryLines = [...catMap.values(), ...overrideMap.values()].map(v => ({
+        category: v.category,
         subtotal:  parseFloat(v.subtotal.toFixed(2)),
         costTotal: parseFloat(v.costTotal.toFixed(2)),
+        ...(v.revenueLedgerId ? { revenueLedgerId: v.revenueLedgerId } : {}),
       }));
 
       const je = autoPostSaleReturnJE({

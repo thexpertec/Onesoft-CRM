@@ -2699,7 +2699,7 @@ export function InvoiceFormPage() {
         deliveryAmount: parseFloat((shipping + handling).toFixed(2)),
         amountPaid: paidSoFar,
         costTotal: catLines.reduce((s, c) => s + c.costTotal, 0),
-        categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+        categoryLines: catLines,
       });
       if (je) { extraUpdates.jeId = je.id; extraUpdates.jeUsesAR = je.usesAR; }
     }
@@ -2872,26 +2872,10 @@ export function InvoiceFormPage() {
     }
 
     // ── Build per-category breakdown for accurate ledger posting ─────────────
-    const allProducts = getProducts();
-    const buildCategoryLines = (items: SaleItem[]) => {
-      const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
-      for (const item of items) {
-        const prod    = findProductForItem(item, allProducts);
-        const cat     = prod?.category?.trim() || "Uncategorised";
-        const qty     = parseFloat(item.qty) || 0;
-        const price   = parseFloat(item.unitPrice) || 0;
-        const disc    = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
-        const lineNet = qty * price * (1 - disc);
-        const lineCost = effectiveItemCost(item, prod) * qty;
-        const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: qty * price };
-        entry.subtotal      += lineNet;
-        entry.costTotal     += lineCost;
-        entry.purchaseTotal  = (entry.purchaseTotal || 0) + qty * price;
-        catMap.set(cat, entry);
-      }
-      return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
-    };
-    const catLines = buildCategoryLines(inv.items);
+    // Uses the shared builder so labour rows with `revenueAccountId` are
+    // routed to their override ledger (e.g. sys-3110) instead of folding
+    // into the product category's revenue ledger.
+    const catLines = buildSaleCatLines(inv.items);
 
     // ── Sale invoices: deduct stock when dispatched ───────────────────────────
     if (inv.invoiceType !== "purchase" &&
@@ -2941,7 +2925,7 @@ export function InvoiceFormPage() {
           deliveryAmount: parseFloat(((computeTotals(inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee).shipping) + (computeTotals(inv.items, inv.taxRate, inv.amountPaid || "0", inv.shippingFee, inv.handlingFee).handling)).toFixed(2)),
           amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
-          categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+          categoryLines: catLines,
         });
         if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
       }
@@ -2973,7 +2957,7 @@ export function InvoiceFormPage() {
             // grandTotal === paidAmt here, so no outstanding balance → Cash/Bank debit
             amountPaid: paidAmt,
             costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
-            categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+            categoryLines: catLines,
           });
           if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
         }
@@ -3007,23 +2991,10 @@ export function InvoiceFormPage() {
     };
 
     // ── Build per-category breakdown ──────────────────────────────────────────
-    const allProds = getProducts();
-    const catMap = new Map<string, { subtotal: number; costTotal: number; purchaseTotal: number }>();
-    for (const item of inv.items) {
-      const prod    = findProductForItem(item, allProds);
-      const cat     = prod?.category?.trim() || "Uncategorised";
-      const qty     = parseFloat(item.qty) || 0;
-      const price   = parseFloat(item.unitPrice) || 0;
-      const disc    = parseFloat((item as {discountPct?: string}).discountPct || "0") / 100;
-      const lineNet  = qty * price * (1 - disc);
-      const lineCost = effectiveItemCost(item, prod) * qty;
-      const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0, purchaseTotal: 0 };
-      entry.subtotal      += lineNet;
-      entry.costTotal     += lineCost;
-      entry.purchaseTotal += qty * price;
-      catMap.set(cat, entry);
-    }
-    const catLines = Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
+    // Shared builder — honours per-item `revenueAccountId` overrides so labour
+    // rows from repair-derived invoices credit sys-3110 instead of the
+    // product-category revenue ledger.
+    const catLines = buildSaleCatLines(inv.items);
 
     // ── Stock management (sales only — purchases receive stock via "Mark as Received") ──
     if (!inv.stockDeducted && inv.invoiceType !== "purchase") {
@@ -3054,7 +3025,7 @@ export function InvoiceFormPage() {
           deliveryAmount: parseFloat((_s3 + _h3).toFixed(2)),
           amountPaid: paidSoFar,
           costTotal: parseFloat(catLines.reduce((s, c) => s + c.costTotal, 0).toFixed(2)),
-          categoryLines: catLines.map(c => ({ category: c.category, subtotal: c.subtotal, costTotal: c.costTotal })),
+          categoryLines: catLines,
         });
         if (je) { updates.jeId = je.id; updates.jeUsesAR = je.usesAR; }
 
