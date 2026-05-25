@@ -1105,7 +1105,6 @@ export default function RepairPage() {
                                             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
                                               <th className="text-left py-1.5 pr-1.5 font-medium">Product</th>
                                               <th className="text-right py-1.5 px-1 font-medium w-12">Qty</th>
-                                              <th className="text-right py-1.5 px-1 font-medium w-16">Cost</th>
                                               <th className="text-right py-1.5 px-1 font-medium w-16">Price</th>
                                               <th className="text-right py-1.5 px-1 font-medium w-16">Subtotal</th>
                                               {canEdit && <th className="w-6" />}
@@ -1168,14 +1167,6 @@ export default function RepairPage() {
                                                   </td>
                                                   <td className="py-1.5 px-1 text-right">
                                                     {editableRow ? (
-                                                      <input type="number" min="0" step="0.01" value={line.unitCost}
-                                                        onChange={e => patchPart({ unitCost: parseFloat(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
-                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
-                                                    ) : <span className="tabular-nums">{line.unitCost.toFixed(2)}</span>}
-                                                  </td>
-                                                  <td className="py-1.5 px-1 text-right">
-                                                    {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitPrice}
                                                         onChange={e => patchPart({ unitPrice: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
@@ -1231,9 +1222,7 @@ export default function RepairPage() {
                                           <thead>
                                             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
                                               <th className="text-left py-1.5 pr-1.5 font-medium">Description</th>
-                                              <th className="text-right py-1.5 px-1 font-medium w-12">Hours</th>
-                                              <th className="text-right py-1.5 px-1 font-medium w-16">Rate</th>
-                                              <th className="text-right py-1.5 px-1 font-medium w-16">Amount</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-20">Amount</th>
                                               {canEdit && <th className="w-6" />}
                                             </tr>
                                           </thead>
@@ -1258,22 +1247,6 @@ export default function RepairPage() {
                                                         disabled={saving === b.id}
                                                         className="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40" />
                                                     ) : <span className="text-foreground block truncate" title={line.description}>{line.description || "—"}</span>}
-                                                  </td>
-                                                  <td className="py-1.5 px-1 text-right">
-                                                    {canEdit ? (
-                                                      <input type="number" min="0" step="0.25" value={line.hours ?? 0}
-                                                        onChange={e => patchLab({ hours: parseFloat(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
-                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
-                                                    ) : <span className="tabular-nums">{line.hours ?? "—"}</span>}
-                                                  </td>
-                                                  <td className="py-1.5 px-1 text-right">
-                                                    {canEdit ? (
-                                                      <input type="number" min="0" step="0.01" value={line.rate}
-                                                        onChange={e => patchLab({ rate: parseFloat(e.target.value) || 0 })}
-                                                        disabled={saving === b.id}
-                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
-                                                    ) : <span className="tabular-nums">{line.rate.toFixed(2)}</span>}
                                                   </td>
                                                   <td className="py-1.5 px-1 text-right">
                                                     {canEdit ? (
