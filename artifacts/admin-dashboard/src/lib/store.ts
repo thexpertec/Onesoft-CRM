@@ -11242,6 +11242,275 @@ export function autoPostSaleJE(params: {
 }
 
 /**
+ * Issue spare parts to a repair job.
+ *
+ * For each part line: locates the StockItem by productId match against the
+ * product's SKU and its variants' SKUs, decrements quantity, appends a
+ * "sale" stock-ledger row tagged as Repair Parts Issue, and locks the
+ * unit cost into the returned line snapshot.
+ *
+ * After all parts are written, posts a single COGS journal entry
+ * (Dr COGS / Cr Inventory) for the total cost. Per-category breakdown
+ * uses the same `inv-cat-{slug}` ledger lookup as `autoPostSaleJE` so
+ * the inventory side hits the correct per-category ledger when one
+ * exists; otherwise General Inventory is used.
+ *
+ * Returns `{ jeId, lockedLines }` so the caller can persist the
+ * locked-cost snapshot and the JE id back onto the repair booking.
+ * Throws when any line cannot be fulfilled from stock — the whole
+ * issuance is atomic at the JE level (no partial issuance posted).
+ */
+export function issueRepairParts(params: {
+  /** Stable booking identifier — used both as the stock-ledger `reference` and
+   *  as the idempotency key. MUST be the full booking id (not a slice), so
+   *  retries of a failed issuance can detect prior commits and refuse to
+   *  double-decrement stock. */
+  bookingId:    string;
+  /** Optional short display label shown in JE narration / reference suffix.
+   *  Defaults to the full bookingId. Display-only, never used for matching. */
+  displayRef?:  string;
+  customerName: string;
+  date:         string;     // YYYY-MM-DD
+  parts: Array<{
+    /** Caller-stable line identifier (e.g. array index as string) — used to
+     *  bind locked-cost/ledger ids back to the originating row even when two
+     *  rows reference the same product. */
+    lineId:      string;
+    productId:   string;
+    productName: string;
+    qty:         number;
+    /** Optional override; otherwise Product.costPrice (resolved via the
+     *  product catalogue) is used. */
+    unitCost?:   number;
+  }>;
+}): { jeId: string; lockedLines: Array<{ lineId: string; productId: string; qty: number; unitCost: number; ledgerEntryId: string }> } {
+  if (!params.parts.length) throw new Error("Issue Parts: no parts to issue.");
+
+  // ── Idempotency: refuse if this booking has already been issued. ──────
+  //
+  //  A previous call may have committed stock + ledger + JE before its
+  //  caller-side booking patch (partsIssueJeIds) landed; the user would
+  //  then see "save failed" and click Issue again. Without this guard
+  //  the helper would silently double-decrement stock and post a second
+  //  JE. We use the stock ledger as the source of truth because it is
+  //  written together with the stock decrement inside this function, so
+  //  its presence proves a prior issuance commit landed regardless of
+  //  what happened upstream.
+  const _existingForBooking = getStockLedger().some(
+    e => e.sourceType === "Repair Parts Issue" && e.reference === params.bookingId
+  );
+  if (_existingForBooking) {
+    throw new Error(
+      "Parts have already been issued for this repair — refresh the page to see the linked Journal Entry."
+    );
+  }
+
+  const products  = getProducts();
+  const stockAll  = getStock();
+  const productById = new Map(products.map(p => [p.id, p]));
+
+  // ── Resolve each line to a StockItem + locked cost; refuse if any line
+  //    cannot be fulfilled. We accumulate the planned mutations and only
+  //    commit after every line has passed validation, so a bad line at
+  //    the end doesn't leave half the issuance partially recorded.
+  //
+  //    Reservation-aware: we track a *running* available qty per stock
+  //    record so two lines that both target the same product cannot each
+  //    individually pass the availability check while collectively
+  //    over-allocating it.
+  type Plan = {
+    lineId:       string;
+    productId:    string;
+    productName:  string;
+    qty:          number;
+    unitCost:     number;
+    stockItem:    StockItem;
+    category:     string;
+  };
+  const plans: Plan[] = [];
+  const reserved = new Map<string, number>();   // stockItem.id → qty already planned this call
+
+  for (const part of params.parts) {
+    if (part.qty <= 0) continue;
+    const product = productById.get(part.productId);
+    const cost    = part.unitCost ?? (product ? parseFloat(product.costPrice || "0") || 0 : 0);
+
+    // Match StockItem by SKU (parent or any variant)
+    const skuSet = new Set<string>();
+    if (product?.sku?.trim()) skuSet.add(product.sku.trim().toLowerCase());
+    product?.variants?.forEach(v => { if (v.sku?.trim()) skuSet.add(v.sku.trim().toLowerCase()); });
+
+    // Find a stock record with enough on-hand AFTER subtracting any qty
+    // already planned for earlier lines in this call. Prefer "For Sale"
+    // records first so business-asset stock isn't drained ahead of resale.
+    const candidates = stockAll
+      .filter(s => s.sku && skuSet.has(s.sku.trim().toLowerCase()))
+      .sort((a, b) => (a.stockType === "For Sale" ? -1 : 1) - (b.stockType === "For Sale" ? -1 : 1));
+
+    const picked = candidates.find(s => {
+      const onHand    = parseFloat(s.quantity) || 0;
+      const available = onHand - (reserved.get(s.id) ?? 0);
+      return available >= part.qty;
+    });
+    if (!picked) {
+      const onHandTotal = candidates.reduce((sum, s) => {
+        const q = (parseFloat(s.quantity) || 0) - (reserved.get(s.id) ?? 0);
+        return sum + Math.max(0, q);
+      }, 0);
+      throw new Error(
+        `Insufficient stock for "${part.productName}": need ${part.qty}, on hand ${onHandTotal} (after earlier lines in this issuance).`
+      );
+    }
+
+    reserved.set(picked.id, (reserved.get(picked.id) ?? 0) + part.qty);
+    plans.push({
+      lineId:      part.lineId,
+      productId:   part.productId,
+      productName: part.productName,
+      qty:         part.qty,
+      unitCost:    cost,
+      stockItem:   picked,
+      category:    product?.category || "uncategorised",
+    });
+  }
+
+  if (!plans.length) throw new Error("Issue Parts: every line had qty 0.");
+
+  // ── Commit: stock decrements first, then ledger rows, then the JE ─────
+  //
+  // If JE creation fails (COA misconfigured), the stock/ledger writes have
+  // already landed. That's intentional — the physical stock movement is
+  // real; the user can re-post the JE manually via Journal Entries. The
+  // ledger-row id is what we use to bind each booking part line to its
+  // stock-ledger trace, so we build the row ids up-front rather than
+  // routing through batchLedger (which allocates internally).
+  const now    = new Date().toISOString();
+  const ref    = params.bookingId;
+  const dispRef = params.displayRef ?? params.bookingId;
+
+  // Aggregate decrements per stock item — two lines targeting the same
+  // StockItem must collapse into one stock-row update; otherwise the
+  // `.map(... find ...)` pattern would only apply the first plan and
+  // silently swallow the other lines' qty.
+  const decrementByStockId = new Map<string, number>();
+  for (const p of plans) {
+    decrementByStockId.set(p.stockItem.id, (decrementByStockId.get(p.stockItem.id) ?? 0) + p.qty);
+  }
+  const stockUpdated: StockItem[] = stockAll.map(s => {
+    const dec = decrementByStockId.get(s.id);
+    if (!dec) return s;
+    const before = parseFloat(s.quantity) || 0;
+    return { ...s, quantity: String(before - dec), updatedAt: now };
+  });
+  _saveStock(stockUpdated);
+
+  // Build one ledger row per *plan* (not per stock-item) — each part line
+  // gets its own audit trail. To make qtyBefore/qtyAfter coherent across
+  // multiple lines on the same stock record, we walk lines in order and
+  // chain the running balance.
+  const runningQty = new Map<string, number>();
+  for (const s of stockAll) runningQty.set(s.id, parseFloat(s.quantity) || 0);
+  const rows: StockLedgerEntry[] = plans.map(p => {
+    const before = runningQty.get(p.stockItem.id) ?? 0;
+    const after  = before - p.qty;
+    runningQty.set(p.stockItem.id, after);
+    return {
+      id:         crypto.randomUUID(),
+      entityType: "product",
+      entityId:   p.stockItem.id,
+      entityName: p.stockItem.productName,
+      date:       params.date,
+      txType:     "sale",
+      sourceType: "Repair Parts Issue",
+      reference:  ref,    // full booking id for unambiguous lookup
+      qtyBefore:  before,
+      qtyChange:  -p.qty,
+      qtyAfter:   after,
+      unit:       p.stockItem.unit,
+      notes:      `Issued to repair ${dispRef} – ${params.customerName}`,
+      createdAt:  now,
+    };
+  });
+  // Append directly via the chokepoint (preserves dual-write). Reading from
+  // storage rather than getStockLedger() avoids merging the pending queue.
+  const existingLedger = getStored<StockLedgerEntry>(LEDGER_KEY);
+  _saveStockLedger([...existingLedger, ...rows]);
+
+  // ── Build the COGS JE — per-category Inventory ledgers where they exist ─
+  const s             = getSettings();
+  const _generalInvId = resolveToLedger(s.accInventory) ?? SYS_ACCS.GENERAL_INVENTORY;
+  const _cogsId       = resolveToLedger(s.accCogs)      ?? SYS_ACCS.COGS;
+  const allAccounts   = getAccounts();
+
+  // Aggregate cost per category for per-category Inventory lines
+  const byCategory = new Map<string, number>();
+  let costTotal = 0;
+  for (const p of plans) {
+    const cat = p.category;
+    byCategory.set(cat, (byCategory.get(cat) ?? 0) + p.unitCost * p.qty);
+    costTotal += p.unitCost * p.qty;
+  }
+  costTotal = parseFloat(costTotal.toFixed(2));
+
+  // `dispRef` (short, human-readable) appears in narrations; `ref` (full
+  // booking id) appears in machine-matched fields so post-hoc lookups are
+  // unambiguous even if two bookings happen to share the first 8 hex chars.
+  const lines: JournalEntryLine[] = [];
+
+  // DR COGS (single line — COGS aggregates across categories)
+  lines.push({
+    id: crypto.randomUUID(), ledgerId: _cogsId,
+    narration: `COGS – ${dispRef}`,
+    debit: costTotal, credit: 0,
+  });
+
+  // CR Inventory per category (or single fallback)
+  for (const [cat, amt] of byCategory) {
+    if (amt <= 0) continue;
+    const slug      = (cat || "uncategorised").trim().toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+    const catInvId  = `inv-cat-${slug}`;
+    const invLedger = allAccounts.some(a => a.id === catInvId && a.accountType === "Ledger")
+                        ? catInvId : _generalInvId;
+    lines.push({
+      id: crypto.randomUUID(), ledgerId: invLedger,
+      narration: `Inventory reduction – ${dispRef} – ${cat}`,
+      debit: 0, credit: parseFloat(amt.toFixed(2)),
+    });
+  }
+
+  const totalDebit  = parseFloat(lines.reduce((a, l) => a + l.debit,  0).toFixed(2));
+  const totalCredit = parseFloat(lines.reduce((a, l) => a + l.credit, 0).toFixed(2));
+
+  const je = createJournalEntry({
+    date:        params.date,
+    reference:   `AUTO-REP-${ref}`,
+    description: `Repair Parts Issue: ${dispRef} – ${params.customerName}`,
+    lines,
+    status:      "posted",
+    totalDebit,
+    totalCredit,
+    isBalanced:  Math.abs(totalDebit - totalCredit) < 0.02,
+  });
+
+  addActivity({
+    action: "created", entity: "Journal Entry", entityName: je.reference || je.id,
+    detail: `Repair parts issue for ${dispRef} (${plans.length} line${plans.length === 1 ? "" : "s"}, cost ${costTotal.toFixed(2)})`,
+  });
+
+  return {
+    jeId: je.id,
+    lockedLines: plans.map((p, i) => ({
+      lineId:        p.lineId,
+      productId:     p.productId,
+      qty:           p.qty,
+      unitCost:      p.unitCost,
+      ledgerEntryId: rows[i].id,
+    })),
+  };
+}
+
+/**
  * Posts a cash/bank receipt JE when a credit-sale is subsequently paid.
  * Works for both buyer (AR) and supplier (AP) sub-ledgers — the contact's
  * own ledger is resolved via CRM lookup regardless of COA position.

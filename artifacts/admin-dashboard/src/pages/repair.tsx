@@ -12,7 +12,7 @@ import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { getSettings, type Product } from "@/lib/store";
+import { getSettings, issueRepairParts, type Product } from "@/lib/store";
 import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
@@ -860,6 +860,11 @@ export default function RepairPage() {
                               const fmt     = (n: number) => `${ccy} ${n.toFixed(2)}`;
                               const canEdit = can("Edit Repairs");
                               const approved = !!b.approvedAt;
+                              // Once parts are issued the row becomes a locked audit record:
+                              // quantities, costs, and the line set itself must not change,
+                              // otherwise the stock-ledger / JE / booking would drift apart.
+                              const alreadyIssued = (b.partsIssueJeIds ?? []).length > 0;
+                              const partsEditable = canEdit && !alreadyIssued;
                               return (
                                 <div className="mt-4 rounded-xl border border-border bg-white dark:bg-slate-900 overflow-hidden">
                                   <div className="px-4 py-2.5 border-b border-border bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
@@ -886,22 +891,109 @@ export default function RepairPage() {
 
                                   {/* Parts table */}
                                   <div className="px-4 py-3 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                                        <Package size={10} /> Parts ({parts.length})
-                                      </div>
-                                      {canEdit && (
-                                        <button
-                                          onClick={() => {
-                                            const next: typeof parts = [...parts, { productId: "", productName: "", qty: 1, unitCost: 0, unitPrice: 0, source: "stock" }];
-                                            updateFields(b.id, { parts: next });
-                                          }}
-                                          className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors"
-                                        >
-                                          <Plus size={10} /> Add part
-                                        </button>
-                                      )}
-                                    </div>
+                                    {(() => {
+                                      const issuedJeIds   = b.partsIssueJeIds ?? [];
+                                      const alreadyIssued = issuedJeIds.length > 0;
+                                      const issueDisabled =
+                                        saving === b.id ||
+                                        alreadyIssued ||
+                                        parts.length === 0 ||
+                                        parts.some(p => !p.productId || p.qty <= 0);
+                                      return (
+                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                            <Package size={10} /> Parts ({parts.length})
+                                            {alreadyIssued && (
+                                              <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded normal-case">
+                                                <CheckCircle2 size={9} /> Issued · {issuedJeIds.length} JE{issuedJeIds.length === 1 ? "" : "s"}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {canEdit && (
+                                            <div className="flex items-center gap-1.5">
+                                              {/*
+                                                Issue Parts — PR2b explicit trigger.
+                                                Decrements stock, records ledger rows tagged "Repair Parts Issue",
+                                                posts a balanced DR COGS / CR Inventory JE, and locks each line's
+                                                unitCost to the value used in the JE. After issuance the parts
+                                                table becomes read-only (Add/Remove disabled, no re-issue) to
+                                                preserve the audit trail; un-issuing is a future PR.
+                                              */}
+                                              <button
+                                                onClick={async () => {
+                                                  setSaving(b.id);
+                                                  try {
+                                                    // Tag each line with its array index as a stable lineId so the
+                                                    // helper can return per-line locked cost/ledger refs even when
+                                                    // two part rows reference the same product (a productId-keyed
+                                                    // map would collapse duplicates).
+                                                    const eligible = parts
+                                                      .map((p, i) => ({ p, i }))
+                                                      .filter(({ p }) => p.productId && p.qty > 0)
+                                                      .map(({ p, i }) => ({
+                                                        lineId:      String(i),
+                                                        productId:   p.productId,
+                                                        productName: p.productName || "(unnamed)",
+                                                        qty:         p.qty,
+                                                        unitCost:    p.unitCost,
+                                                      }));
+                                                    if (eligible.length === 0) {
+                                                      toast({ title: "Nothing to issue", description: "Add at least one part with a product and positive quantity.", variant: "destructive" });
+                                                      return;
+                                                    }
+                                                    const result = issueRepairParts({
+                                                      bookingId:    b.id,
+                                                      displayRef:   b.id.slice(0, 8).toUpperCase(),
+                                                      customerName: b.name,
+                                                      date:         new Date().toISOString().slice(0, 10),
+                                                      parts:        eligible,
+                                                    });
+                                                    // Merge locked cost + ledger ref back per LINE (not per product) so
+                                                    // duplicate-product rows each get their own ledgerEntryId.
+                                                    const byLine = new Map(result.lockedLines.map(l => [l.lineId, l]));
+                                                    const lockedParts = parts.map((p, i) => {
+                                                      const locked = byLine.get(String(i));
+                                                      return locked
+                                                        ? { ...p, unitCost: locked.unitCost, ledgerEntryId: locked.ledgerEntryId }
+                                                        : p;
+                                                    });
+                                                    await enqueueSave(current => current.map(x =>
+                                                      x.id === b.id
+                                                        ? { ...x, parts: lockedParts, partsIssueJeIds: [...(x.partsIssueJeIds ?? []), result.jeId] }
+                                                        : x));
+                                                    toast({ title: "Parts issued", description: `Stock decremented and JE posted (${eligible.length} line${eligible.length === 1 ? "" : "s"}).` });
+                                                  } catch (err) {
+                                                    toast({ title: "Issue failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+                                                  } finally {
+                                                    setSaving(null);
+                                                  }
+                                                }}
+                                                disabled={issueDisabled}
+                                                title={alreadyIssued
+                                                  ? "Parts already issued — see the linked Journal Entry"
+                                                  : parts.length === 0
+                                                    ? "Add at least one part first"
+                                                    : "Decrement stock and post COGS journal entry"}
+                                                className="text-[11px] font-semibold px-2 py-0.5 rounded inline-flex items-center gap-1 border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                              >
+                                                <Package size={10} /> Issue parts
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  const next: typeof parts = [...parts, { productId: "", productName: "", qty: 1, unitCost: 0, unitPrice: 0, source: "stock" }];
+                                                  updateFields(b.id, { parts: next });
+                                                }}
+                                                disabled={alreadyIssued}
+                                                title={alreadyIssued ? "Parts already issued — re-issuing not supported in this PR" : ""}
+                                                className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              >
+                                                <Plus size={10} /> Add part
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     {parts.length === 0 ? (
                                       <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No parts added yet.</p>
                                     ) : (
@@ -920,6 +1012,12 @@ export default function RepairPage() {
                                           <tbody className="divide-y divide-border/60">
                                             {parts.map((line, idx) => {
                                               const lineSub = line.qty * line.unitPrice;
+                                              // After issuance the line set is immutable. Cost and qty fed into
+                                              // the JE; mutating them now would silently break audit trail.
+                                              // unitPrice (what the customer pays) is the only field that could
+                                              // safely change post-issue, but we lock the whole row to keep the
+                                              // mental model simple — adjust price via a separate invoice edit.
+                                              const editableRow = partsEditable;
                                               const patchPart = (patch: Partial<typeof line>) => {
                                                 const next = parts.map((p, i) => i === idx ? { ...p, ...patch } : p);
                                                 updateFields(b.id, { parts: next });
@@ -937,7 +1035,7 @@ export default function RepairPage() {
                                               return (
                                                 <tr key={idx} className="align-middle">
                                                   <td className="py-1.5 pr-2">
-                                                    {canEdit ? (
+                                                    {editableRow ? (
                                                       <select
                                                         value={line.productId}
                                                         onChange={e => onPickProduct(e.target.value)}
@@ -955,7 +1053,7 @@ export default function RepairPage() {
                                                     )}
                                                   </td>
                                                   <td className="py-1.5 px-2 text-right">
-                                                    {canEdit ? (
+                                                    {editableRow ? (
                                                       <input type="number" min="0" step="1" value={line.qty}
                                                         onChange={e => patchPart({ qty: parseInt(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
@@ -963,7 +1061,7 @@ export default function RepairPage() {
                                                     ) : <span className="tabular-nums">{line.qty}</span>}
                                                   </td>
                                                   <td className="py-1.5 px-2 text-right">
-                                                    {canEdit ? (
+                                                    {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitCost}
                                                         onChange={e => patchPart({ unitCost: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
@@ -971,7 +1069,7 @@ export default function RepairPage() {
                                                     ) : <span className="tabular-nums">{line.unitCost.toFixed(2)}</span>}
                                                   </td>
                                                   <td className="py-1.5 px-2 text-right">
-                                                    {canEdit ? (
+                                                    {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitPrice}
                                                         onChange={e => patchPart({ unitPrice: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
@@ -981,13 +1079,15 @@ export default function RepairPage() {
                                                   <td className="py-1.5 px-2 text-right font-semibold text-foreground tabular-nums">{lineSub.toFixed(2)}</td>
                                                   {canEdit && (
                                                     <td className="py-1.5 px-1 text-center">
-                                                      <button
-                                                        onClick={() => updateFields(b.id, { parts: parts.filter((_, i) => i !== idx) })}
-                                                        disabled={saving === b.id}
-                                                        className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
-                                                        title="Remove part">
-                                                        <X size={12} />
-                                                      </button>
+                                                      {editableRow && (
+                                                        <button
+                                                          onClick={() => updateFields(b.id, { parts: parts.filter((_, i) => i !== idx) })}
+                                                          disabled={saving === b.id}
+                                                          className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
+                                                          title="Remove part">
+                                                          <X size={12} />
+                                                        </button>
+                                                      )}
                                                     </td>
                                                   )}
                                                 </tr>
