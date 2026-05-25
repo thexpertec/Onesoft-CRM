@@ -259,7 +259,10 @@ export function MarketplaceHeader() {
               { label: "Today's Deals",  href: "/shop?sort=price_asc" },
               { label: "New Arrivals",   href: "/shop?sort=newest" },
               { label: "Best Sellers",   href: "/shop?sort=popular" },
-              ...navCats.slice(0, 7).map(c => ({ label: c, href: `/shop?cat=${encodeURIComponent(c)}` })),
+              { label: "Services",       href: "/services" },
+              { label: "About Us",       href: "/about" },
+              { label: "Contact",        href: "/contact" },
+              ...navCats.slice(0, 4).map(c => ({ label: c, href: `/shop?cat=${encodeURIComponent(c)}` })),
             ].map(link => (
               <Link key={link.label} href={link.href} style={{
                 color: C.muted, textDecoration: "none", padding: "10px 14px",

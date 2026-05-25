@@ -7,6 +7,7 @@ import {
 import { useStore } from "@/contexts/store-context";
 import { useCart } from "@/lib/cart";
 import { ProductCard, getProductTheme } from "@/components/product-card";
+import { MarketplaceProductCard } from "@/themes/marketplace/product-card";
 import { formatPrice, getStockQty, stockLabel, cn, isBogo } from "@/lib/utils";
 import { useCustomerSession } from "@/hooks/use-customer-session";
 import type { ProductVariant } from "@/types/product";
@@ -550,7 +551,10 @@ export function ProductDetailPage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {related.map(p => <ProductCard key={p.id} product={p} />)}
+            {related.map(p => mp
+              ? <MarketplaceProductCard key={p.id} product={p} />
+              : <ProductCard key={p.id} product={p} />
+            )}
           </div>
         </div>
       )}
