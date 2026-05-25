@@ -42,8 +42,13 @@ router.get("/repair/:id", async (req, res) => {
     const { id } = req.params;
     if (!id) return res.status(400).json({ error: "Missing id" });
 
+    // Bookings now live at the tenant-scoped key `t:{tid}/repair-bookings`
+    // (May 2026 hardening — see kv.ts header). Scan every tenant namespace
+    // that holds a bookings blob; the lookup is by booking id so the first
+    // hit wins. A small `LIKE 't:%'` filter keeps us out of the (now-empty)
+    // global key during the transition window.
     const rows = await query<{ value: unknown }>(
-      "SELECT value FROM kv_store WHERE key = $1",
+      "SELECT value FROM kv_store WHERE key = $1 AND (namespace LIKE 't:%' OR namespace = 'global')",
       ["repair-bookings"]
     );
 

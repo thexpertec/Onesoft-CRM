@@ -134,8 +134,8 @@ The api-server runs `assertApiKeyEnvOrExit()` at startup — if `KV_API_SECRET` 
 | All per-record routes (`/api/customers`, `/api/sales`, `/api/journal-entries`, all 30+) | `X-Api-Key` | Admin-dashboard `rFetch` (in `record-api.ts` and `api.ts`) sends the header automatically. No other client should reach these. |
 
 **KV allowlist** (`routes/kv.ts` — `ANON_EXACT_READ` / `ANON_EXACT_WRITE` / `ANON_PREFIX_READ` / `ANON_PREFIX_WRITE`):
-- Anon READ: `admin-products`, `admin-settings`, `website-cms`, `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, prefix `portal-profile-`, prefix `clubcard-`
-- Anon WRITE (PUT/POST): `repair-bookings`, `store-orders`, `online-orders`, `portal-accounts`, prefix `portal-profile-`, prefix `clubcard-`
+- Anon READ: `admin-products`, `admin-settings`, `website-cms`, `store-orders`, `online-orders`, prefix `portal-profile-`, prefix `clubcard-`
+- Anon WRITE (PUT/POST): `store-orders`, `online-orders`, prefix `portal-profile-`, prefix `clubcard-`
 - Anon DELETE: **never**
 
 **Scoped storefront endpoints** (replaced previous whole-tenant anon reads of `admin-customers` / `admin-sales`, May 2026):
@@ -144,6 +144,7 @@ The api-server runs `assertApiKeyEnvOrExit()` at startup — if `KV_API_SECRET` 
 - `POST /api/portal/change-password` — verifies current hash before swapping.
 - `GET /api/portal/sales?tenantId&customerName` — returns only the named customer's sales from the relational `sales`+`sale_items` tables.
 - `POST /api/storefront/place-order` — atomic insert into `sales` + `sale_items` + append to tenant's `online-orders` kv. Callers: `customer-portal/src/{lib/api.ts,contexts/auth-context.tsx,pages/*}` + `tenant-store/src/pages/checkout.tsx`.
+- `POST /api/storefront/repair-booking` — anonymous append-only booking submit. Server generates id/createdAt/status; validates tenant exists + status=active (rejects forged ids with 404/403); writes to `t:{tid}/repair-bookings` under SELECT…FOR UPDATE. Replaces the previous anonymous `PUT /api/kv/global/repair-bookings` that leaked every tenant's bookings cross-tenant and let any visitor wipe the whole platform's bookings with one request. Callers: `tenant-store/src/{pages/services.tsx,themes/marketplace/services.tsx}`. Admin dashboard reads/writes via `kvGet`/`kvPut` (with `X-Api-Key`) on `t:{currentTenantId}/repair-bookings`. One-shot startup migration (`lib/migrate-repair-bookings.ts`, awaited before `app.listen` to avoid the lost-update race) partitions the legacy global blob by booking.tenantId, dedupes by id, stashes orphans (no tenantId) at `global/repair-bookings-orphans`, then deletes the global key. `/api/public/repair/:id` rewritten to scan `t:%` namespaces (was global-only).
 
 The gate uses a router-level middleware that parses `req.path` directly (Express `req.params` is empty in `router.use()` callbacks before route matching). Only the `/:namespace/:key` shape is eligible for the allowlist; root list, namespace dump, namespace wipe all require the key. Malformed percent-encoding fails closed to the gate (try/catch around `decodeURIComponent`).
 

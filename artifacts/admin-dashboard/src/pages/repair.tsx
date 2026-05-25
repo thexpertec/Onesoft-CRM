@@ -17,8 +17,9 @@ import { useDesignations, useStaff, useCustomers, useProducts, useSales } from "
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { Combobox, type ComboOption } from "@/components/combobox";
 import { SelectCombobox } from "@/components/select-combobox";
+import { kvGet, kvPut } from "@/lib/api";
 
-const API = "/api/kv/global/repair-bookings";
+const BOOKINGS_KEY = "repair-bookings";
 
 type BookingStatus =
   | "New"
@@ -276,19 +277,26 @@ export default function RepairPage() {
   const [addForm, setAddForm]           = useState({ ...EMPTY_FORM });
   const [addSaving, setAddSaving]       = useState(false);
 
+  // Repair bookings live under the per-tenant namespace `t:{tenantId}` keyed
+  // by `repair-bookings` (May 2026 hardening — previously a single global key
+  // leaked every tenant's bookings cross-tenant). When viewing as the platform
+  // superadmin (no tenant context), we fall back to the legacy `global`
+  // namespace so any not-yet-migrated rows remain visible until the one-shot
+  // server-side migration runs on next API restart.
+  const tenantNs = currentTenantId ? `t:${currentTenantId}` : "global";
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(API);
-      const data = await res.json() as { value: RepairBooking[] };
-      const arr  = (Array.isArray(data.value) ? data.value : []).map(normaliseBooking);
+      const raw = await kvGet(tenantNs, BOOKINGS_KEY);
+      const arr  = (Array.isArray(raw) ? (raw as RepairBooking[]) : []).map(normaliseBooking);
       setBookings(arr.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
       toast({ title: "Failed to load bookings", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, tenantNs]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -314,17 +322,12 @@ export default function RepairPage() {
       const updated = mutator(bookingsRef.current);
       bookingsRef.current = updated;
       setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-      const res = await fetch(API, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: updated }),
-      });
-      if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
+      await kvPut(tenantNs, BOOKINGS_KEY, updated);
     });
     // Keep the chain alive even if a save fails — caller handles the error.
     writeQueueRef.current = next.catch(() => undefined);
     return next;
-  }, []);
+  }, [tenantNs]);
 
   async function saveAll(updated: RepairBooking[]) {
     await enqueueSave(() => updated);

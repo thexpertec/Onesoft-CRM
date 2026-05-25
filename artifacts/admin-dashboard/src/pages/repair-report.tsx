@@ -13,6 +13,7 @@ import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { getTenants } from "@/lib/store";
+import { kvGet } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type BookingStatus =
@@ -36,7 +37,7 @@ interface RepairBooking {
   source?:       RequestSource;
 }
 
-const API = "/api/kv/global/repair-bookings";
+const BOOKINGS_KEY = "repair-bookings";
 
 const STATUS_ORDER: BookingStatus[] = [
   "New","Diagnosing","Quoted","Awaiting Parts","In Repair","Ready","Completed",
@@ -172,17 +173,29 @@ export default function RepairReportPage() {
   // Show biz tabs if manager/superadmin with multiple tenants
   const showBizTabs = (isManager || isSuperAdmin) && allTenants.length > 0;
 
+  // Bookings are now stored per-tenant at `t:{tenantId}/repair-bookings`
+  // (May 2026 hardening). For the multi-tenant report we fetch each visible
+  // tenant's bucket in parallel and merge. The legacy global key is also
+  // included so any rows that haven't been migrated yet remain visible.
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(API);
-      const data = await res.json() as { value: RepairBooking[] };
-      const arr  = (Array.isArray(data.value) ? data.value : []).map(normalise);
-      setBookings(arr);
+      const namespaces = allTenants.map(t => `t:${t.id}`);
+      namespaces.push("global");
+      const results = await Promise.all(
+        namespaces.map(ns => kvGet(ns, BOOKINGS_KEY).catch(() => null)),
+      );
+      const merged: RepairBooking[] = [];
+      for (const raw of results) {
+        if (Array.isArray(raw)) {
+          for (const b of raw as RepairBooking[]) merged.push(normalise(b));
+        }
+      }
+      setBookings(merged);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allTenants]);
 
   useEffect(() => { load(); }, [load]);
 

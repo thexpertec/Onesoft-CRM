@@ -70,28 +70,34 @@ interface BookingForm {
 
 async function submitBooking(form: BookingForm): Promise<void> {
   const api = apiBase();
-  const tenantId = new URLSearchParams(window.location.search).get("tenant") || "global";
+  const tenantId = new URLSearchParams(window.location.search).get("tenant");
+  if (!tenantId) {
+    // Without a tenant we cannot route the booking anywhere safely. The old
+    // code silently dropped these into a shared `global` bucket, which was
+    // readable by every tenant — closed in the May 2026 hardening.
+    throw new Error("Missing tenant. Please open the booking form from your store link (?tenant=…).");
+  }
 
-  const getRes = await fetch(`${api}/kv/global/repair-bookings`);
-  const getData = await getRes.json() as { value: unknown };
-  const existing = Array.isArray(getData.value) ? getData.value : [];
-
-  const newBooking = {
-    id: crypto.randomUUID(),
-    name: form.name.trim(),
-    phone: form.phone.trim(),
-    service: form.service,
-    deviceIssue: form.deviceIssue.trim(),
-    tenantId,
-    createdAt: new Date().toISOString(),
-    status: "New",
-  };
-
-  await fetch(`${api}/kv/global/repair-bookings`, {
-    method: "PUT",
+  // Append-only via the dedicated narrow storefront endpoint. The server
+  // generates the id, createdAt, and status — the caller cannot inject
+  // admin-only fields. See artifacts/api-server/src/routes/storefront.ts.
+  const res = await fetch(`${api}/storefront/repair-booking`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value: [...existing, newBooking] }),
+    body: JSON.stringify({
+      tenantId,
+      name:        form.name.trim(),
+      phone:       form.phone.trim(),
+      service:     form.service,
+      deviceIssue: form.deviceIssue.trim(),
+      source:      "Online",
+    }),
   });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = await res.text(); } catch { /* ignore */ }
+    throw new Error(`Booking failed (HTTP ${res.status})${detail ? ": " + detail : ""}`);
+  }
 }
 
 export function ServicesPage() {

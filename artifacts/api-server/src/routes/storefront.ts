@@ -169,4 +169,96 @@ router.post("/place-order", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/storefront/repair-booking
+ *
+ * Anonymous append-only endpoint for the tenant-store / marketplace booking
+ * forms. Replaces the previous direct-write to `PUT /api/kv/global/repair-
+ * bookings` (which leaked every tenant's bookings cross-tenant — anyone could
+ * read or overwrite the whole platform's bookings).
+ *
+ * Body: { tenantId, name, phone, service, deviceIssue?, email?, source? }
+ *
+ * The server appends one sanitised booking to `t:{tenantId}/repair-bookings`
+ * (creates the array if absent). The caller cannot specify id, status, parts,
+ * labour, customerId, technicianId — those are admin-only fields populated
+ * via the admin-dashboard. Status defaults to "New".
+ *
+ * SECURITY NOTE: still anonymous. Narrow scope (single append, no list/
+ * update/delete). Rate limiting is deferred to the broader auth epic.
+ */
+router.post("/repair-booking", async (req, res) => {
+  const tenantId = String(req.body?.tenantId ?? "").trim();
+  const name     = String(req.body?.name ?? "").trim();
+  const phone    = String(req.body?.phone ?? "").trim();
+  const service  = String(req.body?.service ?? "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId required" });
+  if (!name)     return res.status(400).json({ ok: false, error: "name required" });
+  if (!phone)    return res.status(400).json({ ok: false, error: "phone required" });
+  if (!service)  return res.status(400).json({ ok: false, error: "service required" });
+
+  // Validate the tenant exists and is active before accepting an anonymous
+  // write into its namespace. The caller still controls `tenantId` (real
+  // tenant binding requires server-issued sessions — the broader auth epic),
+  // but at minimum we refuse to seed brand-new tenant buckets or write into
+  // suspended/archived tenants. Cuts the casual-spam surface from "any
+  // string" down to "a known live tenant id". Architect-flagged, May 2026.
+  const tenantRows = await query<{ status: string; archived_at: Date | null }>(
+    `SELECT status, archived_at FROM tenants WHERE id = $1 LIMIT 1`,
+    [tenantId],
+  );
+  if (tenantRows.length === 0) {
+    return res.status(404).json({ ok: false, error: "Unknown tenant" });
+  }
+  if (tenantRows[0]!.archived_at !== null || tenantRows[0]!.status !== "active") {
+    return res.status(403).json({ ok: false, error: "Tenant is not accepting bookings" });
+  }
+
+  const deviceIssue = typeof req.body?.deviceIssue === "string" ? req.body.deviceIssue.trim() : "";
+  const email       = typeof req.body?.email       === "string" ? req.body.email.trim()       : "";
+  const source      = req.body?.source === "Shop Visitor" ? "Shop Visitor" : "Online";
+
+  const booking = {
+    id:          randomUUID(),
+    name,
+    phone,
+    service,
+    deviceIssue: deviceIssue || undefined,
+    email:       email || undefined,
+    tenantId,
+    createdAt:   new Date().toISOString(),
+    status:      "New",
+    source,
+  };
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ns = `t:${tenantId}`;
+    const existing = await client.query<{ value: unknown }>(
+      `SELECT value FROM kv_store WHERE namespace = $1 AND key = 'repair-bookings' FOR UPDATE`,
+      [ns],
+    );
+    const arr = existing.rows.length > 0 && Array.isArray(existing.rows[0]!.value)
+      ? (existing.rows[0]!.value as unknown[])
+      : [];
+    arr.push(booking);
+    await client.query(
+      `INSERT INTO kv_store (namespace, key, value, updated_at)
+       VALUES ($1, 'repair-bookings', $2::jsonb, NOW())
+       ON CONFLICT (namespace, key)
+       DO UPDATE SET value = $2::jsonb, updated_at = NOW()`,
+      [ns, JSON.stringify(arr)],
+    );
+    await client.query("COMMIT");
+    return res.status(201).json({ ok: true, booking });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[storefront] repair-booking error", err);
+    return res.status(500).json({ ok: false, error: (err as Error).message });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

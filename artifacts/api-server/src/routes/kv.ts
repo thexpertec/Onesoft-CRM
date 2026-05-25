@@ -110,15 +110,21 @@ const ANON_EXACT_READ = new Set<string>([
   "admin-products",
   "admin-settings",
   "website-cms",
-  "repair-bookings",
   "store-orders",
   "online-orders",
 ]);
 const ANON_EXACT_WRITE = new Set<string>([
-  "repair-bookings",
   "store-orders",
   "online-orders",
 ]);
+// `repair-bookings` is no longer on either anon list (May 2026 hardening).
+// Previously stored at the GLOBAL key `global/repair-bookings`, which was
+// readable AND writable by anyone — leaking every tenant's bookings cross-
+// tenant and letting any visitor wipe the whole platform's bookings with a
+// single PUT. Bookings are now tenant-scoped under `t:{tid}/repair-bookings`
+// and the admin reads/writes them with `X-Api-Key`. Anonymous storefront
+// submissions go through the dedicated narrow endpoint
+// `POST /api/storefront/repair-booking`, which appends one booking server-side.
 // `portal-accounts` is intentionally NOT on the anonymous allowlist any more
 // (May 2026). It holds the SHA-256 password hashes for every portal user
 // in the tenant — leaving it readable lets anyone extract hashes for offline

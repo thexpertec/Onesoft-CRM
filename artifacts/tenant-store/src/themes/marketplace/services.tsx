@@ -82,16 +82,30 @@ export function MarketplaceServicesPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!tenantId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const existing = await fetch(`${apiBase}/kv/t:${tenantId}/repair-bookings`).then(r => r.ok ? r.json() : { value: [] });
-      const bookings = Array.isArray(existing?.value) ? existing.value : [];
-      bookings.push({ ...form, id: crypto.randomUUID(), createdAt: new Date().toISOString(), status: "Pending" });
-      await fetch(`${apiBase}/kv/t:${tenantId}/repair-bookings`, {
-        method: "PUT",
+      // Append-only via the dedicated narrow storefront endpoint (May 2026
+      // hardening — previously the storefront did a read-modify-write PUT on
+      // `t:{tid}/repair-bookings`, leaving the whole array writable anonymously).
+      // The server generates id/createdAt/status; we send the user-supplied
+      // fields only. `device` is appended to deviceIssue so it shows up in
+      // the admin booking detail without changing the relational shape.
+      const deviceIssue = [form.device, form.notes].filter(Boolean).join(" — ");
+      const res = await fetch(`${apiBase}/storefront/repair-booking`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: bookings }),
+        body: JSON.stringify({
+          tenantId,
+          name:        form.name,
+          phone:       form.phone,
+          email:       form.email,
+          service:     form.service,
+          deviceIssue,
+          source:      "Online",
+        }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSuccess(true);
       setTimeout(() => { setShowDialog(false); setSuccess(false); setForm({ name: "", phone: "", email: "", device: "", service: "", notes: "" }); }, 2800);
     } catch { /* silent */ } finally { setLoading(false); }
