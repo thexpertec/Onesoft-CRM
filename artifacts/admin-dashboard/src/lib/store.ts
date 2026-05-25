@@ -10636,7 +10636,35 @@ export function removeJEFromCache(id: string): void {
   _lsCache(sk, getJournalEntries().filter(e => e.id !== id));
 }
 
+/**
+ * Returns true if the given JE was auto-posted by `issueRepairParts`. We
+ * recognise it by the `AUTO-REP-` reference prefix written at creation
+ * time. Repair bookings live in a global KV blob that is not reachable
+ * from this layer, so we cannot reverse-cascade the booking's
+ * `partsIssueJeIds` array on delete. Refusing the delete altogether
+ * keeps the stock-ledger / JE / booking trio internally consistent.
+ */
+export function isRepairPartsIssueJE(je: Pick<JournalEntry, "reference">): boolean {
+  return typeof je.reference === "string" && je.reference.startsWith("AUTO-REP-");
+}
+
 export function deleteJournalEntry(id: string): void {
+  // ── 0. Block deletion of repair-parts-issue JEs ─────────────────────────
+  //
+  // These JEs are paired with stock-ledger rows + a booking's
+  // `partsIssueJeIds` entry. The booking lives in a global KV blob that
+  // this layer cannot mutate, so deleting the JE would orphan the
+  // booking link AND leave the parts physically out of stock with no
+  // accounting trail. The user must undo via the booking (future
+  // "un-issue parts" flow); refuse the delete here as a hard guard.
+  const _target = getJournalEntries().find(e => e.id === id);
+  if (_target && isRepairPartsIssueJE(_target)) {
+    const ref = _target.reference?.replace(/^AUTO-REP-/, "") ?? "";
+    throw new Error(
+      `Cannot delete this Journal Entry — it was auto-posted by a Repair Parts Issue (booking ${ref.slice(0, 8).toUpperCase()}). Undo the parts issuance from the Repair Bookings page instead.`
+    );
+  }
+
   // ── 1. Voucher relinking (existing behaviour) ───────────────────────────
   const linked = getRPVouchers().find(v => v.journalEntryId === id);
   if (linked && linked.status === "posted") {
