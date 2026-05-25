@@ -6172,7 +6172,7 @@ export const restoreStockForSale = (saleItems: SaleItem[], reference = ""): void
 
     // Step 2 — Variant fallback: stock may be under parent product's SKU
     if (effectiveSku) {
-      const parentProd = allProds.find(p => p.variants?.some(v => v.sku?.toLowerCase() === effSkuLower));
+      const parentProd = allProds.find(p => p.variants?.some?.(v => v.sku?.toLowerCase() === effSkuLower));
       if (parentProd?.sku && parentProd.sku.toLowerCase() !== effSkuLower) {
         const parentSkuLower = parentProd.sku.trim().toLowerCase();
         found = stocks.findIndex(s => (s.sku?.trim() || "").toLowerCase() === parentSkuLower);
@@ -7887,7 +7887,7 @@ export function findProductForItem(it: SaleItem, prods: Product[]): Product | un
     const byProductSku = prods.find(p => p.sku === it.sku);
     if (byProductSku) return byProductSku;
     // Variant SKU match — item.sku may be a variant's own SKU; return the parent product
-    const byVariantSku = prods.find(p => p.variants?.some(v => v.sku === it.sku));
+    const byVariantSku = prods.find(p => p.variants?.some?.(v => v.sku === it.sku));
     if (byVariantSku) return byVariantSku;
   }
   // Fallback: name match (for legacy records with no SKU)

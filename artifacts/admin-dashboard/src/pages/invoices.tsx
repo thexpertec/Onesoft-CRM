@@ -794,7 +794,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
       const byProductSku = products.find(p => p.sku === item.sku);
       if (byProductSku?.variants?.length) return byProductSku.variants;
       // Check if item.sku matches a variant's SKU — return parent's variants
-      const byVariantSku = products.find(p => p.variants?.some(v => v.sku === item.sku));
+      const byVariantSku = products.find(p => p.variants?.some?.(v => v.sku === item.sku));
       if (byVariantSku?.variants?.length) return byVariantSku.variants;
     }
     // Fallback: name match (for legacy records with no SKU)
@@ -917,7 +917,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
     setItems(prev => prev.map(i => {
       if (i.id !== itemId) return i;
       // Find parent product by checking whose variant SKU matches this item's SKU
-      const parentProd = products.find(p => p.variants?.some(v => v.sku === i.sku));
+      const parentProd = products.find(p => p.variants?.some?.(v => v.sku === i.sku));
       return {
         ...i,
         sku: parentProd?.sku ?? "",
@@ -1401,12 +1401,12 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                     if (!allVariants || allVariants.length === 0) return null;
                     // Find the parent product for this item (to identify sibling rows)
                     const parentProd = products.find(p =>
-                      p.sku === item.sku || p.variants?.some(v => v.sku === item.sku)
+                      p.sku === item.sku || p.variants?.some?.(v => v.sku === item.sku)
                     );
                     // Variant SKUs already claimed by OTHER rows of the same parent product
                     const takenByOthers = new Set(
                       parentProd ? items
-                        .filter(i => i.id !== item.id && parentProd.variants?.some(v => v.sku === i.sku))
+                        .filter(i => i.id !== item.id && parentProd.variants?.some?.(v => v.sku === i.sku))
                         .map(i => i.sku)
                       : []
                     );

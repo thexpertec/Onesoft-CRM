@@ -381,7 +381,7 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
       discount:    item.discount || "0",
       costPrice:   item.costPrice ||
                    products.find(p => p.sku === item.sku ||
-                     p.variants?.some(v => v.sku === item.sku))?.costPrice || "",
+                     p.variants?.some?.(v => v.sku === item.sku))?.costPrice || "",
       // Preserve revenue-ledger override so the return JE reverses against
       // the same ledger the original sale credited (e.g. sys-3110 for labour).
       ...(item.revenueAccountId ? { revenueAccountId: item.revenueAccountId } : {}),
@@ -454,7 +454,7 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
       const catMap      = new Map<string, RetEntry>();
       const overrideMap = new Map<string, RetEntry>();
       for (const it of effectiveItems) {
-        const prod    = products.find(p => p.sku === it.sku || p.variants?.some(v => v.sku === it.sku));
+        const prod    = products.find(p => p.sku === it.sku || p.variants?.some?.(v => v.sku === it.sku));
         const qty     = parseFloat(it.qty) || 0;
         const price   = parseFloat(it.unitPrice) || 0;
         const disc    = parseFloat(it.discount) || 0;
@@ -795,7 +795,7 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
       const prod = products.find(
         p => (it.sku && p.sku === it.sku) ||
              p.name === (it.productName || "") ||
-             p.variants?.some(v => it.sku && v.sku === it.sku)
+             p.variants?.some?.(v => it.sku && v.sku === it.sku)
       );
       return {
         id:          crypto.randomUUID(),
@@ -879,7 +879,7 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
         const prod = products.find(
           p => (it.sku && p.sku === it.sku) ||
                p.name === it.productName ||
-               p.variants?.some(v => it.sku && v.sku === it.sku)
+               p.variants?.some?.(v => it.sku && v.sku === it.sku)
         );
         const cat = it.category?.trim() || prod?.category?.trim() || "Uncategorised";
         prCatMap.set(cat, (prCatMap.get(cat) ?? 0) + lineTotal);
