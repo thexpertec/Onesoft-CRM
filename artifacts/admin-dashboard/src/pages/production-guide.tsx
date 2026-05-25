@@ -17,7 +17,7 @@ function useWorkflowData() {
     const pendingRmPos   = rmPos.filter(p => p.status !== "Received" && p.status !== "Cancelled");
     const awaitingReceipt = rmPos.filter(p => p.status !== "Received" && p.status !== "Cancelled" && p.status !== "Draft");
 
-    const rmsWithStock   = rms.filter(r => (r.currentStock ?? 0) > 0);
+    const rmsWithStock   = rms.filter(r => Number(r.currentStock ?? 0) > 0);
     const activeMfg      = mfgs.filter(o => o.status === "Draft" || o.status === "In Progress");
     const completedMfg   = mfgs.filter(o => o.status === "Completed");
     const totalStock     = stock.reduce((s, i) => s + (Number(i.quantity) || 0), 0);

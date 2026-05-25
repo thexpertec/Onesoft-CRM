@@ -368,7 +368,7 @@ function NsRow({ ns, open, onToggle }: { ns: NsSummary; open: boolean; onToggle:
               {keys.map(k => {
                 const val = data[k];
                 const isArr = Array.isArray(val);
-                const isObj = val && typeof val === "object" && !isArr;
+                const isObj: boolean = val != null && typeof val === "object" && !isArr;
                 const preview = isArr
                   ? `Array (${(val as unknown[]).length} items)`
                   : isObj
@@ -379,9 +379,9 @@ function NsRow({ ns, open, onToggle }: { ns: NsSummary; open: boolean; onToggle:
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-[11px] font-semibold text-blue-700 dark:text-blue-400">{k}</span>
                       <span className="text-[11px] text-muted-foreground">→</span>
-                      <span className="text-[11px] text-gray-600 dark:text-gray-300">{preview}</span>
+                      <span className="text-[11px] text-gray-600 dark:text-gray-300">{String(preview ?? "")}</span>
                     </div>
-                    {(isArr || isObj) && <JsonView value={val} />}
+                    {(isArr || isObj) && <JsonView value={val as object} />}
                   </div>
                 );
               })}

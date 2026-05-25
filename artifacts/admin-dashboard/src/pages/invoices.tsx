@@ -5,7 +5,7 @@ import {
   Invoice, InvoiceStatus, INVOICE_STATUSES,
   SaleItem, SalePayment, SALE_PAYMENTS,
   PaymentRecord, LegalDocument, InvoiceDoc,
-  BankAccount, ProductVariant, Product,
+  BankAccount, ProductVariant, Product, JournalEntry,
   getProducts, getCustomers, getSettings, getSalesAgents, getBankAccounts, getInvoices, getJournalEntries,
   deductStockForSale, restoreStockForSale, autoPostSaleJE, autoPostCashReceiptJE,
   receiveStockForPurchase, reverseStockForPurchase,
@@ -1411,7 +1411,7 @@ function InvoicePanel({ invoice, onClose, onSave, onDelete, onStatusChange, onCo
                       : []
                     );
                     // Show: this item's own selected variant + any not yet taken
-                    const visibleVariants = allVariants.filter(v => v.sku === item.sku || !takenByOthers.has(v.sku));
+                    const visibleVariants = allVariants.filter(v => v.sku === item.sku || !takenByOthers.has(v.sku ?? ""));
                     const noneSelected = !allVariants.some(v => v.sku === item.sku);
                     return (
                       <div className={`mx-4 mb-2 mt-0.5 flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors ${
@@ -3059,7 +3059,7 @@ export function InvoiceFormPage() {
         // Invoice-sourced sales always use AR (autoPostSaleJE hardcodes useAR=true for source="Invoice"),
         // so we post a cash receipt JE whenever there is a prior JE on a sale invoice,
         // regardless of whether jeUsesAR was stored (handles invoices created before the flag existed).
-        if (payAmt > 0 && (isCredit || inv.jeUsesAR || inv.invoiceType !== "purchase")) {
+        if (payAmt > 0 && (isCredit || inv.jeUsesAR || (inv.invoiceType as string) !== "purchase")) {
           const rcptJE = autoPostCashReceiptJE({
             reference: inv.invoiceNumber, customer: inv.customer || "Customer",
             date: payDate, amount: payAmt, paymentMethod: payMethod,

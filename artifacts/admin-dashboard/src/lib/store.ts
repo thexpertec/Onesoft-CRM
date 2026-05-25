@@ -4158,7 +4158,7 @@ export const updateProduct = (id: string, updates: Partial<Omit<Product, "id" | 
     const storedVariantSkus = new Map(
       (items[i].variants ?? []).map(v => [v.id, (v.sku ?? "").trim().toLowerCase()])
     );
-    for (const v of updates.variants) {
+    for (const v of (updates.variants ?? [])) {
       if (!v.sku?.trim()) continue;
       const newSkuLower = v.sku.trim().toLowerCase();
       const storedSku   = storedVariantSkus.get(v.id) ?? "";
@@ -4795,7 +4795,7 @@ export const receivePurchaseOrder = (id: string): PurchaseOrder => {
     } else {
       // ── Route to Product / StockItem ────────────────────────────────────────
       // SKU is the canonical identifier — try SKU first, fall back to name
-      let pi = item.sku ? allProducts.findIndex(p => p.sku?.toLowerCase() === item.sku.toLowerCase()) : -1;
+      let pi = item.sku ? allProducts.findIndex(p => p.sku?.toLowerCase() === item.sku?.toLowerCase()) : -1;
       if (pi === -1) pi = allProducts.findIndex(p => p.name.toLowerCase().trim() === item.productName.toLowerCase().trim());
       const product = pi >= 0 ? allProducts[pi] : undefined;
 
@@ -8327,6 +8327,7 @@ type SysAccDef = {
   id: string; code: string; name: string;
   head: AccountHead; accountType: AccountKind;
   parentId: string | null; subType: string; description: string;
+  paymentType?: "Debit" | "Credit" | null;
 };
 
 const SYSTEM_ACCOUNTS: SysAccDef[] = [
@@ -8508,7 +8509,7 @@ export function seedDefaultCoaAccounts(): void {
   // Older versions created SALARY_PAYABLE and AP_GENERAL with paymentType: null,
   // causing them to display as "Dr" in the COA / Balance Sheet. Patch in-place.
   {
-    const creditFix = new Set([SYS_ACCS.SALARY_PAYABLE, SYS_ACCS.AP_GENERAL]);
+    const creditFix = new Set<string>([SYS_ACCS.SALARY_PAYABLE, SYS_ACCS.AP_GENERAL]);
     let fixed = false;
     workingAccounts = workingAccounts.map(a => {
       if (creditFix.has(a.id) && a.paymentType !== "Credit") {
@@ -9902,7 +9903,7 @@ export function seedTenantCOA(tenantId: string): void {
   // Strip party-specific subsidiary ledger accounts before copying.
   // Shareholder capital (5100-NNN), customer AR (1130-NNN) and supplier AP (2111-NNN)
   // sub-ledgers belong to the originating tenant and must never be carried over.
-  const partyParentIds = new Set([
+  const partyParentIds = new Set<string>([
     SYS_ACCS.AR_GROUP,       // sys-1100  — customer receivable sub-ledgers
     SYS_ACCS.AP_TRADE,       // sys-2101  — supplier payable sub-ledgers
     SYS_ACCS.OWNERS_CAPITAL, // sys-5100  — shareholder capital sub-ledgers
@@ -10146,7 +10147,7 @@ export function deleteAccount(id: string): void {
   const all = getAccounts();
 
   // Guard 1 — system accounts (COA infrastructure, cannot be removed).
-  if (isSystemAccount(id)) {
+  if (SYSTEM_ACCOUNTS.some(a => a.id === id)) {
     throw new Error("System accounts cannot be deleted.");
   }
 
@@ -11921,7 +11922,7 @@ function _reverseInvoicePayment(invoiceId: string, amount: number, voucherNumber
   const newStatus: InvoiceStatus =
     newPaid >= grand - 0.01 ? "Paid" :
     newPaid > 0             ? "Partial" :
-    "Unpaid";
+    "Sent";
   updateInvoice(invoiceId, {
     amountPaid:     String(newPaid),
     status:         newStatus,
@@ -12093,10 +12094,10 @@ export function postRPVoucherJE(id: string): JournalEntry {
       inv.status;
     const record: PaymentRecord = {
       id:     crypto.randomUUID(),
-      date:   v.date,
+      date:   v!.date,
       amount: String(amount),
-      method: v.voucherType === "receipt" ? "Receipt Voucher" : "Payment Voucher",
-      note:   `${v.voucherNumber}${v.narration ? " — " + v.narration : ""}`,
+      method: v!.voucherType === "receipt" ? "Receipt Voucher" : "Payment Voucher",
+      note:   `${v!.voucherNumber}${v!.narration ? " — " + v!.narration : ""}`,
     };
     updateInvoice(inv.id, {
       amountPaid:     String(newPaid),

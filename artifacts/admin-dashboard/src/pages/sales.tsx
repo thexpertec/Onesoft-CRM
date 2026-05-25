@@ -146,8 +146,9 @@ function adaptReturn(r: SaleReturn): SaleRowData {
       unit:         i.unit || "pcs",
       unitPrice:    String(i.unitPrice),
       discount:     String(i.discount || "0"),
-      discountType: "pct" as const,
+      discountType: "flat" as "pct" | "amt",
       notes:        "",
+      itemStatus:   "Pending" as import("@/lib/store").ItemStatus,
     })),
     paymentMethod:       r.refundMethod,
     amountPaid:          String(r.grandTotal),
@@ -1068,7 +1069,7 @@ function POSView({
   sale, localItems, localMeta, isFresh, customerComboOpts, productComboOpts, agentOpts,
   onClose, onMetaChange, onSaveMeta, onItemChange, onItemBlur,
   onSaveItems, onDeleteItem, onAddProduct, priceMode, onPriceModeChange,
-  onSetStatus, onComplete, onAddCustomer, tenantId,
+  onSetStatus, onComplete, onAcceptOrder, onAddCustomer, tenantId,
 }: POSViewProps) {
   const { stock } = useStock();
   const settings = getSettings();
@@ -1524,7 +1525,7 @@ function POSView({
                           )}
                           {parseFloat(prod?.costPrice ?? "0") > 0 && (
                             <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 text-red-400 dark:text-red-500 tabular-nums">
-                              {sym}{parseFloat(prod!.costPrice).toFixed(2)}
+                              {sym}{parseFloat(prod!.costPrice ?? "0").toFixed(2)}
                             </span>
                           )}
                           {item.bogoApplied && (

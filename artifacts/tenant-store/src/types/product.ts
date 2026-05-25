@@ -32,6 +32,8 @@ export interface Product {
   websitePrice?: string;
   websitePriceWas?: string;
   clubcardPrice?: string;
+  clubcardBogo?: boolean;
+  condition?: string;
   productAttributes?: string[];
   variants?: ProductVariant[];
   createdAt: string;

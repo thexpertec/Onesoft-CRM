@@ -14,7 +14,7 @@ function TikTokIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-const SOCIAL_ICONS: Record<string, React.ElementType | ((p: { size?: number }) => JSX.Element)> = {
+const SOCIAL_ICONS: Record<string, React.ElementType | ((p: { size?: number }) => React.ReactElement)> = {
   twitter:   Twitter,
   instagram: Instagram,
   facebook:  Facebook,

@@ -136,7 +136,7 @@ export default function RichTextEditor({
     const editorHtml = editor.getHTML();
     if (incoming !== lastSyncedValue.current && incoming !== editorHtml) {
       lastSyncedValue.current = incoming;
-      editor.commands.setContent(incoming, false);
+      editor.commands.setContent(incoming, false as never);
     }
   }, [editor, value]);
 

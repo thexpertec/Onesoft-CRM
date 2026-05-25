@@ -101,7 +101,7 @@ export function ServicesPage() {
   const [submitted, setSubmitted] = useState(false);
 
   function openBooking(serviceTitle: string) {
-    setForm({ name: "", phone: "", service: serviceTitle });
+    setForm({ name: "", phone: "", service: serviceTitle, deviceIssue: "" });
     setSubmitted(false);
     setBookingService(serviceTitle);
   }

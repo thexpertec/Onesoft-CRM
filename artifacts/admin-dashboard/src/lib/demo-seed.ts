@@ -429,7 +429,7 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
     // INV-202604-0002 — Maple Grove Interiors (UNPAID)
     {
       id: "dp-inv-003", invoiceNumber: "INV-202604-0002", invoiceTitle: "Tax Invoice", invoiceType: "sale",
-      invoiceDate: D.apr20, dueDate: D.may20,
+      invoiceDate: D.apr20, dueDate: D.may10,
       customer: "Maple Grove Interiors", customerId: "dp-cust-003",
       buyerAddress: "Maple Grove Interiors, 12 Stonegate, York, YO1 8ZW", buyerTown: "York",
       buyerPhone: "+44 1904 330 788", buyerEmail: "hello@maplegroveinteriors.co.uk",
@@ -450,7 +450,7 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
     // INV-202605-0001 — Horizon Hotels (PAID)
     {
       id: "dp-inv-004", invoiceNumber: "INV-202605-0001", invoiceTitle: "Tax Invoice", invoiceType: "sale",
-      invoiceDate: D.may01, dueDate: D.may31,
+      invoiceDate: D.may01, dueDate: D.may10,
       customer: "Horizon Hotels Ltd", customerId: "dp-cust-001",
       buyerAddress: "Horizon Hotels Ltd, 45 Park Row, Leeds, LS1 5HD", buyerTown: "Leeds",
       buyerPhone: "+44 113 400 1100", buyerEmail: "procurement@horizonhotels.co.uk",
@@ -468,7 +468,7 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
     // PINV-202603-0001 — Yorkshire Timber (PURCHASE, PAID)
     {
       id: "dp-pinv-001", invoiceNumber: "PO-202603-0001", invoiceTitle: "Purchase Invoice", invoiceType: "purchase",
-      invoiceDate: D.mar01, dueDate: D.mar31,
+      invoiceDate: D.mar01, dueDate: D.mar28,
       customer: "Yorkshire Timber Co.", customerId: "dp-sup-001",
       buyerAddress: "", buyerTown: "Hull", buyerPhone: "", buyerEmail: "",
       salesOfficer: "Ahmed Malik",
@@ -485,7 +485,7 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
     // PINV-202604-0001 — Sheffield Steel (PURCHASE, PAID)
     {
       id: "dp-pinv-002", invoiceNumber: "PO-202604-0001", invoiceTitle: "Purchase Invoice", invoiceType: "purchase",
-      invoiceDate: D.apr01, dueDate: D.apr30,
+      invoiceDate: D.apr01, dueDate: D.apr20,
       customer: "Sheffield Steel Supplies", customerId: "dp-sup-002",
       buyerAddress: "", buyerTown: "Sheffield", buyerPhone: "", buyerEmail: "",
       salesOfficer: "Ahmed Malik",
@@ -516,7 +516,7 @@ export function seedDataIntoTenant(tenantId: string, companyName = "Premier Furn
       jeId: "dp-je-pinv002", createdAt: iso(40), updatedAt: iso(38),
     },
     {
-      id: "dp-po-003", poNumber: "PO-202605-001", supplier: "FurniParts Direct Ltd", orderDate: D.may01, deliveryDate: D.may15,
+      id: "dp-po-003", poNumber: "PO-202605-001", supplier: "FurniParts Direct Ltd", orderDate: D.may01, deliveryDate: D.may10,
       status: "Confirmed", notes: "Chrome bases and gas cylinders for Q2 production.",
       items: [
         { id: "poi-3-1", productName: "Chrome Chair Base", sku: "RM-007", qty: "60",  unit: "pcs", unitPrice: "14.90", notes: "5-star 65cm" },

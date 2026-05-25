@@ -344,7 +344,7 @@ function NewSaleReturnSheet({ onClose, onSaved }: { onClose: () => void; onSaved
     return sales.filter(s => {
       const matchCustomer = !cq ||
         (s.customer || "").toLowerCase().includes(cq) ||
-        (s.phone || "").toLowerCase().includes(cq);
+        ((s as unknown as {phone?: string}).phone || "").toLowerCase().includes(cq);
       const matchItem = !iq ||
         s.saleNumber.toLowerCase().includes(iq) ||
         s.items.some(it =>
@@ -743,7 +743,7 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
     return purchaseInvoices.filter(inv => {
       const matchSupplier = !sq ||
         (inv.customer || "").toLowerCase().includes(sq) ||
-        (inv.phone || "").toLowerCase().includes(sq);
+        ((inv as unknown as {phone?: string}).phone || "").toLowerCase().includes(sq);
       const matchItem = !iq ||
         inv.invoiceNumber.toLowerCase().includes(iq) ||
         inv.items.some(it =>
@@ -798,7 +798,7 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
     if (!selectedInv) return;
     setReturnItems(prev => prev.map(item => {
       const origItem = selectedInv.items.find(
-        i => (item.sku && i.sku === item.sku) || (i.productName || i.description) === item.productName
+        i => (item.sku && i.sku === item.sku) || (i.productName || (i as unknown as {description?: string}).description) === item.productName
       );
       const origQty = parseFloat(origItem?.qty || item.qty) || 0;
       const key     = item.sku || item.productName;
@@ -980,7 +980,7 @@ function NewPurchaseReturnSheet({ onClose, onSaved }: { onClose: () => void; onS
             <div className="space-y-2">
               {returnItems.map(item => {
                 const origItem  = selectedInv.items.find(
-                  i => (item.sku && i.sku === item.sku) || (i.productName || i.description) === item.productName
+                  i => (item.sku && i.sku === item.sku) || (i.productName || (i as unknown as {description?: string}).description) === item.productName
                 );
                 const origQty   = parseFloat(origItem?.qty || item.qty) || 0;
                 const key       = item.sku || item.productName;

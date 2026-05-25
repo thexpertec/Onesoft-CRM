@@ -415,7 +415,7 @@ export default function InvoiceTemplatePage() {
   const handleDeselect = () => setSelectedKey(null);
 
   // Sample data
-  const sym = company.defaultCurrency === "GBP" ? "£" : "PKR ";
+  const sym = company.currency === "GBP" ? "£" : "PKR ";
 
   // Helper: renders an EditLabel in the preview using the active label set
   const lbl = (key: keyof InvoiceLabels) => (

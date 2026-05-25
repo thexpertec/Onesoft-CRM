@@ -516,10 +516,10 @@ export default function HrmSetupPage() {
                         <div className="absolute z-30 top-7 left-0 bg-card border border-border rounded-xl shadow-xl p-3 w-52">
                           <div className="grid grid-cols-5 gap-2 mb-2">
                             {PRESET_COLORS.map(c => (
-                              <button key={c} onClick={() => applyColor(row.key, c, false)}
+                              <button key={c.hex} onClick={() => applyColor(row.key, c.hex, false)}
                                 className="w-7 h-7 rounded-full border-2 border-white dark:border-zinc-700 shadow-sm hover:scale-110 transition-transform"
-                                style={{ background: c }}>
-                                {c === rowColor && <Check size={10} className="mx-auto text-white" />}
+                                style={{ background: c.hex }}>
+                                {c.hex === rowColor && <Check size={10} className="mx-auto text-white" />}
                               </button>
                             ))}
                           </div>
@@ -982,10 +982,10 @@ function NewRow({ draft, setDraft, roleNames, deptNames, desigNames, colorKey, s
             <div className="absolute z-30 top-7 left-0 bg-card border border-border rounded-xl shadow-xl p-3 w-52">
               <div className="grid grid-cols-5 gap-2 mb-2">
                 {PRESET_COLORS.map(c => (
-                  <button key={c} onClick={() => applyColor(c)}
+                  <button key={c.hex} onClick={() => applyColor(c.hex)}
                     className="w-7 h-7 rounded-full border-2 border-white dark:border-zinc-700 shadow-sm hover:scale-110 transition-transform"
-                    style={{ background: c }}>
-                    {c === draft.color && <Check size={10} className="mx-auto text-white" />}
+                    style={{ background: c.hex }}>
+                    {c.hex === draft.color && <Check size={10} className="mx-auto text-white" />}
                   </button>
                 ))}
               </div>

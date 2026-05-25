@@ -253,7 +253,7 @@ export default function OrderDetailPage() {
                 const lineAmt = calcLineTotal(item);
                 const qty  = parseFloat(item.qty) || 1;
                 /* Support both unitPrice (admin/online) and price (legacy) */
-                const unitP = parseFloat((item as Record<string, string>).unitPrice ?? item.price ?? "0") || 0;
+                const unitP = parseFloat((item as unknown as Record<string, string>).unitPrice ?? item.price ?? "0") || 0;
                 const disc  = parseFloat(item.discount) || 0;
                 return (
                   <div key={item.id ?? idx} className="flex items-start gap-4 px-5 py-3.5">

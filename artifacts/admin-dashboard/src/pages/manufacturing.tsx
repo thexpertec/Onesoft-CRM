@@ -714,7 +714,7 @@ export default function ManufacturingPage() {
   const sym                                   = getSettingsCurrencySymbol();
   const dp                                    = getSettingsDecimalPlaces();
   const products                              = getProducts();
-  const canEdit = !isStaff || staffPermissions.manufacturing !== "view";
+  const canEdit = !isStaff || (staffPermissions as unknown as Record<string, string | undefined>).manufacturing !== "view";
 
   // ── New order sheet ───────────────────────────────────────────────────────
   const [newOpen, setNewOpen] = useState(false);

@@ -138,6 +138,7 @@ const FIELD_ALIASES: Record<EditableField, string[]> = {
   notes:["notes","note","comments","comment","description"],
   temperature:["temperature","temp","heat","lead temp","lead temperature"],
   nextFollowUp:["next follow-up","followup","follow up","next contact","next call"],
+  assignedTo:["assigned to","assignedto","agent","assigned agent","owner"],
 };
 function mapRow(row: ParsedRow): Record<EditableField, string> {
   const result = BLANK_ROW();
@@ -201,7 +202,7 @@ function EditableCell({ value, col, active, canEdit, onActivate, onCommit, onCan
         </select>
       </div>
     );
-    return <input ref={inputRef} type={col.type === "temp-select" ? "text" : col.type} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={handleKey}
+    return <input ref={inputRef} type={(col.type as string) === "temp-select" ? "text" : col.type} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={handleKey}
       className="absolute inset-0 w-full h-full px-3 text-[13px] bg-transparent border-0 outline-none dark:text-foreground" style={{boxSizing:"border-box"}} />;
   }
   const cellBase = `w-full flex items-center px-3 text-[13px] overflow-hidden ${canEdit?"cursor-text":"cursor-default"}`;
@@ -986,7 +987,7 @@ export default function Leads() {
   const commitCell = useCallback((id: string, field: EditableField, value: string) => {
     const lead = leads.find(l => l.id === id);
     if (!lead) return;
-    if ((lead as Record<string,string>)[field] === value) { setActiveCell(null); return; }
+    if ((lead as unknown as Record<string,string>)[field] === value) { setActiveCell(null); return; }
     editLead(id, { [field]: value } as Partial<Lead>);
     setActiveCell(null);
     toast({ title: "Saved", description: `${field.charAt(0).toUpperCase()+field.slice(1)} updated.` });

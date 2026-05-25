@@ -211,7 +211,8 @@ export default function SalesAgentsPage() {
 
   // ── Excel export ──────────────────────────────────────────────────────────
   const handleExport = () => {
-    downloadExcel(filtered.map(a => ({
+    type AgentRow = { Code: string; Name: string; Email: string; Phone: string; "Region / Area": string; "Commission %": string; "Monthly Target": string; Status: string; "Join Date": string; Notes: string; };
+    const rows: AgentRow[] = filtered.map(a => ({
       Code:             a.agentCode,
       Name:             a.name,
       Email:            a.email,
@@ -222,7 +223,8 @@ export default function SalesAgentsPage() {
       Status:           a.status,
       "Join Date":      a.joinDate,
       Notes:            a.notes,
-    })), "Sales-Agents");
+    }));
+    downloadExcel("Sales-Agents", "Sales Agents", rows, (Object.keys(rows[0] ?? {}) as (keyof AgentRow)[]).map(k => ({ header: k, key: k })));
   };
 
   // ── Detail sheet data ─────────────────────────────────────────────────────

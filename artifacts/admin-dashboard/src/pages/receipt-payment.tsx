@@ -35,7 +35,7 @@ function invGrandTotal(inv: Invoice): number {
     const qty   = parseFloat(it.qty) || 0;
     const price = parseFloat(it.unitPrice) || 0;
     const disc  = parseFloat(it.discount) || 0;
-    const line  = qty * price - (it.discountMode === "pct" ? qty * price * disc / 100 : disc);
+    const line  = qty * price - (it.discountType === "pct" ? qty * price * disc / 100 : disc);
     return s + line;
   }, 0);
   const tax = sub * invTaxRate(inv) / 100;
@@ -344,7 +344,7 @@ function InvoiceSearchDropdown({ value, onChange, disabled, invoiceTypeFilter = 
     const all = getInvoices().filter(inv => {
       const isPurchase = inv.invoiceType === "purchase";
       if (invoiceTypeFilter === "purchase" ? !isPurchase : isPurchase) return false;
-      return inv.status !== "paid" && inv.status !== "cancelled";
+      return inv.status !== "Paid" && inv.status !== "Cancelled";
     });
     const sq = q.toLowerCase().trim();
     if (!sq) return all;

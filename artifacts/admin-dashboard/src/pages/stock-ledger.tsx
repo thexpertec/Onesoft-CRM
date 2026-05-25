@@ -23,20 +23,26 @@ const fmtDate    = (d: string) =>
 
 const TX_COLORS: Record<LedgerTxType, string> = {
   "purchase-receipt":  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+  "purchase-cancel":   "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
   "sale":              "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300",
+  "sale-cancel":       "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400",
   "sale-refund":       "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
   "mfg-input":         "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300",
   "mfg-output":        "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+  "mfg-cancel":        "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
   "manual-adjustment": "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
   "opening-balance":   "bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-400",
 };
 
 const TX_PRINT_COLORS: Record<LedgerTxType, string> = {
   "purchase-receipt":  "#065f46",
+  "purchase-cancel":   "#064e3b",
   "sale":              "#9f1239",
+  "sale-cancel":       "#7f1d1d",
   "sale-refund":       "#92400e",
   "mfg-input":         "#9a3412",
   "mfg-output":        "#1e3a8a",
+  "mfg-cancel":        "#1e40af",
   "manual-adjustment": "#4c1d95",
   "opening-balance":   "#374151",
 };

@@ -842,7 +842,7 @@ export default function Dashboard() {
         .reduce((sum, s) => sum + saleItemTotal(s.items as { qty: string; unitPrice: string; discount: string }[]), 0);
       const cost = purchaseOrders.filter(p => p.status === "Received" && p.createdAt >= wStart.toISOString() && p.createdAt < wEnd.toISOString())
         .reduce((sum, po) => {
-          const items = (po.items || []) as { qty: string; unitPrice: string; discount: string }[];
+          const items = (po.items || []) as unknown as { qty: string; unitPrice: string; discount: string }[];
           return sum + items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0) * (1 - (parseFloat(it.discount) || 0) / 100), 0);
         }, 0);
       return { week: format(wStart, "d MMM"), revenue: parseFloat(rev.toFixed(2)), cost: parseFloat(cost.toFixed(2)) };

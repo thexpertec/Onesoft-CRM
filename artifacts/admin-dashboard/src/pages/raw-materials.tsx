@@ -40,7 +40,7 @@ export default function RawMaterialsPage() {
   const { toast } = useToast();
   const sym = getSettingsCurrencySymbol();
 
-  const canEdit = !isStaff || staffPermissions.manufacturing !== "view";
+  const canEdit = !isStaff || (staffPermissions as unknown as Record<string, string | undefined>).manufacturing !== "view";
 
   // Unit column — dropdown sourced from Settings → Units. Falls back to free
   // text only when no units are defined yet, so legacy installs keep working.

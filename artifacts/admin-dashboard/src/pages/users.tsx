@@ -111,7 +111,7 @@ export default function UsersPage() {
   const commitCell = useCallback((id: string, field: EditableField, value: string) => {
     const u = users.find(x => x.id === id);
     if (!u) { setActiveCell(null); return; }
-    if ((u as Record<string, string>)[field] === value) { setActiveCell(null); return; }
+    if ((u as unknown as Record<string, string>)[field] === value) { setActiveCell(null); return; }
 
     try {
       updateAdminUser(id, { [field]: value } as Partial<AdminUser>);
@@ -280,7 +280,7 @@ export default function UsersPage() {
                   const canEditCol = c.type !== "readonly";
                   const rawVal = c.field === "createdAt"
                     ? format(new Date(u.createdAt), "d MMM yyyy")
-                    : String((u as Record<string, string>)[c.field] ?? "");
+                    : String((u as unknown as Record<string, string>)[c.field] ?? "");
                   return (
                     <td key={c.field} className={`border-r border-gray-100 dark:border-border relative p-0 ${isA ? "ring-2 ring-inset ring-blue-500 bg-white dark:bg-card z-10" : canEditCol ? "hover:bg-blue-50/40 dark:hover:bg-blue-950/20" : ""}`}
                       style={{ height: `${CELL_H}px` }}
