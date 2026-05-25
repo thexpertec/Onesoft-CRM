@@ -6409,6 +6409,10 @@ export type Invoice = {
   stockDeducted:     boolean;
   jeId?:             string;   // journal entry ID auto-created on payment (prevents duplicates)
   jeUsesAR?:         boolean;  // true when the accrual JE debited AR (so a cash receipt JE is needed on payment)
+  /** PR3 — immutable back-pointer when this invoice was generated from a repair booking.
+   *  Used by `convertRepairToInvoice` for idempotency: a second convert click is rejected
+   *  if any invoice already carries this bookingId. Set once on creation, never edited. */
+  sourceRepairBookingId?: string;
   createdAt:         string;
   updatedAt:         string;
 };
@@ -11536,6 +11540,169 @@ export function issueRepairParts(params: {
       ledgerEntryId: rows[i].id,
     })),
   };
+}
+
+/**
+ * PR3 — Converts an approved repair booking into a customer Invoice.
+ *
+ * Design:
+ *  • Parts and labour lines are flattened into SaleItem rows. Labour rows
+ *    have no `sku` (skipped by stock deduction by virtue of the
+ *    `stockDeducted: true` flag below).
+ *  • `costPrice` is set to "0" on **every** line. The repair flow already
+ *    posted the COGS/Inventory side via `issueRepairParts` (DR COGS / CR
+ *    Inventory per category), so the invoice's downstream
+ *    `autoPostSaleJE` must NOT re-post COGS. Setting costPrice=0 makes
+ *    `buildSaleCatLines` return `costTotal: 0` per line, which causes
+ *    `autoPostSaleJE` to skip the COGS/Inventory leg entirely — only the
+ *    AR / Revenue / VAT lines get posted. This complements the two JEs
+ *    correctly: parts-issue JE = inventory leg, invoice JE = revenue leg.
+ *  • `stockDeducted: true` prevents the invoice workflow from
+ *    re-deducting stock when status moves to Sent/Paid. Stock was already
+ *    decremented by `issueRepairParts`.
+ *  • Status starts as **Draft** so the user can review and edit before
+ *    sending. Payment method defaults to **Credit** — repair customers
+ *    typically pay on collection, not upfront.
+ *  • Caller-side guard: invoice creation should be blocked when the
+ *    booking has any unresolved parts (parts present AND not yet
+ *    issued), otherwise the costPrice=0 trick would silently lose the
+ *    COGS for those parts.
+ *
+ * Returns the persisted Invoice. Caller is responsible for writing
+ * `invoiceId` back onto the repair booking.
+ */
+export function convertRepairToInvoice(params: {
+  bookingId:        string;
+  customerId:       string;     // must resolve to a real Customer
+  date:             string;     // YYYY-MM-DD — invoice date
+  /** True only when the booking has `approvedAt` set — hard-gated below. */
+  approved:         boolean;
+  /** Number of parts on the booking (parts.length). */
+  partsCount:       number;
+  /** True when `(partsIssueJeIds ?? []).length > 0`. */
+  partsIssued:      boolean;
+  /** The booking's current `invoiceId` (if any) — for double-click guard. */
+  currentInvoiceId?: string;
+  parts: Array<{ productName: string; sku?: string; qty: number; unitPrice: number; unit?: string }>;
+  labour: Array<{ description: string; amount: number }>;
+}): Invoice {
+  // ── Hard guards (defence-in-depth — UI also enforces these) ────────────
+  // Without these, a non-UI caller or a future regression could create an
+  // invoice that loses COGS (parts not issued + costPrice=0) or double-bills
+  // the customer (booking already invoiced).
+  if (!params.approved) {
+    throw new Error("Cannot create invoice — the repair quote has not been approved yet.");
+  }
+  if (params.partsCount > 0 && !params.partsIssued) {
+    throw new Error("Cannot create invoice — issue the booking's parts first. Otherwise COGS for those parts would be silently dropped.");
+  }
+  if (params.currentInvoiceId) {
+    throw new Error("Cannot create invoice — this booking is already linked to an invoice.");
+  }
+  // Idempotency back-stop: even if the caller's `currentInvoiceId` was stale,
+  // refuse if any invoice already carries this bookingId in its source ref.
+  const existing = getInvoices().find(i => i.sourceRepairBookingId === params.bookingId);
+  if (existing) {
+    throw new Error(`Cannot create invoice — an invoice for this booking already exists (${existing.invoiceNumber}).`);
+  }
+
+  const customer = getCustomer(params.customerId);
+  if (!customer) {
+    throw new Error("Cannot create invoice — customer record not found. Pick a customer on the booking first.");
+  }
+  // AR routing safety: `autoPostSaleJE` resolves AR sub-ledger by customer
+  // NAME (not id). If multiple customers share this name, AR could post to
+  // the wrong sub-ledger. Refuse and ask the user to disambiguate.
+  const sameName = getCustomers().filter(c =>
+    (c.name || "").trim().toLowerCase() === (customer.name || "").trim().toLowerCase()
+  );
+  if (sameName.length > 1) {
+    throw new Error(`Cannot create invoice — multiple customers share the name "${customer.name}". Rename one to disambiguate so the AR ledger posts to the right account.`);
+  }
+
+  // Build SaleItems. Costs are intentionally 0 (see docblock above).
+  const partItems: SaleItem[] = params.parts
+    .filter(p => p.qty > 0 && p.productName)
+    .map(p => ({
+      id:           crypto.randomUUID(),
+      productName:  p.productName,
+      sku:          p.sku || "",
+      qty:          String(p.qty),
+      unit:         p.unit || "pcs",
+      unitPrice:    String(p.unitPrice),
+      discount:     "0",
+      discountType: "pct",
+      notes:        "",
+      itemStatus:   "Delivered",
+      costPrice:    "0",
+    }));
+
+  const labourItems: SaleItem[] = params.labour
+    .filter(l => l.amount > 0 && l.description)
+    .map(l => ({
+      id:           crypto.randomUUID(),
+      productName:  l.description,
+      sku:          "",
+      qty:          "1",
+      unit:         "svc",
+      unitPrice:    String(l.amount),
+      discount:     "0",
+      discountType: "pct",
+      notes:        "Labour / Service",
+      itemStatus:   "Delivered",
+      costPrice:    "0",
+    }));
+
+  const items = [...partItems, ...labourItems];
+  if (items.length === 0) {
+    throw new Error("Cannot create invoice — the booking has no chargeable parts or labour lines.");
+  }
+
+  // Compose buyer snapshot from the customer record (Invoice stores a
+  // snapshot so the invoice is stable even if the customer is later edited).
+  const buyerAddress = customer.billingAddress
+    || customer.shippingAddress
+    || formatAddress(customer.billingAddressDetails)
+    || "";
+
+  const invoice = createInvoice({
+    invoiceTitle:   "Invoice",
+    invoiceType:    "sale",
+    invoiceDate:    params.date,
+    dueDate:        params.date,                  // user can adjust before sending
+    customer:       customer.name,
+    customerId:     customer.id,
+    buyerAddress,
+    buyerTown:      customer.city || "",
+    buyerPhone:     customer.phone || "",
+    buyerEmail:     customer.email || "",
+    salesOfficer:   "",
+    status:         "Draft",                      // user reviews + sends manually
+    saleStatus:     "Pending",
+    paymentMethod:  "Credit",
+    paymentTerms:   "",
+    bankDetails:    "",
+    amountPaid:     "0",
+    paidAt:         "",
+    paymentHistory: [],
+    items,
+    taxRate:        "0",
+    shippingFee:    "0",
+    handlingFee:    "0",
+    shippingMethod: "",
+    notes:          `Generated from Repair Booking ${params.bookingId.slice(0, 8).toUpperCase()}`,
+    agreement:      "",
+    invoiceFooter:  `Generated from Repair Booking ${params.bookingId.slice(0, 8).toUpperCase()}`,
+    stockDeducted:  true,                         // parts already issued upstream
+    sourceRepairBookingId: params.bookingId,      // PR3 idempotency back-pointer
+  });
+
+  addActivity({
+    action: "created", entity: "Invoice", entityName: invoice.invoiceNumber,
+    detail: `From Repair Booking ${params.bookingId.slice(0, 8).toUpperCase()} – ${customer.name}`,
+  });
+
+  return invoice;
 }
 
 /**

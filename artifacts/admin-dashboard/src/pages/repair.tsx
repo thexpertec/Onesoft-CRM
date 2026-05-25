@@ -12,7 +12,7 @@ import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { getSettings, issueRepairParts, type Product } from "@/lib/store";
+import { getSettings, issueRepairParts, convertRepairToInvoice, type Product } from "@/lib/store";
 import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
@@ -1282,6 +1282,93 @@ export default function RepairPage() {
                                   className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-border hover:bg-gray-100 dark:hover:bg-muted/30 text-foreground transition-colors">
                                   <Link2 size={12} /> Copy Tracking Link
                                 </button>
+                                {/*
+                                  PR3 — Convert approved repair booking to a customer Invoice.
+                                  Gating rules (defence-in-depth — backend helper also throws):
+                                    • Quote must be approved.
+                                    • A real Customer record must be linked (customerId), so AR posts to a sub-ledger.
+                                    • If parts exist, they must already be issued — otherwise the
+                                      invoice's costPrice="0" trick would silently swallow the COGS.
+                                    • Idempotent — once invoiceId is set the button is replaced with a
+                                      read-only "Invoiced" badge linking to the invoices page.
+                                */}
+                                {b.invoiceId ? (
+                                  <Link href="/invoices">
+                                    <a className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors">
+                                      <Receipt size={12} /> Invoiced · open
+                                    </a>
+                                  </Link>
+                                ) : (() => {
+                                  const partsCount    = (b.parts ?? []).length;
+                                  const partsIssued   = (b.partsIssueJeIds ?? []).length > 0;
+                                  const labourCount   = (b.labour ?? []).length;
+                                  const approved      = !!b.approvedAt;
+                                  const hasCustomerId = !!b.customerId;
+                                  const partsBlocker  = partsCount > 0 && !partsIssued;
+                                  const nothingToBill = partsCount === 0 && labourCount === 0;
+                                  const disabled =
+                                    saving === b.id ||
+                                    !approved ||
+                                    !hasCustomerId ||
+                                    partsBlocker ||
+                                    nothingToBill;
+                                  const tip = !approved
+                                    ? "Mark the quote approved first"
+                                    : !hasCustomerId
+                                      ? "Pick a customer on this booking first (Edit → Customer)"
+                                      : partsBlocker
+                                        ? "Issue parts first — the invoice cannot post COGS for un-issued parts"
+                                        : nothingToBill
+                                          ? "Add at least one part or labour line"
+                                          : "Create a Draft invoice for this repair";
+                                  return can("Edit Repairs") && (
+                                    <button
+                                      onClick={async () => {
+                                        setSaving(b.id);
+                                        try {
+                                          const inv = convertRepairToInvoice({
+                                            bookingId:        b.id,
+                                            customerId:       b.customerId!,
+                                            date:             new Date().toISOString().slice(0, 10),
+                                            approved:         !!b.approvedAt,
+                                            partsCount:       (b.parts ?? []).length,
+                                            partsIssued:      (b.partsIssueJeIds ?? []).length > 0,
+                                            currentInvoiceId: b.invoiceId,
+                                            parts: (b.parts ?? []).map(p => ({
+                                              productName: p.productName || "(unnamed)",
+                                              sku:         p.productId,
+                                              qty:         p.qty,
+                                              unitPrice:   p.unitPrice,
+                                            })),
+                                            labour: (b.labour ?? []).map(l => ({
+                                              description: l.description,
+                                              amount:      l.amount,
+                                            })),
+                                          });
+                                          await enqueueSave(current => current.map(x =>
+                                            x.id === b.id ? { ...x, invoiceId: inv.id } : x));
+                                          toast({
+                                            title: "Invoice created",
+                                            description: `Draft ${inv.invoiceNumber} ready in Invoices.`,
+                                          });
+                                        } catch (err) {
+                                          toast({
+                                            title: "Could not create invoice",
+                                            description: err instanceof Error ? err.message : String(err),
+                                            variant: "destructive",
+                                          });
+                                        } finally {
+                                          setSaving(null);
+                                        }
+                                      }}
+                                      disabled={disabled}
+                                      title={tip}
+                                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <Receipt size={12} /> Convert to Invoice
+                                    </button>
+                                  );
+                                })()}
                                 <button
                                   onClick={() => setExpanded(null)}
                                   className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
