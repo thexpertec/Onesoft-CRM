@@ -48,6 +48,16 @@ const router = Router();
 // relational table stays in lockstep going forward.
 const MIGRATED_KEY_TO_TABLE: Record<string, string> = {
   "admin-products": "products",
+  // HRM master-data (Batch 1). Writes already go straight to the relational
+  // `departments` / `designations` tables via `/api/departments` and
+  // `/api/designations` (no kv_store mirror). Without these bridge entries,
+  // `kvGetAll('t:<tenant>')` returned nothing for these keys and the admin
+  // dashboard's HRM Setup table appeared empty after every page refresh —
+  // the saved rows were "lost" even though the DB still had them.
+  // Verified safe to flip across every tenant (May 2026): zero legacy
+  // kv_store rows for either key, so the bridge cannot hide any data.
+  "admin-hrm-departments":  "departments",
+  "admin-hrm-designations": "designations",
 };
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]*$/;
