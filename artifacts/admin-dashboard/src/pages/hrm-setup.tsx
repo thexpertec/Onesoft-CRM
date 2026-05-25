@@ -149,7 +149,7 @@ export default function HrmSetupPage() {
         deptId:      dept.id,
         desigTitle:  "",
         desigId:     undefined,
-        description: "",
+        description: dept.description || "",
         headOf:      dept.headOf || "",
         permissions: role?.permissions || "",
         isRepairTechnician: false,
@@ -217,42 +217,69 @@ export default function HrmSetupPage() {
   };
 
   // ── Save edit ─────────────────────────────────────────────────────────────
-  const saveEdit = useCallback(() => {
+  // The Description column maps to a different entity per row type:
+  //   - role row        → role.description
+  //   - department row  → department.description
+  //   - designation row → designation.jobDescription
+  // Previously only the designation path was persisted, so editing the
+  // description on a "Management"-style role row appeared to save (toast
+  // fired) but reverted on re-render. Same applied to department descriptions.
+  const saveEdit = useCallback(async () => {
     if (!editKey || !editDraft) return;
     const row = rows.find(r => r.key === editKey);
     if (!row) return;
 
-    // Persist Role changes (color + permissions)
-    if (row.roleId && editDraft.roleName === row.roleName) {
-      editRole(row.roleId, { color: editDraft.color, permissions: editDraft.permissions });
-    } else if (editDraft.roleName) {
-      const existing = roles.find(r => r.name === editDraft.roleName);
-      if (existing) {
-        editRole(existing.id, { color: editDraft.color, permissions: editDraft.permissions });
+    // ── Role persistence ──────────────────────────────────────────────
+    // For role rows, persist color + permissions + description against
+    // this row's role. For dept/desig rows, only color + permissions
+    // flow back to the role they reference (description there belongs
+    // to the dept/desig, not the role).
+    try {
+      if (row.rowType === "role" && row.roleId) {
+        editRole(row.roleId, {
+          color: editDraft.color,
+          permissions: editDraft.permissions,
+          description: editDraft.description,
+        });
+      } else if (row.roleId && editDraft.roleName === row.roleName) {
+        editRole(row.roleId, { color: editDraft.color, permissions: editDraft.permissions });
+      } else if (editDraft.roleName) {
+        const existing = roles.find(r => r.name === editDraft.roleName);
+        if (existing) {
+          editRole(existing.id, { color: editDraft.color, permissions: editDraft.permissions });
+        }
       }
-    }
 
-    // Persist Department changes (headOf + roleName reassignment)
-    if (row.deptId) {
-      editDepartment(row.deptId, {
-        headOf:   editDraft.headOf,
-        roleName: editDraft.roleName,
-      });
-    }
+      // ── Department persistence ─────────────────────────────────────
+      // headOf + roleName for any row that has a deptId. Department
+      // rows additionally own the description for that row.
+      if (row.deptId) {
+        const updates: Partial<{ headOf: string; roleName: string; description: string }> = {
+          headOf:   editDraft.headOf,
+          roleName: editDraft.roleName,
+        };
+        if (row.rowType === "department") {
+          updates.description = editDraft.description;
+        }
+        await editDepartment(row.deptId, updates);
+      }
 
-    // Persist Designation changes (title + description + dept reassignment)
-    if (row.desigId) {
-      editDesignation(row.desigId, {
-        title:             editDraft.desigTitle.trim() || row.desigTitle,
-        jobDescription:    editDraft.description,
-        department:        editDraft.deptName,
-        isRepairTechnician: editDraft.isRepairTechnician,
-      });
-    }
+      // ── Designation persistence ────────────────────────────────────
+      if (row.desigId) {
+        await editDesignation(row.desigId, {
+          title:              editDraft.desigTitle.trim() || row.desigTitle,
+          jobDescription:     editDraft.description,
+          department:         editDraft.deptName,
+          isRepairTechnician: editDraft.isRepairTechnician,
+        });
+      }
 
-    setEditKey(null);
-    setEditDraft(null);
-    toast({ title: "Saved" });
+      setEditKey(null);
+      setEditDraft(null);
+      toast({ title: "Saved" });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message || String(e), variant: "destructive" });
+    }
   }, [editKey, editDraft, rows, roles, editRole, editDepartment, editDesignation, toast]);
 
   // ── Save new row ──────────────────────────────────────────────────────────
