@@ -956,7 +956,7 @@ export default function RepairPage() {
                                 <div className="mt-2.5 rounded-lg border border-border bg-white dark:bg-slate-900 overflow-hidden">
                                   <div className="px-3 py-1.5 border-b border-border bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
                                     <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
-                                      <Receipt size={12} /> Parts & Labour
+                                      <Receipt size={12} /> Parts & Repair Service
                                       {approved && (
                                         <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded normal-case">
                                           <CheckCircle2 size={9} /> Quote approved {b.approvedAt && `· ${formatDateShort(b.approvedAt)}`}
@@ -1193,7 +1193,7 @@ export default function RepairPage() {
                                   <div className="px-3 py-2 border-t border-border lg:border-t-0 space-y-1.5">
                                     <div className="flex items-center justify-between">
                                       <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                                        <Hammer size={10} /> Labour ({labour.length})
+                                        <Hammer size={10} /> Repair Service ({labour.length})
                                       </div>
                                       {canEdit && (
                                         <button
@@ -1203,12 +1203,12 @@ export default function RepairPage() {
                                           }}
                                           className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors"
                                         >
-                                          <Plus size={10} /> Add labour
+                                          <Plus size={10} /> Add service
                                         </button>
                                       )}
                                     </div>
                                     {labour.length === 0 ? (
-                                      <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No labour lines added yet.</p>
+                                      <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No repair service lines added yet.</p>
                                     ) : (
                                       <div className="w-full">
                                         <table className="w-full text-xs table-fixed">
@@ -1236,7 +1236,7 @@ export default function RepairPage() {
                                                 <tr key={idx} className="align-middle">
                                                   <td className="py-1.5 pr-1.5 min-w-0">
                                                     {canEdit ? (
-                                                      <input type="text" placeholder="e.g. Screen labour"
+                                                      <input type="text" placeholder="e.g. Screen replacement"
                                                         value={line.description}
                                                         onChange={e => patchLab({ description: e.target.value })}
                                                         disabled={saving === b.id}
@@ -1273,7 +1273,7 @@ export default function RepairPage() {
                                                         onClick={() => updateFields(b.id, { labour: labour.filter((_, i) => i !== idx) })}
                                                         disabled={saving === b.id}
                                                         className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
-                                                        title="Remove labour">
+                                                        title="Remove service">
                                                         <X size={12} />
                                                       </button>
                                                     </td>
@@ -1293,7 +1293,7 @@ export default function RepairPage() {
                                   <div className="px-3 py-2 border-t border-border bg-slate-50/60 dark:bg-slate-800/30 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                                     <div className="text-xs space-y-1">
                                       <div className="flex justify-between gap-4"><span className="text-muted-foreground">Parts subtotal</span><span className="tabular-nums">{fmt(totals.partsSub)}</span></div>
-                                      <div className="flex justify-between gap-4"><span className="text-muted-foreground">Labour subtotal</span><span className="tabular-nums">{fmt(totals.labourSub)}</span></div>
+                                      <div className="flex justify-between gap-4"><span className="text-muted-foreground">Repair Service subtotal</span><span className="tabular-nums">{fmt(totals.labourSub)}</span></div>
                                       <div className="flex justify-between gap-4 pt-1 border-t border-border/60"><span className="font-semibold text-foreground">Computed total</span><span className="font-bold text-foreground tabular-nums">{fmt(totals.grand)}</span></div>
                                     </div>
                                     <div className="text-xs">
@@ -1388,7 +1388,7 @@ export default function RepairPage() {
                                       : partsBlocker
                                         ? "Issue parts first — the invoice cannot post COGS for un-issued parts"
                                         : nothingToBill
-                                          ? "Add at least one part or labour line"
+                                          ? "Add at least one part or service line"
                                           : "Create a Draft invoice for this repair";
                                   return can("Edit Repairs") && (
                                     <button
