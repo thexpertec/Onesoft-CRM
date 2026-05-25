@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { getSettings } from "@/lib/store";
-import { useDesignations, useStaff } from "@/hooks/use-data";
+import { useDesignations, useStaff, useCustomers } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
 const API = "/api/kv/global/repair-bookings";
@@ -29,8 +29,34 @@ type BookingStatus =
 type Priority = "Low" | "Normal" | "High" | "Urgent";
 type RequestSource = "Online" | "Shop Visitor";
 
+/** Spare part consumed during a repair. Stock is debited at issue time (PR2). */
+export interface RepairPartLine {
+  productId: string;
+  /** Snapshot of product name at issue time (display survives product deletion). */
+  productName: string;
+  qty: number;
+  /** Cost per unit at issue time — used for COGS posting (PR2). */
+  unitCost: number;
+  /** Sale price per unit shown to the customer on the invoice (PR3). */
+  unitPrice: number;
+  /** Where the part came from: existing stock or an ad-hoc purchase. */
+  source?: "stock" | "purchase";
+  /** Reference back to the stock-ledger entry once issued (PR2). */
+  ledgerEntryId?: string;
+}
+
+/** Non-stock labour / service line — billed but doesn't move inventory. */
+export interface RepairLabourLine {
+  description: string;
+  hours?: number;
+  rate: number;
+  amount: number;
+}
+
 interface RepairBooking {
   id: string;
+  /** Resolved customer record id; absent for ad-hoc walk-ins. */
+  customerId?: string;
   name: string;
   phone: string;
   service: string;
@@ -47,6 +73,20 @@ interface RepairBooking {
   technicianId?: string;
   /** Snapshot of technician's name at assignment time (for display when staff record is missing). */
   technicianName?: string;
+  /** Parts consumed on this job (populated in PR2). */
+  parts?: RepairPartLine[];
+  /** Labour / service lines (populated in PR2). */
+  labour?: RepairLabourLine[];
+  /** Quoted total presented to the customer (PR2). */
+  quotedTotal?: number;
+  /** ISO timestamp when the customer approved the quote (PR2). */
+  approvedAt?: string;
+  /** Linked sale invoice id once the job is converted (PR3). */
+  invoiceId?: string;
+  /** JE ids posted by parts-issue movements — used by reverse-cascade on cancel (PR2). */
+  partsIssueJeIds?: string[];
+  /** Warranty window in days from completion (PR3+). */
+  warrantyDays?: number;
 }
 
 const STATUS_ORDER: BookingStatus[] = [
@@ -111,6 +151,7 @@ function normaliseBooking(b: RepairBooking): RepairBooking {
 }
 
 const EMPTY_FORM = {
+  customerId: "",
   name: "", phone: "", service: "Device Repair",
   deviceIssue: "", notes: "", publicNote: "", estimatedDate: "",
   status: "New" as BookingStatus,
@@ -132,6 +173,18 @@ export default function RepairPage() {
   const [technicianFilter, setTechnicianFilter] = useState<string>("All");
   const { designations } = useDesignations();
   const { staff } = useStaff();
+  const { customers } = useCustomers();
+
+  /** Customers sorted by name for the picker, with stable name→record map. */
+  const customerOptions = useMemo(
+    () => customers.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [customers],
+  );
+  const customerByName = useMemo(() => {
+    const m = new Map<string, typeof customers[number]>();
+    customers.forEach(c => m.set(c.name.trim().toLowerCase(), c));
+    return m;
+  }, [customers]);
 
   /** Active staff whose designation is flagged as Repair Technician in HRM Setup. */
   const technicians = useMemo(() => {
@@ -233,8 +286,12 @@ export default function RepairPage() {
     setAddSaving(true);
     try {
       const tech = addForm.technicianId ? technicianById.get(addForm.technicianId) : undefined;
+      // Re-resolve customerId by name (handles case where user edited name after picking).
+      const matched = customerByName.get(addForm.name.trim().toLowerCase());
+      const resolvedCustomerId = matched?.id || addForm.customerId || undefined;
       const newBooking: RepairBooking = {
         id: crypto.randomUUID(),
+        customerId: resolvedCustomerId,
         name: addForm.name.trim(),
         phone: addForm.phone.trim(),
         service: addForm.service,
@@ -810,13 +867,40 @@ export default function RepairPage() {
                 </div>
               </div>
 
-              {/* Name + Phone */}
+              {/* Customer — pick existing or type new walk-in */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={LABEL_CLS}>Customer name <span className="text-red-500">*</span></label>
-                  <input required type="text" placeholder="e.g. John Smith"
-                    value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  <label className={LABEL_CLS}>
+                    Customer name <span className="text-red-500">*</span>
+                    {addForm.customerId && (
+                      <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 size={10} /> linked
+                      </span>
+                    )}
+                  </label>
+                  <input required type="text" list="repair-customer-list"
+                    placeholder="Pick existing or type new walk-in"
+                    value={addForm.name}
+                    onChange={e => {
+                      const v = e.target.value;
+                      const match = customerByName.get(v.trim().toLowerCase());
+                      setAddForm(f => ({
+                        ...f,
+                        name: v,
+                        customerId: match?.id || "",
+                        // Only auto-fill phone when picking an existing customer and
+                        // the field is currently empty (don't overwrite user-typed numbers).
+                        phone: match && !f.phone.trim() ? match.phone : f.phone,
+                      }));
+                    }}
                     className={FIELD_CLS} />
+                  <datalist id="repair-customer-list">
+                    {customerOptions.map(c => (
+                      <option key={c.id} value={c.name}>
+                        {c.phone ? `${c.phone}` : ""}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className={LABEL_CLS}>Phone number <span className="text-red-500">*</span></label>
@@ -825,6 +909,11 @@ export default function RepairPage() {
                     className={FIELD_CLS} />
                 </div>
               </div>
+              {addForm.name.trim() && !addForm.customerId && (
+                <p className="-mt-2 text-[11px] text-muted-foreground leading-snug">
+                  No matching customer — this will be saved as an ad-hoc walk-in. Add the customer in <Link href="/customers" className="text-blue-600 hover:underline">Customers</Link> first to enable invoicing and AR tracking.
+                </p>
+              )}
 
               {/* Service */}
               <div>
