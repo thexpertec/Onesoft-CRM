@@ -750,65 +750,93 @@ export default function RepairPage() {
                       {/* Expanded detail row */}
                       {isOpen && (
                         <tr key={b.id + "-detail"} className="bg-blue-50/40 dark:bg-blue-950/10 border-b border-blue-100 dark:border-blue-900/30">
-                          <td colSpan={can("Delete Repairs") ? 11 : 10} className="px-4 py-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <td colSpan={can("Delete Repairs") ? 11 : 10} className="px-3 py-2.5">
+                            {/* Top info grid — 4 cols on lg+: Issue | Notes | Customer Update | Compact Details + Pipeline.
+                                Customer Update was previously its own full-width section below; consolidating it here
+                                reclaims ~80px and keeps related context-setting fields visually together. */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
 
                               {/* Device issue */}
-                              <div className="sm:col-span-1 space-y-1.5">
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  <MessageSquare size={11} /> Device Issue
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  <MessageSquare size={10} /> Device Issue
                                 </div>
-                                <p className="text-sm text-foreground bg-white dark:bg-slate-800 rounded-lg px-3 py-2.5 border border-border min-h-[60px] leading-relaxed">
-                                  {b.deviceIssue || <span className="text-muted-foreground italic text-xs">Not provided</span>}
+                                <p className="text-xs text-foreground bg-white dark:bg-slate-800 rounded-md px-2 py-1.5 border border-border min-h-[52px] leading-snug">
+                                  {b.deviceIssue || <span className="text-muted-foreground italic">Not provided</span>}
                                 </p>
                               </div>
 
                               {/* Technician notes */}
-                              <div className="sm:col-span-1 space-y-1.5">
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  <FileText size={11} /> Technician Notes
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  <FileText size={10} /> Technician Notes
                                 </div>
                                 {can("Edit Repairs") ? (
                                   <textarea
-                                    rows={3}
+                                    rows={2}
                                     defaultValue={b.notes || ""}
                                     onBlur={e => {
                                       const v = e.target.value.trim();
                                       if (v !== (b.notes || "")) updateField(b.id, "notes", v);
                                     }}
                                     placeholder="Add technician notes…"
-                                    className="w-full text-sm px-3 py-2.5 rounded-lg border border-border bg-white dark:bg-slate-800 text-foreground outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-muted-foreground/40 resize-none leading-relaxed"
+                                    className="w-full text-xs px-2 py-1.5 rounded-md border border-border bg-white dark:bg-slate-800 text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40 resize-none leading-snug min-h-[52px]"
                                   />
                                 ) : (
-                                  <p className="text-sm text-foreground bg-white dark:bg-slate-800 rounded-lg px-3 py-2.5 border border-border min-h-[60px] leading-relaxed">
-                                    {b.notes || <span className="text-muted-foreground italic text-xs">No notes</span>}
+                                  <p className="text-xs text-foreground bg-white dark:bg-slate-800 rounded-md px-2 py-1.5 border border-border min-h-[52px] leading-snug">
+                                    {b.notes || <span className="text-muted-foreground italic">No notes</span>}
                                   </p>
                                 )}
                               </div>
 
-                              {/* Meta panel */}
-                              <div className="sm:col-span-1 space-y-3">
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  <Clock size={11} /> Details
+                              {/* Customer Update (relocated from full-width section below) */}
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                  <Eye size={10} /> Customer Update <span className="text-muted-foreground normal-case font-normal">· QR</span>
                                 </div>
-                                <div className="space-y-2 text-xs">
-                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
-                                    <span className="text-muted-foreground font-medium">Source</span>
-                                    <span className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded border ${SOURCE_META[b.source ?? "Online"].color}`}>
-                                      {b.source === "Shop Visitor" ? <Store size={10} /> : <Globe size={10} />}
+                                {can("Edit Repairs") ? (
+                                  <textarea
+                                    rows={2}
+                                    defaultValue={b.publicNote || ""}
+                                    onBlur={e => {
+                                      const v = e.target.value.trim();
+                                      if (v !== (b.publicNote || "")) updateField(b.id, "publicNote", v);
+                                    }}
+                                    placeholder="Public update (e.g. Screen ordered, ready Friday)…"
+                                    className="w-full text-xs px-2 py-1.5 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 text-foreground outline-none focus:ring-1 focus:ring-amber-400 placeholder:text-muted-foreground/40 resize-none leading-snug min-h-[52px]"
+                                  />
+                                ) : (
+                                  <p className="text-xs text-foreground bg-amber-50/40 dark:bg-amber-950/20 rounded-md px-2 py-1.5 border border-amber-200 dark:border-amber-800 min-h-[52px] leading-snug">
+                                    {b.publicNote || <span className="text-muted-foreground italic">No update</span>}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Compact details + pipeline.
+                                  Previously 5 stacked bordered boxes (~150px); now a single 2-col key:value
+                                  grid inside one box (~70px) plus the pipeline bar. */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  <Clock size={10} /> Details
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] bg-white dark:bg-slate-800 rounded-md border border-border px-2 py-1.5">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-muted-foreground">Source</span>
+                                    <span className={`inline-flex items-center gap-0.5 font-medium px-1 py-0 rounded border text-[10px] ${SOURCE_META[b.source ?? "Online"].color}`}>
+                                      {b.source === "Shop Visitor" ? <Store size={9} /> : <Globe size={9} />}
                                       {b.source ?? "Online"}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
-                                    <span className="text-muted-foreground font-medium">Booking ID</span>
-                                    <span className="font-mono text-[10px] text-foreground/70 truncate max-w-28">{b.id.slice(0, 8)}…</span>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-muted-foreground">ID</span>
+                                    <span className="font-mono text-[10px] text-foreground/70 truncate max-w-[64px]">{b.id.slice(0, 8)}…</span>
                                   </div>
-                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
-                                    <span className="text-muted-foreground font-medium">Received</span>
-                                    <span className="text-foreground">{formatDate(b.createdAt)}</span>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-muted-foreground">Received</span>
+                                    <span className="text-foreground truncate">{formatDate(b.createdAt)}</span>
                                   </div>
-                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
-                                    <span className="text-muted-foreground font-medium">Est. Completion</span>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-muted-foreground">Est.</span>
                                     {can("Edit Repairs") ? (
                                       <input
                                         type="date"
@@ -817,21 +845,20 @@ export default function RepairPage() {
                                           const v = e.target.value;
                                           if (v !== (b.estimatedDate || "")) updateField(b.id, "estimatedDate", v);
                                         }}
-                                        className="text-xs bg-transparent text-foreground outline-none focus:ring-1 focus:ring-blue-400 rounded border border-border px-1.5 py-0.5"
+                                        className="text-[10px] bg-transparent text-foreground outline-none focus:ring-1 focus:ring-blue-400 rounded border border-border px-1 py-0 w-[96px]"
                                       />
                                     ) : (
-                                      <span className="text-foreground">{b.estimatedDate ? formatDateShort(b.estimatedDate) : <span className="italic text-muted-foreground">Not set</span>}</span>
+                                      <span className="text-foreground">{b.estimatedDate ? formatDateShort(b.estimatedDate) : <span className="italic text-muted-foreground">—</span>}</span>
                                     )}
                                   </div>
-                                  <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-border">
-                                    <span className="text-muted-foreground font-medium">Store</span>
-                                    <span className="text-foreground truncate max-w-28">{b.tenantId || "—"}</span>
+                                  <div className="flex items-center justify-between gap-1 col-span-2">
+                                    <span className="text-muted-foreground">Store</span>
+                                    <span className="text-foreground truncate">{b.tenantId || "—"}</span>
                                   </div>
                                 </div>
 
-                                {/* Stage progress bar */}
-                                <div className="space-y-1.5">
-                                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Pipeline Stage</div>
+                                {/* Pipeline progress — thinner bar, single line caption */}
+                                <div className="space-y-0.5">
                                   <div className="flex items-center gap-0.5">
                                     {STATUS_ORDER.map((s, idx) => {
                                       const currentIdx = STATUS_ORDER.indexOf(b.status);
@@ -839,12 +866,12 @@ export default function RepairPage() {
                                       const sm2 = STATUS_META[s];
                                       return (
                                         <div key={s} title={s}
-                                          className={`flex-1 h-1.5 rounded-full transition-all ${filled ? sm2.dot : "bg-gray-200 dark:bg-gray-700"}`} />
+                                          className={`flex-1 h-1 rounded-full transition-all ${filled ? sm2.dot : "bg-gray-200 dark:bg-gray-700"}`} />
                                       );
                                     })}
                                   </div>
                                   <div className="text-[10px] text-muted-foreground">
-                                    Step {STATUS_ORDER.indexOf(b.status) + 1} of {STATUS_ORDER.length} — <span className="font-semibold text-foreground">{b.status}</span>
+                                    Step {STATUS_ORDER.indexOf(b.status) + 1}/{STATUS_ORDER.length} · <span className="font-semibold text-foreground">{b.status}</span>
                                   </div>
                                 </div>
                               </div>
@@ -866,8 +893,8 @@ export default function RepairPage() {
                               const alreadyIssued = (b.partsIssueJeIds ?? []).length > 0;
                               const partsEditable = canEdit && !alreadyIssued;
                               return (
-                                <div className="mt-4 rounded-xl border border-border bg-white dark:bg-slate-900 overflow-hidden">
-                                  <div className="px-4 py-2.5 border-b border-border bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
+                                <div className="mt-2.5 rounded-lg border border-border bg-white dark:bg-slate-900 overflow-hidden">
+                                  <div className="px-3 py-1.5 border-b border-border bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
                                     <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
                                       <Receipt size={12} /> Parts & Labour
                                       {approved && (
@@ -889,8 +916,11 @@ export default function RepairPage() {
                                     )}
                                   </div>
 
+                                  {/* Parts + Labour laid out side-by-side at lg+ to reclaim vertical space
+                                      when one or both sections are short. Stack vertically below lg. */}
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x divide-border">
                                   {/* Parts table */}
-                                  <div className="px-4 py-3 space-y-2">
+                                  <div className="px-3 py-2 space-y-1.5">
                                     {(() => {
                                       const issuedJeIds   = b.partsIssueJeIds ?? [];
                                       const alreadyIssued = issuedJeIds.length > 0;
@@ -1099,8 +1129,8 @@ export default function RepairPage() {
                                     )}
                                   </div>
 
-                                  {/* Labour table */}
-                                  <div className="px-4 py-3 border-t border-border space-y-2">
+                                  {/* Labour table — sibling of Parts inside the 2-col grid; no border-t at lg+ (the divide-x supplies the separator) */}
+                                  <div className="px-3 py-2 border-t border-border lg:border-t-0 space-y-1.5">
                                     <div className="flex items-center justify-between">
                                       <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                                         <Hammer size={10} /> Labour ({labour.length})
@@ -1197,8 +1227,10 @@ export default function RepairPage() {
                                     )}
                                   </div>
 
+                                  </div>{/* /Parts+Labour 2-col grid */}
+
                                   {/* Totals + Quoted total */}
-                                  <div className="px-4 py-3 border-t border-border bg-slate-50/60 dark:bg-slate-800/30 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                  <div className="px-3 py-2 border-t border-border bg-slate-50/60 dark:bg-slate-800/30 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                                     <div className="text-xs space-y-1">
                                       <div className="flex justify-between gap-4"><span className="text-muted-foreground">Parts subtotal</span><span className="tabular-nums">{fmt(totals.partsSub)}</span></div>
                                       <div className="flex justify-between gap-4"><span className="text-muted-foreground">Labour subtotal</span><span className="tabular-nums">{fmt(totals.labourSub)}</span></div>
@@ -1245,42 +1277,19 @@ export default function RepairPage() {
                               );
                             })()}
 
-                            {/* Customer Update (public note) + Actions */}
-                            <div className="mt-4 space-y-3">
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-                                    <Eye size={11} /> Customer Update <span className="text-muted-foreground normal-case font-normal">(visible to customer via QR)</span>
-                                  </div>
-                                </div>
-                                {can("Edit Repairs") ? (
-                                  <textarea
-                                    rows={2}
-                                    defaultValue={b.publicNote || ""}
-                                    onBlur={e => {
-                                      const v = e.target.value.trim();
-                                      if (v !== (b.publicNote || "")) updateField(b.id, "publicNote", v);
-                                    }}
-                                    placeholder="Public update for the customer (e.g. Screen replacement ordered, ready by Friday)…"
-                                    className="w-full text-sm px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 text-foreground outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-muted-foreground/40 resize-none leading-relaxed"
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground bg-amber-50/40 dark:bg-amber-950/20 rounded-lg px-3 py-2.5 border border-amber-200 dark:border-amber-800 min-h-[50px] leading-relaxed">
-                                    {b.publicNote || <span className="text-muted-foreground italic text-xs">No public update</span>}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2 flex-wrap">
+                            {/* Action bar — Customer Update was relocated to the top grid (4th column).
+                                Compact button strip; Collapse pinned right. */}
+                            <div className="mt-2.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <button
                                   onClick={() => printJobCard(b)}
-                                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors">
-                                  <Printer size={12} /> Print Job Card
+                                  className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                                  <Printer size={11} /> Print Job Card
                                 </button>
                                 <button
                                   onClick={() => copyTrackingLink(b)}
-                                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-border hover:bg-gray-100 dark:hover:bg-muted/30 text-foreground transition-colors">
-                                  <Link2 size={12} /> Copy Tracking Link
+                                  className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-border hover:bg-gray-100 dark:hover:bg-muted/30 text-foreground transition-colors">
+                                  <Link2 size={11} /> Copy Tracking Link
                                 </button>
                                 {/*
                                   PR3 — Convert approved repair booking to a customer Invoice.
@@ -1294,8 +1303,8 @@ export default function RepairPage() {
                                 */}
                                 {b.invoiceId ? (
                                   <Link href="/invoices">
-                                    <a className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors">
-                                      <Receipt size={12} /> Invoiced · open
+                                    <a className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors">
+                                      <Receipt size={11} /> Invoiced · open
                                     </a>
                                   </Link>
                                 ) : (() => {
@@ -1363,9 +1372,9 @@ export default function RepairPage() {
                                       }}
                                       disabled={disabled}
                                       title={tip}
-                                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <Receipt size={12} /> Convert to Invoice
+                                      <Receipt size={11} /> Convert to Invoice
                                     </button>
                                   );
                                 })()}
