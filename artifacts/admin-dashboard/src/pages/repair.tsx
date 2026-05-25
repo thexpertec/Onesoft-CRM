@@ -355,11 +355,23 @@ export default function RepairPage() {
     }
   }
 
-  /** Patch multiple fields on a booking in a single save. */
+  /** Patch multiple fields on a booking in a single save.
+   *
+   *  The state update is applied SYNCHRONOUSLY here (not inside enqueueSave's
+   *  microtask) so React batches `setSaving` + `setBookings` into a single
+   *  render. Without this, fast typing in controlled inputs (Qty, Price,
+   *  Description, Amount) loses characters: setSaving fires a render with
+   *  STILL-STALE bookings, the controlled input's `value` prop snaps back to
+   *  the previous value, and the keystroke the user just typed is wiped.
+   *  enqueueSave still runs to serialise the network PUT against concurrent
+   *  edits. */
   async function updateFields(id: string, patch: Partial<RepairBooking>) {
+    const updated = bookingsRef.current.map(b => b.id === id ? { ...b, ...patch } : b);
+    bookingsRef.current = updated;
+    setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setSaving(id);
     try {
-      await enqueueSave(current => current.map(b => b.id === id ? { ...b, ...patch } : b));
+      await enqueueSave(() => updated);
     } catch {
       toast({ title: "Failed to save", variant: "destructive" });
     } finally {
