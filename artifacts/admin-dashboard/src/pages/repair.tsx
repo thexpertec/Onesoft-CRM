@@ -26,7 +26,8 @@ type BookingStatus =
   | "Awaiting Parts"
   | "In Repair"
   | "Ready"
-  | "Completed";
+  | "Completed"
+  | "Cancelled";
 
 type Priority = "Low" | "Normal" | "High" | "Urgent";
 type RequestSource = "Online" | "Shop Visitor";
@@ -93,7 +94,7 @@ interface RepairBooking {
 }
 
 const STATUS_ORDER: BookingStatus[] = [
-  "New", "Diagnosing", "Quoted", "Awaiting Parts", "In Repair", "Ready", "Completed",
+  "New", "Diagnosing", "Quoted", "Awaiting Parts", "In Repair", "Ready", "Completed", "Cancelled",
 ];
 
 const SERVICE_OPTIONS = [
@@ -109,6 +110,7 @@ const STATUS_META: Record<BookingStatus, { color: string; dot: string; icon: Rea
   "In Repair":      { color: "bg-amber-100  text-amber-700  dark:bg-amber-900/40  dark:text-amber-300  border-amber-200  dark:border-amber-800",  dot: "bg-amber-500",  icon: Settings2,    label: "In Repair"      },
   "Ready":          { color: "bg-teal-100   text-teal-700   dark:bg-teal-900/40   dark:text-teal-300   border-teal-200   dark:border-teal-800",   dot: "bg-teal-500",   icon: TruckIcon,    label: "Ready"          },
   "Completed":      { color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800", dot: "bg-emerald-500", icon: CheckCircle2, label: "Completed" },
+  "Cancelled":      { color: "bg-rose-100    text-rose-700    dark:bg-rose-900/40    dark:text-rose-300    border-rose-200    dark:border-rose-800",    dot: "bg-rose-500",    icon: X,            label: "Cancelled"      },
 };
 
 const PRIORITY_META: Record<Priority, { color: string; dot: string }> = {
