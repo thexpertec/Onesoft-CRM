@@ -182,7 +182,10 @@ async function loadCms(): Promise<StoreCms> {
 async function saveCms(cms: StoreCms): Promise<void> {
   const r = await fetch(`${API_BASE}/${CMS_KEY}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": import.meta.env.VITE_KV_API_SECRET ?? "",
+    },
     body: JSON.stringify({ value: cms }),
   });
   if (!r.ok) throw new Error("Failed to save CMS");
