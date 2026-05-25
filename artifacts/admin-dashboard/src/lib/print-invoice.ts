@@ -659,10 +659,6 @@ export function buildRepairJobCardHtml(
     <span class="priority-badge">${esc(booking.priority ?? "Normal")}</span>
   </div>
 
-  <div class="pipeline">
-    ${buildPipelineHtml(booking.status)}
-  </div>
-
   ${invoiceSectionHtml}
 
   <hr class="divider"/>
