@@ -1087,16 +1087,16 @@ export default function RepairPage() {
                                     {parts.length === 0 ? (
                                       <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No parts added yet.</p>
                                     ) : (
-                                      <div className="overflow-x-auto">
-                                        <table className="w-full text-xs">
+                                      <div className="w-full">
+                                        <table className="w-full text-xs table-fixed">
                                           <thead>
                                             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                              <th className="text-left py-1.5 pr-2 font-medium min-w-44">Product</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-16">Qty</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-24">Cost</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-24">Price</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-24">Subtotal</th>
-                                              {canEdit && <th className="w-8" />}
+                                              <th className="text-left py-1.5 pr-1.5 font-medium">Product</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-12">Qty</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-16">Cost</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-16">Price</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-16">Subtotal</th>
+                                              {canEdit && <th className="w-6" />}
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-border/60">
@@ -1124,13 +1124,13 @@ export default function RepairPage() {
                                               };
                                               return (
                                                 <tr key={idx} className="align-middle">
-                                                  <td className="py-1.5 pr-2">
+                                                  <td className="py-1.5 pr-1.5 min-w-0">
                                                     {editableRow ? (
                                                       <select
                                                         value={line.productId}
                                                         onChange={e => onPickProduct(e.target.value)}
                                                         disabled={saving === b.id}
-                                                        className="w-full text-xs px-2 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400"
+                                                        className="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 truncate"
                                                       >
                                                         <option value="">— Select product —</option>
                                                         {productOptions.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
@@ -1139,34 +1139,34 @@ export default function RepairPage() {
                                                         )}
                                                       </select>
                                                     ) : (
-                                                      <span className="text-foreground">{line.productName || "—"}</span>
+                                                      <span className="text-foreground block truncate" title={line.productName}>{line.productName || "—"}</span>
                                                     )}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {editableRow ? (
                                                       <input type="number" min="0" step="1" value={line.qty}
                                                         onChange={e => patchPart({ qty: parseInt(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-14 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.qty}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitCost}
                                                         onChange={e => patchPart({ unitCost: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.unitCost.toFixed(2)}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {editableRow ? (
                                                       <input type="number" min="0" step="0.01" value={line.unitPrice}
                                                         onChange={e => patchPart({ unitPrice: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.unitPrice.toFixed(2)}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right font-semibold text-foreground tabular-nums">{lineSub.toFixed(2)}</td>
+                                                  <td className="py-1.5 px-1 text-right font-semibold text-foreground tabular-nums">{lineSub.toFixed(2)}</td>
                                                   {canEdit && (
                                                     <td className="py-1.5 px-1 text-center">
                                                       {editableRow && (
@@ -1210,15 +1210,15 @@ export default function RepairPage() {
                                     {labour.length === 0 ? (
                                       <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No labour lines added yet.</p>
                                     ) : (
-                                      <div className="overflow-x-auto">
-                                        <table className="w-full text-xs">
+                                      <div className="w-full">
+                                        <table className="w-full text-xs table-fixed">
                                           <thead>
                                             <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                                              <th className="text-left py-1.5 pr-2 font-medium min-w-44">Description</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-16">Hours</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-24">Rate</th>
-                                              <th className="text-right py-1.5 px-2 font-medium w-24">Amount</th>
-                                              {canEdit && <th className="w-8" />}
+                                              <th className="text-left py-1.5 pr-1.5 font-medium">Description</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-12">Hours</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-16">Rate</th>
+                                              <th className="text-right py-1.5 px-1 font-medium w-16">Amount</th>
+                                              {canEdit && <th className="w-6" />}
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-border/60">
@@ -1234,37 +1234,37 @@ export default function RepairPage() {
                                               };
                                               return (
                                                 <tr key={idx} className="align-middle">
-                                                  <td className="py-1.5 pr-2">
+                                                  <td className="py-1.5 pr-1.5 min-w-0">
                                                     {canEdit ? (
-                                                      <input type="text" placeholder="e.g. Screen replacement labour"
+                                                      <input type="text" placeholder="e.g. Screen labour"
                                                         value={line.description}
                                                         onChange={e => patchLab({ description: e.target.value })}
                                                         disabled={saving === b.id}
-                                                        className="w-full text-xs px-2 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40" />
-                                                    ) : <span className="text-foreground">{line.description || "—"}</span>}
+                                                        className="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40" />
+                                                    ) : <span className="text-foreground block truncate" title={line.description}>{line.description || "—"}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {canEdit ? (
                                                       <input type="number" min="0" step="0.25" value={line.hours ?? 0}
                                                         onChange={e => patchLab({ hours: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-14 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.hours ?? "—"}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {canEdit ? (
                                                       <input type="number" min="0" step="0.01" value={line.rate}
                                                         onChange={e => patchLab({ rate: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
                                                     ) : <span className="tabular-nums">{line.rate.toFixed(2)}</span>}
                                                   </td>
-                                                  <td className="py-1.5 px-2 text-right">
+                                                  <td className="py-1.5 px-1 text-right">
                                                     {canEdit ? (
                                                       <input type="number" min="0" step="0.01" value={line.amount}
                                                         onChange={e => patchLab({ amount: parseFloat(e.target.value) || 0 })}
                                                         disabled={saving === b.id}
-                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
+                                                        className="w-full text-right text-xs px-1 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
                                                     ) : <span className="tabular-nums font-semibold">{line.amount.toFixed(2)}</span>}
                                                   </td>
                                                   {canEdit && (
