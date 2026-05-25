@@ -937,6 +937,20 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS invoices_tenant_agent_idx    ON invoices (tenant_id, agent_id)`,
   `CREATE INDEX IF NOT EXISTS invoices_tenant_je_idx       ON invoices (tenant_id, je_id) WHERE je_id IS NOT NULL`,
   `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS memo_no TEXT NOT NULL DEFAULT ''`,
+  // PR3 — immutable back-pointer when this invoice was generated from a
+  // repair booking. Used by `convertRepairToInvoice` for idempotency: a
+  // second convert click is rejected if any invoice already carries the
+  // same bookingId. Set once on creation, never edited (UPDATE route
+  // intentionally omits this column from its COALESCE list).
+  `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source_repair_booking_id TEXT`,
+  // UNIQUE (partial) — enforces one-invoice-per-booking at the DB level so
+  // a cross-tab / cross-client race cannot create two invoices for the same
+  // booking even if both clients pass the convertRepairToInvoice helper's
+  // in-memory back-stop. Partial predicate (WHERE NOT NULL) keeps the
+  // constraint inert for every non-repair invoice.
+  `CREATE UNIQUE INDEX IF NOT EXISTS invoices_tenant_source_repair_uniq
+     ON invoices (tenant_id, source_repair_booking_id)
+     WHERE source_repair_booking_id IS NOT NULL`,
 
   // ── Invoice Items ────────────────────────────────────────────────────────────
   // Mirrors sale_items column-for-column (frontend reuses the SaleItem type).

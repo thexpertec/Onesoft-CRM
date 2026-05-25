@@ -98,6 +98,8 @@ interface IncomingInvoice {
   // shape; the migrator already does the same.
   jeUsesAr?: boolean | null;
   jeUsesAR?: boolean | null;
+  /** PR3 — set once when invoice is generated from a repair booking. */
+  sourceRepairBookingId?: string | null;
 }
 
 function pickJeUsesAr(v: Partial<IncomingInvoice>): boolean | null | undefined {
@@ -133,6 +135,7 @@ const INV_COLS = [
   "agent_id", "agent_name",
   "notes", "agreement", "invoice_footer", "memo_no", "invoice_docs",
   "stock_deducted", "je_id", "je_uses_ar",
+  "source_repair_booking_id",
 ] as const;
 
 function invValues(invId: string, tenantId: string, v: IncomingInvoice): unknown[] {
@@ -163,6 +166,7 @@ function invValues(invId: string, tenantId: string, v: IncomingInvoice): unknown
     v.stockDeducted === true,
     v.jeId ?? null,
     typeof jeUsesAr === "boolean" ? jeUsesAr : null,
+    v.sourceRepairBookingId ?? null,
   ];
 }
 

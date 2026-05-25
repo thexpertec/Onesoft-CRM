@@ -264,3 +264,19 @@ Rather than make `createCustomer`/`updateCustomer`/`deleteCustomer` async — wh
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+### Repair Module — Stock + Accounts integration (PR1–PR3, May 2026)
+
+Wires the in-app repair workflow into stock movements, double-entry accounting, and the sales invoice cluster. Three shipped PRs; all architect-reviewed PASS.
+
+| PR | What shipped |
+|---|---|
+| PR1 | Extended `RepairBooking` (in `repair.tsx`): `customerId`, `parts[]`, `labour[]`, `quotedTotal`, `approvedAt`, `invoiceId`, `partsIssueJeIds[]`, `warrantyDays`. Customer datalist on the add form. |
+| PR2a | Write queue (`writeQueueRef` + `bookingsRef`) serializes PUTs to `/api/kv/global/repair-bookings` so concurrent edits no longer clobber. `customersByName` Map + `resolveUniqueCustomer` helper for name→id resolution. |
+| PR2b | `issueRepairParts({bookingId, …})` in `store.ts` ~11266. Reservation-aware planning, per-stockItem decrement aggregation, chained `qtyBefore`/`qtyAfter` ledger rows, ledger-based idempotency (refuses if `reference===bookingId` exists), full-UUID refs, balanced DR COGS / per-category CR Inventory JE with `reference: AUTO-REP-${bookingId}`. UI: emerald "Issue parts" button; post-issue lock (Add/Remove hidden, all inputs read-only); "Issued · N JEs" badge. |
+| PR2c | `isRepairPartsIssueJE(je)` predicate (AUTO-REP- prefix) + blocker as step 0 in `deleteJournalEntry` (store.ts ~10654). Mirrored on backend in `routes/journal-entries.ts` DELETE (HTTP 409). Prevents JE deletion silently breaking stock-ledger integrity. |
+| PR3 | `convertRepairToInvoice({bookingId, customerId, approved, partsCount, partsIssued, currentInvoiceId, parts, labour})` in store.ts ~11577. Builds SaleItem rows with **`costPrice: "0"` on every line** (the parts-issue JE already DR'd COGS — `buildSaleCatLines` returns costTotal=0, `autoPostSaleJE` skips the COGS/Inventory leg, so only the invoice's AR/Revenue/VAT leg posts when status moves to Sent/Paid) and **`stockDeducted: true`** (parts physically issued upstream). Status starts Draft, paymentMethod "Credit". Hard guards inside the helper: approved required, parts-issued required when parts exist, no existing `currentInvoiceId`, no existing invoice carrying same `sourceRepairBookingId`, unique-name customer check (AR routing safety — `autoPostSaleJE` resolves AR sub-ledger by customer NAME). New immutable **`Invoice.sourceRepairBookingId`** field, persisted in DB (`source_repair_booking_id TEXT` + partial **UNIQUE** index `invoices_tenant_source_repair_uniq` for cross-tab race protection). UI button in repair.tsx expanded row, alongside Print Job Card; replaced with "Invoiced · open" link once converted. |
+
+**Known follow-up debt** (architect-flagged, deferred):
+1. AR ledger resolution in `autoPostSaleJE` is name-based (calls `findSubLedgerForParty(customer.name, AR_GROUP)`). PR3 mitigates with a convert-time unique-name guard, but the underlying TOCTOU at JE-posting time affects **all** sale paths, not just repair-converted. Proper fix = thread `customerId` through `autoPostSaleJE → findSubLedgerForParty`. Cross-cutting refactor, own epic.
+2. `convertRepairToInvoice` trusts caller-supplied booking state (approved/partsCount/partsIssued) rather than loading the booking authoritatively. Bookings live in a KV doc not a sync-cached relational table — making the helper authoritative would require async signature or migrating `repair-bookings` to per-record REST. Today there's exactly one caller (UI button) + the DB UNIQUE constraint + the `getInvoices().find(sourceRepairBookingId === bookingId)` back-stop, so the worst failure mode (duplicate invoice) is closed at the DB layer.
