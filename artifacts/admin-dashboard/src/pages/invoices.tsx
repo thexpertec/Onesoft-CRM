@@ -2583,24 +2583,42 @@ export function InvoiceFormPage() {
     return Array.from(map.entries()).map(([category, total]) => ({ category, total }));
   };
 
-  /** Build per-category sale revenue + cost breakdown from items */
+  /** Build per-category sale revenue + cost breakdown from items.
+   *  Items carrying `revenueAccountId` (e.g. labour rows from a repair
+   *  conversion) are grouped into their own buckets keyed by ledger id,
+   *  so the JE credits the override ledger (3110 Repair Service Revenue)
+   *  instead of folding into the product category's revenue ledger. */
   const buildSaleCatLines = (items: Invoice["items"]) => {
     const prods = getProducts();
-    const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+    type Entry = { category: string; subtotal: number; costTotal: number; revenueLedgerId?: string };
+    // Per-category bucket for product lines (no override); separate per-ledger
+    // bucket for override lines (each ledger gets its own row in the JE).
+    const catMap      = new Map<string, Entry>();
+    const overrideMap = new Map<string, Entry>();
     for (const it of items) {
       const prod    = findProductForItem(it, prods);
-      const cat     = prod?.category?.trim() || "Uncategorised";
       const qty     = parseFloat(it.qty) || 0;
       const price   = parseFloat(it.unitPrice) || 0;
       const disc    = parseFloat((it as { discountPct?: string }).discountPct || "0") / 100;
       const lineNet = qty * price * (1 - disc);
       const cost    = effectiveItemCost(it, prod) * qty;
-      const entry   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
-      entry.subtotal  += lineNet;
-      entry.costTotal += cost;
-      catMap.set(cat, entry);
+      const override = (it as { revenueAccountId?: string }).revenueAccountId;
+      if (override) {
+        const label = it.productName || "Service";
+        const e = overrideMap.get(override)
+              ?? { category: label, subtotal: 0, costTotal: 0, revenueLedgerId: override };
+        e.subtotal  += lineNet;
+        e.costTotal += cost;
+        overrideMap.set(override, e);
+      } else {
+        const cat = prod?.category?.trim() || "Uncategorised";
+        const e   = catMap.get(cat) ?? { category: cat, subtotal: 0, costTotal: 0 };
+        e.subtotal  += lineNet;
+        e.costTotal += cost;
+        catMap.set(cat, e);
+      }
     }
-    return Array.from(catMap.entries()).map(([category, v]) => ({ category, ...v }));
+    return [...catMap.values(), ...overrideMap.values()];
   };
 
   /** Helper: resolve supplier ledger account from CRM */

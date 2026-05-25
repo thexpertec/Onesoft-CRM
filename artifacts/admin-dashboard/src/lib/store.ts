@@ -4958,6 +4958,12 @@ export type SaleItem = {
   // Unit conversion — purchase invoices only
   purchaseUnit?: string;     // label of the unit you buy in (e.g. "Box") — different from stock/sale unit
   conversionFactor?: string; // how many stock units per purchase unit (e.g. "12" → 1 Box = 12 pcs)
+  /** Optional COA ledger override for this item's revenue leg. When set,
+   *  `autoPostSaleJE` credits this ledger instead of the per-category
+   *  `sr-cat-{slug}` lookup. Used today by `convertRepairToInvoice` to
+   *  route labour lines to `sys-3110 Repair Service Revenue` so the P&L
+   *  shows product vs service revenue split. */
+  revenueAccountId?: string;
 };
 
 export type Sale = {
@@ -5386,8 +5392,10 @@ export function autoPostSaleReturnJE(params: {
   taxAmount:     number;     // VAT being refunded
   grandTotal:    number;     // subtotal + taxAmount
   costTotal?:    number;     // total cost of goods being returned
-  /** Per-category breakdown — drives per-category Revenue and Inventory reversal lines */
-  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
+  /** Per-category breakdown — drives per-category Revenue and Inventory reversal lines.
+   *  `revenueLedgerId` mirrors `autoPostSaleJE` — reverses against the same ledger
+   *  the original sale credited (so a labour-line return debits 3110, not 3101). */
+  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number; revenueLedgerId?: string }>;
 }): JournalEntry | null {
   const s           = getSettings();
   const allAccounts = getAccounts();
@@ -5419,11 +5427,19 @@ export function autoPostSaleReturnJE(params: {
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.subtotal <= 0) continue;
-      const slug     = (cl.category || "uncategorised").trim().toLowerCase()
-                         .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
-      const catRevId = `sr-cat-${slug}`;
-      const revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
+      // Mirror autoPostSaleJE: honour explicit revenueLedgerId so the reversal
+      // hits the same ledger the original sale credited.
+      let revLedger: string;
+      if (cl.revenueLedgerId
+          && allAccounts.some(a => a.id === cl.revenueLedgerId && a.accountType === "Ledger")) {
+        revLedger = cl.revenueLedgerId;
+      } else {
+        const slug     = (cl.category || "uncategorised").trim().toLowerCase()
+                           .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+        const catRevId = `sr-cat-${slug}`;
+        revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
                           ? catRevId : _generalRevId;
+      }
       lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
         narration: `Revenue reversal – ${params.returnNumber} – ${cl.category}`,
         debit: cl.subtotal, credit: 0 });
@@ -8307,6 +8323,7 @@ export const SYS_ACCS = {
   // Revenue / Income
   REVENUE_GROUP:      "sys-3000",   // Revenue root (3000)
   SALES_REVENUE:      "sys-3100",   // Main sales revenue ledger (3100)
+  REPAIR_SERVICE_REVENUE: "sys-3110", // Repair Service Revenue (3110) — child of SALES_REVENUE; labour lines from repair invoices post here
   OTHER_INCOME:       "sys-3200",   // Other income (3200)
   // Expense
   EXPENSES_GROUP:     "sys-4000",   // Operating Expenses root (4000)
@@ -8377,6 +8394,7 @@ const SYSTEM_ACCOUNTS: SysAccDef[] = [
   { id: SYS_ACCS.REVENUE_GROUP,      code: "3000", name: "Revenue",                    head: "Revenue / Income", accountType: "Group",  parentId: null,                         subType: "Revenue",          description: "Income from business operations" },
   { id: SYS_ACCS.SALES_REVENUE,      code: "3100", name: "Sales Revenue",              head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Sales",            description: "Revenue from product and service sales — subsidiary ledgers per product" },
   { id: SYS_ACCS.GENERAL_SALES_REV, code: "3101", name: "General Sales Revenue",      head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.SALES_REVENUE,       subType: "Sales",            description: "Catch-all revenue ledger — used when no per-category revenue ledger exists" },
+  { id: SYS_ACCS.REPAIR_SERVICE_REVENUE, code: "3110", name: "Repair Service Revenue", head: "Revenue / Income", accountType: "Ledger", parentId: SYS_ACCS.SALES_REVENUE,       subType: "Sales",            description: "Revenue from repair service labour — credited when a repair-derived invoice is posted" },
   { id: SYS_ACCS.OTHER_INCOME,       code: "3200", name: "Other Income",               head: "Revenue / Income", accountType: "Group",  parentId: SYS_ACCS.REVENUE_GROUP,       subType: "Other Income",     description: "Miscellaneous or non-operating income — subsidiary ledgers per income type" },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -10999,8 +11017,11 @@ export function autoPostSaleJE(params: {
    *  For named customers this amount is embedded in the JE directly.
    *  For Invoice source / credit sales the caller posts a separate receipt JE. */
   amountPaid?:   number;
-  /** Per-category breakdown — drives per-category Revenue and Inventory JE lines */
-  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number }>;
+  /** Per-category breakdown — drives per-category Revenue and Inventory JE lines.
+   *  When a row carries `revenueLedgerId`, the revenue leg credits that ledger
+   *  directly instead of resolving `sr-cat-{slug}` — used for labour/service
+   *  lines routed to 3110 Repair Service Revenue. */
+  categoryLines?: Array<{ category: string; subtotal: number; costTotal: number; revenueLedgerId?: string }>;
 }): JournalEntry & { usesAR: boolean; receiptEmbedded: boolean } | null {
   const s = getSettings();
 
@@ -11098,13 +11119,20 @@ export function autoPostSaleJE(params: {
   if (catLines.length > 0) {
     for (const cl of catLines) {
       if (cl.subtotal <= 0) continue;
-      const slug      = (cl.category || "uncategorised").trim().toLowerCase()
-                          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
-      const catRevId  = `sr-cat-${slug}`;
-      // Use per-category ledger if it exists; otherwise fall back to General Sales Revenue
-      const revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
+      // Explicit revenue-ledger override (e.g. labour → 3110 Repair Service Revenue).
+      // When the override exists and resolves to a Ledger, skip the category lookup.
+      let revLedger: string;
+      if (cl.revenueLedgerId
+          && allAccounts.some(a => a.id === cl.revenueLedgerId && a.accountType === "Ledger")) {
+        revLedger = cl.revenueLedgerId;
+      } else {
+        const slug      = (cl.category || "uncategorised").trim().toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "uncategorised";
+        const catRevId  = `sr-cat-${slug}`;
+        revLedger = allAccounts.some(a => a.id === catRevId && a.accountType === "Ledger")
                           ? catRevId
                           : _generalRevId;
+      }
       lines.push({ id: crypto.randomUUID(), ledgerId: revLedger,
         narration: `Revenue – ${params.reference} – ${cl.category}`, debit: 0, credit: cl.subtotal });
     }
@@ -11648,9 +11676,13 @@ export function convertRepairToInvoice(params: {
       unitPrice:    String(l.amount),
       discount:     "0",
       discountType: "pct",
-      notes:        "Labour / Service",
+      notes:        "Repair Service",
       itemStatus:   "Delivered",
       costPrice:    "0",
+      // Routes the revenue leg of this line to 3110 Repair Service Revenue
+      // (instead of the per-category Sales Revenue ledger). Lets the P&L
+      // split product sales from service income.
+      revenueAccountId: SYS_ACCS.REPAIR_SERVICE_REVENUE,
     }));
 
   const items = [...partItems, ...labourItems];
