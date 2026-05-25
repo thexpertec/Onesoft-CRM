@@ -20,7 +20,7 @@ import {
   ArrowLeft, Package, ChevronDown, Lock, Printer, SlidersHorizontal, ChevronUp,
   MapPin, UserCheck, Users2, Calendar, Wallet, BadgeCheck, ScanLine,
   LayoutGrid, List, RefreshCw, Globe,
-  CheckCircle2, Circle, Clock, XCircle, Truck, DollarSign, Undo2,
+  CheckCircle2, Circle, Clock, XCircle, Truck, DollarSign, Undo2, Wrench,
 } from "lucide-react";
 import BarcodeScanner from "@/components/barcode-scanner";
 import { useKeyboardScanner } from "@/hooks/use-keyboard-scanner";
@@ -3455,24 +3455,27 @@ export default function SalesPage() {
       {/* Type filter pills */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Type:</span>
-        {(["All", "POS", "Invoice", "Online", "Sale Return"] as const).map(t => {
+        {(["All", "POS", "Invoice", "Online", "Repair", "Sale Return"] as const).map(t => {
           const isActive = typeFilter === t;
           const colorMap: Record<string, string> = {
             All:          "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
             POS:          "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
             Invoice:      "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
             Online:       "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+            Repair:       "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
             "Sale Return":"bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300",
           };
           const activeRing: Record<string, string> = {
             All: "ring-2 ring-gray-400", POS: "ring-2 ring-blue-400",
             Invoice: "ring-2 ring-violet-400", Online: "ring-2 ring-emerald-400",
+            Repair: "ring-2 ring-amber-400",
             "Sale Return": "ring-2 ring-rose-400",
           };
           const iconMap: Record<string, React.ReactNode> = {
             POS:          <ShoppingCart size={10} />,
             Invoice:      <Receipt size={10} />,
             Online:       <Globe size={10} />,
+            Repair:       <Wrench size={10} />,
             "Sale Return":<Undo2 size={10} />,
           };
           const count = t === "All" ? counts["All"]

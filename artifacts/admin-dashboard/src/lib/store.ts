@@ -4987,8 +4987,12 @@ export type Sale = {
   deliveryCharges?:  string;
   invoiceDiscount?:  string;
   invoiceDiscountType?: "pct" | "amt";
-  orderType?:        "POS" | "Invoice" | "Online";
+  orderType?:        "POS" | "Invoice" | "Online" | "Repair";
   onlineCustomer?:   string; // full name + contact for online orders
+  /** Back-pointer to the RepairBooking this Sale was generated from.
+   *  Set by `convertRepairToSale`; used for idempotency (a second convert
+   *  click is rejected) and to render the "Repair" tag in the Sales list. */
+  sourceRepairBookingId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -11739,6 +11743,128 @@ export function convertRepairToInvoice(params: {
   });
 
   return invoice;
+}
+
+/**
+ * Convert an approved RepairBooking into a Sale (NOT an Invoice).
+ *
+ * Mirrors `convertRepairToInvoice`'s line construction (parts + labour
+ * flattened into SaleItems with `costPrice="0"` so the downstream
+ * `autoPostSaleJE` skips COGS — that side was already posted by
+ * `issueRepairParts`), but produces a `Sale` row with `orderType="Repair"`
+ * that lives in the Sales list, not the Invoice list. The repair has its
+ * own invoicing track (Print Job Card) — this just makes the revenue
+ * visible alongside POS sales.
+ *
+ * Status defaults to "Pending" and `paymentMethod` to "Credit" — repair
+ * customers typically pay on collection. The user can mark it Completed
+ * + record payment from the Sales page, which triggers the standard sale
+ * JE flow.
+ *
+ * Idempotency: a second click is refused if any Sale already carries
+ * this bookingId in `sourceRepairBookingId`.
+ */
+export function convertRepairToSale(params: {
+  bookingId:        string;
+  customerId:       string;     // must resolve to a real Customer
+  date:             string;     // YYYY-MM-DD — sale date
+  approved:         boolean;
+  partsCount:       number;
+  partsIssued:      boolean;
+  /** The booking's current `saleId` (if any) — for double-click guard. */
+  currentSaleId?:   string;
+  parts: Array<{ productName: string; sku?: string; qty: number; unitPrice: number; unit?: string }>;
+  labour: Array<{ description: string; amount: number }>;
+}): Sale {
+  if (!params.approved) {
+    throw new Error("Cannot create sale — the repair quote has not been approved yet.");
+  }
+  if (params.partsCount > 0 && !params.partsIssued) {
+    throw new Error("Cannot create sale — issue the booking's parts first. Otherwise COGS for those parts would be silently dropped.");
+  }
+  if (params.currentSaleId) {
+    throw new Error("Cannot create sale — this booking is already linked to a sale.");
+  }
+  const existing = getSales().find(s => s.sourceRepairBookingId === params.bookingId);
+  if (existing) {
+    throw new Error(`Cannot create sale — a sale for this booking already exists (${existing.saleNumber}).`);
+  }
+
+  const customer = getCustomer(params.customerId);
+  if (!customer) {
+    throw new Error("Cannot create sale — customer record not found. Pick a customer on the booking first.");
+  }
+  const sameName = getCustomers().filter(c =>
+    (c.name || "").trim().toLowerCase() === (customer.name || "").trim().toLowerCase()
+  );
+  if (sameName.length > 1) {
+    throw new Error(`Cannot create sale — multiple customers share the name "${customer.name}". Rename one to disambiguate so the AR ledger posts to the right account.`);
+  }
+
+  const partItems: SaleItem[] = params.parts
+    .filter(p => p.qty > 0 && p.productName)
+    .map(p => ({
+      id:           crypto.randomUUID(),
+      productName:  p.productName,
+      sku:          p.sku || "",
+      qty:          String(p.qty),
+      unit:         p.unit || "pcs",
+      unitPrice:    String(p.unitPrice),
+      discount:     "0",
+      discountType: "pct",
+      notes:        "",
+      itemStatus:   "Delivered",
+      costPrice:    "0",
+    }));
+
+  const labourItems: SaleItem[] = params.labour
+    .filter(l => l.amount > 0 && l.description)
+    .map(l => ({
+      id:           crypto.randomUUID(),
+      productName:  l.description,
+      sku:          "",
+      qty:          "1",
+      unit:         "svc",
+      unitPrice:    String(l.amount),
+      discount:     "0",
+      discountType: "pct",
+      notes:        "Repair Service",
+      itemStatus:   "Delivered",
+      costPrice:    "0",
+      revenueAccountId: SYS_ACCS.REPAIR_SERVICE_REVENUE,
+    }));
+
+  const items = [...partItems, ...labourItems];
+  if (items.length === 0) {
+    throw new Error("Cannot create sale — the booking has no chargeable parts or labour lines.");
+  }
+
+  const sale = createSale({
+    saleDate:            params.date,
+    customer:            customer.name,
+    status:              "Pending",
+    paymentMethod:       "Credit",
+    notes:               `Generated from Repair Booking ${params.bookingId.slice(0, 8).toUpperCase()}`,
+    items,
+    taxRate:             "0",
+    amountPaid:          "0",
+    paidAt:              "",
+    stockDeducted:       true,                 // parts already issued upstream
+    saleMode:            "Retail",
+    deliveryStatus:      "Delivered",
+    deliveryCharges:     "0",
+    invoiceDiscount:     "0",
+    invoiceDiscountType: "pct",
+    orderType:           "Repair",
+    sourceRepairBookingId: params.bookingId,
+  });
+
+  addActivity({
+    action: "created", entity: "Sale", entityName: sale.saleNumber,
+    detail: `From Repair Booking ${params.bookingId.slice(0, 8).toUpperCase()} – ${customer.name}`,
+  });
+
+  return sale;
 }
 
 /**

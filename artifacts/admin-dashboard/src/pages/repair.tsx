@@ -12,7 +12,7 @@ import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { getSettings, issueRepairParts, convertRepairToInvoice, type Product } from "@/lib/store";
+import { getSettings, issueRepairParts, convertRepairToSale, type Product } from "@/lib/store";
 import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { Combobox, type ComboOption } from "@/components/combobox";
@@ -86,8 +86,12 @@ interface RepairBooking {
   quotedTotal?: number;
   /** ISO timestamp when the customer approved the quote (PR2). */
   approvedAt?: string;
-  /** Linked sale invoice id once the job is converted (PR3). */
+  /** Linked sale invoice id once the job is converted (PR3, legacy — superseded by `saleId`). */
   invoiceId?: string;
+  /** Linked Sale id once the job is converted via `convertRepairToSale`.
+   *  Repair invoicing is kept separate (Print Job Card); the sale shows up
+   *  in the All Sales list tagged "Repair" with the full booking total. */
+  saleId?: string;
   /** JE ids posted by parts-issue movements — used by reverse-cascade on cancel (PR2). */
   partsIssueJeIds?: string[];
   /** Warranty window in days from completion (PR3+). */
@@ -1349,19 +1353,21 @@ export default function RepairPage() {
                                   <Link2 size={11} /> Copy Tracking Link
                                 </button>
                                 {/*
-                                  PR3 — Convert approved repair booking to a customer Invoice.
+                                  Convert approved repair booking to a customer Sale (tagged "Repair").
+                                  Repair invoicing stays separate (Print Job Card); the sale shows in
+                                  the All Sales list with a Repair badge and the full booking total.
                                   Gating rules (defence-in-depth — backend helper also throws):
                                     • Quote must be approved.
                                     • A real Customer record must be linked (customerId), so AR posts to a sub-ledger.
                                     • If parts exist, they must already be issued — otherwise the
-                                      invoice's costPrice="0" trick would silently swallow the COGS.
-                                    • Idempotent — once invoiceId is set the button is replaced with a
-                                      read-only "Invoiced" badge linking to the invoices page.
+                                      sale's costPrice="0" trick would silently swallow the COGS.
+                                    • Idempotent — once saleId is set the button is replaced with a
+                                      read-only "Sale created" badge linking to the sales page.
                                 */}
-                                {b.invoiceId ? (
-                                  <Link href="/invoices">
+                                {b.saleId ? (
+                                  <Link href="/sales">
                                     <a className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors">
-                                      <Receipt size={11} /> Invoiced · open
+                                      <Receipt size={11} /> Sale created · open
                                     </a>
                                   </Link>
                                 ) : (() => {
@@ -1383,23 +1389,23 @@ export default function RepairPage() {
                                     : !hasCustomerId
                                       ? "Pick a customer on this booking first (Edit → Customer)"
                                       : partsBlocker
-                                        ? "Issue parts first — the invoice cannot post COGS for un-issued parts"
+                                        ? "Issue parts first — the sale cannot post COGS for un-issued parts"
                                         : nothingToBill
                                           ? "Add at least one part or service line"
-                                          : "Create a Draft invoice for this repair";
+                                          : "Create a Sale (tagged Repair) for this booking";
                                   return can("Edit Repairs") && (
                                     <button
                                       onClick={async () => {
                                         setSaving(b.id);
                                         try {
-                                          const inv = convertRepairToInvoice({
-                                            bookingId:        b.id,
-                                            customerId:       b.customerId!,
-                                            date:             new Date().toISOString().slice(0, 10),
-                                            approved:         !!b.approvedAt,
-                                            partsCount:       (b.parts ?? []).length,
-                                            partsIssued:      (b.partsIssueJeIds ?? []).length > 0,
-                                            currentInvoiceId: b.invoiceId,
+                                          const sale = convertRepairToSale({
+                                            bookingId:     b.id,
+                                            customerId:    b.customerId!,
+                                            date:          new Date().toISOString().slice(0, 10),
+                                            approved:      !!b.approvedAt,
+                                            partsCount:    (b.parts ?? []).length,
+                                            partsIssued:   (b.partsIssueJeIds ?? []).length > 0,
+                                            currentSaleId: b.saleId,
                                             parts: (b.parts ?? []).map(p => ({
                                               productName: p.productName || "(unnamed)",
                                               sku:         p.productId,
@@ -1412,14 +1418,14 @@ export default function RepairPage() {
                                             })),
                                           });
                                           await enqueueSave(current => current.map(x =>
-                                            x.id === b.id ? { ...x, invoiceId: inv.id } : x));
+                                            x.id === b.id ? { ...x, saleId: sale.id } : x));
                                           toast({
-                                            title: "Invoice created",
-                                            description: `Draft ${inv.invoiceNumber} ready in Invoices.`,
+                                            title: "Sale created",
+                                            description: `${sale.saleNumber} added to Sales (tagged Repair).`,
                                           });
                                         } catch (err) {
                                           toast({
-                                            title: "Could not create invoice",
+                                            title: "Could not create sale",
                                             description: err instanceof Error ? err.message : String(err),
                                             variant: "destructive",
                                           });
@@ -1431,7 +1437,7 @@ export default function RepairPage() {
                                       title={tip}
                                       className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <Receipt size={11} /> Convert to Invoice
+                                      <Receipt size={11} /> Convert to Sale
                                     </button>
                                   );
                                 })()}
