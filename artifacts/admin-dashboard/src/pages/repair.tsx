@@ -16,6 +16,7 @@ import { getSettings, issueRepairParts, convertRepairToInvoice, type Product } f
 import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { Combobox, type ComboOption } from "@/components/combobox";
+import { SelectCombobox } from "@/components/select-combobox";
 
 const API = "/api/kv/global/repair-bookings";
 
@@ -185,6 +186,17 @@ export default function RepairPage() {
   const productOptions = useMemo(
     () => products.filter(p => p.status !== "Inactive").slice().sort((a, b) => a.name.localeCompare(b.name)),
     [products],
+  );
+  /** ComboOption form for the searchable parts picker — label is the product
+   *  name (what users type / read) and `sub` carries category + SKU so the
+   *  dropdown shows the same context as the old "Name | SKU" line. */
+  const productComboOptions = useMemo<ComboOption[]>(
+    () => productOptions.map(p => ({
+      value: p.id,
+      label: p.name,
+      sub:   [p.category, p.sku].filter(Boolean).join(" | "),
+    })),
+    [productOptions],
   );
   const productById = useMemo(() => {
     const m = new Map<string, Product>();
@@ -1126,18 +1138,22 @@ export default function RepairPage() {
                                                 <tr key={idx} className="align-middle">
                                                   <td className="py-1.5 pr-1.5 min-w-0">
                                                     {editableRow ? (
-                                                      <select
+                                                      <SelectCombobox
                                                         value={line.productId}
-                                                        onChange={e => onPickProduct(e.target.value)}
+                                                        onChange={onPickProduct}
+                                                        // If the saved productId no longer exists in the catalogue
+                                                        // (product was deleted), surface a placeholder option so the
+                                                        // input doesn't render blank — matches old "(deleted)" hint.
+                                                        options={
+                                                          line.productId && !productById.has(line.productId)
+                                                            ? [...productComboOptions, { value: line.productId, label: `${line.productName || "(missing)"} (deleted)` }]
+                                                            : productComboOptions
+                                                        }
+                                                        placeholder="— Select product —"
                                                         disabled={saving === b.id}
-                                                        className="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 truncate"
-                                                      >
-                                                        <option value="">— Select product —</option>
-                                                        {productOptions.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
-                                                        {line.productId && !productById.has(line.productId) && (
-                                                          <option value={line.productId}>{line.productName || "(missing)"} (deleted)</option>
-                                                        )}
-                                                      </select>
+                                                        inputClassName="w-full min-w-0 text-xs px-1.5 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 truncate"
+                                                        minDropdownWidth={360}
+                                                      />
                                                     ) : (
                                                       <span className="text-foreground block truncate" title={line.productName}>{line.productName || "—"}</span>
                                                     )}
