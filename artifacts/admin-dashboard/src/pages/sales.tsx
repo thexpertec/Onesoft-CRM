@@ -2925,8 +2925,12 @@ export default function SalesPage() {
       const delAmt_ = parseFloat(localMeta.deliveryCharges || "0") || 0;
       // Use fresh product list for accurate cost prices (same approach as handleComplete)
       const freshProds = getProducts();
-      // Build per-category breakdown for COGS and Inventory lines
-      const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+      // Build per-category breakdown for COGS and Inventory lines.
+      // Items carrying a `revenueAccountId` override (e.g. repair labour →
+      // 3110 Repair Service Revenue) are bucketed separately and passed to
+      // autoPostSaleJE as `revenueLedgerId` so the revenue leg posts to the
+      // overridden ledger instead of the per-category sr-cat lookup.
+      const catMap = new Map<string, { subtotal: number; costTotal: number; revenueLedgerId?: string; category: string }>();
       for (const item of localItems) {
         const prod    = findProductForItem(item, freshProds);
         const qty     = parseFloat(item.qty) || 0;
@@ -2935,13 +2939,15 @@ export default function SalesPage() {
         const lineNet = qty * price - (item.discountType === "amt" ? Math.min(disc, price) * qty : qty * price * disc / 100);
         const cost    = effectiveItemCost(item, prod) * qty;
         const cat     = prod?.category?.trim() || "Uncategorised";
-        const prev    = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
-        catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
+        const key     = item.revenueAccountId ? `__rev:${item.revenueAccountId}` : cat;
+        const prev    = catMap.get(key) ?? { subtotal: 0, costTotal: 0, revenueLedgerId: item.revenueAccountId, category: cat };
+        catMap.set(key, { ...prev, subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
       }
-      const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
-        category,
-        subtotal:  parseFloat(v.subtotal.toFixed(2)),
-        costTotal: parseFloat(v.costTotal.toFixed(2)),
+      const categoryLines = Array.from(catMap.values()).map(v => ({
+        category:        v.category,
+        subtotal:        parseFloat(v.subtotal.toFixed(2)),
+        costTotal:       parseFloat(v.costTotal.toFixed(2)),
+        ...(v.revenueLedgerId ? { revenueLedgerId: v.revenueLedgerId } : {}),
       }));
       const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
       const je = autoPostSaleJE({
@@ -3027,8 +3033,10 @@ export default function SalesPage() {
         // ── First completion: post the primary sale JE ─────────────────────
         // Always use a fresh product list so cost prices are up-to-date
         const freshProds = getProducts();
-        // Build per-category breakdown for COGS and Inventory lines
-        const catMap = new Map<string, { subtotal: number; costTotal: number }>();
+        // Build per-category breakdown for COGS and Inventory lines.
+        // Items carrying `revenueAccountId` (e.g. repair labour) get their
+        // own bucket so the override flows to autoPostSaleJE via revenueLedgerId.
+        const catMap = new Map<string, { subtotal: number; costTotal: number; revenueLedgerId?: string; category: string }>();
         for (const item of localItems) {
           const prod   = findProductForItem(item, freshProds);
           const qty    = parseFloat(item.qty) || 0;
@@ -3037,13 +3045,15 @@ export default function SalesPage() {
           const lineNet = qty * price - (item.discountType === "amt" ? Math.min(disc, price) * qty : qty * price * disc / 100);
           const cost   = effectiveItemCost(item, prod) * qty;
           const cat    = prod?.category?.trim() || "Uncategorised";
-          const prev   = catMap.get(cat) ?? { subtotal: 0, costTotal: 0 };
-          catMap.set(cat, { subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
+          const key    = item.revenueAccountId ? `__rev:${item.revenueAccountId}` : cat;
+          const prev   = catMap.get(key) ?? { subtotal: 0, costTotal: 0, revenueLedgerId: item.revenueAccountId, category: cat };
+          catMap.set(key, { ...prev, subtotal: prev.subtotal + lineNet, costTotal: prev.costTotal + cost });
         }
-        const categoryLines = Array.from(catMap.entries()).map(([category, v]) => ({
-          category,
-          subtotal:  parseFloat(v.subtotal.toFixed(2)),
-          costTotal: parseFloat(v.costTotal.toFixed(2)),
+        const categoryLines = Array.from(catMap.values()).map(v => ({
+          category:        v.category,
+          subtotal:        parseFloat(v.subtotal.toFixed(2)),
+          costTotal:       parseFloat(v.costTotal.toFixed(2)),
+          ...(v.revenueLedgerId ? { revenueLedgerId: v.revenueLedgerId } : {}),
         }));
         const costTotal = categoryLines.reduce((s, cl) => s + cl.costTotal, 0);
         const je = autoPostSaleJE({
@@ -3790,6 +3800,10 @@ export default function SalesPage() {
                         ) : rawVal === "Invoice" ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
                             <Receipt size={9} /> Invoice
+                          </span>
+                        ) : rawVal === "Repair" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                            <Wrench size={9} /> Repair
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">

@@ -11782,7 +11782,9 @@ export function convertRepairToSale(params: {
   if (params.partsCount > 0 && !params.partsIssued) {
     throw new Error("Cannot create sale — issue the booking's parts first. Otherwise COGS for those parts would be silently dropped.");
   }
-  if (params.currentSaleId) {
+  // Treat `currentSaleId` as blocking only if that sale still exists. A
+  // stale id (sale was deleted) must not lock the booking out of re-conversion.
+  if (params.currentSaleId && getSales().some(s => s.id === params.currentSaleId)) {
     throw new Error("Cannot create sale — this booking is already linked to a sale.");
   }
   const existing = getSales().find(s => s.sourceRepairBookingId === params.bookingId);

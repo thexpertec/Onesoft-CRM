@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { getSettings, issueRepairParts, convertRepairToSale, type Product } from "@/lib/store";
-import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
+import { useDesignations, useStaff, useCustomers, useProducts, useSales } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 import { Combobox, type ComboOption } from "@/components/combobox";
 import { SelectCombobox } from "@/components/select-combobox";
@@ -185,6 +185,10 @@ export default function RepairPage() {
   const { staff } = useStaff();
   const { customers, addCustomer } = useCustomers();
   const { products } = useProducts();
+  // Used to detect if a previously-linked Sale was deleted — if so the
+  // booking's stale `saleId` should NOT lock out re-conversion.
+  const { sales: allSales } = useSales();
+  const saleIdSet = useMemo(() => new Set(allSales.map(s => s.id)), [allSales]);
 
   /** Products sorted for the parts picker (active products only). */
   const productOptions = useMemo(
@@ -1364,7 +1368,7 @@ export default function RepairPage() {
                                     • Idempotent — once saleId is set the button is replaced with a
                                       read-only "Sale created" badge linking to the sales page.
                                 */}
-                                {b.saleId ? (
+                                {b.saleId && saleIdSet.has(b.saleId) ? (
                                   <Link href="/sales">
                                     <a className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 transition-colors">
                                       <Receipt size={11} /> Sale created · open
@@ -1405,7 +1409,8 @@ export default function RepairPage() {
                                             approved:      !!b.approvedAt,
                                             partsCount:    (b.parts ?? []).length,
                                             partsIssued:   (b.partsIssueJeIds ?? []).length > 0,
-                                            currentSaleId: b.saleId,
+                                            // Ignore stale saleId pointing to a deleted sale — allow re-conversion.
+                                            currentSaleId: b.saleId && saleIdSet.has(b.saleId) ? b.saleId : undefined,
                                             parts: (b.parts ?? []).map(p => ({
                                               productName: p.productName || "(unnamed)",
                                               sku:         p.productId,
