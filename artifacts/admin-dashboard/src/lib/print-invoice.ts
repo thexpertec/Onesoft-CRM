@@ -405,6 +405,17 @@ export function printSaleInvoice(sale: Sale, settings: AppSettings): void {
 
 // ─── Repair Job Card ──────────────────────────────────────────────────────────
 
+interface RepairJobPart {
+  productName: string;
+  qty: number;
+  unitPrice: number;
+}
+interface RepairJobLabour {
+  description: string;
+  hours?: number;
+  rate: number;
+  amount: number;
+}
 interface RepairJobData {
   id: string;
   name: string;
@@ -416,6 +427,9 @@ interface RepairJobData {
   estimatedDate?: string;
   publicNote?: string;
   createdAt: string;
+  parts?: RepairJobPart[];
+  labour?: RepairJobLabour[];
+  quotedTotal?: number;
 }
 
 const REPAIR_STATUSES = [
@@ -471,6 +485,78 @@ export function buildRepairJobCardHtml(
   };
   const prColor = priorityColor[booking.priority ?? "Normal"] ?? "#6b7280";
   const statusColor = REPAIR_STATUS_COLORS[booking.status] ?? "#6b7280";
+
+  // ── Invoice details (Service Charges + Repair Parts) ───────────────────
+  const sym       = currencySymbol(settings.currency || "GBP");
+  const fmtMoney  = (n: number) => `${sym}${(Number.isFinite(n) ? n : 0).toFixed(2)}`;
+  const parts     = (booking.parts  ?? []).filter(p => p && p.productName);
+  const labour    = (booking.labour ?? []).filter(l => l && l.description);
+  const partsTotal  = parts.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.unitPrice) || 0), 0);
+  const labourTotal = labour.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const grandTotal  = partsTotal + labourTotal;
+  const hasInvoice  = parts.length > 0 || labour.length > 0;
+
+  const labourRows = labour.map(l => {
+    const detail = l.hours && l.hours > 0
+      ? `${esc(l.description)} <span style="color:#888;font-size:8pt;">(${l.hours}h × ${fmtMoney(l.rate)})</span>`
+      : esc(l.description);
+    return `<tr>
+      <td style="padding:3px 4px;">${detail}</td>
+      <td style="padding:3px 4px;text-align:right;white-space:nowrap;font-weight:600;">${fmtMoney(Number(l.amount) || 0)}</td>
+    </tr>`;
+  }).join("");
+
+  const partsRows = parts.map(p => {
+    const qtyNum    = Number(p.qty) || 0;
+    const priceNum  = Number(p.unitPrice) || 0;
+    const lineTotal = qtyNum * priceNum;
+    return `<tr>
+      <td style="padding:3px 4px;">${esc(p.productName)}</td>
+      <td style="padding:3px 4px;text-align:center;white-space:nowrap;color:#666;">${qtyNum} × ${fmtMoney(priceNum)}</td>
+      <td style="padding:3px 4px;text-align:right;white-space:nowrap;font-weight:600;">${fmtMoney(lineTotal)}</td>
+    </tr>`;
+  }).join("");
+
+  const invoiceSectionHtml = hasInvoice ? `
+  <hr class="divider"/>
+  <div class="section">
+    <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Invoice Details</div>
+
+    ${labour.length > 0 ? `
+    <div style="margin-top:4px;">
+      <div style="font-size:8.5pt;font-weight:700;color:#374151;margin-bottom:2px;">Service Charges</div>
+      <table style="width:100%;border-collapse:collapse;font-size:9pt;">
+        <tbody>${labourRows}</tbody>
+        <tfoot>
+          <tr style="border-top:1px dashed #ccc;">
+            <td style="padding:3px 4px;font-weight:700;color:#555;">Subtotal</td>
+            <td style="padding:3px 4px;text-align:right;font-weight:700;">${fmtMoney(labourTotal)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>` : ""}
+
+    ${parts.length > 0 ? `
+    <div style="margin-top:6px;">
+      <div style="font-size:8.5pt;font-weight:700;color:#374151;margin-bottom:2px;">Repair Parts</div>
+      <table style="width:100%;border-collapse:collapse;font-size:9pt;">
+        <tbody>${partsRows}</tbody>
+        <tfoot>
+          <tr style="border-top:1px dashed #ccc;">
+            <td colspan="2" style="padding:3px 4px;font-weight:700;color:#555;">Subtotal</td>
+            <td style="padding:3px 4px;text-align:right;font-weight:700;">${fmtMoney(partsTotal)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>` : ""}
+
+    <div style="margin-top:6px;padding:6px 8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:9.5pt;font-weight:800;color:#065f46;text-transform:uppercase;letter-spacing:.5px;">Total</span>
+      <span style="font-size:12pt;font-weight:900;color:#065f46;">${fmtMoney(grandTotal)}</span>
+    </div>
+    ${booking.quotedTotal != null && Math.abs(booking.quotedTotal - grandTotal) > 0.01 ? `
+    <div style="font-size:8pt;color:#888;text-align:right;margin-top:2px;">Originally quoted: ${fmtMoney(booking.quotedTotal)}</div>` : ""}
+  </div>` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -576,6 +662,8 @@ export function buildRepairJobCardHtml(
   <div class="pipeline">
     ${buildPipelineHtml(booking.status)}
   </div>
+
+  ${invoiceSectionHtml}
 
   <hr class="divider"/>
 
