@@ -293,9 +293,64 @@ export default function RepairPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const raw = await kvGet(tenantNs, BOOKINGS_KEY);
-      const arr  = (Array.isArray(raw) ? (raw as RepairBooking[]) : []).map(normaliseBooking);
-      setBookings(arr.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      // Before the May 2026 per-tenant migration, all repair bookings lived at
+      // `global/repair-bookings` regardless of source. The migration moved them
+      // to `t:{booking.tenantId}/repair-bookings`, but `tenantId` on old records
+      // was set to arbitrary strings:
+      //   • Admin "Add Request" button → `tenantId: currentTenantId || "admin"`
+      //   • Old storefront without ?tenant= → `tenantId: "global"` (string)
+      //
+      // So after migration, bookings may live in ANY of:
+      //   t:{currentTenantId}/repair-bookings  ← canonical going-forward
+      //   t:admin/repair-bookings              ← superadmin-created
+      //   t:global/repair-bookings             ← untenanted storefront
+      //   global/repair-bookings               ← any remaining pre-migration rows
+      //
+      // We scan all four, merge by id (canonical namespace wins on collision),
+      // then auto-repair by writing the full merged set back to the canonical
+      // namespace and clearing the legacy entries so subsequent loads are clean.
+      const LEGACY_NS = ["t:admin", "t:global", "global"];
+      const [primary, ...legacyRaws] = await Promise.all([
+        kvGet(tenantNs, BOOKINGS_KEY).catch(() => null),
+        ...LEGACY_NS.map(ns => ns === tenantNs ? Promise.resolve(null) : kvGet(ns, BOOKINGS_KEY).catch(() => null)),
+      ]);
+
+      const seen = new Set<string>();
+      const merged: RepairBooking[] = [];
+      // Canonical namespace first — its rows win on id collision.
+      for (const b of (Array.isArray(primary) ? (primary as RepairBooking[]) : [])) {
+        if (b?.id && seen.has(b.id)) continue;
+        if (b?.id) seen.add(b.id);
+        merged.push(normaliseBooking(b));
+      }
+      const legacyFound: string[] = [];
+      legacyRaws.forEach((raw, i) => {
+        const legacyRows = Array.isArray(raw) ? (raw as RepairBooking[]) : [];
+        if (legacyRows.length === 0) return;
+        legacyFound.push(LEGACY_NS[i]!);
+        for (const b of legacyRows) {
+          if (b?.id && seen.has(b.id)) continue;
+          if (b?.id) seen.add(b.id);
+          merged.push(normaliseBooking(b));
+        }
+      });
+
+      setBookings(merged.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+
+      // Auto-repair: if we found bookings in legacy namespaces, migrate them
+      // to the canonical namespace in one write, then erase the legacy entries.
+      // This is idempotent — on the next load everything will already be in the
+      // right place.
+      if (legacyFound.length > 0 && merged.length > 0) {
+        try {
+          await kvPut(tenantNs, BOOKINGS_KEY, merged);
+          for (const ns of legacyFound) {
+            await kvPut(ns, BOOKINGS_KEY, []).catch(() => {/* non-fatal */});
+          }
+        } catch {
+          // Non-fatal — data is visible in memory; next load will retry.
+        }
+      }
     } catch {
       toast({ title: "Failed to load bookings", variant: "destructive" });
     } finally {
