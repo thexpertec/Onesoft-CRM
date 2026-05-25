@@ -176,7 +176,7 @@ export default function RepairPage() {
   const [technicianFilter, setTechnicianFilter] = useState<string>("All");
   const { designations } = useDesignations();
   const { staff } = useStaff();
-  const { customers } = useCustomers();
+  const { customers, addCustomer } = useCustomers();
   const { products } = useProducts();
 
   /** Products sorted for the parts picker (active products only). */
@@ -388,7 +388,49 @@ export default function RepairPage() {
       // Prefer an explicit selection (`customerId` from the picker); fall back to a
       // by-name match only when it's unambiguous (single customer with that name).
       const matched = resolveUniqueCustomer(addForm.name);
-      const resolvedCustomerId = addForm.customerId || matched?.id || undefined;
+      // If the typed name doesn't match any existing customer, create one
+      // on the fly so the booking is linked to a real Customer record (enables
+      // AR posting + invoicing). This honours the "new customer will be
+      // created on save" pill shown in the modal.
+      let createdCustomerId: string | undefined;
+      let dedupedCustomerId: string | undefined;
+      if (!addForm.customerId && !matched) {
+        // Preflight dedupe: there's no server-side uniqueness on (name,phone)
+        // yet, so block silent duplicates here. Normalization: case-insensitive
+        // trimmed name + digits-only phone (strips spaces/dashes/parens/plus).
+        // This catches obvious dupes like "abdul qayyum" + "923334199233" vs
+        // "Abdul Qayyum" + "+92 333 4199233" but does NOT fold country-code
+        // variants (e.g. UK 07700 900123 vs +447700900123 won't match) — that
+        // would need locale-aware E.164 canonicalization the app doesn't ship.
+        // Server-side (name, phone) uniqueness is the proper fix, tracked separately.
+        const normName  = addForm.name.trim().toLowerCase();
+        const normPhone = addForm.phone.trim().replace(/\D+/g, "");
+        const dup = customers.find(c =>
+          c.name.trim().toLowerCase() === normName &&
+          (c.phone || "").replace(/\D+/g, "") === normPhone &&
+          normPhone.length > 0
+        );
+        if (dup) {
+          dedupedCustomerId = dup.id;
+        } else {
+          try {
+            const created = await addCustomer({
+              name: addForm.name.trim(),
+              phone: addForm.phone.trim(),
+              email: addForm.email.trim(),
+              customerType: "POS Customer",
+              customerRole: "Buyer",
+              status: "Active",
+              source: "direct",
+            } as Parameters<typeof addCustomer>[0]);
+            createdCustomerId = created.id;
+          } catch {
+            // Non-fatal: fall through and save the booking as an ad-hoc walk-in.
+            toast({ title: "Customer not created", description: "Saved as ad-hoc walk-in instead.", variant: "destructive" });
+          }
+        }
+      }
+      const resolvedCustomerId = addForm.customerId || matched?.id || dedupedCustomerId || createdCustomerId || undefined;
       const newBooking: RepairBooking = {
         id: crypto.randomUUID(),
         customerId: resolvedCustomerId,
