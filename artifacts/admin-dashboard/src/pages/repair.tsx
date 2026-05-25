@@ -1,18 +1,19 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Wrench, RefreshCw, Trash2, CheckCircle2, Clock, AlertCircle,
   Phone, User, CalendarDays, Tag, Loader2, Search, ChevronDown,
   ChevronUp, MessageSquare, FlaskConical, FileText, Package,
   Settings2, TruckIcon, Flag, Plus, Globe, Store, X,
   BarChart3, TrendingUp, Printer, Link2, Eye, HardHat,
+  Hammer, Receipt,
 } from "lucide-react";
 import { Link } from "wouter";
 import QRCode from "qrcode";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { getSettings } from "@/lib/store";
-import { useDesignations, useStaff, useCustomers } from "@/hooks/use-data";
+import { getSettings, type Product } from "@/lib/store";
+import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
 
 const API = "/api/kv/global/repair-bookings";
@@ -174,17 +175,61 @@ export default function RepairPage() {
   const { designations } = useDesignations();
   const { staff } = useStaff();
   const { customers } = useCustomers();
+  const { products } = useProducts();
 
-  /** Customers sorted by name for the picker, with stable name→record map. */
+  /** Products sorted for the parts picker (active products only). */
+  const productOptions = useMemo(
+    () => products.filter(p => p.status !== "Inactive").slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [products],
+  );
+  const productById = useMemo(() => {
+    const m = new Map<string, Product>();
+    products.forEach(p => m.set(p.id, p));
+    return m;
+  }, [products]);
+
+  /** Customers sorted by name for the picker. */
   const customerOptions = useMemo(
     () => customers.slice().sort((a, b) => a.name.localeCompare(b.name)),
     [customers],
   );
-  const customerByName = useMemo(() => {
-    const m = new Map<string, typeof customers[number]>();
-    customers.forEach(c => m.set(c.name.trim().toLowerCase(), c));
+  /**
+   * Name → all matching customers (lowercased+trimmed key).
+   * Stored as an array so duplicate names don't silently shadow each other —
+   * callers must check `.length === 1` before auto-resolving an id.
+   */
+  const customersByName = useMemo(() => {
+    const m = new Map<string, typeof customers>();
+    customers.forEach(c => {
+      const k = c.name.trim().toLowerCase();
+      if (!k) return;
+      const list = m.get(k);
+      if (list) list.push(c); else m.set(k, [c]);
+    });
     return m;
   }, [customers]);
+  /**
+   * Resolve a customer from a free-text picker value.
+   * - If the text is `"Name · Phone"` (the disambiguated datalist label shown when
+   *   multiple customers share a name), match on the (name, phone) tuple so the
+   *   user's specific pick is honoured.
+   * - Otherwise match by name alone, but only when it's unambiguous (single hit).
+   */
+  const resolveUniqueCustomer = useCallback((raw: string) => {
+    const sep = " · ";
+    const idx = raw.lastIndexOf(sep);
+    if (idx > 0) {
+      const namePart  = raw.slice(0, idx).trim().toLowerCase();
+      const phonePart = raw.slice(idx + sep.length).trim();
+      const list = customersByName.get(namePart);
+      if (list && phonePart) {
+        const exact = list.filter(c => (c.phone || "").trim() === phonePart);
+        if (exact.length === 1) return exact[0];
+      }
+    }
+    const list = customersByName.get(raw.trim().toLowerCase());
+    return list && list.length === 1 ? list[0] : undefined;
+  }, [customersByName]);
 
   /** Active staff whose designation is flagged as Repair Technician in HRM Setup. */
   const technicians = useMemo(() => {
@@ -223,14 +268,42 @@ export default function RepairPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function saveAll(updated: RepairBooking[]) {
-    const res = await fetch(API, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: updated }),
+  /**
+   * Latest in-memory bookings, mirrored synchronously alongside `setBookings`.
+   * All mutators must read from this ref (not the closure's `bookings`) so they
+   * always patch the freshest state — otherwise concurrent edits across rows
+   * derive from stale baselines and the second PUT silently clobbers the first.
+   */
+  const bookingsRef = useRef<RepairBooking[]>([]);
+  useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
+
+  /**
+   * Serialised write queue. Each enqueued mutator runs *after* the previous
+   * save resolves, reads the latest `bookingsRef.current`, derives the patch,
+   * updates ref + state synchronously, then awaits the PUT. This eliminates
+   * the lost-update race where overlapping in-flight PUTs race to overwrite
+   * the entire blob from stale baselines.
+   */
+  const writeQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueSave = useCallback((mutator: (current: RepairBooking[]) => RepairBooking[]) => {
+    const next = writeQueueRef.current.then(async () => {
+      const updated = mutator(bookingsRef.current);
+      bookingsRef.current = updated;
+      setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      const res = await fetch(API, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: updated }),
+      });
+      if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
     });
-    if (!res.ok) throw new Error(`Save failed (HTTP ${res.status})`);
-    setBookings(updated.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    // Keep the chain alive even if a save fails — caller handles the error.
+    writeQueueRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
+  async function saveAll(updated: RepairBooking[]) {
+    await enqueueSave(() => updated);
   }
 
   async function printJobCard(booking: RepairBooking) {
@@ -258,8 +331,7 @@ export default function RepairPage() {
   async function updateField<K extends keyof RepairBooking>(id: string, key: K, val: RepairBooking[K]) {
     setSaving(id);
     try {
-      const updated = bookings.map(b => b.id === id ? { ...b, [key]: val } : b);
-      await saveAll(updated);
+      await enqueueSave(current => current.map(b => b.id === id ? { ...b, [key]: val } : b));
     } catch {
       toast({ title: "Failed to save", variant: "destructive" });
     } finally {
@@ -267,10 +339,29 @@ export default function RepairPage() {
     }
   }
 
+  /** Patch multiple fields on a booking in a single save. */
+  async function updateFields(id: string, patch: Partial<RepairBooking>) {
+    setSaving(id);
+    try {
+      await enqueueSave(current => current.map(b => b.id === id ? { ...b, ...patch } : b));
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  /** Compute parts/labour subtotals + grand total for display. */
+  function calcTotals(b: RepairBooking) {
+    const partsSub  = (b.parts  || []).reduce((s, p) => s + p.qty * p.unitPrice, 0);
+    const labourSub = (b.labour || []).reduce((s, l) => s + l.amount, 0);
+    return { partsSub, labourSub, grand: partsSub + labourSub };
+  }
+
   async function confirmDelete(id: string) {
     setSaving(id);
     try {
-      await saveAll(bookings.filter(b => b.id !== id));
+      await enqueueSave(current => current.filter(b => b.id !== id));
       setDeleteId(null);
       if (expanded === id) setExpanded(null);
       toast({ title: "Booking deleted" });
@@ -287,8 +378,10 @@ export default function RepairPage() {
     try {
       const tech = addForm.technicianId ? technicianById.get(addForm.technicianId) : undefined;
       // Re-resolve customerId by name (handles case where user edited name after picking).
-      const matched = customerByName.get(addForm.name.trim().toLowerCase());
-      const resolvedCustomerId = matched?.id || addForm.customerId || undefined;
+      // Prefer an explicit selection (`customerId` from the picker); fall back to a
+      // by-name match only when it's unambiguous (single customer with that name).
+      const matched = resolveUniqueCustomer(addForm.name);
+      const resolvedCustomerId = addForm.customerId || matched?.id || undefined;
       const newBooking: RepairBooking = {
         id: crypto.randomUUID(),
         customerId: resolvedCustomerId,
@@ -307,7 +400,7 @@ export default function RepairPage() {
         technicianId: tech?.id,
         technicianName: tech?.name,
       };
-      await saveAll([...bookings, newBooking]);
+      await enqueueSave(current => [...current, newBooking]);
       setAddOpen(false);
       setAddForm({ ...EMPTY_FORM });
       toast({ title: "Repair request added" });
@@ -604,11 +697,10 @@ export default function RepairPage() {
                                 const tech = id ? technicianById.get(id) : undefined;
                                 setSaving(b.id);
                                 try {
-                                  const updated = bookings.map(x =>
+                                  await enqueueSave(current => current.map(x =>
                                     x.id === b.id
                                       ? { ...x, technicianId: tech?.id, technicianName: tech?.name }
-                                      : x);
-                                  await saveAll(updated);
+                                      : x));
                                 } catch {
                                   toast({ title: "Failed to assign technician", variant: "destructive" });
                                 } finally {
@@ -759,6 +851,300 @@ export default function RepairPage() {
 
                             </div>
 
+                            {/* ─── Parts & Labour — quote builder ─────────────────────── */}
+                            {(() => {
+                              const totals  = calcTotals(b);
+                              const parts   = b.parts  || [];
+                              const labour  = b.labour || [];
+                              const ccy     = getSettings().currency || "AED";
+                              const fmt     = (n: number) => `${ccy} ${n.toFixed(2)}`;
+                              const canEdit = can("Edit Repairs");
+                              const approved = !!b.approvedAt;
+                              return (
+                                <div className="mt-4 rounded-xl border border-border bg-white dark:bg-slate-900 overflow-hidden">
+                                  <div className="px-4 py-2.5 border-b border-border bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wide">
+                                      <Receipt size={12} /> Parts & Labour
+                                      {approved && (
+                                        <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded normal-case">
+                                          <CheckCircle2 size={9} /> Quote approved {b.approvedAt && `· ${formatDateShort(b.approvedAt)}`}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {canEdit && (
+                                      <button
+                                        onClick={() => updateFields(b.id, { approvedAt: approved ? undefined : new Date().toISOString() })}
+                                        disabled={saving === b.id || (!approved && parts.length === 0 && labour.length === 0)}
+                                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${approved
+                                          ? "border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300"
+                                          : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"}`}
+                                      >
+                                        {approved ? "Withdraw approval" : "Mark quote approved"}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Parts table */}
+                                  <div className="px-4 py-3 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                        <Package size={10} /> Parts ({parts.length})
+                                      </div>
+                                      {canEdit && (
+                                        <button
+                                          onClick={() => {
+                                            const next: typeof parts = [...parts, { productId: "", productName: "", qty: 1, unitCost: 0, unitPrice: 0, source: "stock" }];
+                                            updateFields(b.id, { parts: next });
+                                          }}
+                                          className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors"
+                                        >
+                                          <Plus size={10} /> Add part
+                                        </button>
+                                      )}
+                                    </div>
+                                    {parts.length === 0 ? (
+                                      <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No parts added yet.</p>
+                                    ) : (
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                              <th className="text-left py-1.5 pr-2 font-medium min-w-44">Product</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-16">Qty</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-24">Cost</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-24">Price</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-24">Subtotal</th>
+                                              {canEdit && <th className="w-8" />}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border/60">
+                                            {parts.map((line, idx) => {
+                                              const lineSub = line.qty * line.unitPrice;
+                                              const patchPart = (patch: Partial<typeof line>) => {
+                                                const next = parts.map((p, i) => i === idx ? { ...p, ...patch } : p);
+                                                updateFields(b.id, { parts: next });
+                                              };
+                                              const onPickProduct = (pid: string) => {
+                                                const p = productById.get(pid);
+                                                if (!p) { patchPart({ productId: "", productName: "" }); return; }
+                                                patchPart({
+                                                  productId: p.id,
+                                                  productName: p.name,
+                                                  unitCost:  parseFloat(p.costPrice || p.purchasePrice || "0") || 0,
+                                                  unitPrice: parseFloat(p.price || "0") || 0,
+                                                });
+                                              };
+                                              return (
+                                                <tr key={idx} className="align-middle">
+                                                  <td className="py-1.5 pr-2">
+                                                    {canEdit ? (
+                                                      <select
+                                                        value={line.productId}
+                                                        onChange={e => onPickProduct(e.target.value)}
+                                                        disabled={saving === b.id}
+                                                        className="w-full text-xs px-2 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400"
+                                                      >
+                                                        <option value="">— Select product —</option>
+                                                        {productOptions.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
+                                                        {line.productId && !productById.has(line.productId) && (
+                                                          <option value={line.productId}>{line.productName || "(missing)"} (deleted)</option>
+                                                        )}
+                                                      </select>
+                                                    ) : (
+                                                      <span className="text-foreground">{line.productName || "—"}</span>
+                                                    )}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="1" value={line.qty}
+                                                        onChange={e => patchPart({ qty: parseInt(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-14 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                    ) : <span className="tabular-nums">{line.qty}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="0.01" value={line.unitCost}
+                                                        onChange={e => patchPart({ unitCost: parseFloat(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                    ) : <span className="tabular-nums">{line.unitCost.toFixed(2)}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="0.01" value={line.unitPrice}
+                                                        onChange={e => patchPart({ unitPrice: parseFloat(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                    ) : <span className="tabular-nums">{line.unitPrice.toFixed(2)}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right font-semibold text-foreground tabular-nums">{lineSub.toFixed(2)}</td>
+                                                  {canEdit && (
+                                                    <td className="py-1.5 px-1 text-center">
+                                                      <button
+                                                        onClick={() => updateFields(b.id, { parts: parts.filter((_, i) => i !== idx) })}
+                                                        disabled={saving === b.id}
+                                                        className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
+                                                        title="Remove part">
+                                                        <X size={12} />
+                                                      </button>
+                                                    </td>
+                                                  )}
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Labour table */}
+                                  <div className="px-4 py-3 border-t border-border space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                        <Hammer size={10} /> Labour ({labour.length})
+                                      </div>
+                                      {canEdit && (
+                                        <button
+                                          onClick={() => {
+                                            const next: typeof labour = [...labour, { description: "", hours: 1, rate: 0, amount: 0 }];
+                                            updateFields(b.id, { labour: next });
+                                          }}
+                                          className="text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-0.5 rounded inline-flex items-center gap-1 transition-colors"
+                                        >
+                                          <Plus size={10} /> Add labour
+                                        </button>
+                                      )}
+                                    </div>
+                                    {labour.length === 0 ? (
+                                      <p className="text-[11px] text-muted-foreground/60 italic px-1 py-1.5">No labour lines added yet.</p>
+                                    ) : (
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                                              <th className="text-left py-1.5 pr-2 font-medium min-w-44">Description</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-16">Hours</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-24">Rate</th>
+                                              <th className="text-right py-1.5 px-2 font-medium w-24">Amount</th>
+                                              {canEdit && <th className="w-8" />}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border/60">
+                                            {labour.map((line, idx) => {
+                                              const patchLab = (patch: Partial<typeof line>) => {
+                                                const merged = { ...line, ...patch };
+                                                // Keep amount in sync with hours×rate unless the user typed amount directly.
+                                                if (("hours" in patch || "rate" in patch) && !("amount" in patch)) {
+                                                  merged.amount = (merged.hours || 0) * (merged.rate || 0);
+                                                }
+                                                const next = labour.map((l, i) => i === idx ? merged : l);
+                                                updateFields(b.id, { labour: next });
+                                              };
+                                              return (
+                                                <tr key={idx} className="align-middle">
+                                                  <td className="py-1.5 pr-2">
+                                                    {canEdit ? (
+                                                      <input type="text" placeholder="e.g. Screen replacement labour"
+                                                        value={line.description}
+                                                        onChange={e => patchLab({ description: e.target.value })}
+                                                        disabled={saving === b.id}
+                                                        className="w-full text-xs px-2 py-1 rounded border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40" />
+                                                    ) : <span className="text-foreground">{line.description || "—"}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="0.25" value={line.hours ?? 0}
+                                                        onChange={e => patchLab({ hours: parseFloat(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-14 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                    ) : <span className="tabular-nums">{line.hours ?? "—"}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="0.01" value={line.rate}
+                                                        onChange={e => patchLab({ rate: parseFloat(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums" />
+                                                    ) : <span className="tabular-nums">{line.rate.toFixed(2)}</span>}
+                                                  </td>
+                                                  <td className="py-1.5 px-2 text-right">
+                                                    {canEdit ? (
+                                                      <input type="number" min="0" step="0.01" value={line.amount}
+                                                        onChange={e => patchLab({ amount: parseFloat(e.target.value) || 0 })}
+                                                        disabled={saving === b.id}
+                                                        className="w-20 text-right text-xs px-1.5 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
+                                                    ) : <span className="tabular-nums font-semibold">{line.amount.toFixed(2)}</span>}
+                                                  </td>
+                                                  {canEdit && (
+                                                    <td className="py-1.5 px-1 text-center">
+                                                      <button
+                                                        onClick={() => updateFields(b.id, { labour: labour.filter((_, i) => i !== idx) })}
+                                                        disabled={saving === b.id}
+                                                        className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-0.5 rounded transition-colors"
+                                                        title="Remove labour">
+                                                        <X size={12} />
+                                                      </button>
+                                                    </td>
+                                                  )}
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Totals + Quoted total */}
+                                  <div className="px-4 py-3 border-t border-border bg-slate-50/60 dark:bg-slate-800/30 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                    <div className="text-xs space-y-1">
+                                      <div className="flex justify-between gap-4"><span className="text-muted-foreground">Parts subtotal</span><span className="tabular-nums">{fmt(totals.partsSub)}</span></div>
+                                      <div className="flex justify-between gap-4"><span className="text-muted-foreground">Labour subtotal</span><span className="tabular-nums">{fmt(totals.labourSub)}</span></div>
+                                      <div className="flex justify-between gap-4 pt-1 border-t border-border/60"><span className="font-semibold text-foreground">Computed total</span><span className="font-bold text-foreground tabular-nums">{fmt(totals.grand)}</span></div>
+                                    </div>
+                                    <div className="text-xs">
+                                      <label className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Quoted total to customer</label>
+                                      {canEdit ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-muted-foreground text-[11px] font-medium">{ccy}</span>
+                                          {/* keyed by persisted value so programmatic clears/changes remount the input */}
+                                          <input type="number" min="0" step="0.01"
+                                            key={`qt-${b.quotedTotal ?? ""}`}
+                                            defaultValue={b.quotedTotal ?? ""}
+                                            placeholder={totals.grand.toFixed(2)}
+                                            disabled={saving === b.id}
+                                            onBlur={e => {
+                                              const raw = e.target.value.trim();
+                                              const val = raw === "" ? undefined : (parseFloat(raw) || 0);
+                                              if (val !== b.quotedTotal) updateField(b.id, "quotedTotal", val);
+                                            }}
+                                            className="flex-1 text-right text-sm px-2 py-1.5 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-blue-400 tabular-nums font-semibold" />
+                                          {b.quotedTotal !== undefined && (
+                                            <button
+                                              onClick={() => updateField(b.id, "quotedTotal", undefined)}
+                                              disabled={saving === b.id}
+                                              className="text-[10px] text-muted-foreground hover:text-red-600 px-1 py-0.5 rounded transition-colors"
+                                              title="Clear quoted total">
+                                              <X size={12} />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm font-semibold tabular-nums">{b.quotedTotal !== undefined ? fmt(b.quotedTotal) : <span className="text-muted-foreground italic font-normal">Not quoted</span>}</p>
+                                      )}
+                                      {b.quotedTotal !== undefined && Math.abs(b.quotedTotal - totals.grand) > 0.005 && (
+                                        <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                                          Quoted differs from computed by {fmt(Math.abs(b.quotedTotal - totals.grand))}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* Customer Update (public note) + Actions */}
                             <div className="mt-4 space-y-3">
                               <div className="space-y-1.5">
@@ -883,7 +1269,9 @@ export default function RepairPage() {
                     value={addForm.name}
                     onChange={e => {
                       const v = e.target.value;
-                      const match = customerByName.get(v.trim().toLowerCase());
+                      // Only auto-link if the typed name matches exactly one customer;
+                      // duplicates (e.g. two "John Smith") require explicit disambiguation.
+                      const match = resolveUniqueCustomer(v);
                       setAddForm(f => ({
                         ...f,
                         name: v,
@@ -895,11 +1283,18 @@ export default function RepairPage() {
                     }}
                     className={FIELD_CLS} />
                   <datalist id="repair-customer-list">
-                    {customerOptions.map(c => (
-                      <option key={c.id} value={c.name}>
-                        {c.phone ? `${c.phone}` : ""}
-                      </option>
-                    ))}
+                    {customerOptions.map(c => {
+                      // When multiple customers share a name, append the phone so each
+                      // option is visually distinct — otherwise the datalist collapses
+                      // duplicates to a single un-disambiguatable entry.
+                      const collisions = customersByName.get(c.name.trim().toLowerCase());
+                      const label = collisions && collisions.length > 1 && c.phone ? `${c.name} · ${c.phone}` : c.name;
+                      return (
+                        <option key={c.id} value={label}>
+                          {c.phone ? c.phone : ""}
+                        </option>
+                      );
+                    })}
                   </datalist>
                 </div>
                 <div>
@@ -909,11 +1304,21 @@ export default function RepairPage() {
                     className={FIELD_CLS} />
                 </div>
               </div>
-              {addForm.name.trim() && !addForm.customerId && (
-                <p className="-mt-2 text-[11px] text-muted-foreground leading-snug">
-                  No matching customer — this will be saved as an ad-hoc walk-in. Add the customer in <Link href="/customers" className="text-blue-600 hover:underline">Customers</Link> first to enable invoicing and AR tracking.
-                </p>
-              )}
+              {addForm.name.trim() && !addForm.customerId && (() => {
+                const dupes = customersByName.get(addForm.name.trim().toLowerCase());
+                if (dupes && dupes.length > 1) {
+                  return (
+                    <p className="-mt-2 text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
+                      {dupes.length} customers share this name — pick one from the dropdown that includes a phone number to link the record.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="-mt-2 text-[11px] text-muted-foreground leading-snug">
+                    No matching customer — this will be saved as an ad-hoc walk-in. Add the customer in <Link href="/customers" className="text-blue-600 hover:underline">Customers</Link> first to enable invoicing and AR tracking.
+                  </p>
+                );
+              })()}
 
               {/* Service */}
               <div>
