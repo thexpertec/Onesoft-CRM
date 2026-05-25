@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { getSettings, issueRepairParts, convertRepairToInvoice, type Product } from "@/lib/store";
 import { useDesignations, useStaff, useCustomers, useProducts } from "@/hooks/use-data";
 import { buildRepairJobCardHtml, printReceiptHtml } from "@/lib/print-invoice";
+import { Combobox, type ComboOption } from "@/components/combobox";
 
 const API = "/api/kv/global/repair-bookings";
 
@@ -374,6 +375,11 @@ export default function RepairPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    // Combobox doesn't carry the native `required` attribute, so guard explicitly.
+    if (!addForm.name.trim()) {
+      toast({ title: "Customer name required", description: "Pick an existing customer or type a walk-in name.", variant: "destructive" });
+      return;
+    }
     setAddSaving(true);
     try {
       const tech = addForm.technicianId ? technicianById.get(addForm.technicianId) : undefined;
@@ -1460,38 +1466,52 @@ export default function RepairPage() {
                       </span>
                     )}
                   </label>
-                  <input required type="text" list="repair-customer-list"
-                    placeholder="Pick existing or type new walk-in"
-                    value={addForm.name}
-                    onChange={e => {
-                      const v = e.target.value;
-                      // Only auto-link if the typed name matches exactly one customer;
-                      // duplicates (e.g. two "John Smith") require explicit disambiguation.
-                      const match = resolveUniqueCustomer(v);
-                      setAddForm(f => ({
-                        ...f,
-                        name: v,
-                        customerId: match?.id || "",
-                        // Only auto-fill phone when picking an existing customer and
-                        // the field is currently empty (don't overwrite user-typed numbers).
-                        phone: match && !f.phone.trim() ? match.phone : f.phone,
-                      }));
-                    }}
-                    className={FIELD_CLS} />
-                  <datalist id="repair-customer-list">
-                    {customerOptions.map(c => {
-                      // When multiple customers share a name, append the phone so each
-                      // option is visually distinct — otherwise the datalist collapses
-                      // duplicates to a single un-disambiguatable entry.
+                  {(() => {
+                    // Build searchable combobox options. When multiple customers share
+                    // a name we surface the phone as a `tag` so each row is visually
+                    // distinct; the phone also rides along in `sub` so onSelect can
+                    // disambiguate which customer was actually picked.
+                    const customerComboOpts: (ComboOption & { __id: string })[] = customerOptions.map(c => {
                       const collisions = customersByName.get(c.name.trim().toLowerCase());
-                      const label = collisions && collisions.length > 1 && c.phone ? `${c.name} · ${c.phone}` : c.name;
-                      return (
-                        <option key={c.id} value={label}>
-                          {c.phone ? c.phone : ""}
-                        </option>
-                      );
-                    })}
-                  </datalist>
+                      const dup = !!(collisions && collisions.length > 1);
+                      return {
+                        value: c.name,
+                        label: c.name,
+                        sub: c.phone || "",
+                        tag: dup && c.phone ? c.phone : undefined,
+                        __id: c.id,
+                      };
+                    });
+                    return (
+                      <Combobox
+                        value={addForm.name}
+                        options={customerComboOpts}
+                        placeholder="Search customers or type new walk-in…"
+                        inputClassName={FIELD_CLS}
+                        maxResults={50}
+                        onChange={v => {
+                          const match = resolveUniqueCustomer(v);
+                          setAddForm(f => ({
+                            ...f,
+                            name: v,
+                            customerId: match?.id || "",
+                            phone: match && !f.phone.trim() ? match.phone : f.phone,
+                          }));
+                        }}
+                        onSelect={opt => {
+                          const id = (opt as ComboOption & { __id?: string }).__id;
+                          const picked = customerOptions.find(c => c.id === id);
+                          if (!picked) return;
+                          setAddForm(f => ({
+                            ...f,
+                            name: picked.name,
+                            customerId: picked.id,
+                            phone: !f.phone.trim() ? picked.phone : f.phone,
+                          }));
+                        }}
+                      />
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className={LABEL_CLS}>Phone number <span className="text-red-500">*</span></label>
