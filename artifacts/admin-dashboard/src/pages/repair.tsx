@@ -411,9 +411,12 @@ export default function RepairPage() {
     clearDraft(id);
   }
 
-  /** Explicit Save button handler for the expanded detail panel. */
+  /** Explicit "Save & Update" button handler for the expanded detail panel. */
   async function saveDraftForBooking(id: string) {
-    if (!hasDraft(id)) return;
+    if (!hasDraft(id)) {
+      toast({ title: "No changes to save", description: "Edit any field then click Save & Update." });
+      return;
+    }
     setDraftSaving(id);
     try {
       const d = getDraft(id);
@@ -1542,15 +1545,19 @@ export default function RepairPage() {
                                     </button>
                                   );
                                 })()}
-                                {can("Edit Repairs") && hasDraft(b.id) && (
+                                {can("Edit Repairs") && (
                                   <button
                                     onClick={() => saveDraftForBooking(b.id)}
                                     disabled={draftSaving === b.id || saving === b.id}
-                                    className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-60">
+                                    className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-60 ${
+                                      hasDraft(b.id)
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        : "border border-muted-foreground/30 text-muted-foreground hover:bg-muted"
+                                    }`}>
                                     {draftSaving === b.id
                                       ? <Loader2 size={11} className="animate-spin" />
                                       : <Save size={11} />}
-                                    Save
+                                    Save &amp; Update
                                   </button>
                                 )}
                                 <button
