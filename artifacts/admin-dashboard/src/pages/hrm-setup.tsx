@@ -274,13 +274,49 @@ export default function HrmSetupPage() {
         });
       }
 
+      // ── New department from a role row ─────────────────────────────
+      // When the row has no deptId yet (a pure role row) and the user
+      // typed a department name into the inline editor, find-or-create
+      // the department and attach it to this row's role. Same logic
+      // saveNew uses for the "Add row" flow.
+      const deptNameTrim  = editDraft.deptName.trim();
+      const desigTitleTrim = editDraft.desigTitle.trim();
+      if (!row.deptId && deptNameTrim) {
+        const existingDept = departments.find(d => d.name === deptNameTrim);
+        if (!existingDept) {
+          await addDepartment({
+            name:        deptNameTrim,
+            roleName:    editDraft.roleName.trim() || row.roleName,
+            description: row.rowType === "department" ? editDraft.description : "",
+            headOf:      editDraft.headOf,
+            isActive:    true,
+          });
+        } else if (editDraft.roleName && existingDept.roleName !== editDraft.roleName.trim()) {
+          await editDepartment(existingDept.id, {
+            roleName: editDraft.roleName.trim(),
+            headOf:   editDraft.headOf || existingDept.headOf,
+          });
+        }
+      }
+
+      // ── New designation from a role/department row ────────────────
+      if (!row.desigId && desigTitleTrim) {
+        await addDesignation({
+          title:              desigTitleTrim,
+          department:         deptNameTrim || row.deptName,
+          jobDescription:     editDraft.description,
+          isActive:           true,
+          isRepairTechnician: editDraft.isRepairTechnician,
+        });
+      }
+
       setEditKey(null);
       setEditDraft(null);
       toast({ title: "Saved" });
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.message || String(e), variant: "destructive" });
     }
-  }, [editKey, editDraft, rows, roles, editRole, editDepartment, editDesignation, toast]);
+  }, [editKey, editDraft, rows, roles, departments, editRole, editDepartment, addDepartment, editDesignation, addDesignation, toast]);
 
   // ── Save new row ──────────────────────────────────────────────────────────
   const saveNew = useCallback(() => {
