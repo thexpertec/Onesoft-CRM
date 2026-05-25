@@ -61,6 +61,7 @@ interface RepairBooking {
   customerId?: string;
   name: string;
   phone: string;
+  email?: string;
   service: string;
   deviceIssue?: string;
   tenantId: string;
@@ -154,7 +155,7 @@ function normaliseBooking(b: RepairBooking): RepairBooking {
 
 const EMPTY_FORM = {
   customerId: "",
-  name: "", phone: "", service: "Device Repair",
+  name: "", phone: "", email: "", service: "Device Repair",
   deviceIssue: "", notes: "", publicNote: "", estimatedDate: "",
   status: "New" as BookingStatus,
   priority: "Normal" as Priority,
@@ -393,6 +394,7 @@ export default function RepairPage() {
         customerId: resolvedCustomerId,
         name: addForm.name.trim(),
         phone: addForm.phone.trim(),
+        email: addForm.email.trim() || undefined,
         service: addForm.service,
         deviceIssue: addForm.deviceIssue.trim() || undefined,
         tenantId: currentTenantId || "admin",
@@ -1413,7 +1415,7 @@ export default function RepairPage() {
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAddOpen(false)} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-slate-700 max-h-[92vh] flex flex-col">
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border border-gray-200 dark:border-slate-700 max-h-[92vh] flex flex-col">
 
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border flex-shrink-0">
@@ -1432,196 +1434,228 @@ export default function RepairPage() {
               </button>
             </div>
 
-            {/* Modal form */}
-            <form onSubmit={handleAdd} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+            {/* Modal form — 2 columns: left = job details, right = customer + technician */}
+            <form onSubmit={handleAdd} className="overflow-y-auto flex-1 px-6 py-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
 
-              {/* Source type toggle */}
-              <div>
-                <label className={LABEL_CLS}>Request type <span className="text-red-500">*</span></label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["Online", "Shop Visitor"] as RequestSource[]).map(src => {
-                    const m   = SOURCE_META[src];
-                    const Ico = m.icon;
-                    const sel = addForm.source === src;
-                    return (
-                      <button key={src} type="button"
-                        onClick={() => setAddForm(f => ({ ...f, source: src }))}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${sel ? m.color + " ring-2 ring-current/20" : "border-border bg-background text-foreground hover:border-blue-300"}`}>
-                        <Ico size={15} />
-                        {src}
-                      </button>
-                    );
-                  })}
+                {/* ───── LEFT: Repair Job Details ───── */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-1.5 border-b border-border">
+                    <Wrench size={13} className="text-blue-600" />
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Repair Job Details</h3>
+                  </div>
+
+                  {/* Source type toggle */}
+                  <div>
+                    <label className={LABEL_CLS}>Request type <span className="text-red-500">*</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["Online", "Shop Visitor"] as RequestSource[]).map(src => {
+                        const m   = SOURCE_META[src];
+                        const Ico = m.icon;
+                        const sel = addForm.source === src;
+                        return (
+                          <button key={src} type="button"
+                            onClick={() => setAddForm(f => ({ ...f, source: src }))}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${sel ? m.color + " ring-2 ring-current/20" : "border-border bg-background text-foreground hover:border-blue-300"}`}>
+                            <Ico size={15} />
+                            {src}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Service */}
+                  <div>
+                    <label className={LABEL_CLS}>Service required <span className="text-red-500">*</span></label>
+                    <select required value={addForm.service}
+                      onChange={e => setAddForm(f => ({ ...f, service: e.target.value }))}
+                      className={FIELD_CLS}>
+                      {SERVICE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Device issue */}
+                  <div>
+                    <label className={LABEL_CLS}>Device issue / description</label>
+                    <textarea rows={3} placeholder="e.g. Cracked screen, won't turn on, battery draining fast…"
+                      value={addForm.deviceIssue} onChange={e => setAddForm(f => ({ ...f, deviceIssue: e.target.value }))}
+                      className={FIELD_CLS + " resize-none"} />
+                  </div>
+
+                  {/* Status + Priority */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={LABEL_CLS}>Initial stage</label>
+                      <select value={addForm.status}
+                        onChange={e => setAddForm(f => ({ ...f, status: e.target.value as BookingStatus }))}
+                        className={FIELD_CLS}>
+                        {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Priority</label>
+                      <select value={addForm.priority}
+                        onChange={e => setAddForm(f => ({ ...f, priority: e.target.value as Priority }))}
+                        className={FIELD_CLS}>
+                        <option value="Low">Low</option>
+                        <option value="Normal">Normal</option>
+                        <option value="High">High</option>
+                        <option value="Urgent">Urgent</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Estimated date */}
+                  <div>
+                    <label className={LABEL_CLS}>Estimated completion date</label>
+                    <input type="date" value={addForm.estimatedDate}
+                      onChange={e => setAddForm(f => ({ ...f, estimatedDate: e.target.value }))}
+                      className={FIELD_CLS} />
+                  </div>
+
+                  {/* Internal notes */}
+                  <div>
+                    <label className={LABEL_CLS}>Technician notes (internal)</label>
+                    <textarea rows={2} placeholder="Initial diagnosis, quote, or instructions…"
+                      value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
+                      className={FIELD_CLS + " resize-none"} />
+                  </div>
+
+                  {/* Customer-visible update */}
+                  <div>
+                    <label className={LABEL_CLS + " text-amber-600 dark:text-amber-400"}>
+                      Customer update <span className="font-normal text-muted-foreground">(shown on tracking page)</span>
+                    </label>
+                    <textarea rows={2} placeholder="e.g. Screen replacement ordered, ready by Friday…"
+                      value={addForm.publicNote} onChange={e => setAddForm(f => ({ ...f, publicNote: e.target.value }))}
+                      className={FIELD_CLS + " resize-none border-amber-200 dark:border-amber-800 focus:ring-amber-400"} />
+                  </div>
                 </div>
-              </div>
 
-              {/* Customer — pick existing or type new walk-in */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={LABEL_CLS}>
-                    Customer name <span className="text-red-500">*</span>
-                    {addForm.customerId && (
-                      <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 size={10} /> linked
-                      </span>
+                {/* ───── RIGHT: Customer & Technician ───── */}
+                <div className="space-y-4 md:border-l md:border-border md:pl-6">
+                  <div className="flex items-center gap-2 pb-1.5 border-b border-border">
+                    <User size={13} className="text-blue-600" />
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Customer & Technician</h3>
+                  </div>
+
+                  {/* Customer name */}
+                  <div>
+                    <label className={LABEL_CLS}>
+                      Customer name <span className="text-red-500">*</span>
+                      {addForm.customerId ? (
+                        <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 size={10} /> linked
+                        </span>
+                      ) : addForm.name.trim() && !(customersByName.get(addForm.name.trim().toLowerCase())?.length) ? (
+                        <span className="ml-1.5 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                          <Plus size={9} /> new customer
+                        </span>
+                      ) : null}
+                    </label>
+                    {(() => {
+                      const customerComboOpts: (ComboOption & { __id: string })[] = customerOptions.map(c => {
+                        const collisions = customersByName.get(c.name.trim().toLowerCase());
+                        const dup = !!(collisions && collisions.length > 1);
+                        return {
+                          value: c.name,
+                          label: c.name,
+                          sub: c.phone || "",
+                          tag: dup && c.phone ? c.phone : undefined,
+                          __id: c.id,
+                        };
+                      });
+                      return (
+                        <Combobox
+                          value={addForm.name}
+                          options={customerComboOpts}
+                          placeholder="Search customers or type new walk-in…"
+                          inputClassName={FIELD_CLS}
+                          maxResults={50}
+                          onChange={v => {
+                            const match = resolveUniqueCustomer(v);
+                            setAddForm(f => ({
+                              ...f,
+                              name: v,
+                              customerId: match?.id || "",
+                              phone: match && !f.phone.trim() ? match.phone : f.phone,
+                              email: match && !f.email.trim() ? (match.email || f.email) : f.email,
+                            }));
+                          }}
+                          onSelect={opt => {
+                            const id = (opt as ComboOption & { __id?: string }).__id;
+                            const picked = customerOptions.find(c => c.id === id);
+                            if (!picked) return;
+                            setAddForm(f => ({
+                              ...f,
+                              name: picked.name,
+                              customerId: picked.id,
+                              phone: !f.phone.trim() ? picked.phone : f.phone,
+                              email: !f.email.trim() ? (picked.email || "") : f.email,
+                            }));
+                          }}
+                        />
+                      );
+                    })()}
+                    {addForm.name.trim() && !addForm.customerId && (() => {
+                      const dupes = customersByName.get(addForm.name.trim().toLowerCase());
+                      if (dupes && dupes.length > 1) {
+                        return (
+                          <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
+                            {dupes.length} customers share this name — pick one from the dropdown that includes a phone number to link the record.
+                          </p>
+                        );
+                      }
+                      return (
+                        <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
+                          A new customer record will be created on save. Or add one in <Link href="/customers" className="text-blue-600 hover:underline">Customers</Link> first to enable richer AR tracking.
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Mobile */}
+                  <div>
+                    <label className={LABEL_CLS}>Mobile number <span className="text-red-500">*</span></label>
+                    <input required type="tel" placeholder="e.g. 07700 900123"
+                      value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                      className={FIELD_CLS} />
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className={LABEL_CLS}>Email <span className="font-normal text-muted-foreground">(optional)</span></label>
+                    <input type="email" placeholder="customer@example.com"
+                      value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                      className={FIELD_CLS} />
+                  </div>
+
+                  {/* Assigned technician */}
+                  <div>
+                    <label className={LABEL_CLS}>
+                      <HardHat size={11} className="inline mr-1 -mt-0.5" />
+                      Assigned technician
+                    </label>
+                    <select value={addForm.technicianId}
+                      onChange={e => setAddForm(f => ({ ...f, technicianId: e.target.value }))}
+                      className={FIELD_CLS}>
+                      <option value="">— Unassigned —</option>
+                      {technicians.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}{t.designation ? ` · ${t.designation}` : ""}</option>
+                      ))}
+                    </select>
+                    {technicians.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                        No technicians available. In <Link href="/hrm-setup" className="text-blue-600 hover:underline">HRM Setup</Link>, edit a designation and tick <strong>Repair Technician</strong> to make active staff selectable here.
+                      </p>
                     )}
-                  </label>
-                  {(() => {
-                    // Build searchable combobox options. When multiple customers share
-                    // a name we surface the phone as a `tag` so each row is visually
-                    // distinct; the phone also rides along in `sub` so onSelect can
-                    // disambiguate which customer was actually picked.
-                    const customerComboOpts: (ComboOption & { __id: string })[] = customerOptions.map(c => {
-                      const collisions = customersByName.get(c.name.trim().toLowerCase());
-                      const dup = !!(collisions && collisions.length > 1);
-                      return {
-                        value: c.name,
-                        label: c.name,
-                        sub: c.phone || "",
-                        tag: dup && c.phone ? c.phone : undefined,
-                        __id: c.id,
-                      };
-                    });
-                    return (
-                      <Combobox
-                        value={addForm.name}
-                        options={customerComboOpts}
-                        placeholder="Search customers or type new walk-in…"
-                        inputClassName={FIELD_CLS}
-                        maxResults={50}
-                        onChange={v => {
-                          const match = resolveUniqueCustomer(v);
-                          setAddForm(f => ({
-                            ...f,
-                            name: v,
-                            customerId: match?.id || "",
-                            phone: match && !f.phone.trim() ? match.phone : f.phone,
-                          }));
-                        }}
-                        onSelect={opt => {
-                          const id = (opt as ComboOption & { __id?: string }).__id;
-                          const picked = customerOptions.find(c => c.id === id);
-                          if (!picked) return;
-                          setAddForm(f => ({
-                            ...f,
-                            name: picked.name,
-                            customerId: picked.id,
-                            phone: !f.phone.trim() ? picked.phone : f.phone,
-                          }));
-                        }}
-                      />
-                    );
-                  })()}
+                  </div>
                 </div>
-                <div>
-                  <label className={LABEL_CLS}>Phone number <span className="text-red-500">*</span></label>
-                  <input required type="tel" placeholder="e.g. 07700 900123"
-                    value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
-                    className={FIELD_CLS} />
-                </div>
-              </div>
-              {addForm.name.trim() && !addForm.customerId && (() => {
-                const dupes = customersByName.get(addForm.name.trim().toLowerCase());
-                if (dupes && dupes.length > 1) {
-                  return (
-                    <p className="-mt-2 text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
-                      {dupes.length} customers share this name — pick one from the dropdown that includes a phone number to link the record.
-                    </p>
-                  );
-                }
-                return (
-                  <p className="-mt-2 text-[11px] text-muted-foreground leading-snug">
-                    No matching customer — this will be saved as an ad-hoc walk-in. Add the customer in <Link href="/customers" className="text-blue-600 hover:underline">Customers</Link> first to enable invoicing and AR tracking.
-                  </p>
-                );
-              })()}
-
-              {/* Service */}
-              <div>
-                <label className={LABEL_CLS}>Service required <span className="text-red-500">*</span></label>
-                <select required value={addForm.service}
-                  onChange={e => setAddForm(f => ({ ...f, service: e.target.value }))}
-                  className={FIELD_CLS}>
-                  {SERVICE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              {/* Device issue */}
-              <div>
-                <label className={LABEL_CLS}>Device issue / description</label>
-                <textarea rows={3} placeholder="e.g. Cracked screen, won't turn on, battery draining fast…"
-                  value={addForm.deviceIssue} onChange={e => setAddForm(f => ({ ...f, deviceIssue: e.target.value }))}
-                  className={FIELD_CLS + " resize-none"} />
-              </div>
-
-              {/* Status + Priority */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={LABEL_CLS}>Initial stage</label>
-                  <select value={addForm.status}
-                    onChange={e => setAddForm(f => ({ ...f, status: e.target.value as BookingStatus }))}
-                    className={FIELD_CLS}>
-                    {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={LABEL_CLS}>Priority</label>
-                  <select value={addForm.priority}
-                    onChange={e => setAddForm(f => ({ ...f, priority: e.target.value as Priority }))}
-                    className={FIELD_CLS}>
-                    <option value="Low">Low</option>
-                    <option value="Normal">Normal</option>
-                    <option value="High">High</option>
-                    <option value="Urgent">Urgent</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Assigned technician */}
-              <div>
-                <label className={LABEL_CLS}>
-                  <HardHat size={11} className="inline mr-1 -mt-0.5" />
-                  Assigned technician
-                </label>
-                <select value={addForm.technicianId}
-                  onChange={e => setAddForm(f => ({ ...f, technicianId: e.target.value }))}
-                  className={FIELD_CLS}>
-                  <option value="">— Unassigned —</option>
-                  {technicians.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}{t.designation ? ` · ${t.designation}` : ""}</option>
-                  ))}
-                </select>
-                {technicians.length === 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                    No technicians available. In <Link href="/hrm-setup" className="text-blue-600 hover:underline">HRM Setup</Link>, edit a designation and tick <strong>Repair Technician</strong> to make active staff selectable here.
-                  </p>
-                )}
-              </div>
-
-              {/* Est. date + Notes */}
-              <div>
-                <label className={LABEL_CLS}>Estimated completion date</label>
-                <input type="date" value={addForm.estimatedDate}
-                  onChange={e => setAddForm(f => ({ ...f, estimatedDate: e.target.value }))}
-                  className={FIELD_CLS} />
-              </div>
-              <div>
-                <label className={LABEL_CLS}>Technician notes (internal)</label>
-                <textarea rows={2} placeholder="Initial diagnosis, quote, or instructions…"
-                  value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
-                  className={FIELD_CLS + " resize-none"} />
-              </div>
-              <div>
-                <label className={LABEL_CLS + " text-amber-600 dark:text-amber-400"}>
-                  Customer update <span className="font-normal text-muted-foreground">(shown on tracking page)</span>
-                </label>
-                <textarea rows={2} placeholder="e.g. Screen replacement ordered, ready by Friday…"
-                  value={addForm.publicNote} onChange={e => setAddForm(f => ({ ...f, publicNote: e.target.value }))}
-                  className={FIELD_CLS + " resize-none border-amber-200 dark:border-amber-800 focus:ring-amber-400"} />
               </div>
 
               {/* Submit */}
-              <div className="flex gap-2 pt-1 pb-1">
+              <div className="flex gap-2 pt-5 mt-5 border-t border-border">
                 <button type="button" onClick={() => setAddOpen(false)}
                   className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-foreground hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
                   Cancel
